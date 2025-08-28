@@ -51,8 +51,8 @@
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤テーマ</span> <span class="tag">v10</span></h1>
-      <div class="muted">ユーザー毎に <b>保存</b>（File System Access API 経由／MOTW回避）。</div>
+      <h1>ガチャ結果ビューア <span class="tag">v10</span></h1>
+      <div class="muted">ガチャ結果をまとめたJSONを読み込み、ビジュアル化し、zipファイルにする</div>
     </header>
 
     <section class="toolbar">
@@ -81,14 +81,14 @@
     <div class="grid two-col" style="margin-top:16px">
       <section class="panel" id="itemsPanel">
         <h2 style="margin-bottom:.25rem">アイテム画像の設定</h2>
-        <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとに「画像設定」または「リアグ」。</div>
+        <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとにデジグッズまたはリアグを設定。</div>
         <div class="tabs" id="gachaTabs"></div>
         <div id="itemGrid" class="item-grid"></div>
       </section>
 
       <section class="panel" id="usersPanel">
         <h2>ユーザーごとの獲得内訳</h2>
-        <div class="muted">右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
+        <div class="muted">右上の<b>保存</b>でガチャ結果のZIPファイルを出力</div>
         <div class="sep"></div>
         <div class="row" style="align-items:center; margin-bottom:8px">
           <label for="filterGacha">ガチャ絞り込み:</label>
