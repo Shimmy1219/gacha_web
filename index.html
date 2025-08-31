@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ガチャ結果ビューア & 画像マッパー v10 (保存=File System Access)</title>
-<!-- JSZip -->
+<title>ガチャ結果ビューア v12（開始→ワークフロー／リアルタイム＆最終貼付対応）</title>
+
+<!-- JSZip（保存で使用） -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
   if (typeof window.JSZip === "undefined") {
@@ -13,103 +14,265 @@
     document.head.appendChild(s);
   }
 </script>
+
 <style>
-  :root{--bg:#0b0b0f;--panel:#15151b;--panel-2:#1b1b22;--text:#f5f5f6;--muted:#b3b3bd;--accent:#e11d48;--accent-2:#9f1239;--border:#2a2a36;--shadow:0 6px 24px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5)}
-  *{box-sizing:border-box}html,body{height:100%}body{margin:0;background:radial-gradient(1200px 600px at 20% -10%, rgba(225,29,72,.08), transparent 60%),radial-gradient(800px 500px at 100% 0%, rgba(225,29,72,.08), transparent 55%),var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,"Segoe UI",Roboto,"Helvetica Neue",Arial;line-height:1.6}
-  h1,h2,h3{margin:0 0 .5rem}h1{font-size:1.75rem}h2{font-size:1.25rem}.container{max-width:1200px;margin:24px auto 64px;padding:0 16px}
+  :root{
+    --bg:#0b0b0f;--panel:#15151b;--panel-2:#1b1b22;--text:#f5f5f6;--muted:#b3b3bd;
+    --accent:#e11d48;--accent-2:#9f1239;--border:#2a2a36;
+    --shadow:0 6px 24px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5)
+  }
+  *{box-sizing:border-box}html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(225,29,72,.08), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, rgba(225,29,72,.08), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+    line-height:1.6
+  }
+  h1,h2,h3{margin:0 0 .5rem}h1{font-size:1.7rem}h2{font-size:1.2rem}
+  .container{max-width:1200px;margin:24px auto 64px;padding:0 16px}
+
+  /* Buttons */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+    font-size:1rem;line-height:1;min-height:42px;padding:.7rem 1rem;border-radius:10px;
+    appearance:none;border:1px solid var(--accent);
+    background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;
+    font-weight:700;letter-spacing:.02em;cursor:pointer;box-shadow:var(--shadow);
+    transition:transform .05s,filter .2s
+  }
+  .btn:active{transform:translateY(1px) scale(.995)}
+  .btn.subtle{background:var(--panel-2);color:var(--text);border-color:var(--border);font-weight:600}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+  .btn.small{min-height:32px;padding:.45rem .7rem;font-size:.9rem}
+  .btn[disabled]{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
+
+  .tag{display:inline-flex;align-items:center;gap:.45rem;background:#23232b;border:1px solid var(--border);color:#9aa;font-size:.85rem;padding:.2rem .55rem;border-radius:999px}
   .toolbar{background:linear-gradient(180deg, rgba(225,29,72,.12), rgba(225,29,72,.04) 40%, transparent);border:1px solid var(--border);border-radius:16px;padding:16px;display:grid;gap:12px;box-shadow:var(--shadow)}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.file-drop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px dashed rgba(225,29,72,.45);border-radius:12px;padding:12px;background:rgba(225,29,72,.06)}.file-drop.dragover{background:rgba(225,29,72,.12)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;font-size:1rem;line-height:1;min-height:42px;padding:.7rem 1rem;border-radius:10px;appearance:none;border:1px solid var(--accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;font-weight:700;letter-spacing:.02em;cursor:pointer;box-shadow:var(--shadow);transition:transform .05s,filter .2s}
-  .btn:active{transform:translateY(1px) scale(.995)}.btn.subtle{background:var(--panel-2);color:var(--text);border-color:var(--border);font-weight:600}.btn.ghost{background:transparent;border-color:var(--border);color:var(--muted)}.btn.small{min-height:32px;padding:.45rem .7rem;font-size:.9rem}.btn[disabled]{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
-  .tag{display:inline-flex;align-items:center;gap:.45rem;background:#23232b;border:1px solid var(--border);color:var(--muted);font-size:.85rem;padding:.2rem .55rem;border-radius:999px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .file-drop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px dashed rgba(225,29,72,.45);border-radius:12px;padding:12px;background:rgba(225,29,72,.06)}
+  .file-drop.dragover{background:rgba(225,29,72,.12)}
+  input[type="file"]::file-selector-button{appearance:none;border:1px solid var(--accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;padding:.55rem .9rem;border-radius:10px;cursor:pointer;font-weight:700;line-height:1;margin-right:.6rem}
+  input[type="file"]{color:var(--muted)}
+  select{appearance:none;background:#0f1016;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:.55rem 2rem .55rem .7rem;font-weight:600;line-height:1;min-height:42px;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="%23b3b3bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 14 8"/></svg>');
+    background-repeat:no-repeat;background-position:right .6rem center;background-size:12px}
+  select:focus{outline:2px solid rgba(225,29,72,.4);outline-offset:2px}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
   .grid{display:grid;gap:16px}.two-col{grid-template-columns:1fr}@media(min-width:980px){.two-col{grid-template-columns:1fr 1fr}}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}.kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f1014;padding:.1rem .35rem;border-radius:6px;border:1px solid var(--border);color:#d1d5db}
-  .muted{color:var(--muted)}.sep{height:1px;background:var(--border);margin:.75rem 0 1rem}.visually-hidden{position:absolute!important;inset:0 auto auto 0;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
-  input[type="file"]::file-selector-button{appearance:none;border:1px solid var(--accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;padding:.55rem .9rem;border-radius:10px;cursor:pointer;font-weight:700;line-height:1;margin-right:.6rem}input[type="file"]{color:var(--muted)}
-  select{appearance:none;background:#0f1016;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:.55rem 2rem .55rem .7rem;font-weight:600;line-height:1;min-height:42px;background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="%23b3b3bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 14 8"/></svg>');background-repeat:no-repeat;background-position:right .6rem center;background-size:12px}
-  select:focus{outline:2px solid rgba(225,29,72,.4);outline-offset:2px}.tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap}
-  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none}.tab.active{background:#191922;color:#fff;border-color:var(--accent)}
-  .item-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}.item-card{background:var(--panel-2);border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:190px;position:relative}
-  .item-thumb{aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}.item-thumb img{width:100%;height:100%;object-fit:contain;display:block}
-  .item-code{font-weight:800;font-size:1.15rem;letter-spacing:.03em}.rarity{font-weight:700}.rarity.SSR{color:#fde68a}.rarity.SR{color:#a78bfa}.rarity.R{color:#93c5fd}.rarity.N{color:#a7f3d0}.rarity.はずれ{color:#fca5a5}
-  .card-actions{display:flex;gap:8px;flex-wrap:wrap}.card-actions .btn[data-action="set"]{width:100%}.badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.5rem;border:1px solid var(--border);background:#0e0f14;color:#a6a6b3}
-  .flag{position:absolute;top:8px;right:10px;display:flex;gap:6px}.flag .skip{border-color:#e11d48;color:#fff;background:linear-gradient(180deg,#e11d48,#9f1239)}
-  .user-card{margin-bottom:16px;position:relative}.user-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.user-actions{display:flex;gap:8px;align-items:center}.user-actions .btn.small{min-width:110px}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f1014;padding:.1rem .35rem;border-radius:6px;border:1px solid var(--border);color:#d1d5db}
+  .muted{color:var(--muted)}.sep{height:1px;background:var(--border);margin:.75rem 0 1rem}
+  .visually-hidden{position:absolute!important;inset:0 auto auto 0;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
+
+  /* Tabs + item grid */
+  .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap}
+  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none}
+  .tab.active{background:#191922;color:#fff;border-color:var(--accent)}
+  .item-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .item-card{background:var(--panel-2);border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:190px;position:relative}
+  .item-thumb{aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .item-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+  .item-code{font-weight:800;font-size:1.15rem;letter-spacing:.03em}
+  .rarity{font-weight:700}.rarity.SSR{color:#fde68a}.rarity.SR{color:#a78bfa}.rarity.R{color:#93c5fd}.rarity.N{color:#a7f3d0}.rarity.はずれ{color:#fca5a5}
+  .card-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .card-actions .btn[data-action="primary"]{width:100%}
+  .badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.5rem;border:1px solid var(--border);background:#0e0f14;color:#a6a6b3}
+  .flag{position:absolute;top:8px;right:10px;display:flex;gap:6px}
+  .flag .skip{border-color:#e11d48;color:#fff;background:linear-gradient(180deg,#e11d48,#9f1239)}
+
+  /* Users panel */
+  .user-card{margin-bottom:16px;position:relative}
+  .user-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .user-actions{display:flex;gap:8px;align-items:center}.user-actions .btn.small{min-width:110px}
   .gacha-box{background:var(--panel-2);border:1px dashed var(--border);border-radius:12px;padding:12px}
-  .rarity-row{display:grid;grid-template-columns:3.6rem 1fr;column-gap:.6rem;align-items:start;margin-top:.25rem}.rarity-label{display:flex;align-items:center;font-weight:800;line-height:1.2;min-height:32px}
-  .rarity-items{display:flex;flex-wrap:wrap;gap:.3rem .45rem}.item-pill{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:999px;background:#23232b;border:1px solid var(--border)}
-  .item-pill img{width:20px;height:20px;object-fit:contain;border-radius:4px;display:block}.item-pill.no-img{justify-content:center;padding:.25rem .8rem}
-  .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.65);padding:20px;z-index:50}.modal.show{display:grid}.modal .dialog{width:min(680px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
-  .dialog h3{margin:0 0 .5rem}.dialog .grid-2{display:grid;gap:12px;grid-template-columns:1fr}@media(min-width:860px){.dialog .grid-2{grid-template-columns:1fr 1fr}}
-  .preview-box{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px;display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
-  .preview-box .thumb{width:120px;aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-  .preview-box .thumb img{width:100%;height:100%;object-fit:contain}input[type="text"]{width:100%;padding:.6rem .7rem;border-radius:10px;border:1px solid var(--border);background:#0f1016;color:#f5f5f6}
-  #fileInput{color:var(--muted)}#fileInput::file-selector-button{appearance:none;border:1px solid var(--accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;padding:.55rem .9rem;border-radius:10px;cursor:pointer;font-weight:700;line-height:1;margin-right:.6rem}
-  label{font-weight:700}.footer{margin-top:20px;display:flex;justify-content:space-between;gap:12px}
+  .rarity-row{display:grid;grid-template-columns:3.6rem 1fr;column-gap:.6rem;align-items:start;margin-top:.25rem}
+  .rarity-label{display:flex;align-items:center;font-weight:800;line-height:1.2;min-height:32px}
+  .rarity-items{display:flex;flex-wrap:wrap;gap:.3rem .45rem}
+  .item-pill{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:999px;background:#23232b;border:1px solid var(--border)}
+  .item-pill img{width:20px;height:20px;object-fit:contain;border-radius:4px;display:block}
+  .item-pill.no-img{justify-content:center;padding:.25rem .8rem}
+
+  /* All modals */
+  .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.65);padding:20px;z-index:50}
+  .modal.show{display:grid}
+  .dialog{width:min(880px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+  .dialog h3{margin:0 0 .5rem}
+  .dialog .grid-2{display:grid;gap:12px;grid-template-columns:1fr}@media(min-width:860px){.dialog .grid-2{grid-template-columns:1fr 1fr}}
+
+  /* Start splash */
+  .splash{display:grid;place-items:center;min-height:60vh}
+  .info-btn{width:26px;height:26px;border-radius:999px;border:1px solid var(--border);background:#0f1016;color:#cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer}
+  .hint{color:#a1a1aa;font-size:.95rem}
+
+  /* Paste areas */
+  textarea{width:100%;min-height:180px;background:#0f1016;color:#f5f5f6;border:1px solid var(--border);border-radius:12px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  input[type="text"]{width:100%;padding:.6rem .7rem;border-radius:10px;border:1px solid var(--border);background:#0f1016;color:#f5f5f6}
 </style>
 </head>
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">v10</span></h1>
-      <div class="muted">ガチャ結果をまとめたJSONを読み込み、ビジュアル化し、zipファイルにできます</div>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v12</span></h1>
+      <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
-    <section class="toolbar">
-      <div class="row file-drop" id="dropzone">
-        <label class="btn" for="jsonFile">JSONファイルを選ぶ</label>
-        <input type="file" id="jsonFile" accept="application/json,.json" class="visually-hidden" />
-        <button class="btn" id="loadJsonBtn">読み込む</button>
-      </div>
-      <div class="row" style="align-items:baseline">
-        <div class="tag" id="summaryTag">未読込</div>
-        <div style="flex:1"></div>
-        <label class="tag"><input type="checkbox" id="hideMiss" /> はずれを隠す</label>
-        <label for="filterRarity">レア度:</label>
-        <select id="filterRarity" class="select">
-          <option value="*">すべて</option><option value="SSR">SSR</option><option value="SR">SR</option><option value="R">R</option><option value="N">N</option><option value="はずれ">はずれ</option>
-        </select>
-        <label for="userSearch">ユーザー検索:</label>
-        <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
-        <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
-        <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
-        <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
-        <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
-      </div>
+    <!-- Splash -->
+    <section id="splash" class="splash">
+      <button class="btn" id="openStart">開始する</button>
+      <div class="hint" style="margin-top:.5rem">※ 後からでもJSON読込は可能です</div>
     </section>
 
-    <div class="grid two-col" style="margin-top:16px">
-      <section class="panel" id="itemsPanel">
-        <h2 style="margin-bottom:.25rem">アイテム画像の設定</h2>
-        <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとにデジグッズまたはリアグを設定。</div>
-        <div class="tabs" id="gachaTabs"></div>
-        <div id="itemGrid" class="item-grid"></div>
+    <!-- Main UI (hidden until start/loaded) -->
+    <section id="mainUI" style="display:none">
+      <section class="toolbar">
+        <div class="row file-drop" id="dropzone">
+          <div class="tag" id="summaryTag">未読込</div>
+          <div style="flex:1"></div>
+          <label class="tag"><input type="checkbox" id="hideMiss" /> はずれを隠す</label>
+          <label for="filterRarity">レア度:</label>
+          <select id="filterRarity" class="select">
+            <option value="*">すべて</option><option value="SSR">SSR</option><option value="SR">SR</option><option value="R">R</option><option value="N">N</option><option value="はずれ">はずれ</option>
+          </select>
+          <label for="userSearch">ユーザー検索:</label>
+          <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
+          <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
+          <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
+          <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
+          <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
+          <button class="btn" id="openLivePaste" title="リアルタイム入力用の貼り付けパネルを開きます">リアルタイム入力</button>
+        </div>
       </section>
 
-      <section class="panel" id="usersPanel">
-        <h2>ユーザーごとの獲得内訳</h2>
-        <div class="muted">右上の<b>保存</b>でガチャ結果のZIPファイルを出力</div>
-        <div class="sep"></div>
-        <div class="row" style="align-items:center; margin-bottom:8px">
-          <label for="filterGacha">ガチャ絞り込み:</label>
-          <select id="filterGacha" class="select"><option value="*">すべて</option></select>
+      <div class="grid two-col" style="margin-top:16px">
+        <section class="panel" id="itemsPanel">
+          <h2 style="margin-bottom:.25rem">アイテム画像の設定</h2>
+          <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとに設定。</div>
+          <div class="tabs" id="gachaTabs"></div>
+          <div id="itemGrid" class="item-grid"></div>
+        </section>
+
+        <section class="panel" id="usersPanel">
+          <h2>ユーザーごとの獲得内訳</h2>
+          <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
+          <div class="sep"></div>
+          <div class="row" style="align-items:center; margin-bottom:8px">
+            <label for="filterGacha">ガチャ絞り込み:</label>
+            <select id="filterGacha" class="select"><option value="*">すべて</option></select>
+          </div>
+          <div id="usersList"></div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <!-- Start Modal -->
+  <div class="modal" id="startModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+      <h3 id="startTitle">はじめに</h3>
+      <div class="muted" style="margin-bottom:8px">ワークフローを選んでください。</div>
+      <div class="sep"></div>
+      <div class="grid" style="grid-template-columns:1fr;gap:10px">
+        <div class="row" style="justify-content:space-between">
+          <button class="btn" id="wfLive">ガチャ企画をリアルタイムで進行</button>
+          <button class="info-btn" title="① 出現アイテム一覧を貼付→解析してアイテム一覧を生成 ② 進行中の結果を都度貼付→ユーザー集計に反映">i</button>
         </div>
-        <div id="usersList"></div>
-      </section>
+        <div class="row" style="justify-content:space-between">
+          <button class="btn" id="wfFinal">最終的なガチャ履歴を張り付ける</button>
+          <button class="info-btn" title="最終集計テキストを一括貼付→解析→ユーザー集計とアイテム一覧を生成">i</button>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <label class="btn" id="wfJsonBtn" for="jsonFile2">JSONファイルを選ぶ</label>
+          <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
+          <button class="info-btn" title="これまで通り、整形済みのJSON（本ツールの出力と同形式）を読み込みます">i</button>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="closeStart">閉じる</button></div>
     </div>
   </div>
 
-  <!-- モーダル（画像/動画/音声プレビュー対応） -->
+  <!-- Catalog Paste Modal（リアルタイムの最初のフェーズ） -->
+  <div class="modal" id="catalogModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="catTitle">
+      <h3 id="catTitle">出現アイテム一覧の貼り付け</h3>
+      <div class="muted">形式例：<span class="kbd">No./レアリティ/出現率/景品名</span>（縦並び or タブ区切り）</div>
+      <div class="sep"></div>
+      <label>ガチャ名</label>
+      <input id="catGachaName" type="text" placeholder="例：やみぃガチャ" />
+      <div style="height:.5rem"></div>
+      <label>テキスト</label>
+      <textarea id="catText" placeholder="ここに一覧を貼り付け"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="catParse">解析して反映</button>
+        <button class="btn ghost" id="catClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: 案内モーダル（リアルタイム結果は上部ボタンから） -->
+  <div class="modal" id="guideModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <h3 id="guideTitle">次のステップ</h3>
+      <div class="muted">
+        ガチャ結果は画面上部の<strong>「リアルタイム入力」</strong>ボタンを押してペーストしてください。
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn" id="guideOk">分かった</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Paste Panel（随時） -->
+  <div class="modal" id="liveModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="liveTitle">
+      <h3 id="liveTitle">リアルタイム結果を貼り付け</h3>
+      <div class="muted">形式例：<span class="kbd">ガチャ名</span> → <span class="kbd">名前100連</span> → <span class="kbd">【R】C　4個</span>… → <span class="kbd">#なまずつーるず</span></div>
+      <div class="sep"></div>
+      <textarea id="liveText" placeholder="ここに結果テキストを貼り付け（複数ブロック可）"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="liveApply">反映</button>
+        <button class="btn ghost" id="liveClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Final Paste Modal -->
+  <div class="modal" id="finalModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="finalTitle">
+      <h3 id="finalTitle">最終的なガチャ履歴の貼り付け</h3>
+      <div class="muted">先頭のヘッダ（<span class="kbd">ガチャ / No. 名前 / No. レアリティ 景品名 あたり数</span>）は無視されます。</div>
+      <div class="sep"></div>
+      <label>ガチャ名（未指定なら「ガチャ」）</label>
+      <input id="finalGachaName" type="text" placeholder="例：やみぃガチャ" />
+      <div style="height:.5rem"></div>
+      <label>テキスト</label>
+      <textarea id="finalText" placeholder="ここに最終一覧を貼り付け"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="finalParse">解析して反映</button>
+        <button class="btn ghost" id="finalClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image modal（既存） -->
   <div class="modal" id="imageModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <h3 id="modalTitle">画像を設定</h3>
       <div class="muted" id="modalSubtitle">対象: <span class="tag" id="modalTarget"></span></div>
       <div class="sep"></div>
-
       <div class="grid-2">
-        <div class="preview-box">
-          <div class="thumb"><img id="modalPreview" alt="プレビュー" /></div>
-          <div><div class="muted" style="margin-bottom:.25rem">現在の画像</div><div class="tag" id="modalStatus">未設定</div></div>
+        <div class="preview-box" style="background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px;display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center">
+          <div class="thumb" style="width:120px;aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center">
+            <img id="modalPreview" alt="プレビュー" />
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:.25rem">現在の画像</div>
+            <div class="tag" id="modalStatus">未設定</div>
+          </div>
         </div>
         <div>
           <label for="fileInput">ファイルから選択</label>
@@ -119,357 +282,638 @@
           <input id="urlInput" type="text" placeholder="https://example.com/image.png" />
           <div style="height:.5rem"></div>
           <button class="btn" id="applyBtn">保存</button>
-          <button class="btn subtle" id="clearBtn">解除</button>
           <button class="btn ghost" id="closeBtn">閉じる</button>
         </div>
       </div>
-      <div class="footer"><div class="muted">表示用はサムネ、ZIP用にオリジナルを保存（URL取得不可は除く）。</div></div>
+      <div class="sep"></div>
+      <div class="muted">表示はサムネ、ZIPはオリジナル（URL取得不可は除く）。</div>
     </div>
   </div>
 
 <script>
-  const $ = (sel, el=document) => el.querySelector(sel);
-  const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-  const rarityOrder = ["SSR","SR","R","N","はずれ"];
-  const keyOf = (gacha, rarity, code) => `${gacha}::${rarity}::${code}`;
-  const legacyKey = (rarity, code) => `${rarity}::${code}`;
-  const stripGacha = (key) => { const p = String(key).split("::"); return p.length===3 ? `${p[1]}::${p[2]}` : key; };
-  const byRarityThenCode = (a,b)=>{ const ra = rarityOrder.indexOf(a.rarity), rb = rarityOrder.indexOf(b.rarity); if(ra !== rb) return ra - rb; return (a.code||'').localeCompare(b.code||''); };
-  const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  const sanitize = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
+/* ====== 小ユーティリティ ====== */
+const $ = (sel, el=document) => el.querySelector(sel);
+const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+const rarityOrder = ["UR","SSR","SR","R","N","はずれ"];
+const keyOf = (gacha, rarity, code) => `${gacha}::${rarity}::${code}`;
+const legacyKey = (rarity, code) => `${rarity}::${code}`;
+const stripGacha = (key) => { const p = String(key).split("::"); return p.length===3 ? `${p[1]}::${p[2]}` : key; };
+const byRarityThenCode = (a,b)=>{ const ra = rarityOrder.indexOf(a.rarity), rb = rarityOrder.indexOf(b.rarity); if(ra !== rb) return ra - rb; return (a.code||'').localeCompare(b.code||''); };
+const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const sanitize = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
+const uniqPush = (arr, v) => { if(!arr.includes(v)) arr.push(v); };
 
-  let gData=null,gAllGachas=[],gItemsByGacha={},selectedGacha=null,currentModalTarget=null;
-  const LS_KEY_IMG="gacha_item_image_map_v1";
-  const LS_KEY_SKIP="gacha_item_image_skip_v1";
-  const LS_KEY_ORIG="gacha_item_original_v1";
-  function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
-  function saveLocalJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e){ if(e && (e.name==="QuotaExceededError"||e.code===22)){ console.warn("quota",key); return false; } throw e; } }
-  let imgMap=loadLocalJSON(LS_KEY_IMG,{}), origMap=loadLocalJSON(LS_KEY_ORIG,{}), skipSet=new Set(loadLocalJSON(LS_KEY_SKIP,[]));
-  const skipHas=(key)=>skipSet.has(key)||skipSet.has(stripGacha(key));
-  const skipAdd=(key)=>{ skipSet.add(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
-  const skipDel=(key)=>{ skipSet.delete(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
+/* ====== 画像保存系（既存） ====== */
+let gData = {};                     // { user: { gacha: { pulls:int, items:{rarity:[code...]}}}}
+let gCatalogByGacha = {};           // { gacha: [{gacha,rarity,code}, ...]} ← 追加：カタログ定義
+let gAllGachas=[], gItemsByGacha={}, selectedGacha=null, currentModalTarget=null;
 
-  const DB_NAME="gachaImagesDB", STORE="images";
-  function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)}; r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });}
-  async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
-  async function idbGet(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readonly"); const rq=tx.objectStore(STORE).get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); });}
-  async function idbDelete(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
-  async function idbClear(){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).clear(); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
-  const urlCache=new Map(); async function urlForKey(key){ if(urlCache.has(key)) return urlCache.get(key); const blob=await idbGet(key); if(!blob) return ""; const url=URL.createObjectURL(blob); urlCache.set(key,url); return url; }
+const LS_KEY_IMG="gacha_item_image_map_v1";
+const LS_KEY_SKIP="gacha_item_image_skip_v1";
+const LS_KEY_ORIG="gacha_item_original_v1";
+function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
+function saveLocalJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e){ if(e && (e.name==="QuotaExceededError"||e.code===22)){ console.warn("quota",key); return false; } throw e; } }
+let imgMap=loadLocalJSON(LS_KEY_IMG,{}), origMap=loadLocalJSON(LS_KEY_ORIG,{}), skipSet=new Set(loadLocalJSON(LS_KEY_SKIP,[]));
+const skipHas=(key)=>skipSet.has(key)||skipSet.has(stripGacha(key));
+const skipAdd=(key)=>{ skipSet.add(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
+const skipDel=(key)=>{ skipSet.delete(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
 
-  function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
-  const drop=$("#dropzone"); drop.addEventListener("dragover",(e)=>{e.preventDefault();drop.classList.add("dragover")}); drop.addEventListener("dragleave",()=>drop.classList.remove("dragover")); drop.addEventListener("drop",(e)=>{e.preventDefault();drop.classList.remove("dragover");handleFiles(e.dataTransfer.files)}); $("#loadJsonBtn").addEventListener("click",()=>handleFiles($("#jsonFile").files));
+const DB_NAME="gachaImagesDB", STORE="images";
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)}; r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });}
+async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+async function idbGet(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readonly"); const rq=tx.objectStore(STORE).get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); });}
+async function idbDelete(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+async function idbClear(){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).clear(); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+const urlCache=new Map(); async function urlForKey(key){ if(urlCache.has(key)) return urlCache.get(key); const blob=await idbGet(key); if(!blob) return ""; const url=URL.createObjectURL(blob); urlCache.set(key,url); return url; }
 
-  function onJsonLoaded(data){
-    gData=data; const gSet=new Set(); const perGachaMap={}; let usersCount=0,gachaEntries=0,itemUniqueTotal=0;
-    Object.entries(data).forEach(([user,gobj])=>{ usersCount++; Object.entries(gobj).forEach(([gacha,info])=>{ gachaEntries++; gSet.add(gacha); if(!perGachaMap[gacha]) perGachaMap[gacha]=new Map(); Object.entries(info.items||{}).forEach(([rarity,arr])=>{ (arr||[]).forEach(code=>{ const k=keyOf(gacha,rarity,code); if(!perGachaMap[gacha].has(k)) perGachaMap[gacha].set(k,{gacha,rarity,code}); }); }); }); });
-    gAllGachas=Array.from(gSet); gItemsByGacha={}; gAllGachas.forEach(g=>{ const arr=Array.from(perGachaMap[g]?.values()||[]); arr.sort(byRarityThenCode); gItemsByGacha[g]=arr; itemUniqueTotal+=arr.length; });
-    const tabs=$("#gachaTabs"); tabs.innerHTML=""; gAllGachas.forEach((g,idx)=>{ const el=document.createElement("div"); el.className="tab"+(idx===0?" active":""); el.textContent=g; el.dataset.gacha=g; el.addEventListener("click",()=>{selectedGacha=g; $$(".tab",tabs).forEach(t=>t.classList.toggle("active",t.dataset.gacha===g)); renderItemGrid();}); tabs.appendChild(el); });
-    selectedGacha=gAllGachas[0]||null;
-    const sel=$("#filterGacha"); sel.innerHTML='<option value="*">すべて</option>'+gAllGachas.map(g=>`<option>${g}</option>`).join("");
-    $("#summaryTag").textContent=`${usersCount}ユーザー / ${gachaEntries}ガチャ / ${itemUniqueTotal}アイテム（タブ集計）`;
-    renderItemGrid(); renderUsersList();
-  }
+function lookupVal(map,key){ if(map[key]) return map[key]; const leg=stripGacha(key); return map[leg]||""; }
+function immediateSrcFor(key){ const v=lookupVal(imgMap,key); if(!v) return ""; if(v.startsWith("idb:")) return ""; return v; }
+function thumbInnerHTML(it){ const key=keyOf(it.gacha,it.rarity,it.code); const src=immediateSrcFor(key); return src?`<img src="${src}" alt="${escapeHtml(it.code)}" />`:`<span class="muted">No Image</span>`; }
 
-  function renderItemGrid(){
-    const grid=$("#itemGrid"); grid.innerHTML=""; if(!selectedGacha){ grid.textContent="ガチャがありません。"; return; }
-    const rFilter=$("#filterRarity").value;
-    const list=(gItemsByGacha[selectedGacha]||[]).filter(it=>rFilter==="*"||it.rarity===rFilter);
-    for(const it of list){
-      const key=keyOf(it.gacha,it.rarity,it.code); const skipped=skipHas(key);
-      const card=document.createElement("div"); card.className="item-card";
-      card.innerHTML=`
-        <div class="item-thumb" data-thumb-key="${key}">${thumbInnerHTML(it)}</div>
-        <div class="item-code">${escapeHtml(it.code)}</div>
-        <div class="muted"><span class="rarity ${it.rarity}">${it.rarity}</span></div>
-        <div class="card-actions">
-          <button class="btn" data-action="set"${skipped?' disabled':''}>画像設定</button>
-          <button class="btn subtle" data-action="clear">解除</button>
-          <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
-        </div>
-        <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
-      card.querySelector('[data-action="set"]').addEventListener("click",()=>openModal(it));
-      card.querySelector('[data-action="clear"]').addEventListener("click",()=>clearImage(it));
-      card.querySelector('[data-action="skip"]').addEventListener("click",()=>toggleSkip(it));
-      grid.appendChild(card);
-    }
-    resolveThumbs(grid);
-  }
+/* ====== JSON 読み込み／UI 再描画 ====== */
+function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
 
-  // === ユーザー一覧（保存ボタンのみ） ===
-  function renderUsersList(){
-    const wrap=$("#usersList"); wrap.innerHTML=""; if(!gData){ wrap.textContent="JSONを読み込んでください。"; return; }
-    const gachaFilter=$("#filterGacha").value, rFilter=$("#filterRarity").value, hideMiss=$("#hideMiss").checked, q=($("#userSearch").value||"").trim();
+const drop=$("#dropzone");
+if (drop) {
+  drop.addEventListener("dragover",(e)=>{e.preventDefault();drop.classList.add("dragover")});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("dragover"));
+  drop.addEventListener("drop",(e)=>{e.preventDefault();drop.classList.remove("dragover");handleFiles(e.dataTransfer.files)});
+}
+$("#loadJsonBtn")?.addEventListener("click",()=>handleFiles($("#jsonFile").files));
 
-    Object.entries(gData).forEach(([user,gobj])=>{
-      if(q && !user.includes(q)) return;
+function onJsonLoaded(data){
+  gData = data || {};
+  rebuildGachaCaches();
+  renderTabs();
+  renderItemGrid();
+  renderUsersList();
+}
 
-      const card=document.createElement("div"); card.className="user-card panel";
-      const header=document.createElement("div"); header.className="user-header";
-
-      header.innerHTML=`<h2>${escapeHtml(user)}</h2>
-        <div class="user-actions">
-          <button class="btn small" data-zip-save>保存</button>
-        </div>`;
-      card.appendChild(header);
-
-      // 保存（File System Access API で Save As）
-      header.querySelector('[data-zip-save]').addEventListener('click', async (e)=>{
-        if (!('showSaveFilePicker' in window)) {
-          alert('この機能はChrome/EdgeなどChromium系ブラウザで利用できます。');
-          return;
-        }
-        if (typeof JSZip === "undefined") { alert("JSZipの読み込みに失敗しています。"); return; }
-        const btn = e.currentTarget; const old = btn.textContent;
-        btn.disabled = true; btn.textContent = "保存中…";
-        try{
-          const { blob } = await buildZipForUser(user, gobj); // ZIPを生成（無圧縮）
-          const handle = await window.showSaveFilePicker({
-            suggestedName: `${sanitize(user)}_gacha.zip`,
-            types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
-          });
-          const w = await handle.createWritable();
-          await w.write(blob);
-          await w.close();
-          btn.textContent = "保存しました";
-          setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
-        }catch(err){
-          btn.disabled = false; btn.textContent = old;
-          alert("保存に失敗: " + (err?.message || err));
-        }
-      });
-
-      // アイテム一覧
-      Object.entries(gobj).forEach(([gacha,info])=>{
-        if(gachaFilter!=="*" && gachaFilter!==gacha) return;
-        const box=document.createElement("div"); box.className="gacha-box";
-        const pulls=info.pulls??0; box.innerHTML=`<div><strong>${escapeHtml(gacha)}</strong> <span class="tag">${pulls}連</span></div>`;
-        const items=info.items||{};
-        rarityOrder.forEach(rarity=>{
-          let list=(items[rarity]||[]); if(!list.length) return;
-          if(hideMiss && rarity==="はずれ") return;
-          if(rFilter!=="*" && rFilter!==rarity) return;
-
-          const row=document.createElement("div"); row.className="rarity-row";
-          const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
-          const itemsWrap=document.createElement("div"); itemsWrap.className="rarity-items";
-
-          list.forEach(code=>{
-            const key=keyOf(gacha,rarity,code);
-            const pill=document.createElement("span");
-            const v=lookupVal(imgMap,key); const immediate=v && !v.startsWith("idb:") ? v : "";
-            pill.className="item-pill"+(immediate?"":" no-img");
-            if(immediate){ pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/><span>${escapeHtml(code)}</span>`; }
-            else{ pill.innerHTML=`<span>${escapeHtml(code)}</span>`; pill.dataset.imgKey=key; }
-            itemsWrap.appendChild(pill);
-          });
-
-          row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
+function rebuildGachaCaches(){
+  // gItemsByGacha: gData 由来のアイテム
+  const perGachaMap = {};
+  let usersCount=0, gachaEntries=0, itemUniqueTotal=0;
+  Object.entries(gData).forEach(([user,gobj])=>{
+    usersCount++;
+    Object.entries(gobj).forEach(([gacha,info])=>{
+      gachaEntries++;
+      if(!perGachaMap[gacha]) perGachaMap[gacha]=new Map();
+      Object.entries(info.items||{}).forEach(([rarity,arr])=>{
+        (arr||[]).forEach(code=>{
+          const k=keyOf(gacha,rarity,code);
+          if(!perGachaMap[gacha].has(k)) perGachaMap[gacha].set(k,{gacha,rarity,code});
         });
-        card.appendChild(box);
       });
-
-      wrap.appendChild(card);
     });
-    resolvePills(wrap);
-  }
-
-  // 表示用画像解決
-  function lookupVal(map,key){ if(map[key]) return map[key]; const leg=stripGacha(key); return map[leg]||""; }
-  function immediateSrcFor(key){ const v=lookupVal(imgMap,key); if(!v) return ""; if(v.startsWith("idb:")) return ""; return v; }
-  function thumbInnerHTML(it){ const key=keyOf(it.gacha,it.rarity,it.code); const src=immediateSrcFor(key); return src?`<img src="${src}" alt="${escapeHtml(it.code)}" />`:`<span class="muted">No Image</span>`; }
-  async function resolveThumbs(root=document){
-    const nodes=$$('[data-thumb-key]',root);
-    await Promise.all(nodes.map(async el=>{
-      const key=el.getAttribute('data-thumb-key'); if(!key) return;
-      if(immediateSrcFor(key)) return;
-      const v=lookupVal(imgMap,key); if(v && v.startsWith("idb:")){ const idbKey=v.slice(4); const url=await urlForKey(idbKey); if(url){ el.innerHTML=`<img src="${url}" alt="${escapeHtml(key.split('::')[2]||'item')}" />`; } }
-    }));
-  }
-  async function resolvePills(root=document){
-    const nodes=$$('[data-img-key]',root);
-    await Promise.all(nodes.map(async el=>{
-      const key=el.dataset.imgKey; const v=lookupVal(imgMap,key);
-      if(v && v.startsWith("idb:")){ const url=await urlForKey(v.slice(4)); if(url){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${url}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; } }
-      else if(v){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${v}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; }
-    }));
-  }
-
-  // 画像解除/リアグ
-  async function clearImage(it){
-    const kNew=keyOf(it.gacha,it.rarity,it.code), kOld=legacyKey(it.rarity,it.code);
-    for(const k of [kNew,kOld]){
-      const v=imgMap[k]; if(v && v.startsWith("idb:")){ const real=v.slice(4); await idbDelete(real); if(urlCache.has(real)){ URL.revokeObjectURL(urlCache.get(real)); urlCache.delete(real); } }
-      const o=origMap[k]; if(o && o.startsWith("idb:")){ await idbDelete(o.slice(4)); }
-      delete imgMap[k]; delete origMap[k];
-    }
-    saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
-    renderItemGrid(); renderUsersList();
-  }
-  async function toggleSkip(it){ const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)){ skipDel(k); } else { await clearImage(it); skipAdd(k); } renderItemGrid(); }
-
-  // モーダル（保存）
-  const modal=$("#imageModal"); let tempPreviewURL="";
-  function openModal(it){
-    const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)) return;
-    currentModalTarget=it; $("#modalTarget").textContent=`${it.gacha} / ${it.rarity}:${it.code}`;
-    const cur=immediateSrcFor(k); $("#modalPreview").src=cur||""; $("#modalStatus").textContent=(lookupVal(imgMap,k)?"設定済み":"未設定");
-    $("#fileInput").value=""; $("#urlInput").value=(cur && !cur.startsWith("data:"))?cur:"";
-    modal.classList.add("show"); modal.setAttribute("aria-hidden","false");
-  }
-  function closeModal(){ modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; } }
-  $("#closeBtn").addEventListener("click", closeModal);
-  modal.addEventListener("click",(e)=>{ if(e.target===modal) closeModal(); });
-
-  $("#fileInput").addEventListener("change", async ()=>{
-    if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; }
-    const file=$("#fileInput").files[0]; if(!file){ $("#modalPreview").src=""; return; }
-    const kind=getFileKind(file);
-    try{
-      if(kind==="image"){ tempPreviewURL=URL.createObjectURL(file); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（画像）"; return; }
-      if(kind==="audio"){ const blob=await makeNotePlaceholder(256); tempPreviewURL=URL.createObjectURL(blob); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（音声:♫）"; return; }
-      if(kind==="video"){ const thumb=await extractVideoThumbnail(file,{time:0.1,maxSize:256}); tempPreviewURL=URL.createObjectURL(thumb); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（動画サムネ）"; return; }
-    }catch(e){ const ph=await makeFilmPlaceholder(256); tempPreviewURL=URL.createObjectURL(ph); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="プレビュー生成に失敗（プレースホルダ）"; }
   });
-  $("#urlInput").addEventListener("input", ()=>{ const url=($("#urlInput").value||"").trim(); if(url){ $("#modalPreview").src=url; $("#modalStatus").textContent="未保存のプレビュー（URL）"; } });
+  // union with catalog
+  const gSet = new Set([...Object.keys(perGachaMap), ...Object.keys(gCatalogByGacha)]);
+  gItemsByGacha = {};
+  gSet.forEach(g=>{
+    const fromData = Array.from(perGachaMap[g]?.values()||[]);
+    const fromCat  = Array.from((gCatalogByGacha[g]||[]).values());
+    const map = new Map();
+    [...fromData, ...fromCat].forEach(it=>map.set(keyOf(it.gacha,it.rarity,it.code), it));
+    const arr = Array.from(map.values()).sort(byRarityThenCode);
+    gItemsByGacha[g] = arr;
+    itemUniqueTotal += arr.length;
+  });
+  gAllGachas = Array.from(gSet);
+  if(!selectedGacha) selectedGacha = gAllGachas[0] || null;
 
-  $("#applyBtn").addEventListener("click", async ()=>{
-    if(!currentModalTarget) return;
-    const k=keyOf(currentModalTarget.gacha,currentModalTarget.rarity,currentModalTarget.code);
-    const file=$("#fileInput").files[0]; const url=($("#urlInput").value||"").trim();
-    try{
-      if(file){
-        const kind=getFileKind(file);
-        await idbPut(k+"|orig", file);           // オリジナル保持
-        origMap[k] = "idb:" + (k+"|orig");
+  $("#summaryTag").textContent = `${Object.keys(gData).length}ユーザー / ${gSet.size}ガチャ / ${itemUniqueTotal}アイテム`;
+  const sel=$("#filterGacha"); if(sel) sel.innerHTML='<option value="*">すべて</option>'+gAllGachas.map(g=>`<option>${g}</option>`).join("");
+}
+
+function renderTabs(){
+  const tabs=$("#gachaTabs"); if(!tabs) return;
+  tabs.innerHTML="";
+  gAllGachas.forEach((g,idx)=>{
+    const el=document.createElement("div");
+    el.className="tab"+((selectedGacha?selectedGacha===g:idx===0)?" active":"");
+    el.textContent=g; el.dataset.gacha=g;
+    el.addEventListener("click",()=>{ selectedGacha=g; $$(".tab",tabs).forEach(t=>t.classList.toggle("active",t.dataset.gacha===g)); renderItemGrid(); });
+    tabs.appendChild(el);
+  });
+  if(!selectedGacha && gAllGachas.length) selectedGacha=gAllGachas[0];
+}
+
+function renderItemGrid(){
+  const grid=$("#itemGrid"); if(!grid){ return; }
+  grid.innerHTML="";
+  if(!selectedGacha){ grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。"; return; }
+  const rFilter=$("#filterRarity").value;
+  const list=(gItemsByGacha[selectedGacha]||[]).filter(it=>rFilter==="*"||it.rarity===rFilter);
+  for(const it of list){
+    const key=keyOf(it.gacha,it.rarity,it.code);
+    const skipped=skipHas(key);
+    const hasImage=!!lookupVal(imgMap,key);
+    const card=document.createElement("div"); card.className="item-card";
+    card.innerHTML=`
+      <div class="item-thumb" data-thumb-key="${key}">${thumbInnerHTML(it)}</div>
+      <div class="item-code">${escapeHtml(it.code)}</div>
+      <div class="muted"><span class="rarity ${it.rarity}">${it.rarity}</span></div>
+      <div class="card-actions">
+        <button class="btn" data-action="primary"${skipped?' disabled':''}>${hasImage?'解除':'🖼️ 画像設定'}</button>
+        <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
+      </div>
+      <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
+    card.querySelector('[data-action="primary"]').addEventListener("click",()=>{ const nowHas=!!lookupVal(imgMap,key); if(nowHas){ clearImage(it); } else { openImageModal(it); }});
+    card.querySelector('[data-action="skip"]').addEventListener("click",()=>toggleSkip(it));
+    grid.appendChild(card);
+  }
+  resolveThumbs(grid);
+}
+
+function renderUsersList(){
+  const wrap=$("#usersList"); if(!wrap) return;
+  wrap.innerHTML="";
+  const empty = Object.keys(gData).length===0;
+  if(empty){ wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>'; return; }
+
+  const gachaFilter=$("#filterGacha").value, rFilter=$("#filterRarity").value, hideMiss=$("#hideMiss").checked, q=($("#userSearch").value||"").trim();
+
+  Object.entries(gData).forEach(([user,gobj])=>{
+    if(q && !user.includes(q)) return;
+
+    const card=document.createElement("div"); card.className="user-card panel";
+    const header=document.createElement("div"); header.className="user-header";
+    header.innerHTML=`<h2>${escapeHtml(user)}</h2>
+      <div class="user-actions"><button class="btn small" data-zip-save>保存</button></div>`;
+    card.appendChild(header);
+
+    // 保存（File System Access API）
+    header.querySelector('[data-zip-save]').addEventListener('click', async (e)=>{
+      if (!('showSaveFilePicker' in window)) { alert('Chrome/Edge などChromium系で動作します。'); return; }
+      if (typeof JSZip === "undefined") { alert("JSZipの読み込みに失敗しています。"); return; }
+      const btn = e.currentTarget; const old = btn.textContent;
+      btn.disabled = true; btn.textContent = "保存中…";
+      try{
+        const { blob } = await buildZipForUser(user, gobj);
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `${sanitize(user)}_gacha.zip`,
+          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+        });
+        const w = await handle.createWritable();
+        await w.write(blob); await w.close();
+        btn.textContent = "保存しました";
+        setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
+      }catch(err){ btn.disabled = false; btn.textContent = old; alert("保存に失敗: " + (err?.message || err)); }
+    });
+
+    Object.entries(gobj).forEach(([gacha,info])=>{
+      if(gachaFilter!=="*" && gachaFilter!==gacha) return;
+      const box=document.createElement("div"); box.className="gacha-box";
+      const pulls=info.pulls??0; box.innerHTML=`<div><strong>${escapeHtml(gacha)}</strong> <span class="tag">${pulls}連</span></div>`;
+      const items=info.items||{};
+      rarityOrder.forEach(rarity=>{
+        let list=(items[rarity]||[]); if(!list.length) return;
+        if(hideMiss && rarity==="はずれ") return;
+        if(rFilter!=="*" && rFilter!==rarity) return;
+
+        const row=document.createElement("div"); row.className="rarity-row";
+        const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
+        const itemsWrap=document.createElement("div"); itemsWrap.className="rarity-items";
+
+        list.forEach(code=>{
+          const key=keyOf(gacha,rarity,code);
+          const pill=document.createElement("span");
+          const v=lookupVal(imgMap,key);
+          const immediate=v && !v.startsWith("idb:") ? v : "";
+          pill.className="item-pill"+(immediate?"":" no-img");
+          if(immediate){ pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/><span>${escapeHtml(code)}</span>`; }
+          else{ pill.innerHTML=`<span>${escapeHtml(code)}</span>`; pill.dataset.imgKey=key; }
+          itemsWrap.appendChild(pill);
+        });
+
+        row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
+      });
+      card.appendChild(box);
+    });
+
+    wrap.appendChild(card);
+  });
+  resolvePills(wrap);
+}
+
+/* ====== 画像モーダル（既存） ====== */
+const imageModal=$("#imageModal"); let tempPreviewURL="";
+function openImageModal(it){
+  const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)) return;
+  currentModalTarget=it; $("#modalTarget").textContent=`${it.gacha} / ${it.rarity}:${it.code}`;
+  const cur=immediateSrcFor(k); $("#modalPreview").src=cur||""; $("#modalStatus").textContent=(lookupVal(imgMap,k)?"設定済み":"未設定");
+  $("#fileInput").value=""; $("#urlInput").value=(cur && !cur.startsWith("data:"))?cur:"";
+  imageModal.classList.add("show"); imageModal.setAttribute("aria-hidden","false");
+}
+function closeImageModal(){ imageModal.classList.remove("show"); imageModal.setAttribute("aria-hidden","true"); if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; } }
+$("#closeBtn").addEventListener("click", closeImageModal);
+imageModal.addEventListener("click",(e)=>{ if(e.target===imageModal) closeImageModal(); });
+
+$("#fileInput").addEventListener("change", async ()=>{
+  if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; }
+  const file=$("#fileInput").files[0]; if(!file){ $("#modalPreview").src=""; return; }
+  const kind=getFileKind(file);
+  try{
+    if(kind==="image"){ tempPreviewURL=URL.createObjectURL(file); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（画像）"; return; }
+    if(kind==="audio"){ const blob=await makeNotePlaceholder(256); tempPreviewURL=URL.createObjectURL(blob); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（音声:♫）"; return; }
+    if(kind==="video"){ const thumb=await extractVideoThumbnail(file,{time:0.1,maxSize:256}); tempPreviewURL=URL.createObjectURL(thumb); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（動画サムネ）"; return; }
+  }catch(e){ const ph=await makeFilmPlaceholder(256); tempPreviewURL=URL.createObjectURL(ph); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="プレビュー生成に失敗（プレースホルダ）"; }
+});
+$("#urlInput").addEventListener("input", ()=>{ const url=($("#urlInput").value||"").trim(); if(url){ $("#modalPreview").src=url; $("#modalStatus").textContent="未保存のプレビュー（URL）"; } });
+
+$("#applyBtn").addEventListener("click", async ()=>{
+  if(!currentModalTarget) return;
+  const k=keyOf(currentModalTarget.gacha,currentModalTarget.rarity,currentModalTarget.code);
+  const file=$("#fileInput").files[0]; const url=($("#urlInput").value||"").trim();
+  try{
+    if(file){
+      const kind=getFileKind(file);
+      await idbPut(k+"|orig", file);           // オリジナル
+      origMap[k] = "idb:" + (k+"|orig");
+      let thumbBlob=null;
+      if(kind==="image"){ thumbBlob = await compressImage(file,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
+      else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
+      else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(file,{time:0.1,maxSize:256}); }
+      await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb");
+      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
+    }else if(url){
+      let ok=false;
+      try{
+        const resp = await fetch(url,{mode:"cors"}); const blob = await resp.blob();
+        await idbPut(k+"|orig", blob); origMap[k] = "idb:"+(k+"|orig");
+        const kind = blob.type.startsWith("image/") ? "image" : blob.type.startsWith("video/") ? "video" : blob.type.startsWith("audio/") ? "audio" : "unknown";
         let thumbBlob=null;
-        if(kind==="image"){ thumbBlob = await compressImage(file,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
+        if(kind==="image"){ thumbBlob = await compressImage(blob,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
         else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
-        else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(file,{time:0.1,maxSize:256}); }
-        await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb");
-        saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
-      }else if(url){
-        let ok=false;
-        try{
-          const resp = await fetch(url,{mode:"cors"}); const blob = await resp.blob();
-          await idbPut(k+"|orig", blob); origMap[k] = "idb:"+(k+"|orig");
-          const kind = blob.type.startsWith("image/") ? "image" : blob.type.startsWith("video/") ? "video" : blob.type.startsWith("audio/") ? "audio" : "unknown";
-          let thumbBlob=null;
-          if(kind==="image"){ thumbBlob = await compressImage(blob,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
-          else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
-          else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(blob,{time:0.1,maxSize:256}); }
-          if(thumbBlob){ await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb"); ok=true; }
-        }catch(_e){}
-        if(!ok){ imgMap[k]=url; }
-        saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
-      }else{ alert("ファイルまたはURLを指定してください。"); return; }
-      closeModal(); renderItemGrid(); renderUsersList();
-    }catch(err){ console.error(err); alert("保存に失敗: "+(err?.message||err)); }
-  });
-  $("#clearBtn").addEventListener("click", async ()=>{ if(!currentModalTarget) return; await clearImage(currentModalTarget); closeModal(); });
+        else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(blob,{time:0.1,maxSize:256}); }
+        if(thumbBlob){ await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb"); ok=true; }
+      }catch(_e){}
+      if(!ok){ imgMap[k]=url; }
+      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
+    }else{ alert("ファイルまたはURLを指定してください。"); return; }
+    closeImageModal(); renderItemGrid(); renderUsersList();
+  }catch(err){ console.error(err); alert("保存に失敗: "+(err?.message||err)); }
+});
 
-  function getFileKind(file){ const t=(file.type||"").toLowerCase(); const n=(file.name||"").toLowerCase();
-    if(t.startsWith("image/")) return "image";
-    if(t.startsWith("video/")||n.endsWith(".mp4")||n.endsWith(".webm")||n.endsWith(".mov")) return "video";
-    if(t.startsWith("audio/")||n.endsWith(".mp3")||n.endsWith(".wav")||n.endsWith(".m4a")) return "audio";
-    return "unknown"; }
-  async function makeNotePlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
-    x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.fillStyle="#1f2937"; x.beginPath(); x.arc(size*.5,size*.5,size*.42,0,Math.PI*2); x.fill();
-    x.fillStyle="#e11d48"; x.font=`${Math.round(size*.5)}px system-ui,-apple-system,"Segoe UI",Roboto,"Noto Color Emoji"`; x.textAlign="center"; x.textBaseline="middle"; x.fillText("♫", size*.5, size*.5);
-    return await new Promise(r=>c.toBlob(r,"image/png")); }
-  async function makeFilmPlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
-    x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.strokeStyle="#e11d48"; x.lineWidth=Math.max(2,size*.04); x.strokeRect(size*.15,size*.25,size*.7,size*.5);
-    for(let i=0;i<4;i++){ x.fillStyle="#1f2937"; x.fillRect(size*(0.18+i*0.18), size*0.18, size*0.08, size*0.05); x.fillRect(size*(0.18+i*0.18), size*0.77, size*0.08, size*0.05); }
-    return await new Promise(r=>c.toBlob(r,"image/png")); }
-  async function extractVideoThumbnail(fileOrBlob,{time=0.1,maxSize=256}={}){ const url=URL.createObjectURL(fileOrBlob);
-    try{ const v=document.createElement("video"); v.preload="metadata"; v.src=url; v.muted=true;
-      await new Promise((ok,ng)=>{ v.onloadedmetadata=()=>ok(); v.onerror=()=>ng(new Error("metadata load failed")); });
-      v.currentTime=Math.min(Math.max(time,0.01),(v.duration||1)-0.01); await new Promise(ok=>{ v.onseeked=()=>ok(); });
-      const w=v.videoWidth,h=v.videoHeight,s=Math.min(1,maxSize/Math.max(w,h)); const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
-      const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(v,0,0,tw,th); URL.revokeObjectURL(url);
-      return await new Promise(r=>c.toBlob(r,"image/webp",0.85));
-    }catch(e){ URL.revokeObjectURL(url); return await makeFilmPlaceholder(maxSize); } }
-  async function compressImage(fileOrBlob,{maxSize=256,typePrefer=["image/webp","image/jpeg"],quality=0.85}={}){
-    const img=await createImageBitmap(fileOrBlob).catch(()=>null); const tag=img?null:await fileToImage(fileOrBlob);
-    const w=img?img.width:tag.naturalWidth, h=img?img.height:tag.naturalHeight, s=Math.min(1,maxSize/Math.max(w,h));
-    const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
-    const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(img||tag,0,0,tw,th);
-    for(const mime of typePrefer){ const b=await new Promise(r=>c.toBlob(r,mime,quality)); if(b) return b; } return await new Promise(r=>c.toBlob(r,"image/png"));
+/* ====== 解除／リアグ ====== */
+async function clearImage(it){
+  const kNew=keyOf(it.gacha,it.rarity,it.code), kOld=legacyKey(it.rarity,it.code);
+  for(const k of [kNew,kOld]){
+    const v=imgMap[k]; if(v && v.startsWith("idb:")){ const real=v.slice(4); await idbDelete(real); if(urlCache.has(real)){ URL.revokeObjectURL(urlCache.get(real)); urlCache.delete(real); } }
+    const o=origMap[k]; if(o && o.startsWith("idb:")){ await idbDelete(o.slice(4)); }
+    delete imgMap[k]; delete origMap[k];
   }
-  function fileToImage(file){ return new Promise((ok,ng)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>ok(img); img.onerror=ng; img.src=fr.result; }; fr.onerror=ng; fr.readAsDataURL(file); }); }
+  saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
+  renderItemGrid(); renderUsersList();
+}
+async function toggleSkip(it){ const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)){ skipDel(k); } else { await clearImage(it); skipAdd(k); } renderItemGrid(); }
 
-  // JSZip で ZIP 作成（無圧縮）
-  async function buildZipForUser(user, gobj){
-    const zip = new JSZip();
-    const usedNames = new Set();
-    let count = 0;
-    for(const [gacha,info] of Object.entries(gobj)){
-      for(const rarity of rarityOrder){
-        for(const code of (info.items?.[rarity] || [])){
-          const key = keyOf(gacha, rarity, code);
-          if(skipHas(key)) continue;
-          const blob = await getOriginalBlobForKey(key);
-          if(!blob) continue;
-          const ext = guessExt(blob.type) || "bin";
-          const base = `${sanitize(gacha)}/${rarity}_${sanitize(code)}.${ext}`;
-          let name = base, i=2; while(usedNames.has(name)){ name = base.replace(`.${ext}`, `(${i++}).${ext}`); }
-          usedNames.add(name);
-          zip.file(name, blob, {binary:true, compression:"STORE"}); // 無圧縮=無劣化
-          count++;
-        }
+/* ====== 画像のプレビュー解決 ====== */
+async function resolveThumbs(root=document){
+  const nodes=$$('[data-thumb-key]',root);
+  await Promise.all(nodes.map(async el=>{
+    const key=el.getAttribute('data-thumb-key'); if(!key) return;
+    if(immediateSrcFor(key)) return;
+    const v=lookupVal(imgMap,key); if(v && v.startsWith("idb:")){ const idbKey=v.slice(4); const url=await urlForKey(idbKey); if(url){ el.innerHTML=`<img src="${url}" alt="${escapeHtml(key.split('::')[2]||'item')}" />`; } }
+  }));
+}
+async function resolvePills(root=document){
+  const nodes=$$('[data-img-key]',root);
+  await Promise.all(nodes.map(async el=>{
+    const key=el.dataset.imgKey; const v=lookupVal(imgMap,key);
+    if(v && v.startsWith("idb:")){ const url=await urlForKey(v.slice(4)); if(url){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${url}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; } }
+    else if(v){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${v}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; }
+  }));
+}
+
+/* ====== ZIP作成（保存用） ====== */
+async function buildZipForUser(user, gobj){
+  const zip = new JSZip(); const usedNames = new Set(); let count = 0;
+  for(const [gacha,info] of Object.entries(gobj)){
+    for(const rarity of rarityOrder){
+      for(const code of (info.items?.[rarity] || [])){
+        const key = keyOf(gacha, rarity, code);
+        if(skipHas(key)) continue;
+        const blob = await getOriginalBlobForKey(key);
+        if(!blob) continue;
+        const ext = guessExt(blob.type) || "bin";
+        const base = `${sanitize(gacha)}/${rarity}_${sanitize(code)}.${ext}`;
+        let name = base, i=2; while(usedNames.has(name)){ name = base.replace(`.${ext}`, `(${i++}).${ext}`); }
+        usedNames.add(name);
+        zip.file(name, blob, {binary:true, compression:"STORE"}); // 無圧縮
+        count++;
       }
     }
-    if(count === 0) throw new Error("出力対象がありません（画像未設定 or すべてリアグ）");
-    const blob = await zip.generateAsync({type:"blob", compression:"STORE"});
-    return {blob, count, size: blob.size};
   }
-  async function getOriginalBlobForKey(key){
-    const orig = origMap[key];
-    if(orig && orig.startsWith("idb:")){ const b = await idbGet(orig.slice(4)); if(b) return b; }
-    const v = lookupVal(imgMap, key);
-    if(v && v.startsWith("idb:")){ const b = await idbGet(v.slice(4)); if(b) return b; }
-    if(v && /^https?:|^data:/.test(v)){ try{ const res = await fetch(v,{mode:"cors"}); const b = await res.blob(); return b; }catch(_e){ return null; } }
-    return null;
-  }
-  const guessExt = (mime) => {
-    if(!mime) return "";
-    if(mime==="image/jpeg") return "jpg";
-    const map = { "image/png":"png","image/webp":"webp","image/gif":"gif","image/svg+xml":"svg",
-                  "video/mp4":"mp4","video/webm":"webm","audio/mpeg":"mp3","audio/wav":"wav","audio/mp4":"m4a" };
-    return map[mime] || (mime.split("/")[1]||"");
-  };
+  if(count === 0) throw new Error("出力対象がありません（画像未設定 or すべてリアグ）");
+  const blob = await zip.generateAsync({type:"blob", compression:"STORE"});
+  return {blob, count, size: blob.size};
+}
+async function getOriginalBlobForKey(key){
+  const orig = origMap[key];
+  if(orig && orig.startsWith("idb:")){ const b = await idbGet(orig.slice(4)); if(b) return b; }
+  const v = lookupVal(imgMap, key);
+  if(v && v.startsWith("idb:")){ const b = await idbGet(v.slice(4)); if(b) return b; }
+  if(v && /^https?:|^data:/.test(v)){ try{ const res = await fetch(v,{mode:"cors"}); const b = await res.blob(); return b; }catch(_e){ return null; } }
+  return null;
+}
+const guessExt = (mime) => {
+  if(!mime) return "";
+  if(mime==="image/jpeg") return "jpg";
+  const map = { "image/png":"png","image/webp":"webp","image/gif":"gif","image/svg+xml":"svg",
+                "video/mp4":"mp4","video/webm":"webm","audio/mpeg":"mp3","audio/wav":"wav","audio/mp4":"m4a" };
+  return map[mime] || (mime.split("/")[1]||"");
+};
 
-  // 共有のイベント（フィルタ/エクスポート）
-  $("#filterGacha").addEventListener("change", renderUsersList);
-  $("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
-  $("#hideMiss").addEventListener("change", renderUsersList);
-  $("#userSearch").addEventListener("input", renderUsersList);
+/* ====== 画像処理補助 ====== */
+function getFileKind(file){ const t=(file.type||"").toLowerCase(); const n=(file.name||"").toLowerCase();
+  if(t.startsWith("image/")) return "image";
+  if(t.startsWith("video/")||n.endsWith(".mp4")||n.endsWith(".webm")||n.endsWith(".mov")) return "video";
+  if(t.startsWith("audio/")||n.endsWith(".mp3")||n.endsWith(".wav")||n.endsWith(".m4a")) return "audio";
+  return "unknown"; }
+async function makeNotePlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
+  x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.fillStyle="#1f2937"; x.beginPath(); x.arc(size*.5,size*.5,size*.42,0,Math.PI*2); x.fill();
+  x.fillStyle="#e11d48"; x.font=`${Math.round(size*.5)}px system-ui,-apple-system,"Segoe UI",Roboto,"Noto Color Emoji"`; x.textAlign="center"; x.textBaseline="middle"; x.fillText("♫", size*.5, size*.5);
+  return await new Promise(r=>c.toBlob(r,"image/png")); }
+async function makeFilmPlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
+  x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.strokeStyle="#e11d48"; x.lineWidth=Math.max(2,size*.04); x.strokeRect(size*.15,size*.25,size*.7,size*.5);
+  for(let i=0;i<4;i++){ x.fillStyle="#1f2937"; x.fillRect(size*(0.18+i*0.18), size*0.18, size*0.08, size*0.05); x.fillRect(size*(0.18+i*0.18), size*0.77, size*0.08, size*0.05); }
+  return await new Promise(r=>c.toBlob(r,"image/png")); }
+async function extractVideoThumbnail(fileOrBlob,{time=0.1,maxSize=256}={}){ const url=URL.createObjectURL(fileOrBlob);
+  try{ const v=document.createElement("video"); v.preload="metadata"; v.src=url; v.muted=true;
+    await new Promise((ok,ng)=>{ v.onloadedmetadata=()=>ok(); v.onerror=()=>ng(new Error("metadata load failed")); });
+    v.currentTime=Math.min(Math.max(time,0.01),(v.duration||1)-0.01); await new Promise(ok=>{ v.onseeked=()=>ok(); });
+    const w=v.videoWidth,h=v.videoHeight,s=Math.min(1,maxSize/Math.max(w,h)); const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
+    const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(v,0,0,tw,th); URL.revokeObjectURL(url);
+    return await new Promise(r=>c.toBlob(r,"image/webp",0.85));
+  }catch(e){ URL.revokeObjectURL(url); return await makeFilmPlaceholder(maxSize); } }
+async function compressImage(fileOrBlob,{maxSize=256,typePrefer=["image/webp","image/jpeg"],quality=0.85}={}){
+  const img=await createImageBitmap(fileOrBlob).catch(()=>null); const tag=img?null:await fileToImage(fileOrBlob);
+  const w=img?img.width:tag.naturalWidth, h=img?img.height:tag.naturalHeight, s=Math.min(1,maxSize/Math.max(w,h));
+  const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
+  const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(img||tag,0,0,tw,th);
+  for(const mime of typePrefer){ const b=await new Promise(r=>c.toBlob(r,mime,quality)); if(b) return b; } return await new Promise(r=>c.toBlob(r,"image/png"));
+}
+function fileToImage(file){ return new Promise((ok,ng)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>ok(img); img.onerror=ng; img.src=fr.result; }; fr.onerror=ng; fr.readAsDataURL(file); }); }
 
-  $("#exportMapBtn").addEventListener("click", async ()=>{
-    const bundle={ images:imgMap, skip:Array.from(skipSet), original:origMap };
-    const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="gacha_image_map_bundle.json"; document.body.appendChild(a); a.click(); a.remove();
+/* ====== 開始フロー UI ====== */
+const splash=$("#splash"), mainUI=$("#mainUI");
+const startModal=$("#startModal"), catalogModal=$("#catalogModal"), liveModal=$("#liveModal"), finalModal=$("#finalModal"), guideModal=$("#guideModal");
+
+function open(modal){ modal.classList.add("show"); modal.setAttribute("aria-hidden","false"); }
+function close(modal){ modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); }
+function startDone(){ splash.style.display="none"; mainUI.style.display="block"; close(startModal); }
+
+$("#openStart").addEventListener("click", ()=>open(startModal));
+$("#closeStart").addEventListener("click", ()=>close(startModal));
+
+$("#wfLive").addEventListener("click", ()=>{ open(catalogModal); });
+$("#wfFinal").addEventListener("click", ()=>{ open(finalModal); });
+$("#wfJsonBtn").addEventListener("click", ()=>{ $("#jsonFile2").click(); });
+$("#jsonFile2").addEventListener("change", ()=>{ const f=$("#jsonFile2").files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); });
+
+$("#catClose").addEventListener("click", ()=>close(catalogModal));
+$("#openLivePaste").addEventListener("click", ()=>open(liveModal));
+$("#liveClose").addEventListener("click", ()=>close(liveModal));
+$("#finalClose").addEventListener("click", ()=>close(finalModal));
+
+/* ====== 1) リアルタイム：カタログ解析 → 反映 ====== */
+$("#catParse").addEventListener("click", ()=>{
+  const gacha = ($("#catGachaName").value||"").trim() || "ガチャ";
+  const text  = ($("#catText").value||"").trim();
+  if(!text){ alert("テキストを貼り付けてください。"); return; }
+  const items = parseCatalogText(text);
+  if(items.length===0){ alert("アイテムを検出できませんでした。入力形式をご確認ください。"); return; }
+  // 反映：カタログとして登録
+  const arr = [];
+  items.forEach(({rarity, code})=>{
+    arr.push({gacha, rarity, code});
   });
-  $("#importMapInput").addEventListener("change", ()=>{
-    const f=$("#importMapInput").files[0]; if(!f) return;
-    const fr=new FileReader(); fr.onload=()=>{ try{
-      const json=JSON.parse(fr.result);
-      if(json.images&&typeof json.images==="object") imgMap=json.images; else if(typeof json==="object" && !json.original){ imgMap=json; }
-      if(Array.isArray(json.skip)) skipSet=new Set(json.skip);
-      if(json.original && typeof json.original==="object") origMap=json.original;
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); saveLocalJSON(LS_KEY_ORIG,origMap);
-      renderItemGrid(); renderUsersList();
-    }catch(e){ alert("画像マップの読み込みに失敗: "+e.message); } };
-    fr.readAsText(f,"utf-8");
-  });
-  $("#clearMapBtn").addEventListener("click", async ()=>{
-    if(confirm("ローカルの画像マップ/オリジナル/リアグ設定を削除します。よろしいですか？")){
-      imgMap={}; origMap={}; skipSet=new Set();
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveLocalJSON(LS_KEY_SKIP,[]);
-      await idbClear(); for(const url of urlCache.values()) URL.revokeObjectURL(url); urlCache.clear();
-      renderItemGrid(); renderUsersList();
+  gCatalogByGacha[gacha] = arr;
+  selectedGacha = gacha;
+  rebuildGachaCaches(); renderTabs(); renderItemGrid(); // ユーザーは空でもOK
+  startDone(); close(catalogModal);
+  // 次：ライブ貼り付けを促す
+  open(guideModal);
+});
+
+/* ====== 1.5) ガイドモーダルを閉じる ====== */
+$("#guideOk").addEventListener("click", ()=>close(guideModal));
+
+/* ====== 2) リアルタイム：結果貼り付け（繰り返し可） ====== */
+$("#liveApply").addEventListener("click", () => {
+  const text = ($("#liveText").value || "").trim();
+  if (!text) { alert("テキストを貼り付けてください。"); return; }
+
+  const blocks = splitLiveBlocks(text);
+  if (blocks.length === 0) { alert("解析できるブロックが見つかりませんでした。"); return; }
+
+  const delta = {};
+  let lastGacha = null;
+  let added = 0;
+
+  for (const block of blocks) {
+    const parsed = parseLiveBlock(block);
+    if (!parsed) continue;
+
+    const { gacha, user, pulls, items } = parsed;
+    lastGacha = gacha;
+
+    // deltaに積む
+    delta[user] = delta[user] || {};
+    delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
+    delta[user][gacha].pulls += pulls;
+
+    for (const [rarity, codes] of Object.entries(items)) {
+      delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
+      codes.forEach(c => { if (!delta[user][gacha].items[rarity].includes(c)) delta[user][gacha].items[rarity].push(c); });
     }
+
+    // カタログも更新（未登録アイテムの補完）
+    const cat = gCatalogByGacha[gacha] || [];
+    const map = new Map(cat.map(it => [ `${it.gacha}::${it.rarity}::${it.code}`, it ]));
+    Object.entries(items).forEach(([rarity, codes]) => {
+      codes.forEach(code => {
+        const k = `${gacha}::${rarity}::${code}`;
+        if (!map.has(k)) map.set(k, { gacha, rarity, code });
+      });
+    });
+    gCatalogByGacha[gacha] = Array.from(map.values()).sort(byRarityThenCode);
+
+    added++;
+  }
+
+  if (!added) { alert("ブロックは見つかりましたが、解析に失敗しました。形式をご確認ください。"); return; }
+
+  // gDataへマージ → 再描画
+  mergeIntoGData(delta);
+  if (lastGacha) selectedGacha = lastGacha;
+
+  $("#liveText").value = "";
+  close(liveModal);          // ← 反映後にモーダルを閉じる
+  startDone();               // ← まだスプラッシュ表示なら通常画面へ
+  rebuildGachaCaches();
+  renderTabs();
+  renderItemGrid();
+  renderUsersList();
+});
+
+/* ====== 3) 最終結果：一括貼り付け → 反映 ====== */
+$("#finalParse").addEventListener("click", ()=>{
+  const gacha = ($("#finalGachaName").value||"").trim() || "ガチャ";
+  const text = ($("#finalText").value||"").trim();
+  if(!text){ alert("テキストを貼り付けてください。"); return; }
+  const parsed = parseFinalSummaryText(text);
+  if(parsed.length===0){ alert("ユーザーの成績を検出できませんでした。"); return; }
+
+  const delta = {}, catSet = new Map();
+  parsed.forEach(({user, entries})=>{
+    delta[user] = delta[user] || {};
+    delta[user][gacha] = delta[user][gacha] || {pulls:0, items:{}};
+    let pulls = 0;
+    entries.forEach(({rarity, code, count})=>{
+      pulls += (+count||0);
+      delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
+      uniqPush(delta[user][gacha].items[rarity], code);
+      catSet.set(keyOf(gacha,rarity,code), {gacha,rarity,code});
+    });
+    delta[user][gacha].pulls += pulls;
   });
+
+  // カタログ反映
+  gCatalogByGacha[gacha] = Array.from(catSet.values()).sort(byRarityThenCode);
+
+  mergeIntoGData(delta);
+  rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
+  startDone(); close(finalModal);
+});
+
+/* ====== マージ/ユーティリティ ====== */
+function mergeIntoGData(delta){
+  for(const [user,gobj] of Object.entries(delta)){
+    gData[user] = gData[user] || {};
+    for(const [gacha,info] of Object.entries(gobj)){
+      gData[user][gacha] = gData[user][gacha] || {pulls:0, items:{}};
+      gData[user][gacha].pulls += (info.pulls||0);
+      for(const [rarity,codes] of Object.entries(info.items||{})){
+        gData[user][gacha].items[rarity] = gData[user][gacha].items[rarity] || [];
+        codes.forEach(c=>uniqPush(gData[user][gacha].items[rarity], c));
+      }
+    }
+  }
+}
+
+/* ====== 解析: 出現アイテム一覧 ======
+   行の並びが ①タブ区切り（1\tR\t7.5%\tC）
+            または ②縦4行（1 / R / 7.5% / C） を両対応 */
+function parseCatalogText(text){
+  const items = [];
+  const clean = text.replace(/\r/g,'').replace(/[ \t]+\n/g,'\n').trim();
+  // ① タブ区切り
+  const reTab = /^\s*\d+\s*\t\s*([^\t]+)\t([^\t\n]+)\t([^\t\n]+)\s*$/gm;
+  let m;
+  while((m = reTab.exec(clean)) !== null){
+    const rarity=(m[1]||"").trim(); const code=(m[3]||"").trim();
+    if(rarity) items.push({rarity, code});
+  }
+  if(items.length>0) return items;
+
+  // ② 縦4行
+  const lines = clean.split(/\n+/);
+  // ヘッダ除去
+  while(lines.length && /No\./.test(lines[0])) lines.shift();
+  while(lines.length && /レアリティ|景品名|出現率/.test(lines[0])) lines.shift();
+
+  for(let i=0;i+3<lines.length;i++){
+    const a=lines[i].trim(), b=lines[i+1].trim(), c=lines[i+2].trim(), d=lines[i+3].trim();
+    if(/^\d+$/.test(a) && b && d){ items.push({rarity:b, code:d}); i+=3; }
+  }
+  return items;
+}
+
+/* ====== 解析: リアルタイム結果（1ブロック） ====== */
+function splitLiveBlocks(text){
+  const clean = text.replace(/\r/g, '').trim();
+  // 「#なまずつーるず」(末尾に空白があっても可) だけを区切りに採用
+  return clean
+    .split(/#なまずつーるず[^\S\r\n]*/g)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+function parseLiveBlock(block){
+  const lines = block.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if(lines.length<3) return null;
+  const gacha = lines[0];
+  const mUser = /^(.+?)\s*([0-9]+)\s*連$/.exec(lines[1]);
+  if(!mUser) return null;
+  const user = mUser[1].trim(); const pulls = parseInt(mUser[2],10)||0;
+  const items = {};
+  for(let i=2;i<lines.length;i++){
+    const line = lines[i];
+    const m = /【([^】]+)】\s*([^\s　]+)[\s　]+(\d+)個?/.exec(line);
+    if(!m) continue;
+    const rarity=m[1].trim(), code=m[2].trim(); // count=m[3]
+    items[rarity]=items[rarity]||[]; uniqPush(items[rarity], code);
+  }
+  return {gacha,user,pulls,items};
+}
+
+/* ====== 解析: 最終結果一覧 ======
+   構造： (数字) → (ユーザー名) → 多数の「番号\tレアリティ\t景品\t個数」行 → 次の (数字) ... */
+function parseFinalSummaryText(text){
+  const lines = text.replace(/\r/g,'').split(/\n/).map(s=>s.trim());
+  const out = [];
+  // ヘッダをスキップ
+  let i=0; while(i<lines.length && (/^ガチャ$/.test(lines[i]) || /^No\./.test(lines[i]) || /名前$/.test(lines[i]) || /レアリティ/.test(lines[i]))) i++;
+  while(i<lines.length){
+    // 数字行
+    if(!/^\d+$/.test(lines[i]||"")){ i++; continue; }
+    i++;
+    const user = (lines[i++]||"").trim(); if(!user){ continue; }
+    const entries=[];
+    while(i<lines.length){
+      const s=lines[i];
+      if(/^\d+$/.test(s)) break;  // 次ユーザー
+      const m=/^\s*\d+\s*\t\s*([^\t]+)\t([^\t]+)\t(\d+)\s*$/.exec(s);
+      if(m){ entries.push({rarity:m[1].trim(), code:m[2].trim(), count:parseInt(m[3],10)||0}); i++; }
+      else { i++; }
+    }
+    if(entries.length) out.push({user, entries});
+  }
+  return out;
+}
+
+/* ====== フィルタ＆その他イベント ====== */
+$("#filterGacha").addEventListener("change", renderUsersList);
+$("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
+$("#hideMiss").addEventListener("change", renderUsersList);
+$("#userSearch").addEventListener("input", renderUsersList);
+
+$("#exportMapBtn").addEventListener("click", async ()=>{
+  const bundle={ images:imgMap, skip:Array.from(skipSet), original:origMap };
+  const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="gacha_image_map_bundle.json"; document.body.appendChild(a); a.click(); a.remove();
+});
+$("#importMapInput").addEventListener("change", ()=>{
+  const f=$("#importMapInput").files[0]; if(!f) return;
+  const fr=new FileReader(); fr.onload=()=>{ try{
+    const json=JSON.parse(fr.result);
+    if(json.images&&typeof json.images==="object") imgMap=json.images; else if(typeof json==="object" && !json.original){ imgMap=json; }
+    if(Array.isArray(json.skip)) skipSet=new Set(json.skip);
+    if(json.original && typeof json.original==="object") origMap=json.original;
+    saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); saveLocalJSON(LS_KEY_ORIG,origMap);
+    renderItemGrid(); renderUsersList();
+  }catch(e){ alert("画像マップの読み込みに失敗: "+e.message); } };
+  fr.readAsText(f,"utf-8");
+});
+$("#clearMapBtn").addEventListener("click", async ()=>{
+  if(confirm("ローカルの画像マップ/オリジナル/リアグ設定を削除します。よろしいですか？")){
+    imgMap={}; origMap={}; skipSet=new Set();
+    saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveLocalJSON(LS_KEY_SKIP,[]);
+    await idbClear(); for(const url of urlCache.values()) URL.revokeObjectURL(url); urlCache.clear();
+    renderItemGrid(); renderUsersList();
+  }
+});
 </script>
 </body>
 </html>
