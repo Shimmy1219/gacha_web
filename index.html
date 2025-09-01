@@ -124,6 +124,17 @@
   /* タブ右上の×ボタン */
   .tab .close{position:absolute; top:-8px; right:-8px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#2a2a36; color:#cbd5e1; border:1px solid var(--border); font-weight:800; cursor:pointer;}
   .tab .close:hover{ background:#e11d48; color:#fff; border-color:#e11d48; }
+  .tab { position: relative; }
+  .tab .close{opacity: 0; pointer-events: none; transition: opacity .15s ease;}
+  .tab:hover .close{ opacity: 1; pointer-events: auto; }
+
+  /* 再設計トグル（スライド式） */
+  .toggle{display:inline-flex; align-items:center; gap:.5rem;padding:.2rem .5rem; background:#23232b; border:1px solid var(--border);border-radius:999px;}
+  .toggle input.switch{appearance:none; width:44px; height:24px; border-radius:999px;background:#0f1016; border:1px solid var(--border);position:relative; outline:none; cursor:pointer;transition:background .2s,border-color .2s;}
+  .toggle input.switch::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;border-radius:50%; background:#9ca3af; transition:left .2s, background .2s;}
+  .toggle input.switch:checked{ background:#e11d48; border-color:#e11d48; }
+  .toggle input.switch:checked::after{ left:24px; background:#fff; }
+  .toggle .label{ font-weight:700; color:#cbd5e1; }
 </style>
 </head>
 <body>
@@ -142,23 +153,28 @@
     <!-- Main UI (hidden until start/loaded) -->
     <section id="mainUI" style="display:none">
       <section class="toolbar">
-        <div class="row file-drop" id="dropzone">
-          <div class="tag" id="summaryTag">未読込</div>
-          <div style="flex:1"></div>
-          <label class="tag"><input type="checkbox" id="hideMiss" /> はずれを隠す</label>
-          <label class="tag" style="margin-left:4px"><input type="checkbox" id="showCounts" /> 獲得数を表示</label>
-          <label for="filterRarity">レア度:</label>
-          <select id="filterRarity" class="select">
-            <option value="*">すべて</option><option value="SSR">SSR</option><option value="SR">SR</option><option value="R">R</option><option value="N">N</option><option value="はずれ">はずれ</option>
-          </select>
-          <label for="userSearch">ユーザー検索:</label>
-          <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
-          <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
-          <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
-          <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
-          <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
-          <button class="btn" id="openLivePaste" title="リアルタイム入力用の貼り付けパネルを開きます">リアルタイム入力</button>
-        </div>
+        <div class="row file-drop" id="dropzone mainControls">
+        <div class="tag" id="summaryTag">未読込</div>
+        <div style="flex:1"></div>
+
+        <div class="toggle"><input type="checkbox" id="hideMiss" class="switch"><span class="label">はずれを隠す</span></div>
+        <div class="toggle"><input type="checkbox" id="showCounts" class="switch"><span class="label">獲得数を表示</span></div>
+        <div class="toggle"><input type="checkbox" id="showSkipOnly" class="switch"><span class="label">リアグのみを表示</span></div>
+
+        <label for="filterRarity">レア度:</label>
+        <select id="filterRarity" class="select"></select>
+
+        <label for="userSearch">ユーザー検索:</label>
+        <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
+
+        <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
+        <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
+        <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
+        <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
+
+        <button class="btn" id="openLivePaste" title="リアルタイム入力パネルを開く">リアルタイム入力</button>
+        <button class="btn" id="openAppend" title="最終履歴を既存ガチャへ追加">履歴を追加する</button>
+      </div>
       </section>
 
       <div class="grid two-col" style="margin-top:16px">
@@ -199,7 +215,7 @@
           <button class="info-btn" title="最終集計テキストを一括貼付→解析→ユーザー集計とアイテム一覧を生成">i</button>
         </div>
         <div class="row" style="justify-content:space-between">
-          <label class="btn" id="wfJsonBtn" for="jsonFile2">JSONファイルを選ぶ</label>
+          <button class="btn" id="wfJsonBtn">JSONファイルを選ぶ</button>
           <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
           <button class="info-btn" title="これまで通り、整形済みのJSON（本ツールの出力と同形式）を読み込みます">i</button>
         </div>
@@ -318,15 +334,33 @@
     </div>
   </div>
 
+  <div class="modal" id="appendModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="appendTitle">
+      <h3 id="appendTitle">履歴を追加する</h3>
+      <div class="muted">最終的なガチャ履歴のフォーマットを貼り付け。ガチャ名を選択してください。</div>
+      <div class="sep"></div>
+      <label for="appendGacha">ガチャ名</label>
+      <select id="appendGacha" class="select"></select>
+      <div style="height:.5rem"></div>
+      <label for="appendText">テキスト</label>
+      <textarea id="appendText" placeholder="最終履歴を貼り付け"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="appendApply">反映</button>
+        <button class="btn ghost" id="appendClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
 const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-const rarityOrder = ["UR","SSR","SR","R","N","はずれ"];
+const baseRarityOrder = ["UR","SSR","SR","R","N","はずれ"];
+let gRarityOrder = [...baseRarityOrder];
 const keyOf = (gacha, rarity, code) => `${gacha}::${rarity}::${code}`;
 const legacyKey = (rarity, code) => `${rarity}::${code}`;
 const stripGacha = (key) => { const p = String(key).split("::"); return p.length===3 ? `${p[1]}::${p[2]}` : key; };
-const byRarityThenCode = (a,b)=>{ const ra = rarityOrder.indexOf(a.rarity), rb = rarityOrder.indexOf(b.rarity); if(ra !== rb) return ra - rb; return (a.code||'').localeCompare(b.code||''); };
+const byRarityThenCode = (a,b)=>{const ra = gRarityOrder.indexOf(a.rarity);const rb = gRarityOrder.indexOf(b.rarity);if(ra !== rb) return ra - rb;return (a.code||'').localeCompare(b.code||'ja');};
 const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const sanitize = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
 const uniqPush = (arr, v) => { if(!arr.includes(v)) arr.push(v); };
@@ -390,6 +424,7 @@ function rebuildGachaCaches(){
   // gItemsByGacha: gData 由来のアイテム
   const perGachaMap = {};
   let usersCount=0, gachaEntries=0, itemUniqueTotal=0;
+
   Object.entries(gData).forEach(([user,gobj])=>{
     usersCount++;
     Object.entries(gobj).forEach(([gacha,info])=>{
@@ -403,7 +438,20 @@ function rebuildGachaCaches(){
       });
     });
   });
-  // union with catalog
+
+  // まず全レアリティを収集（データ＋カタログ）
+  const raritySet = new Set();
+  Object.values(perGachaMap).forEach(map => map.forEach(it => raritySet.add(it.rarity)));
+  Object.values(gCatalogByGacha).forEach(arr => (arr||[]).forEach(it => raritySet.add(it.rarity)));
+
+  // ★ 動的レアリティ順を決定：基本順 → 未知はアルファベット順で後置
+  const customRarities = Array.from(raritySet).filter(r => !baseRarityOrder.includes(r)).sort((a,b)=>a.localeCompare(b,'ja'));
+  gRarityOrder = [
+    ...baseRarityOrder.filter(r => raritySet.has(r)),
+    ...customRarities,
+  ];
+
+  // gItemsByGacha を作成（並びは gRarityOrder に従う）
   const gSet = new Set([...Object.keys(perGachaMap), ...Object.keys(gCatalogByGacha)]);
   gItemsByGacha = {};
   gSet.forEach(g=>{
@@ -416,10 +464,21 @@ function rebuildGachaCaches(){
     itemUniqueTotal += arr.length;
   });
   gAllGachas = Array.from(gSet);
+
   if(!selectedGacha) selectedGacha = gAllGachas[0] || null;
 
+  // 概要
   $("#summaryTag").textContent = `${Object.keys(gData).length}ユーザー / ${gSet.size}ガチャ / ${itemUniqueTotal}アイテム`;
-  const sel=$("#filterGacha"); if(sel) sel.innerHTML='<option value="*">すべて</option>'+gAllGachas.map(g=>`<option>${g}</option>`).join("");
+
+  // ガチャ絞り込みセレクト更新
+  const selG=$("#filterGacha");
+  if(selG) selG.innerHTML='<option value="*">すべて</option>'+gAllGachas.map(g=>`<option>${g}</option>`).join("");
+
+  // ★ レアリティセレクトも動的に更新
+  const selR=$("#filterRarity");
+  if(selR){
+    selR.innerHTML = '<option value="*">すべて</option>' + gRarityOrder.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("");
+  }
 }
 
 function renderTabs(){
@@ -451,7 +510,7 @@ function renderTabs(){
   add.title="ガチャの種類を追加";
   add.textContent="＋";
   add.style.fontWeight="800";
-  add.style.borderStyle="dashed";
+  add.style.borderStyle="solid";
   add.addEventListener("click", ()=> open(startModal));
   tabs.appendChild(add);
 
@@ -493,6 +552,7 @@ function renderUsersList(){
 
   const gachaFilter=$("#filterGacha").value, rFilter=$("#filterRarity").value, hideMiss=$("#hideMiss").checked, q=($("#userSearch").value||"").trim();
   const showCounts = $("#showCounts")?.checked;
+  const showSkipOnly = $("#showSkipOnly")?.checked;
   
   Object.entries(gData).forEach(([user,gobj])=>{
     if(q && !user.includes(q)) return;
@@ -530,10 +590,14 @@ function renderUsersList(){
       const items=info.items||{};
       let boxHasAny = false;
       
-      rarityOrder.forEach(rarity=>{
-        let list=(items[rarity]||[]); if(!list.length) return;
-        if(hideMiss && rarity==="はずれ") return;
-        if(rFilter!=="*" && rFilter!==rarity) return;
+      gRarityOrder.forEach(rarity=>{
+        let list = (items[rarity] || []);
+        if(showSkipOnly){
+          list = list.filter(code => skipHas(keyOf(gacha, rarity, code)));
+        }
+        if(!list.length) return; 
+        if(hideMiss && rarity==="はずれ") return; 
+        if(rFilter!=="*" && rFilter!==rarity) return; //
 
         const row=document.createElement("div"); row.className="rarity-row";
         const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
@@ -575,6 +639,48 @@ function renderUsersList(){
   });
   resolvePills(wrap);
 }
+
+/* ====== 履歴を追加モーダル ====== */
+const appendModal = $("#appendModal");
+
+$("#openAppend").addEventListener("click", ()=>{
+  const sel = $("#appendGacha");
+  sel.innerHTML = gAllGachas.map(g=>`<option>${g}</option>`).join("");
+  open(appendModal);
+});
+$("#appendClose").addEventListener("click", ()=>close(appendModal));
+
+$("#appendApply").addEventListener("click", ()=>{
+  const gacha = ($("#appendGacha").value||"").trim();
+  const text  = ($("#appendText").value||"").trim();
+  if(!gacha){ alert("ガチャ名を選択してください。"); return; }
+  if(!text){ alert("テキストを貼り付けてください。"); return; }
+
+  const parsed = parseFinalSummaryText(text);
+  if(parsed.length===0){ alert("ユーザーの成績を検出できませんでした。"); return; }
+
+  const delta = {}, catSet = new Map();
+  parsed.forEach(({user, entries})=>{
+    delta[user] = delta[user] || {};
+    delta[user][gacha] = delta[user][gacha] || {pulls:0, items:{}};
+    let pulls = 0;
+    entries.forEach(({rarity, code, count})=>{
+      pulls += (+count||0);
+      delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
+      uniqPush(delta[user][gacha].items[rarity], code);
+      catSet.set(keyOf(gacha,rarity,code), {gacha,rarity,code});
+      incCount(user, gacha, rarity, code, +count||0); // 獲得数も反映
+    });
+    delta[user][gacha].pulls += pulls;
+  });
+
+  gCatalogByGacha[gacha] = Array.from(catSet.values()).sort(byRarityThenCode);
+  mergeIntoGData(delta);
+
+  rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
+  close(appendModal);
+});
+
 /* ====== ガチャタブ削除確認モーダル ====== */
 const deleteModal = $("#deleteModal");
 let pendingDeleteGacha = null;
@@ -715,8 +821,9 @@ async function resolvePills(root=document){
 async function buildZipForUser(user, gobj){
   const zip = new JSZip(); const usedNames = new Set(); let count = 0;
   for(const [gacha,info] of Object.entries(gobj)){
-    for(const rarity of rarityOrder){
-      for(const code of (info.items?.[rarity] || [])){
+    const itemObj = info.items || {};
+  for(const rarity of Object.keys(itemObj)){
+      for(const code of (itemObj[rarity] || [])){
         const key = keyOf(gacha, rarity, code);
         if(skipHas(key)) continue;
         const blob = await getOriginalBlobForKey(key);
@@ -725,7 +832,7 @@ async function buildZipForUser(user, gobj){
         const base = `${sanitize(gacha)}/${rarity}_${sanitize(code)}.${ext}`;
         let name = base, i=2; while(usedNames.has(name)){ name = base.replace(`.${ext}`, `(${i++}).${ext}`); }
         usedNames.add(name);
-        zip.file(name, blob, {binary:true, compression:"STORE"}); // 無圧縮
+        zip.file(name, blob, {binary:true, compression:"STORE"});
         count++;
       }
     }
@@ -734,6 +841,7 @@ async function buildZipForUser(user, gobj){
   const blob = await zip.generateAsync({type:"blob", compression:"STORE"});
   return {blob, count, size: blob.size};
 }
+
 async function getOriginalBlobForKey(key){
   const orig = origMap[key];
   if(orig && orig.startsWith("idb:")){ const b = await idbGet(orig.slice(4)); if(b) return b; }
@@ -742,6 +850,7 @@ async function getOriginalBlobForKey(key){
   if(v && /^https?:|^data:/.test(v)){ try{ const res = await fetch(v,{mode:"cors"}); const b = await res.blob(); return b; }catch(_e){ return null; } }
   return null;
 }
+
 const guessExt = (mime) => {
   if(!mime) return "";
   if(mime==="image/jpeg") return "jpg";
@@ -1027,6 +1136,7 @@ $("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUser
 $("#hideMiss").addEventListener("change", renderUsersList);
 $("#userSearch").addEventListener("input", renderUsersList);
 $("#showCounts")?.addEventListener("change", renderUsersList);
+$("#showSkipOnly")?.addEventListener("change", renderUsersList);
 
 $("#exportMapBtn").addEventListener("click", async ()=>{
   const bundle={ images:imgMap, skip:Array.from(skipSet), original:origMap };
