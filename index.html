@@ -110,6 +110,20 @@
   /* Paste areas */
   textarea{width:100%;min-height:180px;background:#0f1016;color:#f5f5f6;border:1px solid var(--border);border-radius:12px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   input[type="text"]{width:100%;padding:.6rem .7rem;border-radius:10px;border:1px solid var(--border);background:#0f1016;color:#f5f5f6}
+
+  /* 画像プレビューの収まりを強制（モーダル） */
+  #modalPreview{width:100%;height:100%; object-fit:contain;image-rendering:auto;}
+
+  /* ユーザー内訳の個数表示 */
+  .item-pill .count{font-weight:700;color:#e5e7eb;margin-left:.15rem;}
+
+  /* タブをホバーで強調 */
+  .tab{ position: relative; }
+  .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
+
+  /* タブ右上の×ボタン */
+  .tab .close{position:absolute; top:-8px; right:-8px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#2a2a36; color:#cbd5e1; border:1px solid var(--border); font-weight:800; cursor:pointer;}
+  .tab .close:hover{ background:#e11d48; color:#fff; border-color:#e11d48; }
 </style>
 </head>
 <body>
@@ -132,6 +146,7 @@
           <div class="tag" id="summaryTag">未読込</div>
           <div style="flex:1"></div>
           <label class="tag"><input type="checkbox" id="hideMiss" /> はずれを隠す</label>
+          <label class="tag" style="margin-left:4px"><input type="checkbox" id="showCounts" /> 獲得数を表示</label>
           <label for="filterRarity">レア度:</label>
           <select id="filterRarity" class="select">
             <option value="*">すべて</option><option value="SSR">SSR</option><option value="SR">SR</option><option value="R">R</option><option value="N">N</option><option value="はずれ">はずれ</option>
@@ -290,6 +305,19 @@
     </div>
   </div>
 
+  <!-- NEW: ガチャ削除の確認モーダル -->
+  <div class="modal" id="deleteModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+      <h3 id="delTitle">ガチャを削除</h3>
+      <div class="muted">以下のガチャを削除します： <span class="tag" id="delTarget"></span><br>このガチャのユーザー集計も削除されます。</div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn ghost" id="delCancel">キャンセル</button>
+        <button class="btn" id="delConfirm">削除</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
@@ -307,6 +335,7 @@ const uniqPush = (arr, v) => { if(!arr.includes(v)) arr.push(v); };
 let gData = {};                     // { user: { gacha: { pulls:int, items:{rarity:[code...]}}}}
 let gCatalogByGacha = {};           // { gacha: [{gacha,rarity,code}, ...]} ← 追加：カタログ定義
 let gAllGachas=[], gItemsByGacha={}, selectedGacha=null, currentModalTarget=null;
+let gHitCounts = {};
 
 const LS_KEY_IMG="gacha_item_image_map_v1";
 const LS_KEY_SKIP="gacha_item_image_skip_v1";
@@ -340,6 +369,14 @@ if (drop) {
   drop.addEventListener("drop",(e)=>{e.preventDefault();drop.classList.remove("dragover");handleFiles(e.dataTransfer.files)});
 }
 $("#loadJsonBtn")?.addEventListener("click",()=>handleFiles($("#jsonFile").files));
+
+function incCount(user, gacha, rarity, code, by=1){
+  if(!user || !gacha || !rarity || !code) return;
+  gHitCounts[user] = gHitCounts[user] || {};
+  gHitCounts[user][gacha] = gHitCounts[user][gacha] || {};
+  gHitCounts[user][gacha][rarity] = gHitCounts[user][gacha][rarity] || {};
+  gHitCounts[user][gacha][rarity][code] = (gHitCounts[user][gacha][rarity][code] || 0) + (by||0);
+}
 
 function onJsonLoaded(data){
   gData = data || {};
@@ -393,8 +430,31 @@ function renderTabs(){
     el.className="tab"+((selectedGacha?selectedGacha===g:idx===0)?" active":"");
     el.textContent=g; el.dataset.gacha=g;
     el.addEventListener("click",()=>{ selectedGacha=g; $$(".tab",tabs).forEach(t=>t.classList.toggle("active",t.dataset.gacha===g)); renderItemGrid(); });
+        // 右上 × ボタン
+    const x=document.createElement("button");
+    x.type="button";
+    x.className="close";
+    x.textContent="×";
+    x.title="このガチャを削除";
+    x.addEventListener("click",(ev)=>{
+      ev.stopPropagation();
+      openDeleteConfirm(g);
+    });
+    el.appendChild(x);
+
     tabs.appendChild(el);
   });
+
+  // ＋ボタン：新しいガチャを追加（開始モーダルを開く）
+  const add=document.createElement("div");
+  add.className="tab add";
+  add.title="ガチャの種類を追加";
+  add.textContent="＋";
+  add.style.fontWeight="800";
+  add.style.borderStyle="dashed";
+  add.addEventListener("click", ()=> open(startModal));
+  tabs.appendChild(add);
+
   if(!selectedGacha && gAllGachas.length) selectedGacha=gAllGachas[0];
 }
 
@@ -432,7 +492,8 @@ function renderUsersList(){
   if(empty){ wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>'; return; }
 
   const gachaFilter=$("#filterGacha").value, rFilter=$("#filterRarity").value, hideMiss=$("#hideMiss").checked, q=($("#userSearch").value||"").trim();
-
+  const showCounts = $("#showCounts")?.checked;
+  
   Object.entries(gData).forEach(([user,gobj])=>{
     if(q && !user.includes(q)) return;
 
@@ -460,12 +521,15 @@ function renderUsersList(){
         setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
       }catch(err){ btn.disabled = false; btn.textContent = old; alert("保存に失敗: " + (err?.message || err)); }
     });
-
+    
+    let hasAnyBox = false; 
     Object.entries(gobj).forEach(([gacha,info])=>{
       if(gachaFilter!=="*" && gachaFilter!==gacha) return;
       const box=document.createElement("div"); box.className="gacha-box";
       const pulls=info.pulls??0; box.innerHTML=`<div><strong>${escapeHtml(gacha)}</strong> <span class="tag">${pulls}連</span></div>`;
       const items=info.items||{};
+      let boxHasAny = false;
+      
       rarityOrder.forEach(rarity=>{
         let list=(items[rarity]||[]); if(!list.length) return;
         if(hideMiss && rarity==="はずれ") return;
@@ -480,21 +544,64 @@ function renderUsersList(){
           const pill=document.createElement("span");
           const v=lookupVal(imgMap,key);
           const immediate=v && !v.startsWith("idb:") ? v : "";
+          const countVal = showCounts ? (((gHitCounts[user]||{})[gacha]||{})[rarity]||{})[code] : null;
+
           pill.className="item-pill"+(immediate?"":" no-img");
-          if(immediate){ pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/><span>${escapeHtml(code)}</span>`; }
-          else{ pill.innerHTML=`<span>${escapeHtml(code)}</span>`; pill.dataset.imgKey=key; }
+          pill.dataset.imgKey = key;
+          pill.dataset.user  = user;
+          pill.dataset.gacha = gacha;
+          pill.dataset.rarity= rarity;
+          pill.dataset.code  = code;
+
+          const labelHtml = `<span>${escapeHtml(code)}</span>${(countVal!=null)?`<span class="count">×${countVal}</span>`:""}`;
+
+          if(immediate){
+            pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/>${labelHtml}`;
+          }else{
+            pill.innerHTML=labelHtml;
+          }
           itemsWrap.appendChild(pill);
         });
 
+        if(itemsWrap.children.length){
         row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
+        boxHasAny = true;
+        }
       });
-      card.appendChild(box);
+      if(boxHasAny){ card.appendChild(box); hasAnyBox = true; }
     });
 
-    wrap.appendChild(card);
+    if(hasAnyBox){ wrap.appendChild(card); } // ★ 対象がないユーザーは出さない
   });
   resolvePills(wrap);
 }
+/* ====== ガチャタブ削除確認モーダル ====== */
+const deleteModal = $("#deleteModal");
+let pendingDeleteGacha = null;
+
+function openDeleteConfirm(gacha){
+  pendingDeleteGacha = gacha;
+  $("#delTarget").textContent = gacha;
+  open(deleteModal);
+}
+$("#delCancel").addEventListener("click", ()=>{ pendingDeleteGacha=null; close(deleteModal); });
+$("#delConfirm").addEventListener("click", ()=>{
+  const g = pendingDeleteGacha; pendingDeleteGacha=null; close(deleteModal);
+  if(!g) return;
+  // カタログから削除
+  delete gCatalogByGacha[g];
+  // 集計から削除 & カウントも削除
+  for(const user of Object.keys(gData)){
+    if(gData[user] && gData[user][g]) delete gData[user][g];
+    if(gHitCounts[user] && gHitCounts[user][g]) delete gHitCounts[user][g];
+    // ユーザーの全ガチャが無くなったら空を掃除
+    if(gData[user] && Object.keys(gData[user]).length===0) delete gData[user];
+  }
+  // 選択ガチャの調整
+  if(selectedGacha === g) selectedGacha = null;
+  rebuildGachaCaches();
+  renderTabs(); renderItemGrid(); renderUsersList();
+});
 
 /* ====== 画像モーダル（既存） ====== */
 const imageModal=$("#imageModal"); let tempPreviewURL="";
@@ -577,12 +684,30 @@ async function resolveThumbs(root=document){
     const v=lookupVal(imgMap,key); if(v && v.startsWith("idb:")){ const idbKey=v.slice(4); const url=await urlForKey(idbKey); if(url){ el.innerHTML=`<img src="${url}" alt="${escapeHtml(key.split('::')[2]||'item')}" />`; } }
   }));
 }
+
 async function resolvePills(root=document){
   const nodes=$$('[data-img-key]',root);
+  const showCounts = $("#showCounts")?.checked;
+
   await Promise.all(nodes.map(async el=>{
-    const key=el.dataset.imgKey; const v=lookupVal(imgMap,key);
-    if(v && v.startsWith("idb:")){ const url=await urlForKey(v.slice(4)); if(url){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${url}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; } }
-    else if(v){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(key.split('::')[2]||'item')}" src="${v}"/><span>${escapeHtml(key.split('::')[2]||'')}<\/span>`; }
+    const key=el.dataset.imgKey;
+    const v=lookupVal(imgMap,key);
+    if(!v) return;
+
+    const user  = el.dataset.user;
+    const gacha = el.dataset.gacha;
+    const rarity= el.dataset.rarity;
+    const code  = el.dataset.code;
+    const countVal = showCounts ? (((gHitCounts[user]||{})[gacha]||{})[rarity]||{})[code] : null;
+    const labelHtml = `<span>${escapeHtml(code)}</span>${(countVal!=null)?`<span class="count">×${countVal}</span>`:""}`;
+
+    if(v.startsWith("idb:")){
+      const url=await urlForKey(v.slice(4));
+      if(url){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(code)}" src="${url}"/>${labelHtml}`; }
+    }else{
+      el.classList.remove("no-img");
+      el.innerHTML=`<img alt="${escapeHtml(code)}" src="${v}"/>${labelHtml}`;
+    }
   }));
 }
 
@@ -724,6 +849,15 @@ $("#liveApply").addEventListener("click", () => {
     delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
     delta[user][gacha].pulls += pulls;
 
+    // 獲得数（counts）を加算
+    if (parsed.counts) {
+      for (const [rarity, byCode] of Object.entries(parsed.counts)) {
+        for (const [code, num] of Object.entries(byCode)) {
+          incCount(user, gacha, rarity, code, num);
+        }
+      }
+    }
+
     for (const [rarity, codes] of Object.entries(items)) {
       delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
       codes.forEach(c => { if (!delta[user][gacha].items[rarity].includes(c)) delta[user][gacha].items[rarity].push(c); });
@@ -776,6 +910,7 @@ $("#finalParse").addEventListener("click", ()=>{
       delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
       uniqPush(delta[user][gacha].items[rarity], code);
       catSet.set(keyOf(gacha,rarity,code), {gacha,rarity,code});
+      incCount(user, gacha, rarity, code, +count||0);
     });
     delta[user][gacha].pulls += pulls;
   });
@@ -848,14 +983,17 @@ function parseLiveBlock(block){
   if(!mUser) return null;
   const user = mUser[1].trim(); const pulls = parseInt(mUser[2],10)||0;
   const items = {};
+  const counts = {}; // counts[rarity][code] = number
+
   for(let i=2;i<lines.length;i++){
     const line = lines[i];
     const m = /【([^】]+)】\s*([^\s　]+)[\s　]+(\d+)個?/.exec(line);
     if(!m) continue;
-    const rarity=m[1].trim(), code=m[2].trim(); // count=m[3]
-    items[rarity]=items[rarity]||[]; uniqPush(items[rarity], code);
+    const rarity=m[1].trim(), code=m[2].trim(), num=parseInt(m[3],10)||0;
+    items[rarity]=items[rarity]||[]; if(!items[rarity].includes(code)) items[rarity].push(code);
+    counts[rarity]=counts[rarity]||{}; counts[rarity][code]=(counts[rarity][code]||0)+num;
   }
-  return {gacha,user,pulls,items};
+  return {gacha,user,pulls,items,counts};
 }
 
 /* ====== 解析: 最終結果一覧 ======
@@ -888,6 +1026,7 @@ $("#filterGacha").addEventListener("change", renderUsersList);
 $("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
 $("#hideMiss").addEventListener("change", renderUsersList);
 $("#userSearch").addEventListener("input", renderUsersList);
+$("#showCounts")?.addEventListener("change", renderUsersList);
 
 $("#exportMapBtn").addEventListener("click", async ()=>{
   const bundle={ images:imgMap, skip:Array.from(skipSet), original:origMap };
