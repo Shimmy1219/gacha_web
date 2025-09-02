@@ -254,6 +254,8 @@ button, a, [role="button"] {
       margin: 0;
     }
 
+    html, body { overscroll-behavior: none; }
+
     body {
       overflow: hidden;            /* 画面全体のスクロールを止める（内部スクロールに委譲） */
       background: #000;
@@ -274,6 +276,8 @@ button, a, [role="button"] {
     }
     .scroll-area::-webkit-scrollbar { display: none; } /* WebKit系: スクロールバー非表示 */
   }
+
+  .image-actions .btn{ flex:1 1 0; }
 </style>
 </head>
 <body>
@@ -285,12 +289,21 @@ button, a, [role="button"] {
 
     <!-- Splash -->
     <section id="splash" class="splash">
+      <div class="muted" style="max-width:760px; margin:0 auto 12px">
+        <p>このサイトは、他サービスで引いたガチャ結果を<strong>見やすく集計・共有</strong>するビューアです。</p>
+        <ul style="margin:.3rem 0 .6rem 1.2rem;line-height:1.5">
+          <li>まずは <strong>設定データ</strong>（アイテム一覧）か <strong>最終履歴</strong> を読み込みます。</li>
+          <li>外部サイトのエクスポート <code>.txt</code>（base64）や本ツールの <code>.json</code> をそのまま取り込めます。</li>
+          <li>途中経過は「リアルタイム入力」からどんどん貼り付け可能。</li>
+        </ul>
+        <p>迷ったら <strong>「TXTを読み込む」</strong>から始めるのが簡単です。</p>
+      </div>
       <button class="btn" id="openStart">開始する</button>
       <div class="hint" style="margin-top:.5rem">※ 後からでもJSON読込は可能です</div>
     </section>
 
     <!-- Main UI (hidden until start/loaded) -->
-    <section id="mainUI" style="display:none">
+    <section id="mainUI" class="scroll-area" style="display:none">
       <section class="toolbar" id="controlsPage" data-page="controls">
         <div class="row file-drop" id="dropzone mainControls">
         <div class="tag" id="summaryTag">未読込</div>
@@ -354,17 +367,7 @@ button, a, [role="button"] {
   <!-- Start Modal -->
   <div class="modal" id="startModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="startTitle">
-      <h3 id="startTitle">はじめに</h3>
-
-      <div class="muted" style="margin-bottom:10px">
-        <p>このサイトは、他サービスで引いたガチャ結果を<strong>見やすく集計・共有</strong>するビューアです。</p>
-        <ul style="margin:.3rem 0 .6rem 1.2rem;line-height:1.5">
-          <li>まずは <strong>設定データ</strong>（アイテム一覧）か <strong>最終履歴</strong> を読み込みます。</li>
-          <li>外部サイトのエクスポート <code>.txt</code>（base64）や本ツールの <code>.json</code> をそのまま取り込めます。</li>
-          <li>途中経過は「リアルタイム入力」からどんどん貼り付け可能。</li>
-        </ul>
-        <p>迷ったら <strong>「TXTを読み込む」</strong>から始めるのが簡単です。</p>
-      </div>
+      <h3 id="startTitle">はじめる</h3>
 
       <!-- 四角いタイル群 -->
       <div class="start-grid">
@@ -491,12 +494,12 @@ button, a, [role="button"] {
           <label for="urlInput">画像URL（画像/動画/音声）</label>
           <input id="urlInput" type="text" placeholder="https://example.com/image.png" />
           <div style="height:.5rem"></div>
-          <button class="btn" id="applyBtn">保存</button>
-          <button class="btn ghost" id="closeBtn">閉じる</button>
+          <div class="image-actions" style="display:flex; gap:8px; margin-top:.25rem">
+            <button class="btn" id="applyBtn" style="flex:1 1 0">保存</button>
+            <button class="btn ghost" id="closeBtn" style="flex:1 1 0">閉じる</button>
+          </div>
         </div>
       </div>
-      <div class="sep"></div>
-      <div class="muted">表示はサムネ、ZIPはオリジナル（URL取得不可は除く）。</div>
     </div>
   </div>
 
@@ -1605,6 +1608,7 @@ async function importFromExternalState(state){
   // 入力系はズーム抑止の対象外
   const isInteractive = (el) =>
     !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom');
+  const allowSel = '.scroll-area, input, textarea, select, [contenteditable="true"]';
 
   // ダブルタップズーム抑止
   let lastTouchEnd = 0;
@@ -1628,6 +1632,22 @@ async function importFromExternalState(state){
     },
     { passive: false }
   );
+    // bodyロックを強制（iOSが解除しても都度復帰）
+  const lock = () => {
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+  };
+  ['focusin','focusout','orientationchange','visibilitychange'].forEach(ev=>{
+    window.addEventListener(ev, lock, {passive:true});
+  });
+  lock();
+
+  // .scroll-area 以外でのドラッグをキャンセル（バウンス対策）
+  document.addEventListener('touchmove', (e)=>{
+    if (e.target.closest(allowSel)) return;
+    e.preventDefault();
+  }, {passive:false});
 })();
 
 </script>
