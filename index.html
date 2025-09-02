@@ -13,7 +13,7 @@
   content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- 電話番号の自動リンク無効化 -->
 <meta name="format-detection" content="telephone=no">
-<title>ガチャ結果ビューア v15</title>
+<title>ガチャ結果ビューア v16.2</title>
 
 <!-- JSZip（保存で使用） -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -142,7 +142,7 @@ button, a, [role="button"] {
   .item-pill .count{font-weight:700;color:#e5e7eb;margin-left:.15rem;}
 
   /* タブをホバーで強調 */
-  .tab{ position: relative; }
+  .tab{ position: relative; touch-action: manipulation; }
   .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
 
   /* タブ右上の×ボタン */
@@ -274,7 +274,21 @@ button, a, [role="button"] {
       padding-left:   env(safe-area-inset-left);
       padding-right:  env(safe-area-inset-right);
     }
+
     .scroll-area::-webkit-scrollbar { display: none; } /* WebKit系: スクロールバー非表示 */
+    .container { 
+      min-height: 100dvh; 
+      display: flex; 
+      flex-direction: column; 
+    }
+    #mainUI.scroll-area {
+      flex: 1 1 auto;                 /* 余白を全部受け持つ */
+      overflow: auto;                  /* 内部スクロール */
+      -webkit-overflow-scrolling: touch;
+      /* ボトムタブ分の余白（mobile-viewsのpadding-bottomと整合） */
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
   }
 
   .image-actions .btn{ flex:1 1 0; }
@@ -283,7 +297,7 @@ button, a, [role="button"] {
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v15</span></h1>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v16.2</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -769,7 +783,7 @@ function renderItemGrid(){
       <div class="item-code">${escapeHtml(it.code)}</div>
       <div class="muted"><span class="rarity ${it.rarity}">${it.rarity}</span></div>
       <div class="card-actions">
-        <button class="btn" data-action="primary"${skipped?' disabled':''}>${hasImage?'解除':'🖼️ 画像設定'}</button>
+        <button class="btn" data-action="primary"${skipped?' disabled':''}>${hasImage?'解除':'画像設定'}</button>
         <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
       </div>
       <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
@@ -1607,8 +1621,8 @@ async function importFromExternalState(state){
 
   // 入力系はズーム抑止の対象外
   const isInteractive = (el) =>
-    !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom');
-  const allowSel = '.scroll-area, input, textarea, select, [contenteditable="true"]';
+    !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom .tab');
+  const allowSel = '.scroll-area, input, .tab, textarea, select, [contenteditable="true"]';
 
   // ダブルタップズーム抑止
   let lastTouchEnd = 0;
