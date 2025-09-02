@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#e11d48">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
 <title>ガチャ結果ビューア v12（開始→ワークフロー／リアルタイム＆最終貼付対応）</title>
 
 <!-- JSZip（保存で使用） -->
@@ -1163,6 +1168,13 @@ $("#clearMapBtn").addEventListener("click", async ()=>{
     renderItemGrid(); renderUsersList();
   }
 });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+
 </script>
 </body>
 </html>
