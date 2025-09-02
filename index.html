@@ -348,6 +348,7 @@
       <!-- 隠しファイル入力（JSON / TXT） -->
       <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
       <input type="file" id="txtFileInput" accept=".txt,text/plain" class="visually-hidden" /> 
+    </div>
   </div>
 
   <!-- Catalog Paste Modal（リアルタイムの最初のフェーズ） -->
@@ -1152,6 +1153,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
     rd.readAsText(f, "utf-8");
+
+  $("#catClose").addEventListener("click", ()=>close(catalogModal));
+  $("#openLivePaste").addEventListener("click", ()=>open(liveModal));
+  $("#liveClose").addEventListener("click", ()=>close(liveModal));
+  $("#finalClose").addEventListener("click", ()=>close(finalModal));
   });
 
   // TXT(.txt) を選択 → base64(raw deflate) → JSON → 取り込み
@@ -1174,10 +1180,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-$("#catClose").addEventListener("click", ()=>close(catalogModal));
-$("#openLivePaste").addEventListener("click", ()=>open(liveModal));
-$("#liveClose").addEventListener("click", ()=>close(liveModal));
-$("#finalClose").addEventListener("click", ()=>close(finalModal));
+
 
 /* ====== 1) リアルタイム：カタログ解析 → 反映 ====== */
 $("#catParse").addEventListener("click", ()=>{
