@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#e11d48">
+<meta name="theme-color" content="#000000">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
@@ -140,6 +140,28 @@
   .toggle input.switch:checked{ background:#e11d48; border-color:#e11d48; }
   .toggle input.switch:checked::after{ left:24px; background:#fff; }
   .toggle .label{ font-weight:700; color:#cbd5e1; }
+
+  /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
+  #mainUI.mobile-views { padding-bottom: 82px; } /* ボトムタブ分の余白 */
+
+  #mainUI.mobile-views [data-page]{ display:none; }
+  #mainUI.mobile-views[data-view="controls"] #controlsPage{ display:block; }
+  #mainUI.mobile-views[data-view="items"]    #itemsPanel{ display:block; }
+  #mainUI.mobile-views[data-view="users"]    #usersPanel{ display:block; }
+
+  /* ボトムタブ：通常は非表示、mobile-views 時のみ表示 */
+  .mobile-tabs{ display:none; }
+  #mainUI.mobile-views .mobile-tabs{
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    display:flex; gap:8px; padding:10px env(safe-area-inset-right) calc(10px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+    background: rgba(10,10,14,.9); backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border);
+  }
+  #mainUI.mobile-views .mobile-tabs button{
+    flex:1 1 0; min-height:44px; border-radius:12px; border:1px solid var(--border);
+    background:#15151b; color:#cbd5e1; font-weight:700;
+  }
+  #mainUI.mobile-views .mobile-tabs button.active{ border-color: var(--accent); color:#fff; }
 </style>
 </head>
 <body>
@@ -157,7 +179,7 @@
 
     <!-- Main UI (hidden until start/loaded) -->
     <section id="mainUI" style="display:none">
-      <section class="toolbar">
+      <section class="toolbar" id="controlsPage" data-page="controls">
         <div class="row file-drop" id="dropzone mainControls">
         <div class="tag" id="summaryTag">未読込</div>
         <div style="flex:1"></div>
@@ -183,14 +205,14 @@
       </section>
 
       <div class="grid two-col" style="margin-top:16px">
-        <section class="panel" id="itemsPanel">
+        <section class="panel" id="itemsPanel" data-page="items">
           <h2 style="margin-bottom:.25rem">アイテム画像の設定</h2>
           <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとに設定。</div>
           <div class="tabs" id="gachaTabs"></div>
           <div id="itemGrid" class="item-grid"></div>
         </section>
 
-        <section class="panel" id="usersPanel">
+        <section class="panel" id="usersPanel" data-page="users">
           <h2>ユーザーごとの獲得内訳</h2>
           <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
           <div class="sep"></div>
@@ -201,6 +223,13 @@
           <div id="usersList"></div>
         </section>
       </div>
+      
+      <!-- モバイル用ボトムナビ -->
+      <nav id="mobileTabs" class="mobile-tabs" aria-label="画面切り替え">
+        <button type="button" data-view="controls" class="active">設定</button>
+        <button type="button" data-view="items">アイテム</button>
+        <button type="button" data-view="users">ユーザー</button>
+      </nav>
     </section>
   </div>
 
@@ -408,6 +437,36 @@ if (drop) {
   drop.addEventListener("drop",(e)=>{e.preventDefault();drop.classList.remove("dragover");handleFiles(e.dataTransfer.files)});
 }
 $("#loadJsonBtn")?.addEventListener("click",()=>handleFiles($("#jsonFile").files));
+
+// “モバイル相当”を環境と幅の両面で判定
+function isMobileLike(){
+  return window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
+}
+
+function updateMobileViewMode(){
+  const mobile = isMobileLike();
+  if (mobile) {
+    mainUI.classList.add('mobile-views');
+    if (!mainUI.getAttribute('data-view')) mainUI.setAttribute('data-view','users'); // デフォルト表示
+  } else {
+    mainUI.classList.remove('mobile-views');
+    mainUI.removeAttribute('data-view'); // デスクトップは通常レイアウト
+  }
+}
+
+// 画面変化に追従
+window.addEventListener('resize', updateMobileViewMode);
+window.addEventListener('orientationchange', updateMobileViewMode);
+updateMobileViewMode();
+
+$("#mobileTabs")?.addEventListener("click", (e)=>{
+  const b = e.target.closest('button[data-view]'); if(!b) return;
+  const view = b.getAttribute('data-view');
+  mainUI.setAttribute('data-view', view);
+  $$("#mobileTabs button").forEach(x=>x.classList.toggle('active', x===b));
+  // スクロール位置を上に
+  window.scrollTo({top:0, behavior:'smooth'});
+});
 
 function incCount(user, gacha, rarity, code, by=1){
   if(!user || !gacha || !rarity || !code) return;
