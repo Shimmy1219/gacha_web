@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
@@ -438,26 +438,32 @@ if (drop) {
 }
 $("#loadJsonBtn")?.addEventListener("click",()=>handleFiles($("#jsonFile").files));
 
+// ---- mobile 判定 & 切替（mainUI を安全に取得してから動かす） ----
+let __mainUI = null;
+function getMainUI(){ return __mainUI || (__mainUI = document.getElementById('mainUI')); }
+
 // “モバイル相当”を環境と幅の両面で判定
 function isMobileLike(){
   return window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
 }
 
 function updateMobileViewMode(){
+  const main = getMainUI();        // ← ここで取得（まだ無ければ何もしない）
+  if (!main) return;
   const mobile = isMobileLike();
   if (mobile) {
-    mainUI.classList.add('mobile-views');
-    if (!mainUI.getAttribute('data-view')) mainUI.setAttribute('data-view','users'); // デフォルト表示
+    main.classList.add('mobile-views');
+    if (!main.getAttribute('data-view')) main.setAttribute('data-view','users');
   } else {
-    mainUI.classList.remove('mobile-views');
-    mainUI.removeAttribute('data-view'); // デスクトップは通常レイアウト
+    main.classList.remove('mobile-views');
+    main.removeAttribute('data-view');
   }
 }
 
-// 画面変化に追従
+// DOM 構築後に初回実行（早すぎる呼び出しを防止）
+document.addEventListener('DOMContentLoaded', updateMobileViewMode);
 window.addEventListener('resize', updateMobileViewMode);
 window.addEventListener('orientationchange', updateMobileViewMode);
-updateMobileViewMode();
 
 $("#mobileTabs")?.addEventListener("click", (e)=>{
   const b = e.target.closest('button[data-view]'); if(!b) return;
@@ -1262,7 +1268,7 @@ $("#clearMapBtn").addEventListener("click", async ()=>{
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
   });
 }
 
