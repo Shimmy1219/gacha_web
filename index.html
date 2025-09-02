@@ -1101,40 +1101,77 @@ async function compressImage(fileOrBlob,{maxSize=256,typePrefer=["image/webp","i
 }
 function fileToImage(file){ return new Promise((ok,ng)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>ok(img); img.onerror=ng; img.src=fr.result; }; fr.onerror=ng; fr.readAsDataURL(file); }); }
 
-/* ====== 開始フロー UI ====== */
-const splash=$("#splash"), mainUI=$("#mainUI");
-const startModal=$("#startModal"), catalogModal=$("#catalogModal"), liveModal=$("#liveModal"), finalModal=$("#finalModal"), guideModal=$("#guideModal");
+/* ====== 開始フロー UI（堅牢版） ====== */
+const splash = $("#splash"), mainUI = $("#mainUI");
+const startModal = $("#startModal"), catalogModal = $("#catalogModal"),
+      liveModal = $("#liveModal"), finalModal = $("#finalModal"),
+      guideModal = $("#guideModal");
 
 let modalCount = 0;
-function open(modal){modal.classList.add("show"); modal.setAttribute("aria-hidden","false"); if(++modalCount === 1){ document.body.classList.add("modal-open"); }}
-function close(modal){if(!modal.classList.contains("show")) return; modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); if(--modalCount <= 0){ modalCount = 0; document.body.classList.remove("modal-open"); }}
-function startDone(){ splash.style.display="none"; mainUI.style.display="block"; document.body.classList.remove('splash-locked'); close(startModal); }
+function open(modal){
+  if (!modal) return;
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden","false");
+  if (++modalCount === 1) document.body.classList.add("modal-open");
+}
+function close(modal){
+  if (!modal || !modal.classList.contains("show")) return;
+  modal.classList.remove("show");
+  modal.setAttribute("aria-hidden","true");
+  if (--modalCount <= 0){ modalCount = 0; document.body.classList.remove("modal-open"); }
+}
+function startDone(){
+  if (splash) splash.style.display = "none";
+  if (mainUI) mainUI.style.display = "block";
+  document.body.classList.remove('splash-locked');
+  close(startModal);
+}
 
-$("#openStart").addEventListener("click", ()=>open(startModal));
-$("#closeStart").addEventListener("click", ()=>close(startModal));
+/* ▼ DOM構築後に安全にバインド */
+document.addEventListener('DOMContentLoaded', () => {
+  $("#openStart")?.addEventListener("click", ()=> open(startModal));
+  $("#closeStart")?.addEventListener("click", ()=> close(startModal));
 
-$("#tileJson").addEventListener("click", ()=> $("#jsonFile2").click());
-$("#tileTxt").addEventListener("click",  ()=> $("#txtFileInput").click());
-$("#tileLive").addEventListener("click", ()=> open(catalogModal));
-$("#tileFinal").addEventListener("click", ()=> open(finalModal));
-$("#jsonFile2").addEventListener("change", ()=>{ const f=$("#jsonFile2").files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); });
+  $("#tileJson")?.addEventListener("click", ()=> $("#jsonFile2")?.click());
+  $("#tileTxt")?.addEventListener("click",  ()=> $("#txtFileInput")?.click());
+  $("#tileLive")?.addEventListener("click", ()=> open(catalogModal));
+  $("#tileFinal")?.addEventListener("click", ()=> open(finalModal));
 
-// TXT(.txt) を選択 → base64 を raw inflate → JSON → 取り込み
-$("#txtFileInput").addEventListener("change", async (ev)=>{
-  const f = ev.target.files?.[0]; if(!f) return;
-  try{
-    const b64 = (await f.text()).trim();
-    const bytes = b64ToBytes(b64);
-    // ★ 重要：raw（zlibヘッダなし）で伸長
-    const jsonStr = pako.inflateRaw(bytes, { to: "string" });
-    const state = JSON.parse(jsonStr);
-    await importFromExternalState(state);
-  }catch(err){
-    console.error(err);
-    alert("TXTの復元に失敗しました: " + (err?.message || err));
-  }finally{
-    ev.target.value = ""; // 同じファイルを続けて選択可能に
-  }
+  $("#jsonFile2")?.addEventListener("change", ()=>{
+    const inp = $("#jsonFile2");
+    const f = inp?.files?.[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        onJsonLoaded(JSON.parse(rd.result));
+        startDone();
+      } catch (err) {
+        alert("JSONの解析に失敗: " + (err?.message || err));
+      } finally {
+        if (inp) inp.value = "";
+      }
+    };
+    rd.readAsText(f, "utf-8");
+  });
+
+  // TXT(.txt) を選択 → base64(raw deflate) → JSON → 取り込み
+  $("#txtFileInput")?.addEventListener("change", async (ev)=>{
+    const inp = ev.currentTarget;
+    const f = ev.target.files?.[0]; if (!f) return;
+    try{
+      if (typeof pako === "undefined") throw new Error("pako が読み込まれていません。");
+      const b64 = (await f.text()).trim();
+      const bytes = b64ToBytes(b64);                 // ※ URL-safe/改行除去版を使用
+      const jsonStr = pako.inflateRaw(bytes, { to: "string" }); // ★ raw が必須
+      const state = JSON.parse(jsonStr);
+      await importFromExternalState(state);          // ※ この中で startDone() 済み
+    }catch(err){
+      console.error(err);
+      alert("TXTの復元に失敗しました: " + (err?.message || err));
+    }finally{
+      if (inp) inp.value = ""; // 同じファイルを連続選択可
+    }
+  });
 });
 
 $("#catClose").addEventListener("click", ()=>close(catalogModal));
