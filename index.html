@@ -570,21 +570,53 @@ function renderUsersList(){
 
     // 保存（File System Access API）
     header.querySelector('[data-zip-save]').addEventListener('click', async (e)=>{
-      if (!('showSaveFilePicker' in window)) { alert('Chrome/Edge などChromium系で動作します。'); return; }
-      if (typeof JSZip === "undefined") { alert("JSZipの読み込みに失敗しています。"); return; }
-      const btn = e.currentTarget; const old = btn.textContent;
-      btn.disabled = true; btn.textContent = "保存中…";
-      try{
-        const { blob } = await buildZipForUser(user, gobj);
+    if (typeof JSZip === "undefined") { alert("JSZipの読み込みに失敗しています。"); return; }
+
+    const btn = e.currentTarget; const old = btn.textContent;
+    btn.disabled = true; btn.textContent = "保存準備…";
+
+    try{
+      const { blob } = await buildZipForUser(user, gobj);
+      const filename = `${sanitize(user)}_gacha.zip`;
+
+      // 1) File System Access API（デスクトップ Chrome/Edge 等）
+      if ('showSaveFilePicker' in window) {
         const handle = await window.showSaveFilePicker({
-          suggestedName: `${sanitize(user)}_gacha.zip`,
-          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+          suggestedName: filename,
+          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
         });
         const w = await handle.createWritable();
         await w.write(blob); await w.close();
         btn.textContent = "保存しました";
         setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
-      }catch(err){ btn.disabled = false; btn.textContent = old; alert("保存に失敗: " + (err?.message || err)); }
+        return;
+      }
+
+      // 2) Web Share Level 2（iOS/Android の共有シート → 「ファイルに保存」等）
+      if (navigator.canShare) {
+        const file = new File([blob], filename, { type: 'application/zip' });
+        if (navigator.canShare({ files:[file] })) {
+          await navigator.share({ files:[file], title: filename });
+          btn.textContent = "共有しました";
+          setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
+          return;
+        }
+      }
+
+      // 3) ダウンロードリンク（iOS/Android Safari/Chrome の保存）
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 3000);
+      btn.textContent = "ダウンロード開始";
+      setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
+
+    }catch(err){
+      console.error(err);
+      btn.disabled = false; btn.textContent = old;
+      alert("保存に失敗: " + (err?.message || err));
+    }
     });
     
     let hasAnyBox = false; 
