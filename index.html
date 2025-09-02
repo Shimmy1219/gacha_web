@@ -142,12 +142,13 @@
   .toggle .label{ font-weight:700; color:#cbd5e1; }
 
   /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
-  #mainUI.mobile-views { padding-bottom: 82px; } /* ボトムタブ分の余白 */
+  #mainUI.mobile-views { padding-bottom: 98px; } /* ボトムタブ分の余白 */
 
   #mainUI.mobile-views [data-page]{ display:none; }
   #mainUI.mobile-views[data-view="controls"] #controlsPage{ display:block; }
   #mainUI.mobile-views[data-view="items"]    #itemsPanel{ display:block; }
   #mainUI.mobile-views[data-view="users"]    #usersPanel{ display:block; }
+  #mainUI.mobile-views[data-view="riagu"]    #skipPanel { display:block; } /* NEW */
 
   /* ボトムタブ：通常は非表示、mobile-views 時のみ表示 */
   .mobile-tabs{ display:none; }
@@ -158,10 +159,27 @@
     border-top: 1px solid var(--border);
   }
   #mainUI.mobile-views .mobile-tabs button{
-    flex:1 1 0; min-height:44px; border-radius:12px; border:1px solid var(--border);
+    flex:1 1 0; min-height:56px; border-radius:12px; border:1px solid var(--border);
     background:#15151b; color:#cbd5e1; font-weight:700;
   }
   #mainUI.mobile-views .mobile-tabs button.active{ border-color: var(--accent); color:#fff; }
+
+  /* --- モバイル時：アイテムカードを横長に --- */
+  #mainUI.mobile-views #itemGrid{ grid-template-columns: 1fr; gap:12px; }
+  #mainUI.mobile-views .item-card{
+    display:grid;
+    grid-template-columns:110px 1fr;
+    grid-template-areas:
+      "thumb title"
+      "thumb rarity"
+      "thumb actions";
+    align-items:center; gap:10px; min-height:120px;
+  }
+  #mainUI.mobile-views .item-card .item-thumb{ grid-area:thumb; width:100%; aspect-ratio:1 / 1; }
+  #mainUI.mobile-views .item-card .item-code{ grid-area:title; font-size:1.3rem; }
+  #mainUI.mobile-views .item-card > .muted{ grid-area:rarity; }
+  #mainUI.mobile-views .item-card .card-actions{ grid-area:actions; display:flex; gap:8px; }
+  #mainUI.mobile-views .item-card .card-actions .btn[data-action="primary"]{ width:100%; }
 </style>
 </head>
 <body>
@@ -222,6 +240,11 @@
           </div>
           <div id="usersList"></div>
         </section>
+
+        <section class="panel" id="skipPanel" data-page="riagu">
+          <h2>リアグ</h2>
+          <div class="muted">ここに「リアグ」に設定したアイテムの詳細を表示します。（準備中）</div>
+        </section>
       </div>
       
       <!-- モバイル用ボトムナビ -->
@@ -229,6 +252,7 @@
         <button type="button" data-view="controls" class="active">設定</button>
         <button type="button" data-view="items">アイテム</button>
         <button type="button" data-view="users">ユーザー</button>
+        <button type="button" data-view="riagu">リアグ</button>
       </nav>
     </section>
   </div>
@@ -427,6 +451,9 @@ function lookupVal(map,key){ if(map[key]) return map[key]; const leg=stripGacha(
 function immediateSrcFor(key){ const v=lookupVal(imgMap,key); if(!v) return ""; if(v.startsWith("idb:")) return ""; return v; }
 function thumbInnerHTML(it){ const key=keyOf(it.gacha,it.rarity,it.code); const src=immediateSrcFor(key); return src?`<img src="${src}" alt="${escapeHtml(it.code)}" />`:`<span class="muted">No Image</span>`; }
 
+// スプラッシュ中はスクロール不可
+document.body.classList.add('splash-locked');
+
 /* ====== JSON 読み込み／UI 再描画 ====== */
 function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
 
@@ -447,17 +474,27 @@ function isMobileLike(){
   return window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
 }
 
+function syncMobileTabs(){
+  const main = getMainUI(); if(!main) return;
+  const view = main.getAttribute('data-view') || 'controls';
+  document.querySelectorAll('#mobileTabs button').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
+}
+
+
 function updateMobileViewMode(){
   const main = getMainUI();        // ← ここで取得（まだ無ければ何もしない）
   if (!main) return;
   const mobile = isMobileLike();
   if (mobile) {
     main.classList.add('mobile-views');
-    if (!main.getAttribute('data-view')) main.setAttribute('data-view','users');
+    if (!main.getAttribute('data-view')) main.setAttribute('data-view','controls'); // ← 既定を「設定」
   } else {
     main.classList.remove('mobile-views');
     main.removeAttribute('data-view');
   }
+  syncMobileTabs();
 }
 
 // DOM 構築後に初回実行（早すぎる呼び出しを防止）
@@ -465,12 +502,17 @@ document.addEventListener('DOMContentLoaded', updateMobileViewMode);
 window.addEventListener('resize', updateMobileViewMode);
 window.addEventListener('orientationchange', updateMobileViewMode);
 
+$$(".modal").forEach(m=>{
+  m.addEventListener("touchmove", e=>{ if(e.target === m) e.preventDefault(); }, {passive:false});
+});
+
 $("#mobileTabs")?.addEventListener("click", (e)=>{
   const b = e.target.closest('button[data-view]'); if(!b) return;
   const view = b.getAttribute('data-view');
   mainUI.setAttribute('data-view', view);
   $$("#mobileTabs button").forEach(x=>x.classList.toggle('active', x===b));
   // スクロール位置を上に
+  syncMobileTabs();
   window.scrollTo({top:0, behavior:'smooth'});
 });
 
@@ -996,9 +1038,10 @@ function fileToImage(file){ return new Promise((ok,ng)=>{ const fr=new FileReade
 const splash=$("#splash"), mainUI=$("#mainUI");
 const startModal=$("#startModal"), catalogModal=$("#catalogModal"), liveModal=$("#liveModal"), finalModal=$("#finalModal"), guideModal=$("#guideModal");
 
-function open(modal){ modal.classList.add("show"); modal.setAttribute("aria-hidden","false"); }
-function close(modal){ modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); }
-function startDone(){ splash.style.display="none"; mainUI.style.display="block"; close(startModal); }
+let modalCount = 0;
+function open(modal){modal.classList.add("show"); modal.setAttribute("aria-hidden","false"); if(++modalCount === 1){ document.body.classList.add("modal-open"); }}
+function close(modal){if(!modal.classList.contains("show")) return; modal.classList.remove("show"); modal.setAttribute("aria-hidden","true"); if(--modalCount <= 0){ modalCount = 0; document.body.classList.remove("modal-open"); }}
+function startDone(){ splash.style.display="none"; mainUI.style.display="block"; document.body.classList.remove('splash-locked'); close(startModal); }
 
 $("#openStart").addEventListener("click", ()=>open(startModal));
 $("#closeStart").addEventListener("click", ()=>close(startModal));
