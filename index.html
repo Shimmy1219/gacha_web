@@ -8,7 +8,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
-<title>ガチャ結果ビューア v12（開始→ワークフロー／リアルタイム＆最終貼付対応）</title>
+<title>ガチャ結果ビューア v15</title>
 
 <!-- JSZip（保存で使用） -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -19,6 +19,7 @@
     document.head.appendChild(s);
   }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 
 <style>
   :root{
@@ -167,25 +168,70 @@
   /* --- モバイル時：アイテムカードを横長に --- */
   #mainUI.mobile-views #itemGrid{ grid-template-columns: 1fr; gap:12px; }
   #mainUI.mobile-views .item-card{
+    /* 2カラムの横長グリッド。左に正方形サムネ、右に情報 */
     display:grid;
     grid-template-columns:110px 1fr;
+    grid-template-rows:auto auto auto auto;
     grid-template-areas:
+      "thumb flag"    /* ← 右上にバッジ（重ならない専用行） */
       "thumb title"
       "thumb rarity"
       "thumb actions";
-    align-items:center; gap:10px; min-height:120px;
+    align-items:center;
+    gap:8px;
+    padding:8px;
+    min-height:110px;   /* サムネと高さを合わせる */
   }
-  #mainUI.mobile-views .item-card .item-thumb{ grid-area:thumb; width:100%; aspect-ratio:1 / 1; }
-  #mainUI.mobile-views .item-card .item-code{ grid-area:title; font-size:1.3rem; }
-  #mainUI.mobile-views .item-card > .muted{ grid-area:rarity; }
-  #mainUI.mobile-views .item-card .card-actions{ grid-area:actions; display:flex; gap:8px; }
-  #mainUI.mobile-views .item-card .card-actions .btn[data-action="primary"]{ width:100%; }
+  /* サムネ（左） */
+  #mainUI.mobile-views .item-card .item-thumb{grid-area:thumb; width:100%; max-width:110px; aspect-ratio:1/1;}
+
+  /* 右上のバッジ行：absolute を解除して専用セルに置く（重なり防止） */
+  #mainUI.mobile-views .item-card .flag{ grid-area:flag; position:static !important; justify-self:end; align-self:start; margin:0;}
+  #mainUI.mobile-views .item-card .badge{ font-size:.72rem; padding:.05rem .35rem; border-radius:.4rem;}
+
+  /* タイトル（item-code）を省略記号で1行に */
+  #mainUI.mobile-views .item-card .item-code{ grid-area:title; font-size:1.05rem; line-height:1.2; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  /* レアリティの行を少し小さくタイトに */
+  #mainUI.mobile-views .item-card > .muted{ grid-area:rarity; margin-top:2px; }
+  #mainUI.mobile-views .item-card .rarity{ font-size:.9rem; }
+
+  /* アクション（画像設定 / リアグ）は横並び・コンパクトに */
+  #mainUI.mobile-views .item-card .card-actions{ grid-area:actions; display:flex; gap:6px; margin-top:2px;}
+  #mainUI.mobile-views .item-card .card-actions .btn{ flex:1 1 0; min-height:36px; padding:.45rem .7rem; font-size:.95rem; border-radius:10px;}
+  #mainUI.mobile-views .item-card .card-actions .btn.ghost{ font-size:.9rem;}
+
+  /* 正方形タイル配置：PC 4列 / モバイル 2x2 */
+  .start-grid{
+    display:grid; gap:12px;
+    grid-template-columns: repeat(4, minmax(0,1fr));
+  }
+  @media (max-width: 900px){
+    .start-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  .start-tile{
+    position:relative; aspect-ratio:1/1;
+    border:1px solid var(--border); border-radius:16px;
+    background:linear-gradient(180deg,#1a1a22,#14141a);
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; cursor:pointer;
+  }
+  .start-tile .title{ font-weight:800; font-size:1.05rem; color:#fff; }
+  .start-tile .sub{ font-size:.85rem; color:#cbd5e1; text-align:center; line-height:1.3 }
+  .start-tile .info{
+    position:absolute; top:8px; right:8px; width:22px; height:22px;
+    border-radius:999px; background:#2a2a36; color:#cbd5e1;
+    display:flex; align-items:center; justify-content:center; font-weight:800;
+    border:1px solid var(--border);
+  }
+  .start-tile:hover{ outline:1px solid var(--accent); }
 </style>
 </head>
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v14</span></h1>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v15</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -261,26 +307,47 @@
   <div class="modal" id="startModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="startTitle">
       <h3 id="startTitle">はじめに</h3>
-      <div class="muted" style="margin-bottom:8px">ワークフローを選んでください。</div>
-      <div class="sep"></div>
-      <div class="grid" style="grid-template-columns:1fr;gap:10px">
-        <div class="row" style="justify-content:space-between">
-          <button class="btn" id="wfLive">ガチャ企画をリアルタイムで進行</button>
-          <button class="info-btn" title="① 出現アイテム一覧を貼付→解析してアイテム一覧を生成 ② 進行中の結果を都度貼付→ユーザー集計に反映">i</button>
-        </div>
-        <div class="row" style="justify-content:space-between">
-          <button class="btn" id="wfFinal">最終的なガチャ履歴を張り付ける</button>
-          <button class="info-btn" title="最終集計テキストを一括貼付→解析→ユーザー集計とアイテム一覧を生成">i</button>
-        </div>
-        <div class="row" style="justify-content:space-between">
-          <button class="btn" id="wfJsonBtn">JSONファイルを選ぶ</button>
-          <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
-          <button class="info-btn" title="これまで通り、整形済みのJSON（本ツールの出力と同形式）を読み込みます">i</button>
-        </div>
+
+      <div class="muted" style="margin-bottom:10px">
+        <p>このサイトは、他サービスで引いたガチャ結果を<strong>見やすく集計・共有</strong>するビューアです。</p>
+        <ul style="margin:.3rem 0 .6rem 1.2rem;line-height:1.5">
+          <li>まずは <strong>設定データ</strong>（アイテム一覧）か <strong>最終履歴</strong> を読み込みます。</li>
+          <li>外部サイトのエクスポート <code>.txt</code>（base64）や本ツールの <code>.json</code> をそのまま取り込めます。</li>
+          <li>途中経過は「リアルタイム入力」からどんどん貼り付け可能。</li>
+        </ul>
+        <p>迷ったら <strong>「TXTを読み込む」</strong>から始めるのが簡単です。</p>
       </div>
-      <div class="sep"></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="closeStart">閉じる</button></div>
-    </div>
+
+      <!-- 四角いタイル群 -->
+      <div class="start-grid">
+        <button class="start-tile" id="tileTxt">
+          <span class="title">TXTを読み込む</span>
+          <span class="sub">外部サイトの<br>base64エクスポート</span>
+          <span class="info" title="他サイトでエクスポートした .txt（base64）を選ぶと、設定と履歴をまとめて読み込みます。">i</span>
+        </button>
+
+        <button class="start-tile" id="tileJson">
+          <span class="title">JSONを読み込む</span>
+          <span class="sub">このツール形式</span>
+          <span class="info" title="本ツールが出力する gacha_summary.json などを読み込みます。">i</span>
+        </button>
+
+        <button class="start-tile" id="tileLive">
+          <span class="title">リアルタイム進行</span>
+          <span class="sub">設定→逐次貼付</span>
+          <span class="info" title="アイテム一覧（設定）を貼り付け→以後、リアルタイムの結果テキストを貼り付けて集計します。">i</span>
+        </button>
+
+        <button class="start-tile" id="tileFinal">
+          <span class="title">最終履歴を貼付</span>
+          <span class="sub">最後に一括反映</span>
+          <span class="info" title="最終的に出力された一覧を貼り付け、集計に一括反映します。">i</span>
+        </button>
+      </div>
+
+      <!-- 隠しファイル入力（JSON / TXT） -->
+      <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
+      <input type="file" id="txtFileInput" accept=".txt,text/plain" class="visually-hidden" /> 
   </div>
 
   <!-- Catalog Paste Modal（リアルタイムの最初のフェーズ） -->
@@ -1046,10 +1113,29 @@ function startDone(){ splash.style.display="none"; mainUI.style.display="block";
 $("#openStart").addEventListener("click", ()=>open(startModal));
 $("#closeStart").addEventListener("click", ()=>close(startModal));
 
-$("#wfLive").addEventListener("click", ()=>{ open(catalogModal); });
-$("#wfFinal").addEventListener("click", ()=>{ open(finalModal); });
-$("#wfJsonBtn").addEventListener("click", ()=>{ $("#jsonFile2").click(); });
+$("#tileJson").addEventListener("click", ()=> $("#jsonFile2").click());
+$("#tileTxt").addEventListener("click",  ()=> $("#txtFileInput").click());
+$("#tileLive").addEventListener("click", ()=> open(catalogModal));
+$("#tileFinal").addEventListener("click", ()=> open(finalModal));
 $("#jsonFile2").addEventListener("change", ()=>{ const f=$("#jsonFile2").files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); });
+
+// TXT(.txt) を選択 → base64 を raw inflate → JSON → 取り込み
+$("#txtFileInput").addEventListener("change", async (ev)=>{
+  const f = ev.target.files?.[0]; if(!f) return;
+  try{
+    const b64 = (await f.text()).trim();
+    const bytes = b64ToBytes(b64);
+    // ★ 重要：raw（zlibヘッダなし）で伸長
+    const jsonStr = pako.inflateRaw(bytes, { to: "string" });
+    const state = JSON.parse(jsonStr);
+    await importFromExternalState(state);
+  }catch(err){
+    console.error(err);
+    alert("TXTの復元に失敗しました: " + (err?.message || err));
+  }finally{
+    ev.target.value = ""; // 同じファイルを続けて選択可能に
+  }
+});
 
 $("#catClose").addEventListener("click", ()=>close(catalogModal));
 $("#openLivePaste").addEventListener("click", ()=>open(liveModal));
@@ -1313,6 +1399,102 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('/sw.js').catch(()=>{});
   });
+}
+
+// --- TXT(base64 + DEFLATE raw) を復元して取り込む ---
+
+// base64 → Uint8Array（URL-safe/改行を除去）
+function b64ToBytes(b64){
+  const s = (b64||"").replace(/\s+/g,'').replace(/-/g,'+').replace(/_/g,'/');
+  const pad = s.length % 4 ? 4 - (s.length % 4) : 0;
+  const bin = atob(s + '='.repeat(pad));
+  const arr = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+// 外部state(JSON) → 既存構造へ取り込み
+async function importFromExternalState(state){
+  try{
+    // 1) ガチャ名の決定
+    const nameMap = state?.gacha_name_list || {};
+    const selKey  = String(state?.gacha_select ?? Object.keys(nameMap)[0] ?? "0");
+    const gacha   = nameMap[selKey] || "ガチャ";
+
+    // 2) カタログ（item_base × rarity_base）
+    const rarityBase = Array.isArray(state?.gacha_data?.rarity_base) ? state.gacha_data.rarity_base : [];
+    // 位置インデックス → レア名（例: 0->"N"）
+    const rarityIdxToName = rarityBase.map(row => Array.isArray(row) ? String(row[0]) : String(row?.name||""));
+    const itemBase = Array.isArray(state?.gacha_data?.item_base) ? state.gacha_data.item_base : [];
+
+    const cat = [];
+    for(const row of itemBase){
+      // 形式: [rarityIndex, weight, itemName]
+      const ridx = parseInt(row?.[0],10);
+      const code = String(row?.[2] ?? "");
+      if(!code) continue;
+      const rarity = rarityIdxToName[ridx] || String(row?.[1] ?? "N"); // 念のためフォールバック
+      cat.push({ gacha, rarity, code });
+    }
+    if(cat.length) gCatalogByGacha[gacha] = cat.sort(byRarityThenCode);
+
+    // 3) 履歴（history_list）
+    // 形式: [ [ userName, [ [itemId, rarityStr, itemName, count], ... ] ], ... ]
+    const hist = Array.isArray(state?.gacha_data?.history_list) ? state.gacha_data.history_list : [];
+    const delta = {};
+    for(const pair of hist){
+      const user  = String(pair?.[0] ?? "");
+      const entries = Array.isArray(pair?.[1]) ? pair[1] : [];
+      if(!user || !entries.length) continue;
+
+      delta[user] = delta[user] || {};
+      delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
+
+      let pulls = 0;
+      for(const e of entries){
+        // e: [id, rarity, itemName, count]
+        const rarity = String(e?.[1] ?? "");
+        const code   = String(e?.[2] ?? "");
+        const n      = +e?.[3] || 0;
+        if(!rarity || !code) continue;
+
+        // items: 種類（ユニーク）
+        const arr = (delta[user][gacha].items[rarity] ||= []);
+        if(!arr.includes(code)) arr.push(code);
+
+        // 獲得数＆pulls
+        incCount(user, gacha, rarity, code, n);
+        pulls += n;
+
+        // カタログ補完（history にしか無い名称も拾う）
+        if(!gCatalogByGacha[gacha]){
+          gCatalogByGacha[gacha] = [{gacha,rarity,code}];
+        }else{
+          const k = keyOf(gacha,rarity,code);
+          // 既存に無ければ追加
+          if(!(gCatalogByGacha[gacha].some(it => keyOf(it.gacha,it.rarity,it.code) === k))){
+            gCatalogByGacha[gacha].push({gacha,rarity,code});
+          }
+        }
+      }
+      delta[user][gacha].pulls += pulls;
+    }
+
+    if(Object.keys(delta).length){
+      // カタログのソート
+      if(Array.isArray(gCatalogByGacha[gacha])) {
+        gCatalogByGacha[gacha].sort(byRarityThenCode);
+      }
+      // マージ→再描画
+      mergeIntoGData(delta);
+    }
+
+    rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
+    startDone(); close(startModal);
+  }catch(err){
+    console.error(err);
+    alert("取り込みに失敗しました: " + (err?.message || err));
+  }
 }
 
 </script>
