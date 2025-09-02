@@ -1508,8 +1508,46 @@ $("#clearMapBtn").addEventListener("click", async ()=>{
 });
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js', { type: 'module' });
+
+      // ★ ページ表示時・可視化時・定期的にアップデートチェック
+      reg.update();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update();
+      });
+      setInterval(() => reg.update(), 60 * 60 * 1000); // 1時間おき
+
+      // ★ 新SWが waiting になったら即座に skipWaiting を依頼
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            sw.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+
+      // ★ controller が切り替わったら自動リロード（1回だけ）
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        // SPA の状態保持が必要なら、ここで軽いダイアログを挟むのも可
+        window.location.reload();
+      });
+
+      // 受信ログ（任意）
+      navigator.serviceWorker.addEventListener('message', (ev) => {
+        if (ev.data?.type === 'SW_ACTIVATED') {
+          console.log('[SW] activated:', ev.data.version);
+        }
+      });
+    } catch (e) {
+      console.warn('SW registration failed', e);
+    }
   });
 }
 
