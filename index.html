@@ -15,17 +15,24 @@
 <meta name="format-detection" content="telephone=no">
 <title>ガチャ結果ビューア v19</title>
 
-<!-- JSZip（保存で使用） -->
-<script src="https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- 先にライブラリ（ローカル） -->
+<script src="/lib/jszip.min.js"></script>
+<script src="/lib/pako.min.js"></script>
+<script src="/lib/lzma-min.js"></script>
+
+<!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
-  if (typeof window.JSZip === "undefined") {
-    const s = document.createElement("script");
-    s.src = "https://unpkg.com/jszip@3.10.1/dist/jszip.min.js";
-    document.head.appendChild(s);
-  }
+(function ensureLibs(){
+  function need(src){ return !document.querySelector(`script[src="${src}"]`); }
+  function inject(src){ return new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>ng(new Error('load '+src)); document.head.appendChild(s); });}
+  (async()=>{
+    if (typeof JSZip==='undefined') await inject('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    if (typeof pako==='undefined')  await inject('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js');
+    if (typeof LZMA==='undefined')  await inject('https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js');
+  })();
+})();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+
 <script src="imp_exp_file.js"></script>
 
 <style>

@@ -103,32 +103,27 @@
   // 同一オリジンのワーカーがあれば優先（例: /lib/lzma_worker-min.js）
   async function probeSameOriginWorker(){
     const local = new URL("/lib/lzma_worker-min.js", location.href).href;
-    try {
-      const res = await fetch(local, { method: "HEAD", cache: "no-store" });
-      if (res.ok) return local;
-    } catch(_) {}
+    try{
+      const r = await fetch(local, { method:"HEAD", cache:"no-store" });
+      if (r.ok) return local;
+    }catch(_){}
     return null;
   }
-
-  // CDN を importScripts するだけの最小ワーカースタブを blob で作る
   function makeBlobWorkerURL(){
     const src = `self.importScripts(${JSON.stringify(LZMA_CDN_URL)});`;
-    const blob = new Blob([src], { type: "application/javascript" });
-    return URL.createObjectURL(blob);
+    return URL.createObjectURL(new Blob([src], {type:"application/javascript"}));
   }
-
-  // LZMA インスタンスを安全に作る
   async function ensureLZMA(){
-    if (__lzma) return __lzma;
-    if (typeof LZMA === "undefined") throw new Error("LZMA ライブラリが読み込まれていません。");
-
-    // 1) 同一オリジンのワーカーがあればそれを使う
-    let workerURL = await probeSameOriginWorker();
-
-    // 2) なければ blob: ワーカースタブ（中で importScripts(CDN)）
-    if (!workerURL) {
-      workerURL = makeBlobWorkerURL();
+    if (typeof LZMA === "undefined") {
+      // 事前に index.html で読み込んでいるのが理想。なければここで補う。
+      await new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src="/lib/lzma-min.js"; s.onload=ok; s.onerror=()=>ng(); document.head.appendChild(s); })
+        .catch(()=> new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src="https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js"; s.onload=ok; s.onerror=ng; document.head.appendChild(s); }));
     }
+    if (__lzma) return __lzma;
+
+    let workerURL = await probeSameOriginWorker();   // まず /lib を探す
+    if (!workerURL) workerURL = makeBlobWorkerURL(); // ダメなら blob Worker
+
     __lzmaWorkerURL = workerURL;
     __lzma = new LZMA(workerURL);
     return __lzma;
