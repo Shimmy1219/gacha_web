@@ -14,6 +14,10 @@
   const K_ORIG = global.LS_KEY_ORIG || 'gacha_item_original_v1';
   const K_SKIP = global.LS_KEY_SKIP || 'gacha_item_image_skip_v1';
 
+
+  const APP_BUNDLE_EXT = '.shimmy';
+  const APP_BUNDLE_MIME = 'application/x-shimmy'; 
+
   const JSZip = global.JSZip;
   function assert(cond, msg){ if(!cond) throw new Error(msg); }
 
@@ -194,6 +198,47 @@
   }
 
   // 保存（File System Access → Web Share → ダウンロード）
+  async function saveBlobSmart(blob, filename, mime, btnEl){
+    // 1) File System Access API
+    if ('showSaveFilePicker' in window){
+      try{
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: filename, accept: { [mime]: [ '.' + filename.split('.').pop() ] } }]
+        });
+        const w = await handle.createWritable();
+        await w.write(blob); await w.close();
+        if (btnEl){ btnEl.textContent = "保存しました"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
+        return;
+      }catch(e){
+        // ← キャンセルは“成功扱いで何もしない”
+        if (e && (e.name === 'AbortError' || e.code === 20)) {
+          if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体エクスポート"; }
+          return;
+        }
+        // それ以外は次の手段へフォールバック
+      }
+    }
+
+    // 2) Web Share Level 2
+    if (navigator.canShare){
+      const file = new File([blob], filename, { type: mime });
+      if (navigator.canShare({ files:[file] })){
+        await navigator.share({ files:[file], title: filename }).catch(()=>{ /* キャンセルは無視 */ });
+        if (btnEl){ btnEl.textContent = "共有しました"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
+        return;
+      }
+    }
+
+    // 3) ダウンロードリンク
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+    if (btnEl){ btnEl.textContent = "ダウンロード開始"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
+  }
+
+  // 保存（File System Access → Web Share → ダウンロード）
   async function exportAllZip(btnEl){
     if (btnEl){ btnEl.disabled = true; btnEl.textContent = "パッキング中…"; }
 
@@ -244,11 +289,28 @@
     const blob = await zip.generateAsync({ type: 'blob', compression: "DEFLATE", compressionOptions: { level: 6 } });
 
     // 5) 保存
-    await saveBlobSmart(blob, `gacha_app_export_${Date.now()}.zip`, 'application/zip', btnEl);
+    await saveBlobSmart(
+      blob,
+      `gacha_app_export_${Date.now()}${APP_BUNDLE_EXT}`,
+      APP_BUNDLE_MIME,
+      btnEl
+    );
+
 
     if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体エクスポート"; }
   }
   // ===== 公開API =====
-  global.ImpExp = { exportAllZip, importAllZip, /*内部デバッグ用*/ _buildZip: buildAllAsZipBlob };
+  global.ImpExp = {
+  // 旧名（既存コードの互換用）
+  exportAllZip,
+  importAllZip,
+  // 新名（将来はこっちを使う想定）
+  exportAll: exportAllZip,
+  importAll: importAllZip,
+  // 参照用に公開（UI 側で accept に使える）
+  BUNDLE_EXT: APP_BUNDLE_EXT,
+  BUNDLE_MIME: APP_BUNDLE_MIME,
+  /*内部デバッグ用*/ _buildZip: buildAllAsZipBlob
+};
 
 })(window);
