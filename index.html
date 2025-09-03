@@ -13,9 +13,10 @@
   content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- 電話番号の自動リンク無効化 -->
 <meta name="format-detection" content="telephone=no">
-<title>ガチャ結果ビューア v17</title>
+<title>ガチャ結果ビューア v19</title>
 
 <!-- JSZip（保存で使用） -->
+<script src="https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
   if (typeof window.JSZip === "undefined") {
@@ -25,6 +26,7 @@
   }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+<script src="imp_exp_file.js"></script>
 
 <style>
   :root{
@@ -261,7 +263,7 @@ button, a, [role="button"] {
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v17</span></h1>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v19</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -284,27 +286,41 @@ button, a, [role="button"] {
     <section id="mainUI" style="display:none">
       <section class="toolbar" id="controlsPage" data-page="controls">
         <div class="row file-drop" id="dropzone mainControls">
-        <div class="tag" id="summaryTag">未読込</div>
-        <div style="flex:1"></div>
+          <div class="tag" id="summaryTag">未読込</div>
+          <div style="flex:1"></div>
 
-        <div class="toggle"><input type="checkbox" id="hideMiss" class="switch"><span class="label">はずれを隠す</span></div>
-        <div class="toggle"><input type="checkbox" id="showCounts" class="switch"><span class="label">獲得数を表示</span></div>
-        <div class="toggle"><input type="checkbox" id="showSkipOnly" class="switch"><span class="label">リアグのみを表示</span></div>
+          <div class="toggle"><input type="checkbox" id="hideMiss" class="switch"><span class="label">はずれを隠す</span></div>
+          <div class="toggle"><input type="checkbox" id="showCounts" class="switch"><span class="label">獲得数を表示</span></div>
+          <div class="toggle"><input type="checkbox" id="showSkipOnly" class="switch"><span class="label">リアグのみを表示</span></div>
 
-        <label for="filterRarity">レア度:</label>
-        <select id="filterRarity" class="select"></select>
+          <label for="filterRarity">レア度:</label>
+          <select id="filterRarity" class="select"></select>
 
-        <label for="userSearch">ユーザー検索:</label>
-        <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
+          <label for="userSearch">ユーザー検索:</label>
+          <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
 
-        <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
-        <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
-        <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
-        <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
+          <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
+          <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
+          <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
+          <button class="btn ghost" id="clearMapBtn">画像マップをリセット</button>
 
-        <button class="btn" id="openLivePaste" title="リアルタイム入力パネルを開く">リアルタイム入力</button>
-        <button class="btn" id="openAppend" title="最終履歴を既存ガチャへ追加">履歴を追加する</button>
-      </div>
+          <button class="btn" id="openLivePaste" title="リアルタイム入力パネルを開く">リアルタイム入力</button>
+          <button class="btn" id="openAppend" title="最終履歴を既存ガチャへ追加">履歴を追加する</button>
+          
+          <!-- 追加: アプリ状態の完全エクスポート / インポート -->
+          <button class="btn subtle" id="exportAllBtn" title="画像・動画・音声・履歴・設定を丸ごと書き出し">
+            全体エクスポート
+          </button>
+          <label class="btn ghost" for="importAllInput" title="エクスポートしたZIPから丸ごと復元">
+            全体インポート
+          </label>
+          <input type="file" id="importAllInput" accept=".zip,application/zip" style="display:none" />
+          <!-- エクスポート形式選択 -->
+          <select id="exportFormat" class="select small" title="エクスポート形式">
+            <option value="zip">ZIP（推奨）</option>
+            <option value="gabx">高圧縮（.gabx）</option>
+          </select>
+        </div>
       </section>
 
       <div class="grid two-col" style="margin-top:16px">
@@ -1714,6 +1730,62 @@ async function importFromExternalState(state){
   );
 })();
 
+</script>
+<script>
+/* App⇔モジュールのブリッジ（let 変数を window へ安全に受け渡す） */
+window.AppStateBridge = {
+  getState(){
+    return {
+      gData, gCatalogByGacha, gHitCounts, selectedGacha,
+      imgMap, origMap, skipArray: Array.from(skipSet || [])
+    };
+  },
+  setState(st){
+    gData = st.gData || {};
+    gCatalogByGacha = st.gCatalogByGacha || {};
+    gHitCounts = st.gHitCounts || {};
+    selectedGacha = st.selectedGacha || null;
+    imgMap = st.imgMap || {};
+    origMap = st.origMap || {};
+    skipSet = new Set(st.skipArray || []);
+  },
+  afterRestore(){
+    // 既存の保存キーと整合（存在しなければデフォルト）
+    const K_IMG  = window.LS_KEY_IMG  || 'gacha_item_image_map_v1';
+    const K_ORIG = window.LS_KEY_ORIG || 'gacha_item_original_v1';
+    const K_SKIP = window.LS_KEY_SKIP || 'gacha_item_image_skip_v1';
+    try{
+      localStorage.setItem(K_IMG,  JSON.stringify(imgMap));
+      localStorage.setItem(K_ORIG, JSON.stringify(origMap));
+      localStorage.setItem(K_SKIP, JSON.stringify(Array.from(skipSet)));
+    }catch(e){}
+
+    // 画面更新（既存実装があれば呼ぶ）
+    if (typeof rebuildGachaCaches === 'function') rebuildGachaCaches();
+    if (typeof renderTabs        === 'function') renderTabs();
+    if (typeof renderItemGrid    === 'function') renderItemGrid();
+    if (typeof renderUsersList   === 'function') renderUsersList();
+    if (typeof startDone         === 'function') startDone();
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const exBtn = document.getElementById('exportAllBtn');
+  const fmt   = document.getElementById('exportFormat');
+  const imp   = document.getElementById('importAllInput');
+
+  exBtn?.addEventListener('click', async () => {
+    const mode = fmt?.value || 'zip';
+    await window.ImpExp?.exportAll(mode, exBtn);  // 第二引数はボタン（任意）
+  });
+
+  imp?.addEventListener('change', (e) => {
+    const f = e.currentTarget.files?.[0];
+    if (!f) return;
+    window.ImpExp?.importAll(f);
+    e.currentTarget.value = ""; // 同じファイル再選択可
+  });
+});
 </script>
 </body>
 </html>
