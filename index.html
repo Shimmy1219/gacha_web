@@ -93,8 +93,9 @@ button, a, [role="button"] {
 
   /* Tabs + item grid */
   .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap}
-  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;}
+  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none; touch-action: manipulation; position: relative; }
   .tab.active{background:#191922;color:#fff;border-color:var(--accent)}
+  .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
   .item-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
   .item-card{background:var(--panel-2);border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:190px;position:relative}
   .item-thumb{aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -140,10 +141,6 @@ button, a, [role="button"] {
 
   /* ユーザー内訳の個数表示 */
   .item-pill .count{font-weight:700;color:#e5e7eb;margin-left:.15rem;}
-
-  /* タブをホバーで強調 */
-  .tab{ position: relative; touch-action: manipulation; }
-  .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
 
   /* タブ右上の×ボタン */
   .tab .close{position:absolute; top:-8px; right:-8px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#2a2a36; color:#cbd5e1; border:1px solid var(--border); font-weight:800; cursor:pointer;}
