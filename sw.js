@@ -14,8 +14,6 @@ const PRECACHE_URLS = [
   // --- ライブラリ類（/lib 配下に配置したものを列挙）---
   '/lib/jszip.min.js',
   '/lib/pako.min.js',
-  '/lib/lzma-min.js',
-  '/lib/lzma_worker-min.js',
 
   // --- あなたのアプリコード（必要に応じて）---
   '/imp_exp_file.js',

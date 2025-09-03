@@ -18,7 +18,6 @@
 <!-- 先にライブラリ（ローカル） -->
 <script src="/lib/jszip.min.js"></script>
 <script src="/lib/pako.min.js"></script>
-<script src="/lib/lzma-min.js"></script>
 
 <!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
@@ -28,7 +27,6 @@
   (async()=>{
     if (typeof JSZip==='undefined') await inject('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
     if (typeof pako==='undefined')  await inject('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js');
-    if (typeof LZMA==='undefined')  await inject('https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js');
   })();
 })();
 </script>
@@ -322,11 +320,6 @@ button, a, [role="button"] {
             全体インポート
           </label>
           <input type="file" id="importAllInput" accept=".zip,application/zip" style="display:none" />
-          <!-- エクスポート形式選択 -->
-          <select id="exportFormat" class="select small" title="エクスポート形式">
-            <option value="zip">ZIP（推奨）</option>
-            <option value="gabx">高圧縮（.gabx）</option>
-          </select>
         </div>
       </section>
 
@@ -1778,19 +1771,16 @@ window.AppStateBridge = {
 
 document.addEventListener('DOMContentLoaded', () => {
   const exBtn = document.getElementById('exportAllBtn');
-  const fmt   = document.getElementById('exportFormat');
   const imp   = document.getElementById('importAllInput');
 
   exBtn?.addEventListener('click', async () => {
-    const mode = fmt?.value || 'zip';
-    await window.ImpExp?.exportAll(mode, exBtn);  // 第二引数はボタン（任意）
+    await window.ImpExp?.exportAllZip(e.currentTarget).catch(err => alert("エクスポート失敗: " + (err?.message || err))); // 第二引数はボタン（任意）
   });
 
   imp?.addEventListener('change', (e) => {
-    const f = e.currentTarget.files?.[0];
-    if (!f) return;
-    window.ImpExp?.importAll(f);
-    e.currentTarget.value = ""; // 同じファイル再選択可
+  const f = e.target.files?.[0]; if (!f) return;
+  importAllZip(f).catch(err => alert("インポート失敗: " + (err?.message || err)))
+    .finally(()=>{ e.target.value = ""; });
   });
 });
 </script>

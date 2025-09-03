@@ -1,7 +1,7 @@
 /*!
  * imp_exp_file.js
  * すべての画像/動画/音声（IndexedDB）＋アプリ状態(JSON)を
- * ZIPにまとめ、任意でLZMA(.gabx)高圧縮して保存／復元するモジュール
+ * ZIPにまとめ、保存／復元するモジュール
  */
 (function (global) {
   'use strict';
@@ -15,13 +15,6 @@
   const K_SKIP = global.LS_KEY_SKIP || 'gacha_item_image_skip_v1';
 
   const JSZip = global.JSZip;
-  const LZMA  = global.LZMA;
-  // CDN（直接 Worker に渡さない。importScripts 用にだけ使う）
-  const LZMA_CDN_URL = "https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma_worker-min.js";
-
-  let __lzma = null;
-  let __lzmaWorkerURL = null; // blob: または 同一オリジンのパス
-
   function assert(cond, msg){ if(!cond) throw new Error(msg); }
 
   // ===== IndexedDB helpers =====
@@ -99,54 +92,6 @@
     return decodeURIComponent(escape(atob(s)));
   }
 
-  // ===== LZMA helpers =====
-  // 同一オリジンのワーカーがあれば優先（例: /lib/lzma_worker-min.js）
-  async function probeSameOriginWorker(){
-    const local = new URL("/lib/lzma_worker-min.js", location.href).href;
-    try{
-      const r = await fetch(local, { method:"HEAD", cache:"no-store" });
-      if (r.ok) return local;
-    }catch(_){}
-    return null;
-  }
-  function makeBlobWorkerURL(){
-    const src = `self.importScripts(${JSON.stringify(LZMA_CDN_URL)});`;
-    return URL.createObjectURL(new Blob([src], {type:"application/javascript"}));
-  }
-  async function ensureLZMA(){
-    if (typeof LZMA === "undefined") {
-      // 事前に index.html で読み込んでいるのが理想。なければここで補う。
-      await new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src="/lib/lzma-min.js"; s.onload=ok; s.onerror=()=>ng(); document.head.appendChild(s); })
-        .catch(()=> new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src="https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma-min.js"; s.onload=ok; s.onerror=ng; document.head.appendChild(s); }));
-    }
-    if (__lzma) return __lzma;
-
-    let workerURL = await probeSameOriginWorker();   // まず /lib を探す
-    if (!workerURL) workerURL = makeBlobWorkerURL(); // ダメなら blob Worker
-
-    __lzmaWorkerURL = workerURL;
-    __lzma = new LZMA(workerURL);
-    return __lzma;
-  }
-
-  // ラッパー：必ず ensureLZMA() 経由で呼ぶ
-  async function lzmaCompress(u8, level=6){
-    const inst = await ensureLZMA();
-    return new Promise((res) => {
-      inst.compress(u8, level, (out)=> res(new Uint8Array(out)), ()=>{}, "uint8array");
-    });
-  }
-  async function lzmaDecompress(u8){
-    const inst = await ensureLZMA();
-    return new Promise((res, rej) => {
-      inst.decompress(u8, (out)=> {
-        if (out instanceof Uint8Array) res(out);
-        else if (typeof out === "string") res(new TextEncoder().encode(out));
-        else rej(new Error("LZMA解凍結果の型不明"));
-      }, ()=>{}, "uint8array");
-    });
-  }
-
   // ===== Appブリッジ =====
   function getBridge(){
     const br = global.AppStateBridge;
@@ -190,125 +135,119 @@
     });
   }
 
-  // ===== 公開: エクスポート =====
-  async function exportAll(format = "zip", btnEl){
-    try{
-      if (btnEl){ btnEl.disabled = true; btnEl.textContent = "収集中…"; }
-      const zipBlob = await buildAllAsZipBlob();
+  async function importAllZip(fileOrBlob, btnEl){
+    if (btnEl){ btnEl.disabled = true; btnEl.textContent = "読み込み中…"; }
 
-      if (format === "zip"){
-        await saveBlobSmart(zipBlob, "gacha_app_bundle.zip", "application/zip", btnEl);
-        return;
+    const zip = await JSZip.loadAsync(fileOrBlob);
+    const metaEntry = zip.file('app_state_v1.json');
+    if (!metaEntry) throw new Error('app_state_v1.json が見つかりません');
+
+    const meta = JSON.parse(await metaEntry.async('string'));
+    const snap = meta?.state || {};
+    const mapping = meta?.blobs || {};
+
+    // 1) JSON 状態をアプリに流し込む
+    gData            = snap.gData || {};
+    gCatalogByGacha  = snap.gCatalogByGacha || {};
+    gHitCounts       = snap.gHitCounts || {};
+    imgMap           = snap.imgMap || {};
+    origMap          = snap.origMap || {};
+    skipSet          = new Set(snap.skip || []);
+    gRarityOrder     = snap.rarityOrder || gRarityOrder;
+
+    // 2) バイナリをIDBに復元（origMap に対応づけ）
+    for (const [key, rel] of Object.entries(mapping)){
+      const f = zip.file(rel);
+      if (!f) continue;
+      const blob = await f.async('blob');
+      await idbPut(key + '|orig', blob);
+      origMap[key] = 'idb:' + (key + '|orig');
+
+      // サムネが無い場合は、種類に応じて再生成（軽量）
+      const isImage = /^image\//.test(blob.type);
+      const isVideo = /^video\//.test(blob.type);
+      const isAudio = /^audio\//.test(blob.type);
+
+      let thumb = null;
+      if (isImage) thumb = await compressImage(blob, { maxSize: 256, typePrefer: ["image/webp","image/jpeg"], quality: 0.85 });
+      else if (isVideo) thumb = await extractVideoThumbnail(blob, { time: 0.1, maxSize: 256 });
+      else if (isAudio) thumb = await makeNotePlaceholder(256);
+
+      if (thumb) {
+        await idbPut(key + '|thumb', thumb);
+        imgMap[key] = 'idb:' + (key + '|thumb');
       }
-      if (format === "gabx"){
-        if (btnEl) btnEl.textContent = "高圧縮中…";
-        const u8 = new Uint8Array(await zipBlob.arrayBuffer());
-        const lz = await lzmaCompress(u8, 6); // バランス重視
-        const out = new Blob([lz], { type: "application/octet-stream" });
-        await saveBlobSmart(out, "gacha_app_bundle.gabx", "application/octet-stream", btnEl);
-        return;
-      }
-      throw new Error("未知のエクスポート形式: " + format);
-    }catch(err){
-      console.error(err);
-      alert("エクスポートに失敗: " + (err?.message || err));
-    }finally{
-      if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体エクスポート"; }
     }
+
+    // 3) ストレージへ保存
+    saveLocalJSON(LS_KEY_IMG, imgMap);
+    saveLocalJSON(LS_KEY_ORIG, origMap);
+    saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
+
+    // 4) UI 再構築
+    rebuildGachaCaches();
+    renderTabs();
+    renderItemGrid();
+    renderUsersList();
+
+    if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体インポート"; }
   }
 
   // 保存（File System Access → Web Share → ダウンロード）
-  async function saveBlobSmart(blob, filename, mime, btnEl){
-    if ('showSaveFilePicker' in global){
-      const handle = await global.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{ description: filename, accept: { [mime]: [ '.' + filename.split('.').pop() ] } }]
-      });
-      const w = await handle.createWritable();
-      await w.write(blob); await w.close();
-      if (btnEl){ btnEl.textContent = "保存しました"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
-      return;
-    }
-    if (navigator.canShare){
-      const file = new File([blob], filename, { type: mime });
-      if (navigator.canShare({ files:[file] })){
-        await navigator.share({ files:[file], title: filename });
-        if (btnEl){ btnEl.textContent = "共有しました"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
-        return;
+  async function exportAllZip(btnEl){
+    if (btnEl){ btnEl.disabled = true; btnEl.textContent = "パッキング中…"; }
+
+    // 1) JSON スナップショット（縮小整形でもOK）
+    const snapshot = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      state: {
+        gData, gCatalogByGacha, gHitCounts,
+        imgMap, origMap, skip: Array.from(skipSet),
+        rarityOrder: gRarityOrder
+      },
+      blobs: {} // key -> 相対パス
+    };
+
+    const zip = new JSZip();
+
+    // 2) 原本バイナリ（origMap優先、無ければimgMapのidb）を /blobs/ に入れる
+    const blobsDir = zip.folder('blobs');
+    for (const key of new Set([...Object.keys(origMap), ...Object.keys(imgMap)])) {
+      // スキップは出力対象外
+      if (skipHas(key)) continue;
+
+      // まず origMap
+      let blob = null;
+      const orig = origMap[key];
+      if (orig && orig.startsWith('idb:')) blob = await idbGet(orig.slice(4));
+
+      // fallback: imgMap が idb:thumb の場合でも、可能ならそれを拾う
+      if (!blob) {
+        const v = imgMap[key];
+        if (v && v.startsWith('idb:')) blob = await idbGet(v.slice(4));
       }
+      if (!blob) continue;
+
+      const ext = guessExt(blob.type) || 'bin';
+      const safe = sanitize(key).replace(/::/g,'__');
+      const rel = `blobs/${safe}.${ext}`;
+
+      blobsDir.file(`${safe}.${ext}`, blob, { binary: true, compression: "STORE" }); // 原本は非圧縮で保持
+      snapshot.blobs[key] = rel;
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 2000);
-    if (btnEl){ btnEl.textContent = "ダウンロード開始"; setTimeout(()=> btnEl.textContent = "全体エクスポート", 900); }
+
+    // 3) JSON を格納
+    zip.file('app_state_v1.json', JSON.stringify(snapshot, null, 2));
+
+    // 4) ZIP 化（メタはDEFLATE、バイナリは上でSTOREにしてある）
+    const blob = await zip.generateAsync({ type: 'blob', compression: "DEFLATE", compressionOptions: { level: 6 } });
+
+    // 5) 保存
+    await saveBlobSmart(blob, `gacha_app_export_${Date.now()}.zip`, 'application/zip', btnEl);
+
+    if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体エクスポート"; }
   }
-
-  // ===== 公開: インポート =====
-  async function importAll(fileOrBlob){
-    try{
-      assert(JSZip, "JSZip 未ロード");
-      const ab = await fileOrBlob.arrayBuffer();
-      let buf = new Uint8Array(ab);
-
-      // まず ZIP として試す → ダメなら .gabx(LZMA) として解凍してから ZIP 読み込み
-      let zip;
-      try{
-        zip = await JSZip.loadAsync(buf);
-      }catch(_zipErr){
-        try{
-          const u8 = await lzmaDecompress(buf);
-          zip = await JSZip.loadAsync(u8);
-        }catch(e){
-          throw new Error("ZIP でも .gabx でもありません");
-        }
-      }
-
-      const metaFile = zip.file("app_state_v1.json");
-      assert(metaFile, "app_state_v1.json が見つかりません");
-      const meta = JSON.parse(await metaFile.async("string"));
-      assert(meta && meta.version === 1, "未知のバンドル形式です");
-
-      // 1) IDB 初期化
-      await idbClear();
-
-      // 2) IDB 書き戻し
-      const files = Array.isArray(meta.idb?.files) ? meta.idb.files : [];
-      for (const f of files){
-        const zf = zip.file(f.name);
-        if (!zf) continue;
-        const raw = await zf.async("blob");
-        const blob = f.type ? raw.slice(0, raw.size, f.type) : raw;
-        await idbPut(f.key, blob);
-      }
-
-      // 3) アプリ状態を反映
-      const br = getBridge();
-      br.setState(meta.state || {
-        gData: {}, gCatalogByGacha: {}, gHitCounts: {},
-        selectedGacha: null, imgMap: {}, origMap: {}, skipArray:[]
-      });
-
-      // 4) 永続保存（マップ類）
-      try{
-        const st = meta.state || {};
-        localStorage.setItem(K_IMG,  JSON.stringify(st.imgMap  || {}));
-        localStorage.setItem(K_ORIG, JSON.stringify(st.origMap || {}));
-        localStorage.setItem(K_SKIP, JSON.stringify(st.skipArray || []));
-      }catch(e){}
-
-      // 5) 画面更新
-      br.afterRestore();
-      alert("インポートが完了しました。");
-    }catch(err){
-      console.error(err);
-      alert("インポートに失敗: " + (err?.message || err));
-    }finally{
-      // 呼び出し側で <input> の値はクリア済み
-    }
-  }
-
   // ===== 公開API =====
   global.ImpExp = { exportAll, importAll, /*内部デバッグ用*/ _buildZip: buildAllAsZipBlob };
 
