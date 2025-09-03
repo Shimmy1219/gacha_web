@@ -1773,7 +1773,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const exBtn = document.getElementById('exportAllBtn');
   const imp   = document.getElementById('importAllInput');
 
-  exBtn?.addEventListener('click', async () => {
+  exBtn?.addEventListener('click', async (e) => {
     await window.ImpExp?.exportAllZip(e.currentTarget).catch(err => alert("エクスポート失敗: " + (err?.message || err))); // 第二引数はボタン（任意）
   });
 
