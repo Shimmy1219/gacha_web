@@ -16,8 +16,11 @@
 
   const JSZip = global.JSZip;
   const LZMA  = global.LZMA;
-  const LZMA_WORKER_URL = "https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma_worker-min.js";
-  const lzma = (typeof LZMA !== 'undefined') ? new LZMA(LZMA_WORKER_URL) : null;
+  // CDN（直接 Worker に渡さない。importScripts 用にだけ使う）
+  const LZMA_CDN_URL = "https://cdn.jsdelivr.net/npm/lzma@2.3.2/src/lzma_worker-min.js";
+
+  let __lzma = null;
+  let __lzmaWorkerURL = null; // blob: または 同一オリジンのパス
 
   function assert(cond, msg){ if(!cond) throw new Error(msg); }
 
@@ -97,16 +100,51 @@
   }
 
   // ===== LZMA helpers =====
-  function lzmaCompress(u8, level=6){
-    assert(lzma, "LZMA ライブラリ未ロード");
+  // 同一オリジンのワーカーがあれば優先（例: /lib/lzma_worker-min.js）
+  async function probeSameOriginWorker(){
+    const local = new URL("/lib/lzma_worker-min.js", location.href).href;
+    try {
+      const res = await fetch(local, { method: "HEAD", cache: "no-store" });
+      if (res.ok) return local;
+    } catch(_) {}
+    return null;
+  }
+
+  // CDN を importScripts するだけの最小ワーカースタブを blob で作る
+  function makeBlobWorkerURL(){
+    const src = `self.importScripts(${JSON.stringify(LZMA_CDN_URL)});`;
+    const blob = new Blob([src], { type: "application/javascript" });
+    return URL.createObjectURL(blob);
+  }
+
+  // LZMA インスタンスを安全に作る
+  async function ensureLZMA(){
+    if (__lzma) return __lzma;
+    if (typeof LZMA === "undefined") throw new Error("LZMA ライブラリが読み込まれていません。");
+
+    // 1) 同一オリジンのワーカーがあればそれを使う
+    let workerURL = await probeSameOriginWorker();
+
+    // 2) なければ blob: ワーカースタブ（中で importScripts(CDN)）
+    if (!workerURL) {
+      workerURL = makeBlobWorkerURL();
+    }
+    __lzmaWorkerURL = workerURL;
+    __lzma = new LZMA(workerURL);
+    return __lzma;
+  }
+
+  // ラッパー：必ず ensureLZMA() 経由で呼ぶ
+  async function lzmaCompress(u8, level=6){
+    const inst = await ensureLZMA();
     return new Promise((res) => {
-      lzma.compress(u8, level, (out)=> res(new Uint8Array(out)), ()=>{}, "uint8array");
+      inst.compress(u8, level, (out)=> res(new Uint8Array(out)), ()=>{}, "uint8array");
     });
   }
-  function lzmaDecompress(u8){
-    assert(lzma, "LZMA ライブラリ未ロード");
+  async function lzmaDecompress(u8){
+    const inst = await ensureLZMA();
     return new Promise((res, rej) => {
-      lzma.decompress(u8, (out)=> {
+      inst.decompress(u8, (out)=> {
         if (out instanceof Uint8Array) res(out);
         else if (typeof out === "string") res(new TextEncoder().encode(out));
         else rej(new Error("LZMA解凍結果の型不明"));
