@@ -584,6 +584,35 @@ function syncMobileTabs(){
   });
 }
 
+// 自動保存関係
+const LS_KEY_APP = "gacha_app_state_v1";
+function saveAppState(){
+  try{
+    const state = {
+      data: gData,
+      catalogs: gCatalogByGacha,
+      counts: gHitCounts,
+      selected: selectedGacha || null,
+    };
+    localStorage.setItem(LS_KEY_APP, JSON.stringify(state));
+  }catch(e){ console.warn("saveAppState failed:", e); }
+}
+function saveAppStateDebounced(){
+  clearTimeout(saveAppStateDebounced._t);
+  saveAppStateDebounced._t = setTimeout(saveAppState, 150);
+}
+function loadAppState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY_APP);
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    gData = s?.data || {};
+    gCatalogByGacha = s?.catalogs || {};
+    gHitCounts = s?.counts || {};
+    selectedGacha = s?.selected || selectedGacha;
+    return true;
+  }catch(e){ console.warn("loadAppState failed:", e); return false; }
+}
 
 function updateMobileViewMode(){
   const main = getMainUI();        // ← ここで取得（まだ無ければ何もしない）
@@ -599,10 +628,25 @@ function updateMobileViewMode(){
   syncMobileTabs();
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+  if (loadAppState()) {
+    rebuildGachaCaches();
+    renderTabs();
+    renderItemGrid();
+    renderUsersList();
+    startDone();
+    saveAppStateDebounced();               // スプラッシュを閉じて通常画面へ
+  }
+});
+
 // DOM 構築後に初回実行（早すぎる呼び出しを防止）
 document.addEventListener('DOMContentLoaded', updateMobileViewMode);
 window.addEventListener('resize', updateMobileViewMode);
 window.addEventListener('orientationchange', updateMobileViewMode);
+
+// 画面が開かれた際、閉じられた際にも保存
+window.addEventListener('beforeunload', saveAppState);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveAppState(); });
 
 $$(".modal").forEach(m=>{
   m.addEventListener("touchmove", e=>{ if(e.target === m) e.preventDefault(); }, {passive:false});
@@ -632,6 +676,7 @@ function onJsonLoaded(data){
   renderTabs();
   renderItemGrid();
   renderUsersList();
+  saveAppStateDebounced();
 }
 
 function rebuildGachaCaches(){
@@ -925,6 +970,7 @@ $("#appendApply").addEventListener("click", ()=>{
 
   rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
   close(appendModal);
+  saveAppStateDebounced();
 });
 
 /* ====== ガチャタブ削除確認モーダル ====== */
@@ -952,7 +998,7 @@ $("#delConfirm").addEventListener("click", ()=>{
   // 選択ガチャの調整
   if(selectedGacha === g) selectedGacha = null;
   rebuildGachaCaches();
-  renderTabs(); renderItemGrid(); renderUsersList();
+  renderTabs(); renderItemGrid(); renderUsersList(); saveAppStateDebounced();
 });
 
 /* ====== 画像モーダル（既存） ====== */
@@ -994,7 +1040,7 @@ $("#applyBtn").addEventListener("click", async ()=>{
       else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
       else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(file,{time:0.1,maxSize:256}); }
       await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb");
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
+      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveAppStateDebounced();
     }else if(url){
       let ok=false;
       try{
@@ -1008,9 +1054,9 @@ $("#applyBtn").addEventListener("click", async ()=>{
         if(thumbBlob){ await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb"); ok=true; }
       }catch(_e){}
       if(!ok){ imgMap[k]=url; }
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
+      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveAppStateDebounced();
     }else{ alert("ファイルまたはURLを指定してください。"); return; }
-    closeImageModal(); renderItemGrid(); renderUsersList();
+    closeImageModal(); renderItemGrid(); renderUsersList(); saveAppStateDebounced();
   }catch(err){ console.error(err); alert("保存に失敗: "+(err?.message||err)); }
 });
 
@@ -1023,7 +1069,7 @@ async function clearImage(it){
     delete imgMap[k]; delete origMap[k];
   }
   saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
-  renderItemGrid(); renderUsersList();
+  renderItemGrid(); renderUsersList(); saveAppStateDebounced();
 }
 async function toggleSkip(it){ const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)){ skipDel(k); } else { await clearImage(it); skipAdd(k); } renderItemGrid(); }
 
@@ -1323,6 +1369,7 @@ $("#liveApply").addEventListener("click", () => {
   renderTabs();
   renderItemGrid();
   renderUsersList();
+  saveAppStateDebounced();
 });
 
 /* ====== 3) 最終結果：一括貼り付け → 反映 ====== */
@@ -1353,7 +1400,7 @@ $("#finalParse").addEventListener("click", ()=>{
 
   mergeIntoGData(delta);
   rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
-  startDone(); close(finalModal);
+  startDone(); close(finalModal); saveAppStateDebounced();
 });
 
 /* ====== マージ/ユーティリティ ====== */
@@ -1369,6 +1416,7 @@ function mergeIntoGData(delta){
       }
     }
   }
+  saveAppStateDebounced();
 }
 
 /* ====== 解析: 出現アイテム一覧 ======
@@ -1620,8 +1668,8 @@ async function importFromExternalState(state){
       mergeIntoGData(delta);
     }
 
-    rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();
-    startDone(); close(startModal);
+    rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList();  
+    startDone(); close(startModal); saveAppStateDebounced();
   }catch(err){
     console.error(err);
     alert("取り込みに失敗しました: " + (err?.message || err));
