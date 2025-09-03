@@ -1626,7 +1626,7 @@ async function importFromExternalState(state){
 
   // 入力系はズーム抑止の対象外
   const isInteractive = (el) =>
-    !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom .tab');
+    !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom, .tab, #gachaTabs');
 
   // ダブルタップズーム抑止
   let lastTouchEnd = 0;
