@@ -249,6 +249,6 @@
     if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体エクスポート"; }
   }
   // ===== 公開API =====
-  global.ImpExp = { exportAll, importAll, /*内部デバッグ用*/ _buildZip: buildAllAsZipBlob };
+  global.ImpExp = { exportAllZip, importAllZip, /*内部デバッグ用*/ _buildZip: buildAllAsZipBlob };
 
 })(window);
