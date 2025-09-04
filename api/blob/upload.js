@@ -1,64 +1,92 @@
 // /api/blob/upload.js
-// 目的: client-upload 用トークン発行 + 完了通知の受け取り（最小要件）
-// ポイント: handleUpload は「req/resを直接いじらない」。戻り値を res.json で返す。
-
-export const config = {
-  api: {
-    // JSON 受け取るだけなので bodyParser は有効のままでOK
-    // 大きい本体はブラウザ→Vercel Blob へ直送される
-  },
-};
-
 export default async function handler(req, res) {
   // ヘルスチェック
   if (req.method === 'GET' && 'health' in (req.query || {})) {
     return res.status(200).json({ ok: true, route: '/api/blob/upload' });
   }
-
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, GET');
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
+  // ====== 1) 同一オリジン検証 ======
+  // 許可オリジン: 本番/プレビューに合わせて列挙（例）
+  const ALLOWED_ORIGINS = [
+    process.env.NEXT_PUBLIC_SITE_ORIGIN,            // 例: https://shimmy3.com
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`, // 例: https://myapp.vercel.app
+  ].filter(Boolean);
+
+  const reqOriginHeader = req.headers.origin || '';
+  const referer = req.headers.referer || '';
+  const derivedOrigin = (() => {
+    try { return referer ? new URL(referer).origin : ''; } catch { return ''; }
+  })();
+
+  const originToCheck = reqOriginHeader || derivedOrigin;
+  if (!originToCheck || !ALLOWED_ORIGINS.includes(originToCheck)) {
+    return res.status(403).json({ ok: false, error: 'Forbidden: origin not allowed' });
+  }
+
+  // ====== 2) handleUpload 呼び出し ======
   try {
-    // 重要: client 用のヘルパーは '@vercel/blob/client' から
     const { handleUpload } = await import('@vercel/blob/client');
 
-    // Next.js /pages の req.body は JSON (upload() が投げる HandleUploadBody)
+    // JSON ボディ（@vercel/blob の client が送ってくる）
     const body = req.body ?? {};
 
     const jsonResponse = await handleUpload({
-      request: req,      // Node IncomingMessage でもOK
-      body,              // ← ここに JSON ボディ（token 生成 or 完了通知のどちらか）
+      request: req,
+      body,
+      // ---- CSRF & 制限チェック ----
       onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
-        // ここでアップロード許可ポリシーを返す
+        // CSRF: クッキー vs clientPayload を一致チェック
+        const cookies = Object.fromEntries(
+          (req.headers.cookie || '')
+            .split(';')
+            .map(v => v.trim())
+            .filter(Boolean)
+            .map(v => v.split('=').map(decodeURIComponent))
+        );
+        let csrfFromPayload = '';
+        try {
+          const parsed = clientPayload ? JSON.parse(clientPayload) : {};
+          csrfFromPayload = parsed?.csrf || '';
+        } catch (_) { /* 無視 */ }
+
+        const csrfFromCookie = cookies['csrf'] || '';
+        if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
+          // CSRF不一致 → 拒否
+          throw new Error('Forbidden: invalid CSRF token');
+        }
+
+        // ここで MIME/サイズ/ファイル名ポリシーを決める
         return {
-          addRandomSuffix: true, // ファイル名衝突を避ける
+          addRandomSuffix: true,
           allowedContentTypes: [
             'application/zip',
             'application/x-zip-compressed',
           ],
-          maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
-          // 必要なら cacheControlMaxAge, validUntil, allowOverwrite など
+          maximumSizeInBytes: 100 * 1024 * 1024,
+          // cacheControlMaxAge, validUntil など必要なら追加
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // 完了フック（本番ならDB更新など）
         console.log('[blob/upload completed]', {
           url: blob.url,
           downloadUrl: blob.downloadUrl || null,
           pathname: blob.pathname,
           size: blob.size,
           contentType: blob.contentType,
-          tokenPayload,
         });
       },
     });
 
-    // handleUpload はレスポンスを書かないので、ここで返す
     return res.status(200).json(jsonResponse);
   } catch (err) {
     console.error('[blob/upload error]', err);
-    return res.status(500).json({ ok: false, error: err?.message || String(err) });
+    // CSRFなどで throw した場合もここに来るので 403 を返す
+    const msg = err?.message || String(err);
+    const status = /forbidden/i.test(msg) ? 403 : 500;
+    return res.status(status).json({ ok: false, error: msg });
   }
 }

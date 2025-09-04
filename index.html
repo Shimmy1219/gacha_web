@@ -575,11 +575,32 @@ button, a, [role="button"] {
     document.body.appendChild(fileInput);
   }
 
+  // === CSRF トークン管理 ===
+  let csrfToken = '';
+  async function ensureCsrf() {
+    if (csrfToken) return csrfToken;
+    const r = await fetch('/api/blob/csrf', { credentials: 'same-origin' });
+    const j = await r.json();
+    if (!r.ok || !j?.token) throw new Error('CSRF token fetch failed');
+    csrfToken = j.token;
+    return csrfToken;
+  }
+
   // クリックでファイル選択
-  testBtn?.addEventListener('click', () => {
+  testBtn?.addEventListener('click', async () => {
     if (testRes) testRes.textContent = '';
     if (resultBox) { resultBox.style.display = 'none'; }
     fileInput.value = '';
+
+    // アップロード前に CSRF トークンを確保
+    try {
+      await ensureCsrf();
+    } catch (e) {
+      console.error(e);
+      if (testRes) testRes.textContent = 'CSRFトークン取得失敗';
+      return;
+    }
+
     fileInput.click();
   });
 
@@ -594,12 +615,16 @@ button, a, [role="button"] {
     if (testRes) testRes.textContent = '';
 
     try {
+      await ensureCsrf();
+
       // ファイル名はそのまま渡す（衝突回避は addRandomSuffix で対応）
       const put = await upload(file.name, file, {
         access: 'public',
         contentType: 'application/zip',
-        // サーバ側トークン発行 API（今回はセキュリティ無視で最小要件）
-        handleUploadUrl: '/api/blob/upload'
+        handleUploadUrl: '/api/blob/upload',
+        // ★ CSRF をサーバーへ送信
+        clientPayload: JSON.stringify({ csrf: csrfToken }),
+        // 大きいZIPなら multipart: true も検討
       });
 
       const link = put.downloadUrl || put.url;
