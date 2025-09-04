@@ -5,7 +5,7 @@
 // - ユーザー/用途ごとの格納パス (pathnamePrefix)
 // - トークン有効期限 (validUntil)
 // - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
-
+import crypto from 'crypto';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
 function vLog(...args) {
@@ -95,54 +95,70 @@ export default async function handler(req, res) {
       body,
 
       // ここで CSRF 照合・保存ポリシー（拡張子/MIME/サイズ/格納パス/有効期限）を決定
-      onBeforeGenerateToken: async (_pathname, clientPayload /* string|undefined */) => {
+      onBeforeGenerateToken: async (_pathname, clientPayload) => {
         const cookies = parseCookies(req.headers.cookie);
 
+        // 1) CSRF チェック
         let payload = {};
         try { payload = clientPayload ? JSON.parse(clientPayload) : {}; }
         catch (e) { vLog('clientPayload JSON parse error:', String(e)); }
 
         const csrfFromCookie  = cookies['csrf'] || '';
         const csrfFromPayload = payload?.csrf || '';
-        vLog('csrfFromCookie exists:', !!csrfFromCookie);
-        vLog('csrfFromPayload exists:', !!csrfFromPayload);
-
         if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
-          vLog('CSRF mismatch', { csrfFromCookieLen: csrfFromCookie.length, csrfFromPayloadLen: csrfFromPayload.length });
           const err = new Error('Forbidden: invalid CSRF token');
-          err.statusCode = 403;
-          throw err;
+          err.statusCode = 403; throw err;
         }
 
-        // --- ユーザー/用途の抽出＆サニタイズ ---
-        const rawUserId = payload?.userId;
-        const rawPurpose = payload?.purpose;
-        const userId  = sanitizeSegment(rawUserId, 'anon');
-        const purpose = sanitizeSegment(rawPurpose, 'misc');
+        // 2) ユーザー/用途（サニタイズ）
+        const userId  = sanitizeSegment(payload?.userId,  'anon');
+        const purpose = sanitizeSegment(payload?.purpose, 'misc');
 
-        // --- ファイル名・サイズ等の制約（ZIPのみ） ---
-        // クライアントが送る multipart のときは _pathname が無い場合もあるので拡張子は二重でチェックするなら完了時スキャンも検討
+        // 3) レート制限（DBレス：同一IP 1分に1回）
+        //    - 時間窓: 60秒
+        //    - 決定論的 pathname を生成し、allowOverwrite: false で 2回目以降を弾く
+        const ip = (req.headers['x-forwarded-for'] || '')
+          .split(',')[0].trim() || req.socket?.remoteAddress || '0.0.0.0';
+
+        const WINDOW_MS = 60 * 1000; // 60秒窓
+        const windowId = Math.floor(Date.now() / WINDOW_MS);
+
+        const secret = process.env.BLOB_RATE_SECRET || 'dev-secret-change-me';
+        const h = crypto.createHmac('sha256', secret)
+                        .update(`${ip}:${windowId}`)
+                        .digest('hex')
+                        .slice(0, 32);
+
+        // 4) 有効期限（例: 5分）
+        const validUntilMs = Date.now() + 5 * 60 * 1000;
+
+        // 5) ZIP限定などの基本ポリシ
         const allowedContentTypes = [
           'application/zip',
           'application/x-zip-compressed',
         ];
 
-        // --- 有効期限（発行から5分） ---
-        const validUntilMs = Date.now() + 5 * 60 * 1000;
+        // 6) 決定論的な格納パス（DBレスRateLimitの要）
+        //    - 同一IP・同一時間窓なら "同じ pathname" になる
+        //    - 元ファイル名は保存先では使わない（必要なら別メタで管理）
+        const pathname = `/uploads/${userId}/${purpose}/${h}.zip`;
 
-        // --- パスのプレフィックス（ユーザー/用途ごと） ---
-        // 例: /uploads/<userId>/<purpose>/ 直下に addRandomSuffix 付きで保存
-        const pathnamePrefix = `/uploads/${userId}/${purpose}/`;
-
-        vLog('policy', { userId, purpose, pathnamePrefix, validUntilMs });
+        vLog('policy', { userId, purpose, ip, windowId, pathname, validUntilMs });
 
         return {
-          addRandomSuffix: true,
+          // ★ DBレス・ハードレートの要点
+          addRandomSuffix: false,
+          allowOverwrite: false, // 同名があれば失敗（= 同窓2回目を拒否）
+
+          // 基本制限
           allowedContentTypes,
-          maximumSizeInBytes: 100 * 1024 * 1024,  // 100MB
+          maximumSizeInBytes: 100 * 1024 * 1024,
+
+          // セキュリティ/運用
           validUntil: validUntilMs,
-          pathnamePrefix,
-          // 必要に応じて: cacheControlMaxAge, allowOverwrite など
+
+          // 保存先指定（prefixではなく固定パス）
+          pathname,
         };
       },
 
