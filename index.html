@@ -634,18 +634,6 @@ button, a, [role="button"] {
   });
 </script>
 
-
-<script type="module">
-  import { upload } from "https://esm.sh/@vercel/blob@0.25.1/client";
-
-  window.__vercelBlobUpload = async function __vercelBlobUpload(filename, blob) {
-    return await upload(filename, blob, {
-      access: "public",                // 必須
-      handleUploadUrl: "/api/blob/upload",
-      // addRandomSuffix や cacheControlMaxAge はクライアントで指定しない
-    });
-  };
-</script>
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
