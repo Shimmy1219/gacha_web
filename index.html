@@ -13,7 +13,7 @@
   content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- 電話番号の自動リンク無効化 -->
 <meta name="format-detection" content="telephone=no">
-<title>ガチャ結果ビューア v19.2</title>
+<title>ガチャ結果ビューア v20</title>
 
 <!-- 先にライブラリ（ローカル） -->
 <script src="/lib/jszip.min.js"></script>
@@ -268,7 +268,7 @@ button, a, [role="button"] {
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v19.2</span></h1>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v20</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -960,6 +960,7 @@ window.__vercelBlobUpload = async function(filename, blob){
   const { upload } = await import('https://esm.sh/@vercel/blob@0.25.1/client');
   const put = await upload(filename, blob, {
     // ★ クライアントではオプション最小化。トークン発行は /api/blob/upload に委譲
+    access: "public",
     handleUploadUrl: '/api/blob/upload',
     // access / addRandomSuffix / cacheControlMaxAge などはクライアントで指定しない
   });
