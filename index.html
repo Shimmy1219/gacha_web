@@ -597,7 +597,6 @@ button, a, [role="button"] {
       // ファイル名はそのまま渡す（衝突回避は addRandomSuffix で対応）
       const put = await upload(file.name, file, {
         access: 'public',
-        addRandomSuffix: true,
         contentType: 'application/zip',
         // サーバ側トークン発行 API（今回はセキュリティ無視で最小要件）
         handleUploadUrl: '/api/blob/upload'
