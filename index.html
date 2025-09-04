@@ -548,6 +548,17 @@ button, a, [role="button"] {
     </div>
   </div>
 
+<script type="module">
+  import { upload } from "https://esm.sh/@vercel/blob@0.25.1/client";
+
+  window.__vercelBlobUpload = async function __vercelBlobUpload(filename, blob) {
+    return await upload(filename, blob, {
+      access: "public",                // 必須
+      handleUploadUrl: "/api/blob/upload",
+      // addRandomSuffix や cacheControlMaxAge はクライアントで指定しない
+    });
+  };
+</script>
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
@@ -954,18 +965,6 @@ function setLastUploadUrl(user, url){
   gLastUploadUrls[user] = url;
   saveLocalJSON(LS_KEY_UPLOAD_URLS, gLastUploadUrls);
 }
-
-// 目的: Vercel Blob 直送アップロード（クライアント側：サーバ発行トークンを使用）
-window.__vercelBlobUpload = async function(filename, blob){
-  const { upload } = await import('https://esm.sh/@vercel/blob@0.25.1/client');
-  const put = await upload(filename, blob, {
-    // ★ クライアントではオプション最小化。トークン発行は /api/blob/upload に委譲
-    access: "public",
-    handleUploadUrl: '/api/blob/upload',
-    // access / addRandomSuffix / cacheControlMaxAge などはクライアントで指定しない
-  });
-  return put; // { url, downloadUrl?, pathname, contentType }
-};
 
 // 目的: 保存オプションモーダルの制御（デバイス保存 / アップロード）
 const saveOptionModal = document.getElementById('saveOptionModal');
