@@ -554,74 +554,85 @@ button, a, [role="button"] {
   </div>
 
 
-<!-- 目的: APIテストボタンから /api/ping を叩いて結果を表示 -->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const testBtn = document.getElementById('testUploadBtn');
-  const testRes = document.getElementById('testResult');
-  let   fileInput = document.getElementById('testZipInput');
+<script type="module">
+  import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
 
+  // DOM 取得
+  const testBtn   = document.getElementById('testUploadBtn');
+  const testRes   = document.getElementById('testResult');
+  const resultBox = document.getElementById('uploadResult');
+  const urlLink   = document.getElementById('uploadUrlLink');
+  const copyBtn   = document.getElementById('copyUploadUrlBtn');
+
+  // 隠し file input（なければ生成）
+  let fileInput = document.getElementById('testZipInput');
   if (!fileInput) {
     fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.zip,application/zip';
-    fileInput.style.display = 'none';
+    fileInput.id = 'testZipInput';
+    fileInput.className = 'visually-hidden';
     document.body.appendChild(fileInput);
   }
 
+  // クリックでファイル選択
   testBtn?.addEventListener('click', () => {
     if (testRes) testRes.textContent = '';
+    if (resultBox) { resultBox.style.display = 'none'; }
     fileInput.value = '';
     fileInput.click();
   });
 
+  // ファイル選択後に直送アップロード
   fileInput.addEventListener('change', async (ev) => {
     const file = ev.target.files?.[0];
     if (!file) { if (testRes) testRes.textContent = 'キャンセル'; return; }
 
-    const old = testBtn.textContent;
+    const oldLabel = testBtn.textContent;
     testBtn.disabled = true;
-    testBtn.textContent = '送信中…';
+    testBtn.textContent = 'アップロード中…';
     if (testRes) testRes.textContent = '';
 
     try {
-      const r = await fetch('/api/ping', {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type || 'application/zip',
-          'X-Filename': encodeURIComponent(file.name),
-          // ★ 自己申告のフォールバック（サーバは Origin/Referer優先で検証）
-          'X-App-Origin': location.origin
-        },
-        body: file
+      // ファイル名はそのまま渡す（衝突回避は addRandomSuffix で対応）
+      const put = await upload(file.name, file, {
+        access: 'public',
+        addRandomSuffix: true,
+        contentType: 'application/zip',
+        // サーバ側トークン発行 API（今回はセキュリティ無視で最小要件）
+        handleUploadUrl: '/api/blob/upload'
       });
-      const j = await r.json().catch(() => ({}));
 
-      if (r.status === 403) {
-        testRes.textContent = `禁止: ${j.error || 'forbidden'} (stage: ${j.stage || 'origin'})`;
-        return;
+      const link = put.downloadUrl || put.url;
+      if (resultBox) {
+        resultBox.style.display = 'block';
+        urlLink.textContent = link;
+        urlLink.href = link;
       }
-
-      if (r.ok && j.ok) {
-        const url = j.downloadUrl || j.url;
-        if (url) {
-          testRes.innerHTML = `OK: <a href="${url}" target="_blank" rel="noopener">${url}</a>`;
-        } else {
-          testRes.textContent = `OK: ${j.filename || file.name} / ${j.size ?? file.size} bytes (URLなし)`;
-        }
-      } else {
-        testRes.textContent = `NG: ${j.error || r.status} (stage: ${j.stage || 'n/a'})`;
-      }
+      if (testRes) testRes.textContent = 'アップロード完了';
     } catch (e) {
-      testRes.textContent = `失敗: ${e?.message || e}`;
+      console.error(e);
+      if (testRes) testRes.textContent = `失敗: ${e?.message || e}`;
     } finally {
-      testBtn.textContent = old;
+      testBtn.textContent = oldLabel;
       testBtn.disabled = false;
-      ev.target.value = '';
+      ev.target.value = ''; // 同じファイルでも再選択可
     }
   });
-});
 
+  // URL コピー
+  copyBtn?.addEventListener('click', async () => {
+    const url = urlLink?.href || '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = 'コピーしました';
+      setTimeout(()=> copyBtn.textContent = 'URLをコピー', 1200);
+    } catch {
+      // フォールバック
+      window.prompt('このURLをコピーしてください', url);
+    }
+  });
 </script>
 
 
