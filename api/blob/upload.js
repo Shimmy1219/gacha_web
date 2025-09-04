@@ -1,11 +1,6 @@
 // 目的: 依存未解決や ESM/CJS 差異でのロード失敗を防ぐ（health は必ず通す）
-// 目的: クライアント直送トークンの発行（access/public と addRandomSuffix をサーバ側で付与）
-import { handleUpload } from "@vercel/blob/client";
-
-export const config = { api: { bodyParser: false } };
-
-export default async function handler(req, res) {
-  // ヘルスチェック
+async function handler(req, res) {
+  // GET /api/blob/upload?health=1 → まずはこれで 200 が返るか確認
   if (req.method === "GET" && req.query.health) {
     return res.status(200).json({ ok: true, route: "/api/blob/upload" });
   }
@@ -15,20 +10,29 @@ export default async function handler(req, res) {
     return res.status(405).end("Method Not Allowed");
   }
 
+  // ここで初めて依存を読み込む（CJS/ESM どちらでも動く）
+  const { handleUpload } = await import('@vercel/blob/client');
+
   return handleUpload({
     req,
     res,
-    // ★ ここで 'public' と addRandomSuffix を付ける（クライアントでは指定不可）
     onBeforeGenerateToken: async () => ({
-      access: "public",
+      access: 'public',
       addRandomSuffix: true,
-      allowedContentTypes: ["application/zip"],
-      // 必要なら: maximumSizeInBytes: 50 * 1024 * 1024,
+      allowedContentTypes: ['application/zip'],
+      // cacheControlMaxAge: 31536000, // 必要ならここに（client 側では指定しない）
     }),
     onUploadCompleted: async ({ blob }) => {
-      // 本番ではログや記録に使う
-      console.log("blob uploaded:", blob.url);
+      console.log('[blob uploaded]', {
+        url: blob.url,
+        downloadUrl: blob.downloadUrl,
+        pathname: blob.pathname,
+        size: blob.size,
+      });
     },
   });
 }
 
+// Next.js / Vercel Functions どちらでも動くようにエクスポート
+module.exports = handler;
+module.exports.config = { api: { bodyParser: false } };
