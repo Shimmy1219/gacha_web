@@ -545,6 +545,7 @@ button, a, [role="button"] {
         <div class="row" style="margin-top:6px">
           <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
         </div>
+        <input type="file" id="testZipInput" accept=".zip,application/zip" class="visually-hidden" />
       </div>
       <div class="row" style="justify-content:flex-end;margin-top:12px">
         <button class="btn ghost" id="saveOptClose">閉じる</button>
@@ -558,44 +559,47 @@ button, a, [role="button"] {
 document.addEventListener('DOMContentLoaded', () => {
   const testBtn = document.getElementById('testUploadBtn');
   const testRes = document.getElementById('testResult');
+  let   fileInput = document.getElementById('testZipInput');
 
-  testBtn?.addEventListener('click', async () => {
+  // 保険: hidden input が無ければ動的に作る
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.zip,application/zip';
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+  }
+
+  testBtn?.addEventListener('click', () => {
+    if (testRes) testRes.textContent = '';
+    fileInput.value = '';   // 同じファイルでもchangeが発火するように
+    fileInput.click();      // エクスプローラを開く
+  });
+
+  fileInput.addEventListener('change', async (ev) => {
+    const file = ev.target.files?.[0];
+    if (!file) { if (testRes) testRes.textContent = 'キャンセル'; return; }
+
     const old = testBtn.textContent;
     testBtn.disabled = true;
     testBtn.textContent = '送信中…';
     if (testRes) testRes.textContent = '';
 
     try {
-      // 対象ユーザーの決定（保存モーダルを開いた文脈を優先）
-      const ctx = (window.__saveCtx || {});
-      let user = ctx.user;
-      let gobj = ctx.gobj;
-
-      // フォールバック：最初のユーザー
-      if (!user || !gobj) {
-        const first = Object.entries(window.gData || {}).find(Boolean);
-        if (!first) throw new Error('送信対象のユーザーがいません。');
-        user = first[0];
-        gobj = first[1];
-      }
-
-      // ZIP を生成
-      const { blob } = await buildZipForUser(user, gobj);
-      const filename = `${sanitize(user)}_gacha.zip`;
-
-      // /api/ping に ZIP を生で送信（multipart は使わず、ヘッダでファイル名を渡す）
       const r = await fetch('/api/ping', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/zip',
-          'X-Filename': filename
+          'Content-Type': file.type || 'application/zip',
+          'X-Filename': encodeURIComponent(file.name)
         },
-        body: blob
+        body: file
       });
-
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
-        if (testRes) testRes.textContent = `OK: ${j.filename || '(no name)'} / ${j.size || 0} bytes`;
+        // サーバの応答優先、無ければ選択ファイル名/サイズを表示
+        const name = j.filename ? j.filename : file.name;
+        const size = (j.size != null) ? j.size : file.size;
+        if (testRes) testRes.textContent = `OK: ${name} / ${size} bytes`;
       } else {
         if (testRes) testRes.textContent = `NG: ${j.error || r.status}`;
       }
@@ -604,9 +608,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       testBtn.textContent = old;
       testBtn.disabled = false;
+      ev.target.value = ''; // 連続選択対策
     }
   });
 });
+
 </script>
 
 
