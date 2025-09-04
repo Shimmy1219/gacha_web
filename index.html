@@ -561,7 +561,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const testRes = document.getElementById('testResult');
   let   fileInput = document.getElementById('testZipInput');
 
-  // 保険: hidden input が無ければ動的に作る
   if (!fileInput) {
     fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -572,8 +571,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   testBtn?.addEventListener('click', () => {
     if (testRes) testRes.textContent = '';
-    fileInput.value = '';   // 同じファイルでもchangeが発火するように
-    fileInput.click();      // エクスプローラを開く
+    fileInput.value = '';
+    fileInput.click();
   });
 
   fileInput.addEventListener('change', async (ev) => {
@@ -595,20 +594,24 @@ document.addEventListener('DOMContentLoaded', () => {
         body: file
       });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) {
-        // サーバの応答優先、無ければ選択ファイル名/サイズを表示
-        const name = j.filename ? j.filename : file.name;
-        const size = (j.size != null) ? j.size : file.size;
-        if (testRes) testRes.textContent = `OK: ${name} / ${size} bytes`;
+
+      if (r.ok && j.ok) {
+        const url = j.downloadUrl || j.url;
+        if (url) {
+          // リンク表示（クリックで確認できるように）
+          testRes.innerHTML = `OK: <a href="${url}" target="_blank" rel="noopener">${url}</a>`;
+        } else {
+          testRes.textContent = `OK: ${j.filename || file.name} / ${j.size ?? file.size} bytes (URLなし)`;
+        }
       } else {
-        if (testRes) testRes.textContent = `NG: ${j.error || r.status}`;
+        testRes.textContent = `NG: ${j.error || r.status} (stage: ${j.stage || 'n/a'})`;
       }
     } catch (e) {
-      if (testRes) testRes.textContent = `失敗: ${e?.message || e}`;
+      testRes.textContent = `失敗: ${e?.message || e}`;
     } finally {
       testBtn.textContent = old;
       testBtn.disabled = false;
-      ev.target.value = ''; // 連続選択対策
+      ev.target.value = '';
     }
   });
 });
