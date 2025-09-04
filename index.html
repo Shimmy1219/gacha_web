@@ -527,6 +527,27 @@ button, a, [role="button"] {
     </div>
   </div>
 
+  <!-- 保存オプションモーダル：デバイス保存 / Vercel Blob 直送 -->
+  <div class="modal" id="saveOptionModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
+      <h3 id="saveOptTitle">保存オプション</h3>
+      <div class="sep"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
+        <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+      </div>
+      <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
+        <div>URL: <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button class="btn ghost" id="saveOptClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
@@ -819,6 +840,7 @@ function renderItemGrid(){
   resolveThumbs(grid);
 }
 
+// 目的: ユーザー一覧の描画。保存ボタンは保存オプションモーダルを開く。既存のURLがあれば「URLをコピー」を出す。
 function renderUsersList(){
   const wrap=$("#usersList"); if(!wrap) return;
   wrap.innerHTML="";
@@ -834,60 +856,38 @@ function renderUsersList(){
 
     const card=document.createElement("div"); card.className="user-card panel";
     const header=document.createElement("div"); header.className="user-header";
-    header.innerHTML=`<h2>${escapeHtml(user)}</h2>
-      <div class="user-actions"><button class="btn small" data-zip-save>保存</button></div>`;
+
+    const lastUrl = (typeof gLastUploadUrls!=="undefined") ? gLastUploadUrls[user] : "";
+    header.innerHTML = `<h2>${escapeHtml(user)}</h2>
+      <div class="user-actions">
+        <button class="btn small" data-zip-save>保存</button>
+        ${lastUrl ? `<button class="btn small ghost" data-copy-url>URLをコピー</button>` : ``}
+      </div>`;
     card.appendChild(header);
 
-    // 保存（File System Access API）
-    header.querySelector('[data-zip-save]').addEventListener('click', async (e)=>{
-    if (typeof JSZip === "undefined") { alert("JSZipの読み込みに失敗しています。"); return; }
-
-    const btn = e.currentTarget; const old = btn.textContent;
-    btn.disabled = true; btn.textContent = "保存準備…";
-
-    try{
-      const { blob } = await buildZipForUser(user, gobj);
-      const filename = `${sanitize(user)}_gacha.zip`;
-
-      // 1) File System Access API（デスクトップ Chrome/Edge 等）
-      if ('showSaveFilePicker' in window) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }]
-        });
-        const w = await handle.createWritable();
-        await w.write(blob); await w.close();
-        btn.textContent = "保存しました";
-        setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
-        return;
-      }
-
-      // 2) Web Share Level 2（iOS/Android の共有シート → 「ファイルに保存」等）
-      if (navigator.canShare) {
-        const file = new File([blob], filename, { type: 'application/zip' });
-        if (navigator.canShare({ files:[file] })) {
-          await navigator.share({ files:[file], title: filename });
-          btn.textContent = "共有しました";
-          setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
-          return;
-        }
-      }
-
-      // 3) ダウンロードリンク（iOS/Android Safari/Chrome の保存）
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url), 3000);
-      btn.textContent = "ダウンロード開始";
-      setTimeout(()=>{ btn.textContent = old; btn.disabled = false; }, 1200);
-
-    }catch(err){
-      console.error(err);
-      btn.disabled = false; btn.textContent = old;
-      alert("保存に失敗: " + (err?.message || err));
-    }
+    // 保存ボタン → 保存オプションモーダルを開く
+    header.querySelector('[data-zip-save]')?.addEventListener('click', ()=>{
+      // モーダルに対象ユーザー情報をセット
+      window.__saveTargetUser = user;
+      window.__saveTargetGobj = gobj;
+      // 前回の結果表示をリセット
+      const ur = document.getElementById('uploadResult');
+      const link = document.getElementById('uploadUrlLink');
+      if (ur){ ur.style.display='none'; }
+      if (link){ link.textContent=''; link.href='#'; }
+      // モーダルを開く
+      open(document.getElementById('saveOptionModal'));
     });
+
+    // 既存URLがある場合はコピー機能
+    const copyBtn = header.querySelector('[data-copy-url]');
+    if (copyBtn){
+      copyBtn.addEventListener('click', async ()=>{
+        const u = gLastUploadUrls[user]; if(!u) return;
+        try{ await navigator.clipboard.writeText(u); copyBtn.textContent='コピー済み'; setTimeout(()=>copyBtn.textContent='URLをコピー',1200); }
+        catch{ prompt('URL をコピーしてください', u); }
+      });
+    }
     
     let hasAnyBox = false; 
     Object.entries(gobj).forEach(([gacha,info])=>{
@@ -904,7 +904,7 @@ function renderUsersList(){
         }
         if(!list.length) return; 
         if(hideMiss && rarity==="はずれ") return; 
-        if(rFilter!=="*" && rFilter!==rarity) return; //
+        if(rFilter!=="*" && rFilter!==rarity) return;
 
         const row=document.createElement("div"); row.className="rarity-row";
         const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
@@ -935,17 +935,96 @@ function renderUsersList(){
         });
 
         if(itemsWrap.children.length){
-        row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
-        boxHasAny = true;
+          row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
+          boxHasAny = true;
         }
       });
       if(boxHasAny){ card.appendChild(box); hasAnyBox = true; }
     });
 
-    if(hasAnyBox){ wrap.appendChild(card); } // ★ 対象がないユーザーは出さない
+    if(hasAnyBox){ wrap.appendChild(card); } // 対象がないユーザーは出さない
   });
   resolvePills(wrap);
 }
+  
+// 目的: アップロードURLの保持/復元（ユーザー単位）
+const LS_KEY_UPLOAD_URLS = "last_upload_urls_v1";
+let gLastUploadUrls = loadLocalJSON(LS_KEY_UPLOAD_URLS, {});
+function setLastUploadUrl(user, url){
+  gLastUploadUrls[user] = url;
+  saveLocalJSON(LS_KEY_UPLOAD_URLS, gLastUploadUrls);
+}
+
+// 目的: Vercel Blob 直送アップロード（downloadUrl ?? url を返す）
+window.__vercelBlobUpload = async function(filename, blob){
+  const { upload } = await import('https://esm.sh/@vercel/blob@0.25.1/client');
+  const put = await upload(filename, blob, {
+    access: 'public',
+    addRandomSuffix: true,
+    handleUploadUrl: '/api/blob/upload',
+    contentType: 'application/zip',
+  });
+  return put; // { url, downloadUrl?, pathname, contentType, size? }
+};
+
+// 目的: 保存オプションモーダルの制御（デバイス保存 / アップロード）
+const saveOptionModal = document.getElementById('saveOptionModal');
+window.__saveTargetUser = null;
+window.__saveTargetGobj = null;
+
+document.getElementById('saveOptClose')?.addEventListener('click', ()=>close(saveOptionModal));
+
+document.getElementById('saveDeviceBtn')?.addEventListener('click', async ()=>{
+  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj; if(!user || !gobj) return;
+  const btn = document.getElementById('saveDeviceBtn'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '保存準備…';
+  try{
+    const { blob } = await buildZipForUser(user, gobj);
+    const filename = `${sanitize(user)}_gacha.zip`;
+
+    if ('showSaveFilePicker' in window) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
+      });
+      const w = await handle.createWritable(); await w.write(blob); await w.close();
+    } else if (navigator.canShare) {
+      const file = new File([blob], filename, { type:'application/zip' });
+      if (navigator.canShare({ files:[file] })) { await navigator.share({ files:[file], title: filename }); }
+      else { const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); }
+    } else {
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+    }
+  }catch(e){ alert('保存に失敗: ' + (e?.message || e)); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+});
+
+document.getElementById('uploadBlobBtn')?.addEventListener('click', async ()=>{
+  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj; if(!user || !gobj) return;
+  const btn = document.getElementById('uploadBlobBtn'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = 'アップロード中…';
+  try{
+    const { blob } = await buildZipForUser(user, gobj);
+    const filename = `${sanitize(user)}_gacha.zip`;
+    const put = await window.__vercelBlobUpload(filename, blob);
+    const url = put.downloadUrl || put.url;
+
+    setLastUploadUrl(user, url);   // 永続化
+    renderUsersList();             // ヘッダの「URLをコピー」ボタンを反映
+
+    const ur = document.getElementById('uploadResult');
+    const link = document.getElementById('uploadUrlLink');
+    if (ur && link){ ur.style.display='block'; link.textContent = url; link.href = url; }
+  }catch(e){ console.error(e); alert('アップロードに失敗: ' + (e?.message || e)); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+});
+
+document.getElementById('copyUploadUrlBtn')?.addEventListener('click', async ()=>{
+  const link = document.getElementById('uploadUrlLink'); const url = link?.href; if(!url) return;
+  try{ await navigator.clipboard.writeText(url); const b=document.getElementById('copyUploadUrlBtn'); b.textContent='コピー済み'; setTimeout(()=>b.textContent='URLをコピー',1200); }
+  catch{ prompt('URL をコピーしてください', url); }
+});
+  
 
 /* ====== 履歴を追加モーダル ====== */
 const appendModal = $("#appendModal");
