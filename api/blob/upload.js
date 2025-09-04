@@ -1,8 +1,7 @@
-// 目的: Node の req/res を Web Request/Response にブリッジして handleUpload を安全に呼ぶ
-
+// 目的: Client Upload のトークン生成(POST)＋ヘルスチェック(GET)。body を明示的に渡して 500 を解消。
 async function handler(req, res) {
-  // ヘルスチェック
-  if (req.method === "GET" && req.query && "health" in req.query) {
+  // GET /api/blob/upload?health=1 → 動作確認
+  if (req.method === "GET" && req.query.health) {
     return res.status(200).json({ ok: true, route: "/api/blob/upload" });
   }
 
@@ -11,46 +10,49 @@ async function handler(req, res) {
     return res.status(405).end("Method Not Allowed");
   }
 
-  // 依存は動的 import（ESM/CJS 差異の影響を最小化）
+  // 動的 import（ESM/CJS 差異を吸収）
   const { handleUpload } = await import("@vercel/blob/client");
 
-  // Node → Web Request にブリッジ
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const url = new URL(req.url, `${proto}://${req.headers.host}`);
-  const webReq = new Request(url, {
-    method: req.method,
-    headers: req.headers,
-    body: req, // 生ストリーム
-    // @ts-ignore (Node18+ の ReadableStream を Request.body として扱うため)
-    duplex: "half",
-  });
+  try {
+    // Node の req → WHATWG Request に橋渡し
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    const request = new Request(url, {
+      method: req.method,
+      headers: new Headers(req.headers),
+      body: req, // 生ストリームをそのまま
+    });
 
-  // handleUpload は Web Request/Response を扱える
-  const webRes = await handleUpload({
-    request: webReq,
-    onBeforeGenerateToken: async () => ({
-      access: "public",                 // ★ クライアント側は access 以外指定しない
-      addRandomSuffix: true,            // ★ 衝突回避はサーバ側で
-      allowedContentTypes: ["application/zip"],
-      // maximumSizeInBytes: 50 * 1024 * 1024, // 必要なら
-    }),
-    onUploadCompleted: async ({ blob }) => {
-      console.log("[blob uploaded]", {
-        url: blob.url,
-        downloadUrl: blob.downloadUrl,
-        pathname: blob.pathname,
-        size: blob.size,
-      });
-    },
-  });
+    // ★ これが無いと handleUpload 内で body が undefined になり
+    //    「Cannot read properties of undefined (reading 'type')」で 500 になります
+    const body = await request.json().catch(() => ({}));
 
-  // Web Response → Node の res に戻す
-  res.status(webRes.status);
-  webRes.headers.forEach((v, k) => res.setHeader(k, v));
-  const buf = Buffer.from(await webRes.arrayBuffer());
-  return res.end(buf);
+    const json = await handleUpload({
+      request,
+      body,
+      onBeforeGenerateToken: async () => ({
+        // クライアント側では addRandomSuffix 等は指定しない
+        allowedContentTypes: ["application/zip"],
+        addRandomSuffix: true,
+        // cacheControlMaxAge: 31536000, // 必要ならサーバ側のみで指定
+      }),
+      onUploadCompleted: async ({ blob }) => {
+        console.log("[blob uploaded]", {
+          url: blob.url,
+          downloadUrl: blob.downloadUrl,
+          pathname: blob.pathname,
+          size: blob.size,
+          contentType: blob.contentType,
+        });
+      },
+    });
+
+    return res.status(200).json(json);
+  } catch (err) {
+    console.error("handleUpload error", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
 }
 
-// Next.js / Vercel Functions どちらでも動くようにエクスポート
+// Next.js pages API / Vercel Functions 両対応の CJS エクスポート
 module.exports = handler;
 module.exports.config = { api: { bodyParser: false } };
