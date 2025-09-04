@@ -555,7 +555,6 @@ button, a, [role="button"] {
 
 <!-- 目的: APIテストボタンから /api/ping を叩いて結果を表示 -->
 <script>
-// API疎通テスト
 document.addEventListener('DOMContentLoaded', () => {
   const testBtn = document.getElementById('testUploadBtn');
   const testRes = document.getElementById('testResult');
@@ -567,10 +566,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (testRes) testRes.textContent = '';
 
     try {
-      const r = await fetch('/api/ping', { method: 'POST' });
+      // 対象ユーザーの決定（保存モーダルを開いた文脈を優先）
+      const ctx = (window.__saveCtx || {});
+      let user = ctx.user;
+      let gobj = ctx.gobj;
+
+      // フォールバック：最初のユーザー
+      if (!user || !gobj) {
+        const first = Object.entries(window.gData || {}).find(Boolean);
+        if (!first) throw new Error('送信対象のユーザーがいません。');
+        user = first[0];
+        gobj = first[1];
+      }
+
+      // ZIP を生成
+      const { blob } = await buildZipForUser(user, gobj);
+      const filename = `${sanitize(user)}_gacha.zip`;
+
+      // /api/ping に ZIP を生で送信（multipart は使わず、ヘッダでファイル名を渡す）
+      const r = await fetch('/api/ping', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/zip',
+          'X-Filename': filename
+        },
+        body: blob
+      });
+
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
-        if (testRes) testRes.textContent = `OK: ${j.ts || Date.now()}`;
+        if (testRes) testRes.textContent = `OK: ${j.filename || '(no name)'} / ${j.size || 0} bytes`;
       } else {
         if (testRes) testRes.textContent = `NG: ${j.error || r.status}`;
       }

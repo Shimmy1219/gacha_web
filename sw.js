@@ -1,5 +1,5 @@
 // sw.js  —— 自動アップデート即時反映版 + ライブラリ類のプレキャッシュ対応
-const VERSION = 'v2025-09-05-3';                // ★ デプロイ毎に必ず更新
+const VERSION = 'v2025-09-05-4';                // ★ デプロイ毎に必ず更新
 const STATIC_CACHE  = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
