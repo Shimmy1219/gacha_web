@@ -589,16 +589,22 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'POST',
         headers: {
           'Content-Type': file.type || 'application/zip',
-          'X-Filename': encodeURIComponent(file.name)
+          'X-Filename': encodeURIComponent(file.name),
+          // ★ 自己申告のフォールバック（サーバは Origin/Referer優先で検証）
+          'X-App-Origin': location.origin
         },
         body: file
       });
       const j = await r.json().catch(() => ({}));
 
+      if (r.status === 403) {
+        testRes.textContent = `禁止: ${j.error || 'forbidden'} (stage: ${j.stage || 'origin'})`;
+        return;
+      }
+
       if (r.ok && j.ok) {
         const url = j.downloadUrl || j.url;
         if (url) {
-          // リンク表示（クリックで確認できるように）
           testRes.innerHTML = `OK: <a href="${url}" target="_blank" rel="noopener">${url}</a>`;
         } else {
           testRes.textContent = `OK: ${j.filename || file.name} / ${j.size ?? file.size} bytes (URLなし)`;
