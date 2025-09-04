@@ -535,6 +535,10 @@ button, a, [role="button"] {
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
         <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+
+          <!-- ★ 追加: API疎通テスト -->
+        <button class="btn ghost small" id="testUploadBtn" title="API疎通テスト">APIテスト</button>
+        <span id="testResult" class="muted" style="min-width:180px"></span>
       </div>
       <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
         <div>URL: <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
@@ -547,6 +551,39 @@ button, a, [role="button"] {
       </div>
     </div>
   </div>
+
+
+<!-- 目的: APIテストボタンから /api/ping を叩いて結果を表示 -->
+<script>
+// API疎通テスト
+document.addEventListener('DOMContentLoaded', () => {
+  const testBtn = document.getElementById('testUploadBtn');
+  const testRes = document.getElementById('testResult');
+
+  testBtn?.addEventListener('click', async () => {
+    const old = testBtn.textContent;
+    testBtn.disabled = true;
+    testBtn.textContent = '送信中…';
+    if (testRes) testRes.textContent = '';
+
+    try {
+      const r = await fetch('/api/ping', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        if (testRes) testRes.textContent = `OK: ${j.ts || Date.now()}`;
+      } else {
+        if (testRes) testRes.textContent = `NG: ${j.error || r.status}`;
+      }
+    } catch (e) {
+      if (testRes) testRes.textContent = `失敗: ${e?.message || e}`;
+    } finally {
+      testBtn.textContent = old;
+      testBtn.disabled = false;
+    }
+  });
+});
+</script>
+
 
 <script type="module">
   import { upload } from "https://esm.sh/@vercel/blob@0.25.1/client";
