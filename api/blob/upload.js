@@ -1,5 +1,10 @@
 // /api/blob/upload.js
-// 同一オリジン検証 + CSRF（二重送信）+ デバッグログ強化
+// 目的:
+// - 同一オリジン検証
+// - CSRF（二重送信: Cookie + clientPayload）
+// - ユーザー/用途ごとの格納パス (pathnamePrefix)
+// - トークン有効期限 (validUntil)
+// - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
 
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
@@ -25,9 +30,15 @@ function uniq(arr) {
 }
 
 function hostToOrigin(host, protoHint = 'https') {
-  // Vercel は基本 https
   if (!host) return '';
   return `${protoHint}://${host}`;
+}
+
+// 許可文字: 英数・_・- のみ（その他は除去）
+function sanitizeSegment(s, fallback) {
+  if (typeof s !== 'string' || !s) return fallback;
+  const t = s.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  return t || fallback;
 }
 
 export default async function handler(req, res) {
@@ -41,29 +52,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
-  // ====== 1) 同一オリジン検証（堅め + フォールバック） ======
-  // 許可オリジンを列挙（環境変数 + 代表例）
-  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN;       // 例: https://shimmy3.com
+  // ====== 1) 同一オリジン検証 ======
+  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN; // 例: https://shimmy3.com
   const vercelUrl = process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`; // 例: https://xxx.vercel.app
-  // www を使う可能性も考慮
   const apex = envOrigin;
   const www = envOrigin && envOrigin.replace('://', '://www.');
-
-  // Host ヘッダから自己オリジンも推測（Origin/Referer が空の時の救済）
   const selfOriginFromHost = hostToOrigin(req.headers.host);
 
   const ALLOWED_ORIGINS = uniq([apex, www, vercelUrl, selfOriginFromHost]);
   const originHdr = req.headers.origin || '';
   const referer = req.headers.referer || '';
-
   let derivedOrigin = '';
-  try { derivedOrigin = referer ? new URL(referer).origin : ''; } catch { /* noop */ }
+  try { derivedOrigin = referer ? new URL(referer).origin : ''; } catch {}
 
-  // チェックに使う候補
   const originToCheck = originHdr || derivedOrigin || '';
   const isAllowed =
     (!!originToCheck && ALLOWED_ORIGINS.includes(originToCheck))
-    // Origin/Referer が空でも、Host ベース自己推測と一致すれば許可（同一オリジン救済）
     || (!originToCheck && ALLOWED_ORIGINS.includes(selfOriginFromHost));
 
   vLog('allowList:', ALLOWED_ORIGINS);
@@ -74,7 +78,6 @@ export default async function handler(req, res) {
   vLog('isAllowed:', isAllowed);
 
   if (!isAllowed) {
-    // ここで詳細を返すと攻撃者にヒントを与えるが、開発中は助かる
     return res.status(403).json({
       ok: false,
       error: 'Forbidden: origin not allowed',
@@ -82,7 +85,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // ====== 2) トークン生成 & CSRF 検証 ======
+  // ====== 2) トークン生成 & CSRF/ポリシー ======
   try {
     const { handleUpload } = await import('@vercel/blob/client');
     const body = req.body ?? {};
@@ -91,38 +94,55 @@ export default async function handler(req, res) {
       request: req,
       body,
 
+      // ここで CSRF 照合・保存ポリシー（拡張子/MIME/サイズ/格納パス/有効期限）を決定
       onBeforeGenerateToken: async (_pathname, clientPayload /* string|undefined */) => {
-        // CSRF: cookie vs clientPayload の照合
         const cookies = parseCookies(req.headers.cookie);
-        let csrfFromPayload = '';
-        try {
-          const parsed = clientPayload ? JSON.parse(clientPayload) : {};
-          csrfFromPayload = parsed?.csrf || '';
-        } catch (e) {
-          vLog('clientPayload JSON parse error:', String(e));
-        }
-        const csrfFromCookie = cookies['csrf'] || '';
 
+        let payload = {};
+        try { payload = clientPayload ? JSON.parse(clientPayload) : {}; }
+        catch (e) { vLog('clientPayload JSON parse error:', String(e)); }
+
+        const csrfFromCookie  = cookies['csrf'] || '';
+        const csrfFromPayload = payload?.csrf || '';
         vLog('csrfFromCookie exists:', !!csrfFromCookie);
         vLog('csrfFromPayload exists:', !!csrfFromPayload);
 
         if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
           vLog('CSRF mismatch', { csrfFromCookieLen: csrfFromCookie.length, csrfFromPayloadLen: csrfFromPayload.length });
-          // 403 相当のエラー
           const err = new Error('Forbidden: invalid CSRF token');
           err.statusCode = 403;
           throw err;
         }
 
-        // ZIP のみ・サイズ制限
+        // --- ユーザー/用途の抽出＆サニタイズ ---
+        const rawUserId = payload?.userId;
+        const rawPurpose = payload?.purpose;
+        const userId  = sanitizeSegment(rawUserId, 'anon');
+        const purpose = sanitizeSegment(rawPurpose, 'misc');
+
+        // --- ファイル名・サイズ等の制約（ZIPのみ） ---
+        // クライアントが送る multipart のときは _pathname が無い場合もあるので拡張子は二重でチェックするなら完了時スキャンも検討
+        const allowedContentTypes = [
+          'application/zip',
+          'application/x-zip-compressed',
+        ];
+
+        // --- 有効期限（発行から5分） ---
+        const validUntilMs = Date.now() + 5 * 60 * 1000;
+
+        // --- パスのプレフィックス（ユーザー/用途ごと） ---
+        // 例: /uploads/<userId>/<purpose>/ 直下に addRandomSuffix 付きで保存
+        const pathnamePrefix = `/uploads/${userId}/${purpose}/`;
+
+        vLog('policy', { userId, purpose, pathnamePrefix, validUntilMs });
+
         return {
           addRandomSuffix: true,
-          allowedContentTypes: [
-            'application/zip',
-            'application/x-zip-compressed',
-          ],
-          maximumSizeInBytes: 100 * 1024 * 1024,
-          // validUntil: Date.now() + 5 * 60 * 1000, // 有効期限を付けたいとき
+          allowedContentTypes,
+          maximumSizeInBytes: 100 * 1024 * 1024,  // 100MB
+          validUntil: validUntilMs,
+          pathnamePrefix,
+          // 必要に応じて: cacheControlMaxAge, allowOverwrite など
         };
       },
 
@@ -133,14 +153,13 @@ export default async function handler(req, res) {
           pathname: blob.pathname,
           size: blob.size,
           contentType: blob.contentType,
-          // tokenPayload は必要ならログ
+          // tokenPayload: tokenPayload // 必要ならログ
         });
       },
     });
 
     return res.status(200).json(jsonResponse);
   } catch (err) {
-    // ここで CSRF / Origin いずれのエラーも捕捉
     const msg = err?.message || String(err);
     const status =
       (err && (err.statusCode || err.status)) ? (err.statusCode || err.status)

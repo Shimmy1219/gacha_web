@@ -586,13 +586,20 @@ button, a, [role="button"] {
     return csrfToken;
   }
 
+  // === アップロードメタ ===
+  // 例: ログインしていないなら localStorage などの擬似IDで分ける
+  function getUserId() {
+    return (window.localStorage.getItem('uid') || 'guest');
+  }
+  // 画面の用途名（任意の分類名）
+  const PURPOSE = 'zips';
+
   // クリックでファイル選択
   testBtn?.addEventListener('click', async () => {
     if (testRes) testRes.textContent = '';
     if (resultBox) { resultBox.style.display = 'none'; }
     fileInput.value = '';
 
-    // アップロード前に CSRF トークンを確保
     try {
       await ensureCsrf();
     } catch (e) {
@@ -617,14 +624,15 @@ button, a, [role="button"] {
     try {
       await ensureCsrf();
 
-      // ファイル名はそのまま渡す（衝突回避は addRandomSuffix で対応）
+      const userId = getUserId();
+
       const put = await upload(file.name, file, {
         access: 'public',
         contentType: 'application/zip',
         handleUploadUrl: '/api/blob/upload',
-        // ★ CSRF をサーバーへ送信
-        clientPayload: JSON.stringify({ csrf: csrfToken }),
-        // 大きいZIPなら multipart: true も検討
+        // ★ CSRF + ユーザー/用途を同封（サーバ側でサニタイズ＆検証）
+        clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
+        // 大きいZIPなら: multipart: true,
       });
 
       const link = put.downloadUrl || put.url;
@@ -653,7 +661,6 @@ button, a, [role="button"] {
       copyBtn.textContent = 'コピーしました';
       setTimeout(()=> copyBtn.textContent = 'URLをコピー', 1200);
     } catch {
-      // フォールバック
       window.prompt('このURLをコピーしてください', url);
     }
   });
