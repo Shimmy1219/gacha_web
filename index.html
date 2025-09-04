@@ -955,16 +955,15 @@ function setLastUploadUrl(user, url){
   saveLocalJSON(LS_KEY_UPLOAD_URLS, gLastUploadUrls);
 }
 
-// 目的: Vercel Blob 直送アップロード（downloadUrl ?? url を返す）
+// 目的: Vercel Blob 直送アップロード（クライアント側：サーバ発行トークンを使用）
 window.__vercelBlobUpload = async function(filename, blob){
   const { upload } = await import('https://esm.sh/@vercel/blob@0.25.1/client');
   const put = await upload(filename, blob, {
-    access: 'public',
-    addRandomSuffix: true,
+    // ★ クライアントではオプション最小化。トークン発行は /api/blob/upload に委譲
     handleUploadUrl: '/api/blob/upload',
-    contentType: 'application/zip',
+    // access / addRandomSuffix / cacheControlMaxAge などはクライアントで指定しない
   });
-  return put; // { url, downloadUrl?, pathname, contentType, size? }
+  return put; // { url, downloadUrl?, pathname, contentType }
 };
 
 // 目的: 保存オプションモーダルの制御（デバイス保存 / アップロード）
