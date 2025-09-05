@@ -535,10 +535,6 @@ button, a, [role="button"] {
       <div class="row" style="gap:8px;flex-wrap:wrap">
         <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
         <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
-
-          <!-- ★ 追加: API疎通テスト -->
-        <button class="btn ghost small" id="testUploadBtn" title="API疎通テスト">APIテスト</button>
-        <span id="testResult" class="muted" style="min-width:180px"></span>
       </div>
       <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
         <div>URL: <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
@@ -557,24 +553,6 @@ button, a, [role="button"] {
 <script type="module">
   import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
 
-  // DOM 取得
-  const testBtn   = document.getElementById('testUploadBtn');
-  const testRes   = document.getElementById('testResult');
-  const resultBox = document.getElementById('uploadResult');
-  const urlLink   = document.getElementById('uploadUrlLink');
-  const copyBtn   = document.getElementById('copyUploadUrlBtn');
-
-  // 隠し file input（なければ生成）
-  let fileInput = document.getElementById('testZipInput');
-  if (!fileInput) {
-    fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.zip,application/zip';
-    fileInput.id = 'testZipInput';
-    fileInput.className = 'visually-hidden';
-    document.body.appendChild(fileInput);
-  }
-
   // === CSRF トークン管理 ===
   let csrfToken = '';
   async function ensureCsrf() {
@@ -586,84 +564,30 @@ button, a, [role="button"] {
     return csrfToken;
   }
 
-  // === アップロードメタ ===
-  // 例: ログインしていないなら localStorage などの擬似IDで分ける
+  // === メタ情報（ユーザー識別 & 用途） ===
   function getUserId() {
     return (window.localStorage.getItem('uid') || 'guest');
   }
-  // 画面の用途名（任意の分類名）
   const PURPOSE = 'zips';
 
-  // クリックでファイル選択
-  testBtn?.addEventListener('click', async () => {
-    if (testRes) testRes.textContent = '';
-    if (resultBox) { resultBox.style.display = 'none'; }
-    fileInput.value = '';
+  // === 公開: ZIP Blob を Vercel Blob に直送する関数 ===
+  // 使い方: const put = await window.__vercelBlobUpload(filename, blob);
+  window.__vercelBlobUpload = async function(filename, blob) {
+    await ensureCsrf();
+    const userId = getUserId();
 
-    try {
-      await ensureCsrf();
-    } catch (e) {
-      console.error(e);
-      if (testRes) testRes.textContent = 'CSRFトークン取得失敗';
-      return;
-    }
-
-    fileInput.click();
-  });
-
-  // ファイル選択後に直送アップロード
-  fileInput.addEventListener('change', async (ev) => {
-    const file = ev.target.files?.[0];
-    if (!file) { if (testRes) testRes.textContent = 'キャンセル'; return; }
-
-    const oldLabel = testBtn.textContent;
-    testBtn.disabled = true;
-    testBtn.textContent = 'アップロード中…';
-    if (testRes) testRes.textContent = '';
-
-    try {
-      await ensureCsrf();
-
-      const userId = getUserId();
-
-      const put = await upload(file.name, file, {
-        access: 'public',
-        contentType: 'application/zip',
-        handleUploadUrl: '/api/blob/upload',
-        // ★ CSRF + ユーザー/用途を同封（サーバ側でサニタイズ＆検証）
-        clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
-        // 大きいZIPなら: multipart: true,
-      });
-
-      const link = put.downloadUrl || put.url;
-      if (resultBox) {
-        resultBox.style.display = 'block';
-        urlLink.textContent = link;
-        urlLink.href = link;
-      }
-      if (testRes) testRes.textContent = 'アップロード完了';
-    } catch (e) {
-      console.error(e);
-      if (testRes) testRes.textContent = `失敗: ${e?.message || e}`;
-    } finally {
-      testBtn.textContent = oldLabel;
-      testBtn.disabled = false;
-      ev.target.value = ''; // 同じファイルでも再選択可
-    }
-  });
-
-  // URL コピー
-  copyBtn?.addEventListener('click', async () => {
-    const url = urlLink?.href || '';
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      copyBtn.textContent = 'コピーしました';
-      setTimeout(()=> copyBtn.textContent = 'URLをコピー', 1200);
-    } catch {
-      window.prompt('このURLをコピーしてください', url);
-    }
-  });
+    // Vercel Blob クライアント直送（サーバレス関数で検証）
+    const put = await upload(filename, blob, {
+      access: 'public',
+      contentType: 'application/zip',
+      handleUploadUrl: '/api/blob/upload',
+      // サーバ側で CSRF / userId / purpose を検証・サニタイズ
+      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
+      // 大きいZIPの場合は必要に応じて:
+      // multipart: true,
+    });
+    return put; // { url, downloadUrl, pathname, ... }
+  };
 </script>
 
 <script>
@@ -752,10 +676,12 @@ function saveAppState(){
     localStorage.setItem(LS_KEY_APP, JSON.stringify(state));
   }catch(e){ console.warn("saveAppState failed:", e); }
 }
+
 function saveAppStateDebounced(){
   clearTimeout(saveAppStateDebounced._t);
   saveAppStateDebounced._t = setTimeout(saveAppState, 150);
 }
+
 function loadAppState(){
   try{
     const raw = localStorage.getItem(LS_KEY_APP);
@@ -1105,30 +1031,55 @@ document.getElementById('saveDeviceBtn')?.addEventListener('click', async ()=>{
   finally{ btn.disabled=false; btn.textContent=old; }
 });
 
-document.getElementById('uploadBlobBtn')?.addEventListener('click', async ()=>{
-  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj; if(!user || !gobj) return;
-  const btn = document.getElementById('uploadBlobBtn'); const old = btn.textContent;
-  btn.disabled = true; btn.textContent = 'アップロード中…';
-  try{
+// 既存の ensureCsrf, getUserId, PURPOSE をそのまま再利用
+document.getElementById('uploadBlobBtn')?.addEventListener('click', async () => {
+  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
+  if (!user || !gobj) return;
+
+  const btn = document.getElementById('uploadBlobBtn');
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'アップロード中…';
+
+  try {
+    // ZIP を構築
     const { blob } = await buildZipForUser(user, gobj);
     const filename = `${sanitize(user)}_gacha.zip`;
-    const put = await window.__vercelBlobUpload(filename, blob);
+
+    // CSRF トークンを確保
+    await ensureCsrf();
+    const userId = getUserId();
+
+    // Vercel Blob へアップロード
+    const put = await upload(filename, blob, {
+      access: 'public',
+      contentType: 'application/zip',
+      handleUploadUrl: '/api/blob/upload',
+      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
+      // 大きいZIPなら: multipart: true,
+    });
+
     const url = put.downloadUrl || put.url;
 
-    setLastUploadUrl(user, url);   // 永続化
-    renderUsersList();             // ヘッダの「URLをコピー」ボタンを反映
+    // ユーザーごとのURLを保存
+    setLastUploadUrl(user, url);
+    renderUsersList(); // 「URLをコピー」ボタンを更新
 
+    // UIに反映
     const ur = document.getElementById('uploadResult');
     const link = document.getElementById('uploadUrlLink');
-    if (ur && link){ ur.style.display='block'; link.textContent = url; link.href = url; }
-  }catch(e){ console.error(e); alert('アップロードに失敗: ' + (e?.message || e)); }
-  finally{ btn.disabled=false; btn.textContent=old; }
-});
-
-document.getElementById('copyUploadUrlBtn')?.addEventListener('click', async ()=>{
-  const link = document.getElementById('uploadUrlLink'); const url = link?.href; if(!url) return;
-  try{ await navigator.clipboard.writeText(url); const b=document.getElementById('copyUploadUrlBtn'); b.textContent='コピー済み'; setTimeout(()=>b.textContent='URLをコピー',1200); }
-  catch{ prompt('URL をコピーしてください', url); }
+    if (ur && link) {
+      ur.style.display = 'block';
+      link.textContent = url;
+      link.href = url;
+    }
+  } catch (e) {
+    console.error(e);
+    alert('アップロードに失敗: ' + (e?.message || e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = old;
+  }
 });
   
 
