@@ -541,7 +541,6 @@ button, a, [role="button"] {
         <div class="row" style="margin-top:6px">
           <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
         </div>
-        <input type="file" id="testZipInput" accept=".zip,application/zip" class="visually-hidden" />
       </div>
       <div class="row" style="justify-content:flex-end;margin-top:12px">
         <button class="btn ghost" id="saveOptClose">閉じる</button>
@@ -578,6 +577,7 @@ button, a, [role="button"] {
     const userId = getUserId();
     const put = await upload(filename, blob, {
       access: 'public',
+      multipart: true,
       contentType: 'application/zip',
       handleUploadUrl: '/api/blob/upload',
       clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
