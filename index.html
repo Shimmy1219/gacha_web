@@ -555,14 +555,40 @@ button, a, [role="button"] {
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
       <h3 id="saveOptTitle">保存オプション</h3>
       <div class="sep"></div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
-        <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+      <!-- 選択肢をカード化して説明を明確に -->
+      <div class="row" style="gap:12px;flex-wrap:wrap">
+        <div style="flex:1 1 320px;min-width:280px;background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px">
+          <div style="font-weight:800;margin-bottom:6px">自分で保存して共有する</div>
+          <div class="muted" style="font-size:.95rem;margin-bottom:10px">
+            端末にZIPを保存し、後で <b>ギガファイル便</b> などお好みのサービスへアップロードする方法です。
+            ストレージ管理や保持期間を自分でコントロールしたい方向け。
+          </div>
+          <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
+        </div>
+
+        <div style="flex:1 1 320px;min-width:280px;background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px">
+          <div style="font-weight:800;margin-bottom:6px">shimmy3.com のアップロード（無料）</div>
+          <div class="muted" style="font-size:.95rem;margin-bottom:10px">
+            画質・音質の劣化なしでZIPをアップロードし、<b>受け取り専用リンク</b>を発行します。
+            すぐに共有したい・手早く渡したい方向け。
+          </div>
+          <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+        </div>
       </div>
-      <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
-        <div><span id="uploadUrlLabel">受け取り用URL:</span> <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
-        <div class="row" style="margin-top:6px">
-          <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
+
+      <!-- 長いURLでも崩れない表示：左にプレビュー、右にコピー -->
+      <div id="uploadResult" class="muted" style="margin-top:12px;display:none">
+        <div class="row" style="gap:10px;align-items:center">
+          <div style="min-width:110px">受け取り用URL</div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;flex:1">
+            <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"
+              style="display:block;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+                      font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+              title="">
+              <span id="uploadUrlText"></span>
+            </a>
+            <button class="btn small ghost" id="copyUploadUrlBtn" style="white-space:nowrap">URLをコピー</button>
+          </div>
         </div>
       </div>
       <div class="row" style="justify-content:flex-end;margin-top:12px">
@@ -719,11 +745,11 @@ button, a, [role="button"] {
       renderUsersList();
 
       // 5) UI反映（受け取り用URLを表示）
-      if (resultBox && urlLink) {
+      if (resultBox && urlLink && urlText) {
         resultBox.style.display = 'block';
-        urlLabel.textContent = '受け取り用URL:';
-        urlLink.textContent = shareUrl;
         urlLink.href = shareUrl;
+        urlLink.title = shareUrl;      // ホバーで全体を確認
+        urlText.textContent = shareUrl; // CSSのellipsisで折り返さず省略表示
       }
     } catch (e) {
       console.error(e);
