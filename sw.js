@@ -1,5 +1,5 @@
 // sw.js  —— 自動アップデート即時反映版 + ライブラリ類のプレキャッシュ対応
-const VERSION = 'v2025-09-06-7';                // ★ デプロイ毎に必ず更新
+const VERSION = 'v2025-09-06-8';                // ★ デプロイ毎に必ず更新
 const STATIC_CACHE  = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -98,7 +98,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3) その他：stale-while-revalidate
+  // 3) API は常にネットワーク（Set-Cookie/最新性のためにキャッシュ禁止）
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req));
+    return;  
+  }
+
+  // 4) その他：stale-while-revalidate
   event.respondWith((async () => {
     const cache = await caches.open(RUNTIME_CACHE);
     const cached = await cache.match(req);

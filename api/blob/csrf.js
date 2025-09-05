@@ -9,6 +9,8 @@ export default async function handler(req, res) {
   // ランダム32バイト
   const token = require('crypto').randomBytes(32).toString('base64url');
 
+  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+
   // クッキー属性
   // - HttpOnly: JS から読めない（改ざんされにくい）
   // - SameSite=Lax: 通常のCSRFをかなり防げる
@@ -20,6 +22,7 @@ export default async function handler(req, res) {
     'HttpOnly',
     'SameSite=Lax',
     'Secure',
+    'Domain=.shimmy3.com',
     // 期限はセッションでも良いが、必要なら `Max-Age=1800` 等を追加
   ].join('; ');
 

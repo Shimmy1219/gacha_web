@@ -606,7 +606,10 @@ button, a, [role="button"] {
   let csrfToken = '';
   async function ensureCsrf() {
     if (csrfToken) return csrfToken;
-    const r = await fetch('/api/blob/csrf', { credentials: 'same-origin' });
+    const r = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
+      credentials: 'same-origin',
+      cache: 'no-store'
+      });
     const j = await r.json();
     if (!r.ok || !j?.token) throw new Error('CSRF token fetch failed');
     csrfToken = j.token;
