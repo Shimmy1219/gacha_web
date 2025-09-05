@@ -550,6 +550,29 @@ button, a, [role="button"] {
 
 
 <!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
+  <!-- 保存オプションモーダル：デバイス保存 / Vercel Blob 直送 -->
+  <div class="modal" id="saveOptionModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
+      <h3 id="saveOptTitle">保存オプション</h3>
+      <div class="sep"></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
+        <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+      </div>
+      <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
+        <div><span id="uploadUrlLabel">受け取り用URL:</span> <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button class="btn ghost" id="saveOptClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+
+<!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
 <script type="module">
   import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
 
@@ -569,6 +592,32 @@ button, a, [role="button"] {
     return (window.localStorage.getItem('uid') || 'guest');
   }
   const PURPOSE = 'zips';
+  const RECEIVE_TOKEN_TTL_DAYS = 7; // 共有リンクの既定有効期限（必要なら環境に合わせて変更）
+
+  // ====== 受け取り用リンク発行API呼び出し ======
+  async function issueReceiveShareUrl({ url, name, purpose = PURPOSE, validUntil }) {
+    await ensureCsrf();
+    const body = {
+      url,
+      name,
+      purpose,
+      validUntil: validUntil || new Date(Date.now() + RECEIVE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      csrf: csrfToken
+    };
+    const res = await fetch('/api/receive/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body)
+    });
+    const j = await res.json().catch(()=> ({}));
+    if (!res.ok || !j?.ok) {
+      const msg = j?.error || `Token API failed (${res.status})`;
+      throw new Error(msg);
+    }
+    // j: { ok:true, token, shareUrl, exp }
+    return j;
+  }
 
   // ====== 公開ブリッジ：ZIP Blob を Vercel Blob へ直送 ======
   // 使い方: const put = await window.__vercelBlobUpload(filename, blob)
@@ -577,11 +626,10 @@ button, a, [role="button"] {
     const userId = getUserId();
     const put = await upload(filename, blob, {
       access: 'public',
-      multipart: true,
+      multipart: true,                 // 100–200MB想定のためmultipartを有効化
       contentType: 'application/zip',
       handleUploadUrl: '/api/blob/upload',
-      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
-      // 必要に応じて: multipart: true,
+      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE })
     });
     return put; // { url, downloadUrl, pathname, ... }
   };
@@ -593,6 +641,7 @@ button, a, [role="button"] {
   const uploadBtn  = document.getElementById('uploadBlobBtn');
   const resultBox  = document.getElementById('uploadResult');
   const urlLink    = document.getElementById('uploadUrlLink');
+  const urlLabel   = document.getElementById('uploadUrlLabel');
   const copyBtn    = document.getElementById('copyUploadUrlBtn');
 
   // 閉じる
@@ -638,7 +687,7 @@ button, a, [role="button"] {
     }
   });
 
-  // ZIPをアップロード
+  // ZIPをアップロード → 受け取り用リンク発行 → UI表示
   uploadBtn?.addEventListener('click', async () => {
     const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
     if (!user || !gobj) return;
@@ -646,32 +695,45 @@ button, a, [role="button"] {
     const old = uploadBtn.textContent;
     uploadBtn.disabled = true; uploadBtn.textContent = 'アップロード中…';
     try {
-      // ZIP生成
+      // 1) ZIP生成
       const { blob } = await buildZipForUser(user, gobj);
       const filename = `${sanitize(user)}_gacha.zip`;
 
-      // 直送アップロード
+      // 2) Vercel Blobへ直送アップロード
       const put = await window.__vercelBlobUpload(filename, blob);
-      const url = put.downloadUrl || put.url;
+      const downloadUrl = put.downloadUrl || put.url;
+      if (!downloadUrl) throw new Error('upload response has no downloadUrl');
 
-      // ユーザー別に保存＆UI反映
-      setLastUploadUrl(user, url);
+      // 3) 受け取り用リンクを発行（サーバが shareUrl を返す）
+      const tokenRes = await issueReceiveShareUrl({
+        url: downloadUrl,
+        name: filename,
+        purpose: PURPOSE
+        // validUntil は既定の7日（RECEIVE_TOKEN_TTL_DAYS）をサーバ側で運用/丸め込み
+      });
+      const shareUrl = tokenRes?.shareUrl || '';
+      if (!shareUrl) throw new Error('Token API returned no shareUrl');
+
+      // 4) ユーザー別の最新URLとして保存（以後、一覧の「URLをコピー」で共有リンクをコピー）
+      setLastUploadUrl(user, shareUrl);
       renderUsersList();
 
+      // 5) UI反映（受け取り用URLを表示）
       if (resultBox && urlLink) {
         resultBox.style.display = 'block';
-        urlLink.textContent = url;
-        urlLink.href = url;
+        urlLabel.textContent = '受け取り用URL:';
+        urlLink.textContent = shareUrl;
+        urlLink.href = shareUrl;
       }
     } catch (e) {
       console.error(e);
-      alert('アップロードに失敗: ' + (e?.message || e));
+      alert('アップロード/共有リンク発行に失敗: ' + (e?.message || e));
     } finally {
       uploadBtn.disabled = false; uploadBtn.textContent = old;
     }
   });
 
-  // URLコピー
+  // URLコピー（受け取り用URLをコピー）
   copyBtn?.addEventListener('click', async () => {
     const url = urlLink?.href || '';
     if (!url) return;

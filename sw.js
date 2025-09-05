@@ -1,5 +1,5 @@
 // sw.js  —— 自動アップデート即時反映版 + ライブラリ類のプレキャッシュ対応
-const VERSION = 'v2025-09-06-3';                // ★ デプロイ毎に必ず更新
+const VERSION = 'v2025-09-06-4';                // ★ デプロイ毎に必ず更新
 const STATIC_CACHE  = `static-${VERSION}`;
 const RUNTIME_CACHE = `runtime-${VERSION}`;
 
@@ -10,6 +10,7 @@ const PRECACHE_URLS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/manifest.webmanifest',
+  '/receive.html',
 
   // --- ライブラリ類（/lib 配下に配置したものを列挙）---
   '/lib/jszip.min.js',

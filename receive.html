@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport"
+  content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>受け取りページ | ガチャ結果集計</title>
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+
+<style>
+  :root{
+    --bg:#0b0b0f;--panel:#15151b;--panel-2:#1b1b22;--text:#f5f5f6;--muted:#b3b3bd;
+    --accent:#e11d48;--accent-2:#9f1239;--border:#2a2a36;
+    --shadow:0 6px 24px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5)
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(225,29,72,.08), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, rgba(225,29,72,.08), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans JP",Meiryo;
+    line-height:1.6;
+  }
+  a{color:#fda4af;text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{display:grid;place-items:start center;min-height:100vh;padding:24px}
+  .card{
+    width:min(980px,96vw);
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:16px;
+    box-shadow:var(--shadow);
+    padding:16px;
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .muted{color:var(--muted)}
+  .sep{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);margin:12px 0}
+  h1{margin:.25rem 0 0;font-size:1.45rem}
+  h2{margin:.75rem 0 .25rem;font-size:1.15rem}
+  .badge{
+    display:inline-flex;align-items:center;gap:.45rem;padding:.2rem .6rem;border-radius:999px;
+    background:rgba(225,29,72,.12);border:1px solid var(--border);color:#fca5a5;font-weight:700;font-size:.85rem
+  }
+  .btn{
+    appearance:none;border:0;outline:0;cursor:pointer;
+    background:linear-gradient(180deg, #ef335d, var(--accent-2));
+    color:#fff;font-weight:800;border-radius:12px;padding:.7rem 1rem;min-height:40px;
+    border:1px solid rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.12), var(--shadow);
+    transition:transform .05s,filter .2s;
+  }
+  .btn:hover{filter:saturate(1.18) brightness(1.02)}
+  .btn:active{transform:translateY(1px) scale(.995)}
+  .btn.subtle{background:var(--panel-2);color:var(--text);border:1px solid var(--border);box-shadow:var(--shadow)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+  .btn.small{min-height:32px;padding:.45rem .7rem;font-size:.9rem}
+  .btn[disabled]{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
+
+  .hero{
+    display:grid;gap:10px;grid-template-columns:1fr auto;align-items:center
+  }
+  @media (max-width:720px){ .hero{grid-template-columns:1fr} }
+
+  .progress{
+    height:12px;background:rgba(255,255,255,.06);
+    border:1px solid var(--border);border-radius:999px;overflow:hidden
+  }
+  .progress > b{
+    display:block;height:100%;width:0%;
+    background:linear-gradient(90deg, #f43f5e, #9f1239);
+    transition:width .15s ease;
+  }
+
+  .grid{
+    display:grid;gap:12px;
+    grid-template-columns:repeat(3,1fr);
+  }
+  @media (max-width:1100px){ .grid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:720px){ .grid{grid-template-columns:1fr} }
+
+  .item{
+    background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px;
+    display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center
+  }
+  @media (max-width:600px){ .item{grid-template-columns:92px 1fr} }
+  .thumb{
+    width:100%;aspect-ratio:1/1;background:#09090b;border:1px solid var(--border);border-radius:10px;
+    display:grid;place-items:center;overflow:hidden
+  }
+  .thumb img,.thumb video{width:100%;height:100%;object-fit:contain;background:#000}
+  .meta .name{font-weight:800}
+  .meta .sub{color:#9ca3af;font-size:.9rem}
+  .item .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .hint{color:#a1a1aa;font-size:.95rem}
+  .center{display:grid;place-items:center}
+  .right{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div>
+        <span class="badge">受け取り</span>
+        <h1 id="title">リンクの確認中…</h1>
+        <div class="muted" id="meta"></div>
+      </div>
+      <div class="row">
+        <button class="btn subtle small" id="copyLinkBtn" title="この受け取りURLをコピー">URLをコピー</button>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="hero">
+      <div>
+        <h2>手順</h2>
+        <ol class="muted" style="margin:.25rem 0 0;padding-left:1.2rem">
+          <li>「受け取る」を押すと、ブラウザ上でZIPのダウンロードが始まります（端末には保存されません）。</li>
+          <li>解凍後、画像・動画・音声を一覧表示します。</li>
+          <li>各項目の「保存」で、カメラロール/ファイルに書き出せます。</li>
+        </ol>
+      </div>
+      <div class="center">
+        <button class="btn" id="startBtn">受け取る</button>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div id="progressBox" style="display:none">
+      <div class="row">
+        <div style="min-width:120px" class="muted">ダウンロード</div>
+        <div class="progress" style="flex:1"><b id="dlBar"></b></div>
+        <div id="dlPct" class="muted" style="min-width:52px;text-align:right">0%</div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div style="min-width:120px" class="muted">解凍</div>
+        <div class="progress" style="flex:1"><b id="unzBar"></b></div>
+        <div id="unzPct" class="muted" style="min-width:52px;text-align:right">0%</div>
+      </div>
+    </div>
+
+    <div id="errorBox" class="muted" style="display:none;margin-top:8px"></div>
+
+    <div id="summary" class="row" style="display:none;margin-top:12px;justify-content:space-between">
+      <div class="muted" id="sumText"></div>
+      <div class="row">
+        <button class="btn ghost small" id="shareAllBtn">一括保存</button>
+      </div>
+    </div>
+
+    <div id="grid" class="grid" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ライブラリ（同一オリジン／SWのPRECACHE対象） -->
+<script src="/lib/jszip.min.js"></script>
+
+<script>
+(function(){
+  const byId = (id)=> document.getElementById(id);
+  const q = (sel)=> document.querySelector(sel);
+
+  // UI refs
+  const titleEl = byId('title');
+  const metaEl = byId('meta');
+  const startBtn = byId('startBtn');
+  const progressBox = byId('progressBox');
+  const dlBar = byId('dlBar'); const dlPct = byId('dlPct');
+  const unzBar = byId('unzBar'); const unzPct = byId('unzPct');
+  const errorBox = byId('errorBox');
+  const grid = byId('grid');
+  const sumRow = byId('summary'); const sumText = byId('sumText');
+  const shareAllBtn = byId('shareAllBtn'); const copyLinkBtn = byId('copyLinkBtn');
+
+  // 状態
+  let resolved = null; // { url, name, exp, purpose }
+  let mediaEntries = []; // [{name, type, size, getBlob:()=>Promise<Blob>}]
+  let objectUrls = new Set(); // 後始末用
+  let zipBlob = null; // DL済みZIP
+
+  // 受け取りURLコピー
+  copyLinkBtn.addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(location.href);
+      copyLinkBtn.textContent = 'コピーしました';
+      setTimeout(()=> copyLinkBtn.textContent = 'URLをコピー', 1200);
+    }catch{
+      prompt('このURLをコピーしてください', location.href);
+    }
+  });
+
+  // クエリ取得
+  const params = new URLSearchParams(location.search);
+  const token = params.get('t');
+
+  // ユーティリティ
+  const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
+  function fmtBytes(n){
+    if (!Number.isFinite(n) || n <= 0) return '';
+    const u = ['B','KB','MB','GB']; let i=0, v=n;
+    while (v>=1024 && i<u.length-1){ v/=1024; i++; }
+    return v.toFixed(v<10?1:0) + ' ' + u[i];
+  }
+  function extToMime(name){
+    const ext = (name.split('.').pop()||'').toLowerCase();
+    const map = {
+      jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', webp:'image/webp', gif:'image/gif', avif:'image/avif',
+      mp4:'video/mp4', webm:'video/webm', mov:'video/quicktime', m4v:'video/mp4',
+      mp3:'audio/mpeg', wav:'audio/wav', ogg:'audio/ogg', m4a:'audio/mp4', flac:'audio/flac'
+    };
+    return map[ext] || 'application/octet-stream';
+  }
+  function isPreviewable(mime){
+    return /^image\//.test(mime) || /^video\//.test(mime) || /^audio\//.test(mime);
+  }
+  function kindLabel(mime){
+    if (/^image\//.test(mime)) return '画像';
+    if (/^video\//.test(mime)) return '動画';
+    if (/^audio\//.test(mime)) return '音声';
+    return 'ファイル';
+  }
+
+  function setError(msg){
+    errorBox.style.display = 'block';
+    errorBox.textContent = msg;
+  }
+
+  // 進捗
+  function setDlProgress(p){ dlBar.style.width = (p*100|0)+'%'; dlPct.textContent = (p*100|0)+'%'; }
+  function setUnzProgress(p){ unzBar.style.width = (p*100|0)+'%'; unzPct.textContent = (p*100|0)+'%'; }
+
+  // ストリーミングDL → Blob
+  async function fetchAsBlob(url, onProgress){
+    const res = await fetch(url, { mode:'cors' });
+    if (!res.ok) throw new Error('ダウンロードに失敗しました (' + res.status + ')');
+    const total = Number(res.headers.get('content-length')) || 0;
+    if (!res.body || !window.ReadableStream) {
+      // 非ストリーミング環境: 一括
+      const b = await res.blob();
+      if (onProgress && total) onProgress(1);
+      return b;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while(true){
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      if (onProgress && total) onProgress(Math.min(1, received / total));
+    }
+    const blob = new Blob(chunks, { type: 'application/zip' });
+    return blob;
+  }
+
+  // 単品保存（カメラロール/ファイル）
+  async function saveOne(name, blob){
+    const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+    if (navigator.canShare && navigator.canShare({ files:[file] })){
+      try{
+        await navigator.share({ files:[file], title:name });
+        return true;
+      }catch(e){
+        // キャンセルは無視してフォールバック
+      }
+    }
+    // フォールバック: ダウンロードリンク
+    const url = URL.createObjectURL(blob);
+    objectUrls.add(url);
+    const a = document.createElement('a'); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>{ URL.revokeObjectURL(url); objectUrls.delete(url); }, 1500);
+    return true;
+  }
+
+  // 一括保存（Web Share 複数 or ZIP再生成）
+  async function saveAll(list){
+    // まずWeb Share複数（サイズ・件数しだいで失敗しうる）
+    try{
+      if (navigator.canShare){
+        const files = [];
+        let total = 0;
+        for (const it of list){
+          const b = await it.getBlob(); total += b.size;
+          files.push(new File([b], it.name, { type:b.type || 'application/octet-stream' }));
+          if (files.length >= 30 || total > 200*1024*1024) break; // 安全上限
+        }
+        if (files.length && navigator.canShare({ files })){
+          await navigator.share({ files, title: '受け取りファイル' });
+          return;
+        }
+      }
+    }catch(e){
+      // 失敗時はZIP化へ
+    }
+    // ZIP再生成（STORE推奨だが種類混在のためDEFLATEに統一）
+    const zip = new JSZip();
+    for (const it of list){
+      const b = await it.getBlob();
+      zip.file(it.name, b, { binary:true, compression:'STORE' });
+    }
+    const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+    await saveOne('received_files.zip', out);
+  }
+
+  // グリッドに1項目追加
+  function addItemCard(item){
+    const { name, type, size, getBlob } = item;
+    const el = document.createElement('div');
+    el.className = 'item';
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.textContent = '…';
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="name">${name}</div>
+                      <div class="sub">${kindLabel(type)}・${fmtBytes(size)}</div>
+                      <div class="actions" style="margin-top:8px">
+                        <button class="btn small" data-act="save">保存</button>
+                        <button class="btn ghost small" data-act="download">ダウンロード</button>
+                      </div>`;
+
+    el.appendChild(thumb); el.appendChild(meta);
+    grid.appendChild(el);
+
+    // プレビュー生成（非同期）
+    (async ()=>{
+      try{
+        const blob = await getBlob();
+        let node = null;
+        if (/^image\//.test(type)){
+          node = new Image();
+          node.alt = name; node.src = URL.createObjectURL(blob);
+          objectUrls.add(node.src);
+          node.onload = ()=>{/* no-op */};
+        } else if (/^video\//.test(type)){
+          const v = document.createElement('video');
+          v.controls = true; v.preload='metadata';
+          v.src = URL.createObjectURL(blob);
+          objectUrls.add(v.src);
+          node = v;
+        } else if (/^audio\//.test(type)){
+          const a = document.createElement('audio');
+          a.controls = true; a.src = URL.createObjectURL(blob);
+          objectUrls.add(a.src);
+          node = a;
+        } else {
+          node = document.createElement('div');
+          node.className = 'muted'; node.textContent = 'プレビュー不可';
+        }
+        thumb.textContent = '';
+        thumb.appendChild(node);
+      }catch(e){
+        thumb.textContent = '読み込み失敗';
+      }
+    })();
+
+    // アクション
+    meta.querySelector('[data-act="save"]').addEventListener('click', async ()=>{
+      try{
+        const blob = await getBlob();
+        await saveOne(name, blob);
+      }catch(e){
+        alert('保存に失敗: ' + (e?.message||e));
+      }
+    });
+    meta.querySelector('[data-act="download"]').addEventListener('click', async ()=>{
+      try{
+        const blob = await getBlob();
+        const url = URL.createObjectURL(blob);
+        objectUrls.add(url);
+        const a = document.createElement('a'); a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>{ URL.revokeObjectURL(url); objectUrls.delete(url); }, 1500);
+      }catch(e){
+        alert('ダウンロードに失敗: ' + (e?.message||e));
+      }
+    });
+  }
+
+  // ZIP を読み取り → エントリ列挙 → メディアだけ項目化
+  async function buildEntriesFromZip(zipBlob){
+    const zip = await JSZip.loadAsync(zipBlob, {
+      createFolders:false,
+      // onUpdate は「解凍中」進捗に近い
+      // ただしJSZipのonUpdateはエントリ読込ではなくロード段階：ここはDL進捗とは別
+      // onUpdate(metadata) { unzBar.style.width = Math.min(100, metadata.percent|0) + '%'; }
+    });
+
+    const items = [];
+    const entries = Object.values(zip.files);
+    // 進捗表示（「解凍」段階）を自前で
+    let done = 0;
+    for (const ent of entries){
+      if (ent.dir) { done++; setUnzProgress(done/entries.length); continue; }
+
+      const name = ent.name.split('/').pop();
+      const mime = extToMime(name);
+      if (!isPreviewable(mime)) { done++; setUnzProgress(done/entries.length); continue; }
+
+      const getBlob = async ()=> ent.async('blob').then(b => new Blob([b], { type: mime }));
+
+      // サイズは事前にわからないので、必要に応じて都度取得
+      // 体感速度優先で0扱い → 表示時に更新してもよい
+      items.push({ name, type:mime, size:0, getBlob });
+
+      done++; setUnzProgress(done/entries.length);
+      // 逐次UIへ反映
+      addItemCard(items[items.length-1]);
+      // メインスレッドブロッキング回避
+      if (done % 8 === 0) await sleep(0);
+    }
+    return items;
+  }
+
+  // 受け取りボタン
+  startBtn.addEventListener('click', async ()=>{
+    if (!resolved) return;
+
+    errorBox.style.display = 'none';
+    progressBox.style.display = 'block';
+    setDlProgress(0); setUnzProgress(0);
+    grid.innerHTML = '';
+    mediaEntries = [];
+    sumRow.style.display = 'none';
+
+    startBtn.disabled = true; startBtn.textContent = '受信中…';
+
+    try{
+      // 1) ストリーミングDL
+      zipBlob = await fetchAsBlob(resolved.url, (p)=> setDlProgress(p));
+      setDlProgress(1);
+
+      // 2) 解凍→項目化（逐次UI反映）
+      mediaEntries = await buildEntriesFromZip(zipBlob);
+
+      // 3) サマリ表示
+      let totalApprox = 0;
+      // サイズ取得（重いので必要最低限に）
+      for (const it of mediaEntries){
+        if (it.size === 0){
+          try { const b = await it.getBlob(); it.size = b.size; totalApprox += b.size; }
+          catch { /* ignore */ }
+        } else {
+          totalApprox += it.size;
+        }
+      }
+      sumText.textContent = `抽出: ${mediaEntries.length} 件・合計 ${fmtBytes(totalApprox)}`;
+      sumRow.style.display = 'flex';
+
+    }catch(e){
+      console.error(e);
+      setError(e?.message || String(e));
+    }finally{
+      startBtn.disabled = false; startBtn.textContent = '受け取る';
+    }
+  });
+
+  // 一括保存
+  shareAllBtn.addEventListener('click', async ()=>{
+    try{
+      if (!mediaEntries.length) return;
+      shareAllBtn.disabled = true; shareAllBtn.textContent = '準備中…';
+      await saveAll(mediaEntries);
+    }catch(e){
+      alert('一括保存に失敗: ' + (e?.message||e));
+    }finally{
+      shareAllBtn.disabled = false; shareAllBtn.textContent = '一括保存';
+    }
+  });
+
+  // 初期化：トークン解決
+  async function init(){
+    if (!token){
+      titleEl.textContent = '受け取りリンクが見つかりません';
+      setError('URLに ?t= が含まれていません。送信者に再発行を依頼してください。');
+      startBtn.disabled = true;
+      return;
+    }
+    try{
+      const r = await fetch(`/api/receive/resolve?t=${encodeURIComponent(token)}`);
+      const j = await r.json();
+      if (!r.ok || !j?.ok) throw new Error(j?.error || 'リンクの検証に失敗しました。');
+      resolved = { url:j.url, name: j.name || 'download.zip', exp: j.exp, purpose: j.purpose };
+
+      const dt = resolved.exp ? new Date(resolved.exp) : null;
+      titleEl.textContent = resolved.name || '受け取りファイル';
+      metaEl.textContent = dt ? `有効期限: ${dt.toLocaleString()}` : '';
+
+    }catch(e){
+      titleEl.textContent = 'リンクが無効です';
+      setError(e?.message || String(e));
+      startBtn.disabled = true;
+    }
+  }
+
+  // 後始末
+  window.addEventListener('beforeunload', ()=>{
+    for (const u of objectUrls){ try{ URL.revokeObjectURL(u); }catch{} }
+    objectUrls.clear();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
