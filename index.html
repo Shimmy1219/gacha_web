@@ -555,13 +555,13 @@ button, a, [role="button"] {
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
       <h3 id="saveOptTitle">保存オプション</h3>
       <div class="sep"></div>
-      <!-- 選択肢をカード化して説明を明確に -->
+      <!-- 選択肢をカード化（説明つき） -->
       <div class="row" style="gap:12px;flex-wrap:wrap">
         <div style="flex:1 1 320px;min-width:280px;background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px">
           <div style="font-weight:800;margin-bottom:6px">自分で保存して共有する</div>
           <div class="muted" style="font-size:.95rem;margin-bottom:10px">
             端末にZIPを保存し、後で <b>ギガファイル便</b> などお好みのサービスへアップロードする方法です。
-            ストレージ管理や保持期間を自分でコントロールしたい方向け。
+            ストレージや保持期間を自分で管理したい方向け。
           </div>
           <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
         </div>
@@ -576,7 +576,7 @@ button, a, [role="button"] {
         </div>
       </div>
 
-      <!-- 長いURLでも崩れない表示：左にプレビュー、右にコピー -->
+      <!-- 長いURLでもはみ出さない表示 -->
       <div id="uploadResult" class="muted" style="margin-top:12px;display:none">
         <div class="row" style="gap:10px;align-items:center">
           <div style="min-width:110px">受け取り用URL</div>
@@ -748,11 +748,13 @@ button, a, [role="button"] {
       renderUsersList();
 
       // 5) UI反映（受け取り用URLを表示）
-      if (resultBox && urlLink && urlText) {
+      if (resultBox && urlLink) {
         resultBox.style.display = 'block';
         urlLink.href = shareUrl;
         urlLink.title = shareUrl;      // ホバーで全体を確認
         urlText.textContent = shareUrl; // CSSのellipsisで折り返さず省略表示
+        if (urlText) urlText.textContent = shareUrl;
+        else urlLink.textContent = shareUrl; // ★ フォールバック（#uploadUrlText が無い環境でも表示）
       }
     } catch (e) {
       console.error(e);
