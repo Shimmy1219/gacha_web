@@ -10,7 +10,7 @@ const PRECACHE_URLS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/manifest.webmanifest',
-  '/receive.html',
+  '/receive/index.html',
 
   // --- ライブラリ類（/lib 配下に配置したものを列挙）---
   '/lib/jszip.min.js',
