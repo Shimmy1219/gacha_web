@@ -527,27 +527,6 @@ button, a, [role="button"] {
     </div>
   </div>
 
-  <!-- 保存オプションモーダル：デバイス保存 / Vercel Blob 直送 -->
-  <div class="modal" id="saveOptionModal" aria-hidden="true">
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
-      <h3 id="saveOptTitle">保存オプション</h3>
-      <div class="sep"></div>
-      <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
-        <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
-      </div>
-      <div id="uploadResult" class="muted" style="margin-top:10px;display:none">
-        <div>URL: <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"></a></div>
-        <div class="row" style="margin-top:6px">
-          <button class="btn small ghost" id="copyUploadUrlBtn">URLをコピー</button>
-        </div>
-      </div>
-      <div class="row" style="justify-content:flex-end;margin-top:12px">
-        <button class="btn ghost" id="saveOptClose">閉じる</button>
-      </div>
-    </div>
-  </div>
-
 
 <!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
   <!-- 保存オプションモーダル：デバイス保存 / Vercel Blob 直送 -->
