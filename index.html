@@ -550,10 +550,11 @@ button, a, [role="button"] {
   </div>
 
 
+<!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
 <script type="module">
   import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
 
-  // === CSRF トークン管理 ===
+  // ====== CSRF取得（このモジュール内で完結）======
   let csrfToken = '';
   async function ensureCsrf() {
     if (csrfToken) return csrfToken;
@@ -564,30 +565,124 @@ button, a, [role="button"] {
     return csrfToken;
   }
 
-  // === メタ情報（ユーザー識別 & 用途） ===
+  // ====== メタ（ユーザー識別 & 用途）======
   function getUserId() {
     return (window.localStorage.getItem('uid') || 'guest');
   }
   const PURPOSE = 'zips';
 
-  // === 公開: ZIP Blob を Vercel Blob に直送する関数 ===
-  // 使い方: const put = await window.__vercelBlobUpload(filename, blob);
-  window.__vercelBlobUpload = async function(filename, blob) {
+  // ====== 公開ブリッジ：ZIP Blob を Vercel Blob へ直送 ======
+  // 使い方: const put = await window.__vercelBlobUpload(filename, blob)
+  window.__vercelBlobUpload = async (filename, blob) => {
     await ensureCsrf();
     const userId = getUserId();
-
-    // Vercel Blob クライアント直送（サーバレス関数で検証）
     const put = await upload(filename, blob, {
       access: 'public',
       contentType: 'application/zip',
       handleUploadUrl: '/api/blob/upload',
-      // サーバ側で CSRF / userId / purpose を検証・サニタイズ
       clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
-      // 大きいZIPの場合は必要に応じて:
-      // multipart: true,
+      // 必要に応じて: multipart: true,
     });
     return put; // { url, downloadUrl, pathname, ... }
   };
+
+  // ====== モーダル内UI制御 ======
+  const saveOptionModal = document.getElementById('saveOptionModal');
+  const closeBtn   = document.getElementById('saveOptClose');
+  const saveBtn    = document.getElementById('saveDeviceBtn');
+  const uploadBtn  = document.getElementById('uploadBlobBtn');
+  const resultBox  = document.getElementById('uploadResult');
+  const urlLink    = document.getElementById('uploadUrlLink');
+  const copyBtn    = document.getElementById('copyUploadUrlBtn');
+
+  // 閉じる
+  closeBtn?.addEventListener('click', () => close(saveOptionModal));
+
+  // デバイス保存
+  saveBtn?.addEventListener('click', async () => {
+    const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
+    if (!user || !gobj) return;
+
+    const old = saveBtn.textContent;
+    saveBtn.disabled = true; saveBtn.textContent = '保存準備…';
+    try {
+      const { blob } = await buildZipForUser(user, gobj);
+      const filename = `${sanitize(user)}_gacha.zip`;
+
+      if ('showSaveFilePicker' in window) {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
+        });
+        const w = await handle.createWritable(); await w.write(blob); await w.close();
+      } else if (navigator.canShare) {
+        const file = new File([blob], filename, { type:'application/zip' });
+        if (navigator.canShare({ files:[file] })) {
+          await navigator.share({ files:[file], title: filename });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+    } catch (e) {
+      alert('保存に失敗: ' + (e?.message || e));
+    } finally {
+      saveBtn.disabled = false; saveBtn.textContent = old;
+    }
+  });
+
+  // ZIPをアップロード
+  uploadBtn?.addEventListener('click', async () => {
+    const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
+    if (!user || !gobj) return;
+
+    const old = uploadBtn.textContent;
+    uploadBtn.disabled = true; uploadBtn.textContent = 'アップロード中…';
+    try {
+      // ZIP生成
+      const { blob } = await buildZipForUser(user, gobj);
+      const filename = `${sanitize(user)}_gacha.zip`;
+
+      // 直送アップロード
+      const put = await window.__vercelBlobUpload(filename, blob);
+      const url = put.downloadUrl || put.url;
+
+      // ユーザー別に保存＆UI反映
+      setLastUploadUrl(user, url);
+      renderUsersList();
+
+      if (resultBox && urlLink) {
+        resultBox.style.display = 'block';
+        urlLink.textContent = url;
+        urlLink.href = url;
+      }
+    } catch (e) {
+      console.error(e);
+      alert('アップロードに失敗: ' + (e?.message || e));
+    } finally {
+      uploadBtn.disabled = false; uploadBtn.textContent = old;
+    }
+  });
+
+  // URLコピー
+  copyBtn?.addEventListener('click', async () => {
+    const url = urlLink?.href || '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = 'コピーしました';
+      setTimeout(() => (copyBtn.textContent = 'URLをコピー'), 1200);
+    } catch {
+      window.prompt('このURLをコピーしてください', url);
+    }
+  });
 </script>
 
 <script>
@@ -998,89 +1093,6 @@ function setLastUploadUrl(user, url){
   gLastUploadUrls[user] = url;
   saveLocalJSON(LS_KEY_UPLOAD_URLS, gLastUploadUrls);
 }
-
-// 目的: 保存オプションモーダルの制御（デバイス保存 / アップロード）
-const saveOptionModal = document.getElementById('saveOptionModal');
-window.__saveTargetUser = null;
-window.__saveTargetGobj = null;
-
-document.getElementById('saveOptClose')?.addEventListener('click', ()=>close(saveOptionModal));
-
-document.getElementById('saveDeviceBtn')?.addEventListener('click', async ()=>{
-  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj; if(!user || !gobj) return;
-  const btn = document.getElementById('saveDeviceBtn'); const old = btn.textContent;
-  btn.disabled = true; btn.textContent = '保存準備…';
-  try{
-    const { blob } = await buildZipForUser(user, gobj);
-    const filename = `${sanitize(user)}_gacha.zip`;
-
-    if ('showSaveFilePicker' in window) {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
-      });
-      const w = await handle.createWritable(); await w.write(blob); await w.close();
-    } else if (navigator.canShare) {
-      const file = new File([blob], filename, { type:'application/zip' });
-      if (navigator.canShare({ files:[file] })) { await navigator.share({ files:[file], title: filename }); }
-      else { const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); }
-    } else {
-      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
-    }
-  }catch(e){ alert('保存に失敗: ' + (e?.message || e)); }
-  finally{ btn.disabled=false; btn.textContent=old; }
-});
-
-// 既存の ensureCsrf, getUserId, PURPOSE をそのまま再利用
-document.getElementById('uploadBlobBtn')?.addEventListener('click', async () => {
-  const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
-  if (!user || !gobj) return;
-
-  const btn = document.getElementById('uploadBlobBtn');
-  const old = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'アップロード中…';
-
-  try {
-    // ZIP を構築
-    const { blob } = await buildZipForUser(user, gobj);
-    const filename = `${sanitize(user)}_gacha.zip`;
-
-    // CSRF トークンを確保
-    await ensureCsrf();
-    const userId = getUserId();
-
-    // Vercel Blob へアップロード
-    const put = await upload(filename, blob, {
-      access: 'public',
-      contentType: 'application/zip',
-      handleUploadUrl: '/api/blob/upload',
-      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE }),
-      // 大きいZIPなら: multipart: true,
-    });
-
-    const url = put.downloadUrl || put.url;
-
-    // ユーザーごとのURLを保存
-    setLastUploadUrl(user, url);
-    renderUsersList(); // 「URLをコピー」ボタンを更新
-
-    // UIに反映
-    const ur = document.getElementById('uploadResult');
-    const link = document.getElementById('uploadUrlLink');
-    if (ur && link) {
-      ur.style.display = 'block';
-      link.textContent = url;
-      link.href = url;
-    }
-  } catch (e) {
-    console.error(e);
-    alert('アップロードに失敗: ' + (e?.message || e));
-  } finally {
-    btn.disabled = false;
-    btn.textContent = old;
-  }
-});
   
 
 /* ====== 履歴を追加モーダル ====== */
