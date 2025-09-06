@@ -91,6 +91,8 @@ button, a, [role="button"] {
     background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="%23b3b3bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 14 8"/></svg>');
     background-repeat:no-repeat;background-position:right .6rem center;background-size:12px}
   select:focus{outline:2px solid rgba(225,29,72,.4);outline-offset:2px}
+  /* 複数選択セレクトの矢印アイコンを消し、余白を調整 */
+  select[multiple]{background-image: none; padding-right: .7rem; min-width: 220px; /* 狭すぎ防止：必要なら調整 */}
 
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
   .grid{display:grid;gap:16px}.two-col{grid-template-columns:1fr}@media(min-width:980px){.two-col{grid-template-columns:1fr 1fr;align-items:start;}}
@@ -373,7 +375,10 @@ button, a, [role="button"] {
           <div class="sep"></div>
           <div class="row" style="align-items:center; margin-bottom:8px">
             <label for="filterGacha">ガチャ絞り込み:</label>
-            <select id="filterGacha" class="select"><option value="*">すべて</option></select>
+            <!-- 複数選択対応 & 行数はJSで後から調整 -->
+            <select id="filterGacha" class="select" multiple size="4">
+              <option value="*">すべて</option>
+            </select>
           </div>
           <div id="usersList"></div>
         </section>
@@ -1035,13 +1040,61 @@ function rebuildGachaCaches(){
   $("#summaryTag").textContent = `${Object.keys(gData).length}ユーザー / ${gSet.size}ガチャ / ${itemUniqueTotal}アイテム`;
 
   // ガチャ絞り込みセレクト更新
-  const selG=$("#filterGacha");
-  if(selG) selG.innerHTML='<option value="*">すべて</option>'+gAllGachas.map(g=>`<option>${g}</option>`).join("");
+  // ガチャ絞り込みセレクト更新（複数選択 & 直前の状態を復元）
+  const selG = $("#filterGacha");
+  if (selG) {
+    // 直前の選択を退避
+    const prev = getSelectedGachas();
+
+    // オプション再生成
+    selG.innerHTML = '<option value="*">すべて</option>' +
+      gAllGachas.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
+
+    // size を動的調整（最大8行）
+    selG.size = Math.min(8, selG.options.length);
+
+    // 選択状態を復元
+    if (prev === '*') {
+      const all = selG.querySelector('option[value="*"]');
+      if (all) all.selected = true;
+    } else if (prev && prev.size) {
+      selG.querySelectorAll('option').forEach(o => {
+        if (prev.has(o.value)) o.selected = true;
+      });
+    } else {
+      const all = selG.querySelector('option[value="*"]');
+      if (all) all.selected = true;
+    }
+}
 
   // ★ レアリティセレクトも動的に更新
   const selR=$("#filterRarity");
   if(selR){
     selR.innerHTML = '<option value="*">すべて</option>' + gRarityOrder.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("");
+  }
+}
+
+// 現在のガチャ選択を取得：'*' or Set<string>
+function getSelectedGachas(){
+  const sel = document.getElementById('filterGacha');
+  if (!sel) return '*';
+  const vals = Array.from(sel.selectedOptions || []).map(o => o.value);
+  if (!vals.length || vals.includes('*')) return '*';
+  return new Set(vals);
+}
+
+// '*（すべて）' と他ガチャを同時に選べた時の調停 & 空選択のフォールバック
+function normalizeGachaSelection(){
+  const sel = document.getElementById('filterGacha');
+  if (!sel) return;
+  const values = Array.from(sel.selectedOptions).map(o => o.value);
+  const all = sel.querySelector('option[value="*"]');
+  if (values.length === 0 && all){            // 何も選ばれていなければ '*' を強制選択
+    all.selected = true;
+    return;
+  }
+  if (values.includes('*') && values.length > 1 && all){
+    all.selected = false;                      // 他を選んだら '*' は外す
   }
 }
 
@@ -1115,7 +1168,7 @@ function renderUsersList(){
   const empty = Object.keys(gData).length===0;
   if(empty){ wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>'; return; }
 
-  const gachaFilter=$("#filterGacha").value, rFilter=$("#filterRarity").value, hideMiss=$("#hideMiss").checked, q=($("#userSearch").value||"").trim();
+  const selectedGachas = getSelectedGachas(); const rFilter = $("#filterRarity").value; const hideMiss = $("#hideMiss").checked; const q = ($("#userSearch").value || "").trim();
   const showCounts = $("#showCounts")?.checked;
   const showSkipOnly = $("#showSkipOnly")?.checked;
   
@@ -1270,7 +1323,7 @@ function renderUsersList(){
     
     let hasAnyBox = false; 
     Object.entries(gobj).forEach(([gacha,info])=>{
-      if(gachaFilter!=="*" && gachaFilter!==gacha) return;
+      if (selectedGachas !== "*" && !selectedGachas.has(gacha)) return;
       const box=document.createElement("div"); box.className="gacha-box";
       const pulls=info.pulls??0; box.innerHTML=`<div><strong>${escapeHtml(gacha)}</strong> <span class="tag">${pulls}連</span></div>`;
       const items=info.items||{};
@@ -1907,7 +1960,7 @@ function parseFinalSummaryText(text){
 }
 
 /* ====== フィルタ＆その他イベント ====== */
-$("#filterGacha").addEventListener("change", renderUsersList);
+$("#filterGacha").addEventListener("change", () => {normalizeGachaSelection(); renderUsersList();});
 $("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
 $("#hideMiss").addEventListener("change", renderUsersList);
 $("#userSearch").addEventListener("input", renderUsersList);
