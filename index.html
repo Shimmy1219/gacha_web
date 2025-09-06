@@ -93,7 +93,7 @@ button, a, [role="button"] {
   select:focus{outline:2px solid rgba(225,29,72,.4);outline-offset:2px}
 
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
-  .grid{display:grid;gap:16px}.two-col{grid-template-columns:1fr}@media(min-width:980px){.two-col{grid-template-columns:1fr 1fr}}
+  .grid{display:grid;gap:16px}.two-col{grid-template-columns:1fr}@media(min-width:980px){.two-col{grid-template-columns:1fr 1fr;align-items:start;}}
   .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f1014;padding:.1rem .35rem;border-radius:6px;border:1px solid var(--border);color:#d1d5db}
   .muted{color:var(--muted)}.sep{height:1px;background:var(--border);margin:.75rem 0 1rem}
   .visually-hidden{position:absolute!important;inset:0 auto auto 0;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
@@ -130,7 +130,7 @@ button, a, [role="button"] {
   /* All modals */
   .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.65);padding:20px;z-index:50}
   .modal.show{display:grid}
-  .dialog{width:min(880px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+  .dialog{width:min(880px,96vw);background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow);max-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 24px);margin: 0 auto;}
   .dialog h3{margin:0 0 .5rem}
   .dialog .grid-2{display:grid;gap:12px;grid-template-columns:1fr}@media(min-width:860px){.dialog .grid-2{grid-template-columns:1fr 1fr}}
 
@@ -268,7 +268,7 @@ button, a, [role="button"] {
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v21.3.2</span></h1>
+      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v21.3.4</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -655,6 +655,15 @@ button, a, [role="button"] {
   // 閉じる
   closeBtn?.addEventListener('click', () => close(saveOptionModal));
 
+  // 追加：ユーザーキャンセル検出（各ブラウザの文言に広めに対応）
+  function isUserAbort(err){
+    const msg = String(err?.message || err || '').toLowerCase();
+    return (
+      err?.name === 'AbortError' ||
+      /aborted a request|user aborted|user canceled|user cancelled|キャンセル/.test(msg)
+    );
+  }
+
   // デバイス保存
   saveBtn?.addEventListener('click', async () => {
     const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
@@ -667,15 +676,23 @@ button, a, [role="button"] {
       const filename = `${sanitize(user)}_gacha.zip`;
 
       if ('showSaveFilePicker' in window) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
-        });
-        const w = await handle.createWritable(); await w.write(blob); await w.close();
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
+          });
+          const w = await handle.createWritable(); await w.write(blob); await w.close();
+        } catch (e) {
+          if (!isUserAbort(e)) throw e; // キャンセルは黙って終了
+        }
       } else if (navigator.canShare) {
         const file = new File([blob], filename, { type:'application/zip' });
         if (navigator.canShare({ files:[file] })) {
-          await navigator.share({ files:[file], title: filename });
+          try {
+            await navigator.share({ files:[file], title: filename });
+          } catch (e) {
+            if (!isUserAbort(e)) throw e; // シェアのキャンセルも無視
+          }
         } else {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a'); a.href = url; a.download = filename;
