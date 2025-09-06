@@ -731,7 +731,6 @@ button, a, [role="button"] {
         resultBox.style.display = 'block';
         urlLink.href = shareUrl;
         urlLink.title = shareUrl;      // ホバーで全体を確認
-        urlText.textContent = shareUrl; // CSSのellipsisで折り返さず省略表示
         if (urlText) urlText.textContent = shareUrl;
         else urlLink.textContent = shareUrl; // ★ フォールバック（#uploadUrlText が無い環境でも表示）
       }
@@ -1081,11 +1080,13 @@ function renderUsersList(){
       // モーダルに対象ユーザー情報をセット
       window.__saveTargetUser = user;
       window.__saveTargetGobj = gobj;
-      // 前回の結果表示をリセット
-      const ur = document.getElementById('uploadResult');
+      // 前回の結果表示をリセット（span を壊さない）
+      const ur   = document.getElementById('uploadResult');
       const link = document.getElementById('uploadUrlLink');
-      if (ur){ ur.style.display='none'; }
-      if (link){ link.textContent=''; link.href='#'; }
+      const text = document.getElementById('uploadUrlText');
+      if (ur) ur.style.display = 'none';
+      if (link){ link.href = '#'; link.title = ''; }
+      if (text) text.textContent = '';
       // モーダルを開く
       open(document.getElementById('saveOptionModal'));
     });
