@@ -116,16 +116,38 @@ button, a, [role="button"] {
   .flag .skip{border-color:#e11d48;color:#fff;background:linear-gradient(180deg,#e11d48,#9f1239)}
 
   /* Users panel */
-  .user-card{margin-bottom:16px;position:relative}
-  .user-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .user-actions{display:flex;gap:8px;align-items:center}.user-actions .btn.small{min-width:110px}
-  .gacha-box{background:var(--panel-2);border:1px dashed var(--border);border-radius:12px;padding:12px}
-  .rarity-row{display:grid;grid-template-columns:3.6rem 1fr;column-gap:.6rem;align-items:start;margin-top:.25rem}
-  .rarity-label{display:flex;align-items:center;font-weight:800;line-height:1.2;min-height:32px}
-  .rarity-items{display:flex;flex-wrap:wrap;gap:.3rem .45rem}
-  .item-pill{display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border-radius:999px;background:#23232b;border:1px solid var(--border)}
-  .item-pill img{width:20px;height:20px;object-fit:contain;border-radius:4px;display:block}
-  .item-pill.no-img{justify-content:center;padding:.25rem .8rem}
+  .user-card{ margin-bottom:16px; position:relative; padding:0 }
+  .user-header{display:flex; align-items:center; justify-content:space-between; padding:16px; margin:0; border-bottom:1px solid var(--border);}
+  /* 見出し全体を“押せる”感じに */
+  .user-header.clickable{ cursor:pointer; user-select:none; border-radius:10px }
+  .user-header.clickable:hover{ background:#191922 }
+  .user-actions{ display:flex; gap:8px; align-items:center }
+  .user-actions .btn.small{ min-width:110px }
+
+  .gacha-box{ background:var(--panel-2); border:1px dashed var(--border); border-radius:12px; padding:12px }
+  .rarity-row{ display:grid; grid-template-columns:3.6rem 1fr; column-gap:.6rem; align-items:start; margin-top:.25rem }
+  .rarity-label{ display:flex; align-items:center; font-weight:800; line-height:1.2; min-height:32px }
+  .rarity-items{ display:flex; flex-wrap:wrap; gap:.3rem .45rem }
+  .item-pill{ display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .6rem; border-radius:999px; background:#23232b; border:1px solid var(--border) }
+  .item-pill img{ width:20px; height:20px; object-fit:contain; border-radius:4px; display:block }
+  .item-pill.no-img{ justify-content:center; padding:.25rem .8rem }
+
+  /* --- user-card 折りたたみ --- */
+  .icon-btn{width:32px; height:32px; border-radius:8px; border:1px solid var(--border);background:transparent; color:var(--muted); display:inline-grid; place-items:center;cursor:pointer; box-shadow:none; line-height:1; font-weight:800}
+  .icon-btn:active{ transform:translateY(1px) scale(.995) }
+  .collapse-btn::after{ content:'▾' }
+  .user-card.collapsed .collapse-btn::after{ content:'▸' }
+  /* 高さアニメは JS で数値指定、CSS はトランジションのみ */
+  .user-body{overflow:hidden; height:auto; opacity:1;transition:height .22s ease, opacity .22s ease; will-change:height, opacity;}
+  .user-card.collapsed .user-body{ opacity:0 }
+  .user-card .user-body{padding: 0 16px 16px 16px;}/* 開いている時の user-body パディング */
+  .user-card.collapsed .user-body{padding: 0 16px 0 16px;}/* 閉じた時は下パディングを 0 に */
+  .user-card .user-header{border-bottom: 1px solid var(--border); padding-bottom: 8px; }/* デフォルトで header 下に1px線を引く（閉じた時の見切り線用） */
+  .user-card:not(.collapsed) .user-header{border-bottom: none; padding-bottom: 0;}/* 開いている時は header 下ボーダーを消す */
+
+
+  /* 本文の余白は内側ラッパに逃がす（height:0時に隙間を残さない） */
+  .user-body-inner{ padding:12px 16px 16px }
 
   /* All modals */
   .modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.65);padding:20px;z-index:50}
@@ -261,6 +283,20 @@ button, a, [role="button"] {
       overscroll-behavior: none;   /* Androidの引っ張り更新/バウンス抑制（iOSは効果弱） */
     }
   }
+  @media (min-width: 1400px){
+  #mainUI .grid.two-col{
+    /* ←2カラムを3カラムに拡張 */
+    grid-template-columns: minmax(620px, 1.4fr) minmax(520px, 1fr) minmax(360px, .9fr);
+    grid-auto-flow: row dense;
+  }
+  #itemsPanel{ grid-column: 1; }  /* 左：アイテム画像 */
+  #usersPanel{ grid-column: 2; }  /* 中：ユーザー内訳 */
+  #skipPanel {                    /* 右：リアグ（上詰め） */
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+  }
+}
 
   .image-actions .btn{ flex:1 1 0; }
 </style>
@@ -268,7 +304,7 @@ button, a, [role="button"] {
 <body>
   <div class="container">
     <header style="margin-bottom:16px">
-      <h1>ガチャ結果ビューア <span class="tag">黒×赤</span> <span class="tag">v21.3.4</span></h1>
+      <h1>四遊楽ガチャツール <span class="tag">黒×赤</span> <span class="tag">v21.3.4</span></h1>
       <div class="muted">開始ボタン → <b>リアルタイム</b> / <b>最終結果貼付</b> / <b>JSON読込</b> を選択。解析後は従来UIにマッピングされます。</div>
     </header>
 
@@ -818,6 +854,11 @@ function thumbInnerHTML(it){ const key=keyOf(it.gacha,it.rarity,it.code); const 
 // スプラッシュ中はスクロール不可
 document.body.classList.add('splash-locked');
 
+// 折りたたみ状態の保存用キーを追加
+const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
+let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
+function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
+
 /* ====== JSON 読み込み／UI 再描画 ====== */
 function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
 
@@ -1089,8 +1130,42 @@ function renderUsersList(){
       <div class="user-actions">
         <button class="btn small" data-zip-save>保存</button>
         ${lastUrl ? `<button class="btn small ghost" data-copy-url>URLをコピー</button>` : ``}
+        <button class="icon-btn collapse-btn" data-collapse aria-expanded="true" title="折りたたむ/開く"></button>
       </div>`;
     card.appendChild(header);
+    // 見出しをクリック可能に + A11y
+    header.classList.add('clickable');
+    header.setAttribute('role','button');
+    header.setAttribute('tabindex','0');
+
+    // body に id を振って関連付け（A11y）
+    const bodyId = 'userBody_' + Math.random().toString(36).slice(2,8);
+    header.setAttribute('aria-controls', bodyId);
+
+    // 折りたたみ対象のボディを用意（ここに各ガチャ箱を入れる）
+    const body = document.createElement("div");
+    body.className = "user-body";
+    card.appendChild(body);
+    body.id = bodyId;
+
+    // 内側ラッパ（高さアニメ対象は body / 余白は inner に）
+    const bodyInner = document.createElement("div");
+    bodyInner.className = "user-body-inner";
+    body.appendChild(bodyInner);
+
+    // 初期状態（保存済みなら閉じる）
+    if (gUserCollapsed[user]) {
+      card.classList.add("collapsed");
+      body.style.height = "0px";
+      body.style.opacity = "0";
+    } else {
+      body.style.height = "auto";
+      body.style.opacity = "1";
+    }
+    // 初期 aria 状態
+    header.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
+    const collapseBtn = header.querySelector('[data-collapse]');
+    collapseBtn?.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
 
     // 保存ボタン → 保存オプションモーダルを開く
     header.querySelector('[data-zip-save]')?.addEventListener('click', ()=>{
@@ -1108,6 +1183,80 @@ function renderUsersList(){
       open(document.getElementById('saveOptionModal'));
     });
 
+    // 折りたたみトグル（ボタン）
+    collapseBtn?.addEventListener('click', (e) => { e.stopPropagation();
+    const isOpen = !card.classList.contains('collapsed');
+
+    if (isOpen){
+      // 閉じる：auto → px へ固定してから 0 へ
+      const h = body.scrollHeight;
+      body.style.height = h + "px";
+      body.style.opacity = "1";
+      // リフローして遷移を有効化
+      void body.offsetHeight;
+      body.style.height = "0px";
+      body.style.opacity = "0";
+      // 終了後に状態確定
+      const onEnd = (e)=>{
+        if (e.propertyName !== "height") return;
+        body.removeEventListener("transitionend", onEnd);
+        card.classList.add("collapsed");
+        collapseBtn?.setAttribute("aria-expanded","false");
+        header.setAttribute('aria-expanded','false');
+        setUserCollapsed(user, true);
+      };
+      body.addEventListener("transitionend", onEnd);
+    } else {
+      // 開く：0 → コンテンツ高 へ
+      card.classList.remove("collapsed");
+      collapseBtn?.setAttribute("aria-expanded","true");
+      header.setAttribute('aria-expanded','true');
+      body.style.height = "0px";
+      body.style.opacity = "0";
+      // リフロー
+      void body.offsetHeight;
+      const h = body.scrollHeight; // 中身の自然高
+      body.style.height = h + "px";
+      body.style.opacity = "1";
+      const onEnd = (e)=>{
+        if (e.propertyName !== "height") return;
+        body.removeEventListener("transitionend", onEnd);
+        body.style.height = "auto"; // 最後に auto に戻す
+        setUserCollapsed(user, false);
+      };
+      body.addEventListener("transitionend", onEnd);
+    }
+  });
+
+  // 見出し全体でトグル（ただし右側の .user-actions 内は除外）
+  header.addEventListener('click', (e)=>{
+    if (e.target.closest('.user-actions')) return;
+    // collapseBtn と同じ処理を流用
+    collapseBtn?.dispatchEvent(new Event('click', { bubbles:false }));
+    if(!collapseBtn){ // 安全策：ボタンがない場合はローカルに実装
+      const isOpen = !card.classList.contains('collapsed');
+      if (isOpen){
+        const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1"; void body.offsetHeight;
+        body.style.height = "0px"; body.style.opacity = "0";
+        const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
+          card.classList.add('collapsed'); header.setAttribute('aria-expanded','false'); setUserCollapsed(user,true); };
+        body.addEventListener('transitionend', onEnd);
+      }else{
+        card.classList.remove('collapsed'); header.setAttribute('aria-expanded','true');
+        body.style.height = '0px'; body.style.opacity = '0'; void body.offsetHeight;
+        const h = body.scrollHeight; body.style.height = h + 'px'; body.style.opacity = '1';
+        const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd); body.style.height = 'auto'; setUserCollapsed(user,false); };
+        body.addEventListener('transitionend', onEnd);
+      }
+    }
+  });
+
+  // キーボード操作（Enter / Space）
+  header.addEventListener('keydown', (e)=>{
+    if (e.target.closest('.user-actions')) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); }
+  });
+
     // 既存URLがある場合はコピー機能
     const copyBtn = header.querySelector('[data-copy-url]');
     if (copyBtn){
@@ -1117,6 +1266,7 @@ function renderUsersList(){
         catch{ prompt('URL をコピーしてください', u); }
       });
     }
+
     
     let hasAnyBox = false; 
     Object.entries(gobj).forEach(([gacha,info])=>{
@@ -1168,7 +1318,7 @@ function renderUsersList(){
           boxHasAny = true;
         }
       });
-      if(boxHasAny){ card.appendChild(box); hasAnyBox = true; }
+      if (boxHasAny) { body.appendChild(box); hasAnyBox = true; }
     });
 
     if(hasAnyBox){ wrap.appendChild(card); } // 対象がないユーザーは出さない
