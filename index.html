@@ -301,6 +301,33 @@ button, a, [role="button"] {
 }
 
   .image-actions .btn{ flex:1 1 0; }
+
+  /* === Gacha Multi-Select (Popover) === */
+  .gacha-filter{ position:relative; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; }
+  .gacha-filter .gf-label{ white-space:nowrap; font-weight:700; }
+  .gacha-filter .gf-btn{ min-width:160px; max-width:60vw; text-overflow:ellipsis; overflow:hidden; }
+  @media (max-width: 600px){.gacha-filter .gf-btn{ max-width:72vw; }}
+
+  /* Popover Panel */
+  .gf-popover{position:absolute; inset:auto auto auto 0; top:calc(100% + 8px); width:min(420px, 92vw); max-height:320px; overflow:auto; display:none; background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:8px; z-index: 90;}
+  .gacha-filter.open .gf-popover{ display:block; animation:gfFade .12s ease-out; }
+  @keyframes gfFade{ from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none} }
+
+  /* List items */
+  .gf-item{display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; cursor:pointer; user-select:none; }
+  .gf-item:hover{ background:#1b1b22; }
+  .gf-item[aria-selected="true"]{ background:rgba(225,29,72,.12); border:1px solid var(--border); }
+  .gf-check{ width:20px; height:20px; border-radius:6px; flex:0 0 20px; border:1px solid var(--border); background:#0f1016; display:inline-grid; place-items:center; font-weight:900; color:#fff; font-size:.85rem; }
+  .gf-item[aria-selected="true"] .gf-check{ background:linear-gradient(180deg,#ef335d,#9f1239); border-color:#e11d48; }
+  .gf-name{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* “すべて/全解除”行（先頭に設置） */
+  .gf-all{ font-weight:800; color:#f5f5f6; }
+
+  /* スクロールバー控えめ（対応ブラウザ） */
+  .gf-popover{ scrollbar-width:thin; }
+  .gf-popover::-webkit-scrollbar{ height:8px; width:8px }
+  .gf-popover::-webkit-scrollbar-thumb{ background:#2a2a36; border-radius:999px }
 </style>
 </head>
 <body>
@@ -374,11 +401,12 @@ button, a, [role="button"] {
           <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
           <div class="sep"></div>
           <div class="row" style="align-items:center; margin-bottom:8px">
-            <label for="filterGacha">ガチャ絞り込み:</label>
-            <!-- 複数選択対応 & 行数はJSで後から調整 -->
-            <select id="filterGacha" class="select" multiple size="4">
-              <option value="*">すべて</option>
-            </select>
+            <div class="gacha-filter" id="gachaFilterWrap">
+              <span class="gf-label">ガチャ絞り込み:</span>
+              <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
+                      aria-haspopup="listbox" aria-expanded="false">すべて</button>
+              <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+            </div>
           </div>
           <div id="usersList"></div>
         </section>
@@ -864,6 +892,150 @@ const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
 let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
 function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
 
+/* === Gacha Filter UI (button + popover) === */
+const GachaFilter = (() => {
+  let wrap, btn, pop;
+  let options = [];                 // ['ガチャA','ガチャB',...]
+  let selected = '*';               // '*' or Set<string>
+  let autoCloseTimer = null;
+  const AUTO_CLOSE_MS = 1800;
+
+  function init(){
+    wrap = document.getElementById('gachaFilterWrap');
+    btn  = document.getElementById('gachaFilterBtn');
+    pop  = document.getElementById('gachaPopover');
+    if(!wrap || !btn || !pop) return;
+
+    btn.addEventListener('click', () => {
+      if (wrap.classList.contains('open')) close(); else open();
+    });
+
+    // 外側クリックで閉じる
+    document.addEventListener('pointerdown', (e)=>{
+      if (!wrap?.classList.contains('open')) return;
+      if (!wrap.contains(e.target)) close();
+    });
+
+    // 無操作で閉じる（ポップオーバー内の活動で延長）
+    ['pointerdown','pointermove','wheel','keydown'].forEach(ev=>{
+      pop.addEventListener(ev, bumpAutoClose, {passive:true});
+    });
+    btn.addEventListener('pointerdown', bumpAutoClose, {passive:true});
+
+    // ★★★ 重要：init 後に “現在の options” で必ず UI を再構築する
+    // （setOptions が先に呼ばれていても、ここで描画が起きるようにする）
+    setOptions(options);
+  }
+
+  function bumpAutoClose(){
+    if (autoCloseTimer) clearTimeout(autoCloseTimer);
+    autoCloseTimer = setTimeout(close, AUTO_CLOSE_MS);
+  }
+
+  function open(){
+    if(!wrap) return;
+    wrap.classList.add('open');
+    btn.setAttribute('aria-expanded','true');
+    pop.focus();
+    bumpAutoClose();
+  }
+  function close(){
+    if(!wrap) return;
+    wrap.classList.remove('open');
+    btn.setAttribute('aria-expanded','false');
+    if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+  }
+
+  function setOptions(arr){
+    options = Array.from(new Set(arr.filter(Boolean)));
+    // 初回/空選択は「全選択」
+    if (selected !== '*' && selected.size === 0) selected = '*';
+
+    // UI再構築
+    if (pop){
+      pop.innerHTML = '';
+      // 先頭：全選択トグル
+      const all = document.createElement('div');
+      all.className = 'gf-item gf-all';
+      all.setAttribute('role', 'option');
+      all.setAttribute('aria-selected', selected === '*' ? 'true' : 'false');
+      all.innerHTML = `<span class="gf-check">${selected==='*' ? '✓' : ''}</span><span class="gf-name">すべて（全選択/全解除）</span>`;
+      all.addEventListener('click', () => {
+        if (selected === '*') {
+          selected = new Set();      // いったん空にして…
+          updateButtonLabel();
+          renderItems();             // その後に全解除
+        } else {
+          selected = '*';            // 全選択
+        }
+        updateButtonLabel();
+        renderItems();
+        notify();
+      });
+      pop.appendChild(all);
+
+      // 仕切り
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.background = 'linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent)';
+      hr.style.margin = '6px 4px';
+      pop.appendChild(hr);
+
+      // 項目群
+      renderItems();
+    }
+    updateButtonLabel();
+  }
+
+  function renderItems(){
+    // 既存の項目は全削除（先頭の2ノード = 全選択行, 仕切り を残す）
+    while (pop.children.length > 2) pop.removeChild(pop.lastChild);
+
+    const selSet = selected === '*' ? new Set(options) : new Set(selected);
+    options.forEach(name => {
+      const row = document.createElement('div');
+      row.className = 'gf-item';
+      row.setAttribute('role','option');
+      row.setAttribute('aria-selected', selSet.has(name) ? 'true' : 'false');
+      row.innerHTML = `<span class="gf-check">${selSet.has(name) ? '✓' : ''}</span><span class="gf-name" title="${name}">${name}</span>`;
+      row.addEventListener('click', () => {
+        // '*' を具体セットに置き換えてからトグル
+        let s = selected === '*' ? new Set(options) : new Set(selected);
+        if (s.has(name)) s.delete(name); else s.add(name);
+        // 0件は '*'（すべて）へフォールバック
+        selected = s.size === 0 ? '*' : s;
+        updateButtonLabel();
+        renderItems();
+        notify();
+      });
+      pop.appendChild(row);
+    });
+  }
+
+  function updateButtonLabel(){
+    if (!btn) return;
+    if (selected === '*') { btn.textContent = 'すべて'; return; }
+    const n = selected.size;
+    if (n === 1){ btn.textContent = Array.from(selected)[0]; }
+    else { btn.textContent = `${n}項目`; }
+  }
+
+  function getSelection(){
+    return selected === '*' ? '*' : new Set(selected);
+  }
+  function setSelection(v){
+    selected = (v === '*' ? '*' : new Set(v));
+    updateButtonLabel();
+    renderItems();
+  }
+  let onChange = null;
+  function notify(){ if (typeof onChange === 'function') onChange(getSelection()); }
+
+  return { init, setOptions, getSelection, setSelection, open, close,
+           set onChange(fn){ onChange = fn; }, updateButtonLabel };
+})();
+document.addEventListener('DOMContentLoaded', () => GachaFilter.init());
+
 /* ====== JSON 読み込み／UI 再描画 ====== */
 function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
 
@@ -1041,31 +1213,22 @@ function rebuildGachaCaches(){
 
   // ガチャ絞り込みセレクト更新
   // ガチャ絞り込みセレクト更新（複数選択 & 直前の状態を復元）
-  const selG = $("#filterGacha");
-  if (selG) {
-    // 直前の選択を退避
-    const prev = getSelectedGachas();
+  // --- ガチャ絞り込み（独自UI）更新 ---
+  {
+    const prev = getSelectedGachas();               // 直前の選択を保存
+    // UIへ候補を流し込む
+    GachaFilter.setOptions(gAllGachas);
 
-    // オプション再生成
-    selG.innerHTML = '<option value="*">すべて</option>' +
-      gAllGachas.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("");
-
-    // size を動的調整（最大8行）
-    selG.size = Math.min(8, selG.options.length);
-
-    // 選択状態を復元
+    // 直前の選択を復元（存在しないガチャは落とす）
     if (prev === '*') {
-      const all = selG.querySelector('option[value="*"]');
-      if (all) all.selected = true;
+      GachaFilter.setSelection('*');
     } else if (prev && prev.size) {
-      selG.querySelectorAll('option').forEach(o => {
-        if (prev.has(o.value)) o.selected = true;
-      });
+      const keep = new Set([...prev].filter(g => gAllGachas.includes(g)));
+      GachaFilter.setSelection(keep.size ? keep : '*');
     } else {
-      const all = selG.querySelector('option[value="*"]');
-      if (all) all.selected = true;
+      GachaFilter.setSelection('*');
     }
-}
+  }
 
   // ★ レアリティセレクトも動的に更新
   const selR=$("#filterRarity");
@@ -1076,27 +1239,11 @@ function rebuildGachaCaches(){
 
 // 現在のガチャ選択を取得：'*' or Set<string>
 function getSelectedGachas(){
-  const sel = document.getElementById('filterGacha');
-  if (!sel) return '*';
-  const vals = Array.from(sel.selectedOptions || []).map(o => o.value);
-  if (!vals.length || vals.includes('*')) return '*';
-  return new Set(vals);
+  return GachaFilter.getSelection();
 }
 
 // '*（すべて）' と他ガチャを同時に選べた時の調停 & 空選択のフォールバック
-function normalizeGachaSelection(){
-  const sel = document.getElementById('filterGacha');
-  if (!sel) return;
-  const values = Array.from(sel.selectedOptions).map(o => o.value);
-  const all = sel.querySelector('option[value="*"]');
-  if (values.length === 0 && all){            // 何も選ばれていなければ '*' を強制選択
-    all.selected = true;
-    return;
-  }
-  if (values.includes('*') && values.length > 1 && all){
-    all.selected = false;                      // 他を選んだら '*' は外す
-  }
-}
+function normalizeGachaSelection(){ /* no-op: 独自UIで整合済み */ }
 
 function renderTabs(){
   const tabs=$("#gachaTabs"); if(!tabs) return;
@@ -1717,6 +1864,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (inp) inp.value = ""; // 同じファイルを連続選択可
     }
   });
+  GachaFilter.onChange = () => { renderUsersList(); };
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1960,7 +2108,6 @@ function parseFinalSummaryText(text){
 }
 
 /* ====== フィルタ＆その他イベント ====== */
-$("#filterGacha").addEventListener("change", () => {normalizeGachaSelection(); renderUsersList();});
 $("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
 $("#hideMiss").addEventListener("change", renderUsersList);
 $("#userSearch").addEventListener("input", renderUsersList);
