@@ -180,6 +180,17 @@ button, a, [role="button"] {
   .tab .close{opacity: 0; pointer-events: none; transition: opacity .15s ease;}
   .tab:hover .close{ opacity: 1; pointer-events: auto; }
 
+  /* アイテムカード右上の×ボタン */
+.item-card .close{
+  position:absolute; top:-8px; right:-8px;
+  width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+  border-radius:999px; background:#2a2a36; color:#cbd5e1;
+  border:1px solid var(--border); font-weight:800; cursor:pointer;
+  opacity:0; pointer-events:none; transition:opacity .15s ease;
+}
+.item-card:hover .close{ opacity:1; pointer-events:auto; }
+.item-card .close:hover{ background:#e11d48; color:#fff; border-color:#e11d48; }
+
   /* 再設計トグル（スライド式） */
   .toggle{display:inline-flex; align-items:center; gap:.5rem;padding:.2rem .5rem; background:#23232b; border:1px solid var(--border);border-radius:999px;}
   .toggle input.switch{appearance:none; width:44px; height:24px; border-radius:999px;background:#0f1016; border:1px solid var(--border);position:relative; outline:none; cursor:pointer;transition:background .2s,border-color .2s;}
@@ -622,6 +633,25 @@ button, a, [role="button"] {
       <div class="row" style="justify-content:flex-end;gap:8px">
         <button class="btn ghost" id="delCancel">キャンセル</button>
         <button class="btn" id="delConfirm">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: アイテム削除の確認モーダル -->
+  <div class="modal" id="itemDeleteModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="idelTitle">
+      <h3 id="idelTitle">アイテムを削除</h3>
+      <div class="muted">
+        以下のアイテムを削除します： <span class="tag" id="idelTarget"></span>
+        <div id="idelWarn" style="margin-top:.5rem; display:none; color:#fca5a5;">
+          このアイテムを獲得したユーザーがいますが、本当に削除しますか？<br>
+          ユーザーの獲得一覧からもこのアイテムは削除されます。
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn ghost" id="idelCancel">キャンセル</button>
+        <button class="btn" id="idelConfirm">削除</button>
       </div>
     </div>
   </div>
@@ -1532,8 +1562,9 @@ function renderItemGrid(){
     const key=keyOf(it.gacha,it.rarity,it.code);
     const skipped=skipHas(key);
     const hasImage=!!lookupVal(imgMap,key);
-    const card=document.createElement("div"); card.className="item-card";
-    card.innerHTML=`
+    const card = document.createElement("div"); 
+    card.className = "item-card";
+    card.innerHTML = `
       <div class="item-thumb" data-thumb-key="${key}">${thumbInnerHTML(it)}</div>
       <div class="item-code">${escapeHtml(it.code)}</div>
       <div class="muted"><span class="rarity ${it.rarity}">${it.rarity}</span></div>
@@ -1542,8 +1573,25 @@ function renderItemGrid(){
         <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
       </div>
       <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
-    card.querySelector('[data-action="primary"]').addEventListener("click",()=>{ const nowHas=!!lookupVal(imgMap,key); if(nowHas){ clearImage(it); } else { openImageModal(it); }});
-    card.querySelector('[data-action="skip"]').addEventListener("click",()=>toggleSkip(it));
+
+    card.querySelector('[data-action="primary"]').addEventListener("click", () => {
+      const nowHas = !!lookupVal(imgMap, key);
+      if (nowHas) { clearImage(it); } else { openImageModal(it); }
+    });
+    card.querySelector('[data-action="skip"]').addEventListener("click", () => toggleSkip(it));
+
+    // 追加：カード右上の削除（×）
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "close";
+    closeBtn.textContent = "×";
+    closeBtn.title = "このアイテムを削除";
+    closeBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openItemDeleteConfirm(it);
+    });
+    card.appendChild(closeBtn);
+
     grid.appendChild(card);
   }
   resolveThumbs(grid);
@@ -1848,6 +1896,76 @@ $("#delConfirm").addEventListener("click", ()=>{
   rebuildGachaCaches();
   renderTabs(); renderItemGrid(); renderUsersList(); saveAppStateDebounced();
 });
+
+/* ====== アイテム削除確認モーダル ====== */
+const itemDeleteModal = $("#itemDeleteModal");
+let pendingDeleteItem = null;
+
+function countUsersWithItem(gacha, rarity, code){
+  let n = 0;
+  for (const [user, gobj] of Object.entries(gData || {})){
+    const list = (((gobj||{})[gacha]||{}).items||{})[rarity] || [];
+    if (Array.isArray(list) && list.includes(code)) n++;
+  }
+  return n;
+}
+
+function openItemDeleteConfirm(it){
+  pendingDeleteItem = it;
+  $("#idelTarget").textContent = `${it.gacha} / ${it.rarity}:${it.code}`;
+  const warn = $("#idelWarn");
+  const usedBy = countUsersWithItem(it.gacha, it.rarity, it.code);
+  if (warn) warn.style.display = usedBy > 0 ? "block" : "none";
+  open(itemDeleteModal);
+}
+
+$("#idelCancel").addEventListener("click", () => {
+  pendingDeleteItem = null;
+  close(itemDeleteModal);
+});
+
+$("#idelConfirm").addEventListener("click", async () => {
+  const it = pendingDeleteItem;
+  pendingDeleteItem = null;
+  close(itemDeleteModal);
+  if (!it) return;
+
+  // 画像/リアグの掃除
+  try { await clearImage(it); } catch(e) { /* ignore */ }
+  skipDel(keyOf(it.gacha, it.rarity, it.code));
+
+  // カタログから削除
+  const cat = gCatalogByGacha[it.gacha] || [];
+  gCatalogByGacha[it.gacha] = cat.filter(x => !(x.rarity === it.rarity && x.code === it.code));
+
+  // 各ユーザーの集計から削除
+  for (const [user, gobj] of Object.entries(gData || {})){
+    const gi = gobj[it.gacha];
+    if (gi && gi.items && Array.isArray(gi.items[it.rarity])) {
+      gi.items[it.rarity] = gi.items[it.rarity].filter(c => c !== it.code);
+      if (gi.items[it.rarity].length === 0) delete gi.items[it.rarity];
+    }
+    // 獲得数（gHitCounts）からも削除
+    if (gHitCounts[user] && gHitCounts[user][it.gacha] && gHitCounts[user][it.gacha][it.rarity]) {
+      delete gHitCounts[user][it.gacha][it.rarity][it.code];
+      if (Object.keys(gHitCounts[user][it.gacha][it.rarity]).length === 0) delete gHitCounts[user][it.gacha][it.rarity];
+      if (Object.keys(gHitCounts[user][it.gacha]).length === 0) delete gHitCounts[user][it.gacha];
+    }
+    // （任意）ユーザー側のガチャが空になったら掃除
+    if (gData[user] && gData[user][it.gacha] && Object.keys(gData[user][it.gacha].items||{}).length === 0 && (gData[user][it.gacha].pulls||0) === 0) {
+      delete gData[user][it.gacha];
+    }
+    if (gData[user] && Object.keys(gData[user]).length === 0) delete gData[user];
+  }
+
+  // 再構築・描画・保存
+  rebuildGachaCaches();
+  renderTabs();
+  renderItemGrid();
+  renderUsersList();
+  saveAppStateDebounced();
+});
+
 
 /* ====== 画像モーダル（既存） ====== */
 const imageModal=$("#imageModal"); let tempPreviewURL="";
