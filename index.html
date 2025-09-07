@@ -303,9 +303,9 @@ button, a, [role="button"] {
   .image-actions .btn{ flex:1 1 0; }
 
   /* === Gacha Multi-Select (Popover) === */
-  .gacha-filter{ position:relative; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; }
-  .gacha-filter .gf-label{ white-space:nowrap; font-weight:700; }
-  .gacha-filter .gf-btn{ min-width:160px; max-width:60vw; text-overflow:ellipsis; overflow:hidden; }
+  .gacha-filter{ position:relative; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0;  --gf-font: .95rem; --gf-line: 1.1; }
+  .gacha-filter .gf-label{ white-space:nowrap; font-weight:700; font-size: var(--gf-font); line-height: var(--gf-line); }
+  .gacha-filter .gf-btn{ min-width:160px; max-width:60vw; text-overflow:ellipsis; overflow:hidden;   min-height: 0; height: auto; padding: 2px 12px; font-size: var(--gf-font); line-height: var(--gf-line); font-weight: 600;}
   @media (max-width: 600px){.gacha-filter .gf-btn{ max-width:72vw; }}
 
   /* Popover Panel */
@@ -328,6 +328,22 @@ button, a, [role="button"] {
   .gf-popover{ scrollbar-width:thin; }
   .gf-popover::-webkit-scrollbar{ height:8px; width:8px }
   .gf-popover::-webkit-scrollbar-thumb{ background:#2a2a36; border-radius:999px }
+
+  /* Usersパネル内のサブコントロール行 */
+  .user-subcontrols{
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin: 2px 0 10px;
+  }
+
+  /* 検索欄は行内で収まりよく。デスクトップは程よい幅、モバイルは横幅を譲る */
+  .user-subcontrols #userSearch{ max-width: 280px; flex: 0 1 280px; }
+  .user-subcontrols .user-search-label{ white-space:nowrap; }
+
+  .user-search{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap;/* ラベルは改行しない */flex: 0 1 360px; min-width: 220px;}
+  .user-search label{ white-space:nowrap; }
+  .user-search input{ flex: 1 1 240px; min-width: 120px; max-width: 100%; min-inline-size: 0;}
 </style>
 </head>
 <body>
@@ -359,15 +375,8 @@ button, a, [role="button"] {
           <div class="tag" id="summaryTag">未読込</div>
           <div style="flex:1"></div>
 
-          <div class="toggle"><input type="checkbox" id="hideMiss" class="switch"><span class="label">はずれを隠す</span></div>
-          <div class="toggle"><input type="checkbox" id="showCounts" class="switch"><span class="label">獲得数を表示</span></div>
-          <div class="toggle"><input type="checkbox" id="showSkipOnly" class="switch"><span class="label">リアグのみを表示</span></div>
-
           <label for="filterRarity">レア度:</label>
           <select id="filterRarity" class="select"></select>
-
-          <label for="userSearch">ユーザー検索:</label>
-          <input id="userSearch" type="text" placeholder="名前で検索..." style="max-width:260px" />
 
           <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
           <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
@@ -408,6 +417,25 @@ button, a, [role="button"] {
               <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
             </div>
           </div>
+          <div class="row user-subcontrols">
+            <div class="toggle">
+              <input type="checkbox" id="hideMiss" class="switch">
+              <span class="label">はずれを隠す</span>
+            </div>
+            <div class="toggle">
+              <input type="checkbox" id="showCounts" class="switch">
+              <span class="label">獲得数を表示</span>
+            </div>
+            <div class="toggle">
+              <input type="checkbox" id="showSkipOnly" class="switch">
+              <span class="label">リアグのみを表示</span>
+            </div>
+            <div class="user-search">
+              <label for="userSearch">ユーザー検索:</label>
+              <input id="userSearch" type="text" placeholder="名前で検索..." />
+            </div>
+          </div>
+
           <div id="usersList"></div>
         </section>
 
