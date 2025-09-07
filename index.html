@@ -303,47 +303,53 @@ button, a, [role="button"] {
   .image-actions .btn{ flex:1 1 0; }
 
   /* === Gacha Multi-Select (Popover) === */
-  .gacha-filter{ position:relative; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0;  --gf-font: .95rem; --gf-line: 1.1; }
-  .gacha-filter .gf-label{ white-space:nowrap; font-weight:700; font-size: var(--gf-font); line-height: var(--gf-line); }
-  .gacha-filter .gf-btn{ min-width:160px; max-width:60vw; text-overflow:ellipsis; overflow:hidden;   min-height: 0; height: auto; padding: 2px 12px; font-size: var(--gf-font); line-height: var(--gf-line); font-weight: 600;}
-  @media (max-width: 600px){.gacha-filter .gf-btn{ max-width:72vw; }}
+  /* === Multi-Select (ガチャ/レア度) 共通スタイル === */
+  .gacha-filter, .rarity-filter{
+    position:relative; display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0;
+    --gf-font:.95rem; --gf-line:1.1;
+  }
+  .gacha-filter .gf-label, .rarity-filter .gf-label{
+    white-space:nowrap; font-weight:700; font-size:var(--gf-font); line-height:var(--gf-line);
+  }
+  .gacha-filter .gf-btn, .rarity-filter .gf-btn{
+    min-width:160px; max-width:60vw; text-overflow:ellipsis; overflow:hidden;
+    min-height:0; height:auto; padding:2px 12px; font-size:var(--gf-font); line-height:var(--gf-line); font-weight:600;
+  }
+  @media (max-width:600px){
+    .gacha-filter .gf-btn, .rarity-filter .gf-btn{ max-width:72vw; }
+  }
 
-  /* Popover Panel */
-  .gf-popover{position:absolute; inset:auto auto auto 0; top:calc(100% + 8px); width:min(420px, 92vw); max-height:320px; overflow:auto; display:none; background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:8px; z-index: 90;}
-  .gacha-filter.open .gf-popover{ display:block; animation:gfFade .12s ease-out; }
+  /* Popover 共通（既存） */
+  .gf-popover{ position:absolute; inset:auto auto auto 0; top:calc(100% + 8px); width:min(420px,92vw); max-height:320px; overflow:auto; display:none; background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); padding:8px; z-index:90; }
+  .gacha-filter.open .gf-popover, .rarity-filter.open .gf-popover{ display:block; animation:gfFade .12s ease-out; }
   @keyframes gfFade{ from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none} }
-
-  /* List items */
-  .gf-item{display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; cursor:pointer; user-select:none; }
+  .gf-item{ display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; cursor:pointer; user-select:none; }
   .gf-item:hover{ background:#1b1b22; }
   .gf-item[aria-selected="true"]{ background:rgba(225,29,72,.12); border:1px solid var(--border); }
   .gf-check{ width:20px; height:20px; border-radius:6px; flex:0 0 20px; border:1px solid var(--border); background:#0f1016; display:inline-grid; place-items:center; font-weight:900; color:#fff; font-size:.85rem; }
   .gf-item[aria-selected="true"] .gf-check{ background:linear-gradient(180deg,#ef335d,#9f1239); border-color:#e11d48; }
   .gf-name{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-  /* “すべて/全解除”行（先頭に設置） */
   .gf-all{ font-weight:800; color:#f5f5f6; }
-
-  /* スクロールバー控えめ（対応ブラウザ） */
   .gf-popover{ scrollbar-width:thin; }
   .gf-popover::-webkit-scrollbar{ height:8px; width:8px }
   .gf-popover::-webkit-scrollbar-thumb{ background:#2a2a36; border-radius:999px }
+  .gf-popover.floating{position: fixed;/* 祖先の overflow を無視 */ left: 0; top: 0;/* JavaScriptで配置を上書き */ width: auto; max-width: min(420px, 92vw); max-height: min(320px, 70vh); display: block;/* JSで開閉制御 */ z-index: 999; /* 他UIより上 */}
 
-  /* Usersパネル内のサブコントロール行 */
-  .user-subcontrols{
-    align-items:center;
-    gap:10px;
-    flex-wrap:wrap;
-    margin: 2px 0 10px;
-  }
+  /* Users サブコントロール行 */
+  .user-subcontrols{display:flex; flex-direction: column;/* ← 縦積み */ align-items: flex-start; gap: 10px; margin: 2px 0 10px;}
+  .user-subcontrols #userSearch{ max-width:280px; flex:0 1 280px; }
+  .user-subcontrols .user-search-label{ white-space:nowrap; }
+  .user-search{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap; min-width:220px; flex-wrap: nowrap; }
+  .user-search input{ flex:1 1 auto; min-width:120px; max-width:100%; min-inline-size:0; padding: .4rem .6rem;/* 既定より小さめ */ min-height: 34px;/* 背を低く */ line-height: 1.2; }
+  .user-search label{ white-space:nowrap; }
+
+  /* サブコントロールの折りたたみ容器 */
+  .subcontrols-body{ overflow:hidden; height:auto; opacity:1; transition:height .22s ease, opacity .22s ease; }
 
   /* 検索欄は行内で収まりよく。デスクトップは程よい幅、モバイルは横幅を譲る */
   .user-subcontrols #userSearch{ max-width: 280px; flex: 0 1 280px; }
   .user-subcontrols .user-search-label{ white-space:nowrap; }
 
-  .user-search{ display:inline-flex; align-items:center; gap:8px; white-space:nowrap;/* ラベルは改行しない */flex: 0 1 360px; min-width: 220px;}
-  .user-search label{ white-space:nowrap; }
-  .user-search input{ flex: 1 1 240px; min-width: 120px; max-width: 100%; min-inline-size: 0;}
 </style>
 </head>
 <body>
@@ -375,9 +381,6 @@ button, a, [role="button"] {
           <div class="tag" id="summaryTag">未読込</div>
           <div style="flex:1"></div>
 
-          <label for="filterRarity">レア度:</label>
-          <select id="filterRarity" class="select"></select>
-
           <button class="btn subtle" id="exportMapBtn">画像マップを書き出し</button>
           <label class="btn ghost" for="importMapInput">画像マップを読み込む</label>
           <input type="file" id="importMapInput" accept="application/json,.json" style="display:none" />
@@ -406,33 +409,49 @@ button, a, [role="button"] {
         </section>
 
         <section class="panel" id="usersPanel" data-page="users">
-          <h2>ユーザーごとの獲得内訳</h2>
+          <h2 style="display:flex;align-items:center;gap:8px">
+            ユーザーごとの獲得内訳
+            <button class="icon-btn collapse-btn" id="subcontrolsToggle" aria-expanded="true" title="フィルタを折りたたむ/開く"></button>
+          </h2>
           <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
           <div class="sep"></div>
-          <div class="row" style="align-items:center; margin-bottom:8px">
-            <div class="gacha-filter" id="gachaFilterWrap">
-              <span class="gf-label">ガチャ絞り込み:</span>
-              <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
-                      aria-haspopup="listbox" aria-expanded="false">すべて</button>
-              <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
-            </div>
-          </div>
-          <div class="row user-subcontrols">
-            <div class="toggle">
-              <input type="checkbox" id="hideMiss" class="switch">
-              <span class="label">はずれを隠す</span>
-            </div>
-            <div class="toggle">
-              <input type="checkbox" id="showCounts" class="switch">
-              <span class="label">獲得数を表示</span>
-            </div>
-            <div class="toggle">
-              <input type="checkbox" id="showSkipOnly" class="switch">
-              <span class="label">リアグのみを表示</span>
-            </div>
-            <div class="user-search">
-              <label for="userSearch">ユーザー検索:</label>
-              <input id="userSearch" type="text" placeholder="名前で検索..." />
+
+          <!-- 折りたたみ対象のコンテナ -->
+          <div id="subcontrolsBody" class="subcontrols-body">
+            <div class="row user-subcontrols">
+              <!-- ① ガチャ絞り込み（移動） -->
+              <div class="gacha-filter" id="gachaFilterWrap">
+                <span class="gf-label">ガチャ絞り込み:</span>
+                <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
+                        aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+              </div>
+
+              <!-- ② レア度（新規：ガチャと同デザインのマルチセレクト） -->
+              <div class="rarity-filter" id="rarityFilterWrap">
+                <span class="gf-label">レア度:</span>
+                <button type="button" id="rarityFilterBtn" class="btn subtle gf-btn"
+                        aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                <div id="rarityPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+              </div>
+
+              <!-- ③ 既存トグル & 検索 -->
+              <div class="toggle">
+                <input type="checkbox" id="hideMiss" class="switch">
+                <span class="label">はずれを隠す</span>
+              </div>
+              <div class="toggle">
+                <input type="checkbox" id="showCounts" class="switch">
+                <span class="label">獲得数を表示</span>
+              </div>
+              <div class="toggle">
+                <input type="checkbox" id="showSkipOnly" class="switch">
+                <span class="label">リアグのみを表示</span>
+              </div>
+              <div class="user-search">
+                <label for="userSearch" class="user-search-label">ユーザー検索:</label>
+                <input id="userSearch" type="text" placeholder="名前で検索..." />
+              </div>
             </div>
           </div>
 
@@ -920,6 +939,10 @@ const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
 let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
 function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
 
+const LS_KEY_SUBCTRL = "user_subcontrols_collapsed_v1";
+let gSubCtrlCollapsed = !!loadLocalJSON(LS_KEY_SUBCTRL, false);
+function setSubCtrlCollapsed(v){ gSubCtrlCollapsed = !!v; saveLocalJSON(LS_KEY_SUBCTRL, gSubCtrlCollapsed); }
+
 /* === Gacha Filter UI (button + popover) === */
 const GachaFilter = (() => {
   let wrap, btn, pop;
@@ -941,7 +964,10 @@ const GachaFilter = (() => {
     // 外側クリックで閉じる
     document.addEventListener('pointerdown', (e)=>{
       if (!wrap?.classList.contains('open')) return;
-      if (!wrap.contains(e.target)) close();
+      const t = e.target;
+      // ★ ポップオーバーを body に移動している間も“内側”として扱う
+      if (wrap.contains(t) || pop.contains(t)) return;
+      close();
     });
 
     // 無操作で閉じる（ポップオーバー内の活動で延長）
@@ -960,10 +986,12 @@ const GachaFilter = (() => {
     autoCloseTimer = setTimeout(close, AUTO_CLOSE_MS);
   }
 
+  let cleanupPortal = null;
   function open(){
     if(!wrap) return;
     wrap.classList.add('open');
     btn.setAttribute('aria-expanded','true');
+    cleanupPortal = openFloatingPopover(wrap, btn, pop);  // ★ ここでポータル表示
     pop.focus();
     bumpAutoClose();
   }
@@ -971,6 +999,7 @@ const GachaFilter = (() => {
     if(!wrap) return;
     wrap.classList.remove('open');
     btn.setAttribute('aria-expanded','false');
+    if (cleanupPortal) { cleanupPortal(); cleanupPortal = null; } // ★ 復帰
     if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
   }
 
@@ -1063,6 +1092,176 @@ const GachaFilter = (() => {
            set onChange(fn){ onChange = fn; }, updateButtonLabel };
 })();
 document.addEventListener('DOMContentLoaded', () => GachaFilter.init());
+
+/* === Rarity Filter UI (button + popover) === */
+const RarityFilter = (() => {
+  let wrap, btn, pop;
+  let options = [];                 // ['UR','SSR',...]
+  let selected = '*';               // '*' or Set<string>
+  let autoCloseTimer = null;
+  const AUTO_CLOSE_MS = 1800;
+
+  function init(){
+    wrap = document.getElementById('rarityFilterWrap');
+    btn  = document.getElementById('rarityFilterBtn');
+    pop  = document.getElementById('rarityPopover');
+    if(!wrap || !btn || !pop) return;
+
+    btn.addEventListener('click', () => {
+      if (wrap.classList.contains('open')) close(); else open();
+    });
+    document.addEventListener('pointerdown', (e)=>{
+      if (!wrap?.classList.contains('open')) return;
+      const t = e.target;
+      // ★ ガチャと同様、浮かせたポップオーバー内クリックは閉じない
+      if (wrap.contains(t) || pop.contains(t)) return;
+      close();
+    });
+    ['pointerdown','pointermove','wheel','keydown'].forEach(ev=>{
+      pop.addEventListener(ev, bumpAutoClose, {passive:true});
+    });
+    btn.addEventListener('pointerdown', bumpAutoClose, {passive:true});
+    setOptions(options);
+  }
+  function bumpAutoClose(){ if (autoCloseTimer) clearTimeout(autoCloseTimer); autoCloseTimer = setTimeout(close, AUTO_CLOSE_MS); }
+
+  let cleanupPortal = null;
+
+  function open(){
+    if(!wrap) return;
+    wrap.classList.add('open');
+    btn.setAttribute('aria-expanded','true');
+    cleanupPortal = openFloatingPopover(wrap, btn, pop);
+    pop.focus();
+    bumpAutoClose();
+  }
+
+  function close(){
+    if(!wrap) return;
+    wrap.classList.remove('open');
+    btn.setAttribute('aria-expanded','false');
+    if (cleanupPortal) { cleanupPortal(); cleanupPortal = null; }
+    if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+  }
+
+  function setOptions(arr){
+    options = Array.from(new Set(arr.filter(Boolean)));
+    if (selected !== '*' && selected.size === 0) selected = '*';
+
+    if (pop){
+      pop.innerHTML = '';
+      const all = document.createElement('div');
+      all.className = 'gf-item gf-all';
+      all.setAttribute('role','option');
+      all.setAttribute('aria-selected', selected === '*' ? 'true' : 'false');
+      all.innerHTML = `<span class="gf-check">${selected==='*' ? '✓' : ''}</span><span class="gf-name">すべて（全選択/全解除）</span>`;
+      all.addEventListener('click', () => {
+        selected = (selected === '*') ? new Set() : '*';
+        updateButtonLabel(); renderItems(); notify();
+      });
+      pop.appendChild(all);
+
+      const hr = document.createElement('div');
+      hr.style.height='1px';
+      hr.style.background='linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent)';
+      hr.style.margin='6px 4px';
+      pop.appendChild(hr);
+
+      renderItems();
+    }
+    updateButtonLabel();
+  }
+
+  function renderItems(){
+    while (pop.children.length > 2) pop.removeChild(pop.lastChild);
+    const selSet = selected === '*' ? new Set(options) : new Set(selected);
+    options.forEach(name => {
+      const row = document.createElement('div');
+      row.className='gf-item';
+      row.setAttribute('role','option');
+      row.setAttribute('aria-selected', selSet.has(name) ? 'true' : 'false');
+      row.innerHTML = `<span class="gf-check">${selSet.has(name)?'✓':''}</span><span class="gf-name" title="${name}">${name}</span>`;
+      row.addEventListener('click', () => {
+        let s = selected === '*' ? new Set(options) : new Set(selected);
+        if (s.has(name)) s.delete(name); else s.add(name);
+        selected = s.size === 0 ? '*' : s;
+        updateButtonLabel(); renderItems(); notify();
+      });
+      pop.appendChild(row);
+    });
+  }
+  function updateButtonLabel(){
+    if (!btn) return;
+    if (selected === '*') { btn.textContent = 'すべて'; return; }
+    const n = selected.size;
+    btn.textContent = (n === 1) ? Array.from(selected)[0] : `${n}項目`;
+  }
+  function getSelection(){ return selected === '*' ? '*' : new Set(selected); }
+  function setSelection(v){ selected = (v === '*') ? '*' : new Set(v); updateButtonLabel(); renderItems(); }
+
+  let onChange = null;
+  function notify(){ if (typeof onChange === 'function') onChange(getSelection()); }
+
+  return { init, setOptions, getSelection, setSelection, open, close, set onChange(fn){ onChange=fn; } };
+})();
+document.addEventListener('DOMContentLoaded', () => RarityFilter.init());
+
+// === 共通: ポップオーバーを body にポータル表示して位置決め ===
+function openFloatingPopover(wrapEl, btnEl, popEl){
+  // 既に開いていたら一旦リセット
+  if (!wrapEl || !btnEl || !popEl) return () => {};
+  // body 直下へ移動
+  document.body.appendChild(popEl);
+  popEl.classList.add('floating');
+  popEl.style.visibility = 'hidden';
+  popEl.style.display = 'block';
+
+  function place(){
+    const r = btnEl.getBoundingClientRect();
+    const margin = 8;
+    // 横幅はボタン以上
+    popEl.style.minWidth = Math.max(r.width, 160) + 'px';
+    // 一旦配置して高さ計測
+    popEl.style.left = Math.round(r.left) + 'px';
+    popEl.style.top  = Math.round(r.bottom + margin) + 'px';
+    const ph = popEl.offsetHeight;
+    // 下に入らなければ上に出す
+    let top = r.bottom + margin;
+    if (top + ph > window.innerHeight) {
+      top = Math.max(8, r.top - ph - margin);
+    }
+    // 右端はみ出し補正
+    let left = r.left;
+    const pw = popEl.offsetWidth;
+    if (left + pw > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - pw - 8);
+    }
+    popEl.style.left = Math.round(left) + 'px';
+    popEl.style.top  = Math.round(top) + 'px';
+  }
+  place();
+  popEl.style.visibility = '';
+
+  // スクロール/リサイズで追従
+  const onMove = () => place();
+  window.addEventListener('scroll', onMove, true);
+  window.addEventListener('resize', onMove);
+
+  // ESCで閉じる
+  const onKey = (e)=>{ if(e.key==='Escape') cleanup(); };
+  window.addEventListener('keydown', onKey);
+
+  // 後処理（元の位置へ戻す）
+  function cleanup(){
+    window.removeEventListener('scroll', onMove, true);
+    window.removeEventListener('resize', onMove);
+    window.removeEventListener('keydown', onKey);
+    popEl.classList.remove('floating');
+    popEl.style.cssText = '';
+    wrapEl.appendChild(popEl);
+  }
+  return cleanup;
+}
 
 /* ====== JSON 読み込み／UI 再描画 ====== */
 function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
@@ -1258,16 +1457,28 @@ function rebuildGachaCaches(){
     }
   }
 
-  // ★ レアリティセレクトも動的に更新
-  const selR=$("#filterRarity");
-  if(selR){
-    selR.innerHTML = '<option value="*">すべて</option>' + gRarityOrder.map(r=>`<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("");
+  // ★ レアリティ（マルチセレクト）の候補更新
+  {
+    const prev = getSelectedRarities();
+    RarityFilter.setOptions(gRarityOrder);
+    if (prev === '*') {
+      RarityFilter.setSelection('*');
+    } else if (prev && prev.size) {
+      const keep = new Set([...prev].filter(r => gRarityOrder.includes(r)));
+      RarityFilter.setSelection(keep.size ? keep : '*');
+    } else {
+      RarityFilter.setSelection('*');
+    }
   }
 }
 
 // 現在のガチャ選択を取得：'*' or Set<string>
 function getSelectedGachas(){
   return GachaFilter.getSelection();
+}
+
+function getSelectedRarities(){
+  return RarityFilter.getSelection();
 }
 
 // '*（すべて）' と他ガチャを同時に選べた時の調停 & 空選択のフォールバック
@@ -1313,8 +1524,10 @@ function renderItemGrid(){
   const grid=$("#itemGrid"); if(!grid){ return; }
   grid.innerHTML="";
   if(!selectedGacha){ grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。"; return; }
-  const rFilter=$("#filterRarity").value;
-  const list=(gItemsByGacha[selectedGacha]||[]).filter(it=>rFilter==="*"||it.rarity===rFilter);
+  const rSel = getSelectedRarities();
+  const list = (gItemsByGacha[selectedGacha]||[]).filter(it => {
+    return (rSel === "*" || rSel.has(it.rarity));
+  });
   for(const it of list){
     const key=keyOf(it.gacha,it.rarity,it.code);
     const skipped=skipHas(key);
@@ -1343,7 +1556,10 @@ function renderUsersList(){
   const empty = Object.keys(gData).length===0;
   if(empty){ wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>'; return; }
 
-  const selectedGachas = getSelectedGachas(); const rFilter = $("#filterRarity").value; const hideMiss = $("#hideMiss").checked; const q = ($("#userSearch").value || "").trim();
+  const selectedGachas = getSelectedGachas();
+  const rSel = getSelectedRarities();
+  const hideMiss = $("#hideMiss").checked;
+  const q = ($("#userSearch").value || "").trim();
   const showCounts = $("#showCounts")?.checked;
   const showSkipOnly = $("#showSkipOnly")?.checked;
   
@@ -1510,8 +1726,8 @@ function renderUsersList(){
           list = list.filter(code => skipHas(keyOf(gacha, rarity, code)));
         }
         if(!list.length) return; 
-        if(hideMiss && rarity==="はずれ") return; 
-        if(rFilter!=="*" && rFilter!==rarity) return;
+        if (hideMiss && rarity === "はずれ") return;
+        if (rSel !== "*" && !rSel.has(rarity)) return;
 
         const row=document.createElement("div"); row.className="rarity-row";
         const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
@@ -1892,6 +2108,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (inp) inp.value = ""; // 同じファイルを連続選択可
     }
   });
+  RarityFilter.onChange = () => { renderItemGrid(); renderUsersList(); };
   GachaFilter.onChange = () => { renderUsersList(); };
 });
 
@@ -1911,6 +2128,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive:false });
     tabsWrap.__boundPointer = true;
   }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const toggle = document.getElementById('subcontrolsToggle');
+  const body   = document.getElementById('subcontrolsBody');
+  if (!toggle || !body) return;
+
+  // 初期状態
+  if (gSubCtrlCollapsed) {
+    body.style.height = "0px"; body.style.opacity = "0";
+    toggle.setAttribute('aria-expanded','false');
+  } else {
+    body.style.height = "auto"; body.style.opacity = "1";
+    toggle.setAttribute('aria-expanded','true');
+  }
+
+  toggle.addEventListener('click', () => {
+    const isOpen = toggle.getAttribute('aria-expanded') !== 'false';
+    if (isOpen){
+      const h = body.scrollHeight;
+      body.style.height = h + "px"; void body.offsetHeight;
+      body.style.height = "0px"; body.style.opacity = "0";
+      const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
+        toggle.setAttribute('aria-expanded','false'); setSubCtrlCollapsed(true); };
+      body.addEventListener('transitionend', onEnd);
+    } else {
+      body.style.height = "0px"; body.style.opacity = "0"; void body.offsetHeight;
+      const h = body.scrollHeight;
+      body.style.height = h + "px"; body.style.opacity = "1";
+      const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
+        body.style.height = "auto"; toggle.setAttribute('aria-expanded','true'); setSubCtrlCollapsed(false); };
+      body.addEventListener('transitionend', onEnd);
+    }
+  });
 });
 
 
@@ -2136,7 +2387,6 @@ function parseFinalSummaryText(text){
 }
 
 /* ====== フィルタ＆その他イベント ====== */
-$("#filterRarity").addEventListener("change", ()=>{ renderItemGrid(); renderUsersList(); });
 $("#hideMiss").addEventListener("change", renderUsersList);
 $("#userSearch").addEventListener("input", renderUsersList);
 $("#showCounts")?.addEventListener("change", renderUsersList);
