@@ -158,6 +158,7 @@
     origMap          = snap.origMap || {};
     skipSet          = new Set(snap.skip || []);
     gRarityOrder     = snap.rarityOrder || gRarityOrder;
+    riaguMeta        = snap.riaguMeta || {};     
 
     // 2) バイナリをIDBに復元（origMap に対応づけ）
     for (const [key, rel] of Object.entries(mapping)){
@@ -187,12 +188,14 @@
     saveLocalJSON(LS_KEY_IMG, imgMap);
     saveLocalJSON(LS_KEY_ORIG, origMap);
     saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
+    saveLocalJSON(LS_KEY_RIAGU_META, riaguMeta);
 
     // 4) UI 再構築
     rebuildGachaCaches();
     renderTabs();
     renderItemGrid();
     renderUsersList();
+    if (typeof renderRiaguPanel === 'function') renderRiaguPanel();
 
     if (btnEl){ btnEl.disabled = false; btnEl.textContent = "全体インポート"; }
   }
@@ -249,11 +252,11 @@
       state: {
         gData, gCatalogByGacha, gHitCounts,
         imgMap, origMap, skip: Array.from(skipSet),
-        rarityOrder: gRarityOrder
+        rarityOrder: gRarityOrder,
+        riaguMeta   // ★追加
       },
-      blobs: {} // key -> 相対パス
+      blobs: {}
     };
-
     const zip = new JSZip();
 
     // 2) 原本バイナリ（origMap優先、無ければimgMapのidb）を /blobs/ に入れる
