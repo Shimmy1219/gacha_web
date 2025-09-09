@@ -811,204 +811,28 @@ button, a, [role="button"] {
       </div>
     </div>
   </div>
-
-
-<!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
 <script type="module">
-  import { upload } from 'https://esm.sh/@vercel/blob@0.23.4/client';
+  import { initSaveModal } from "/src/blob-upload.js";
+  initSaveModal();
+</script>
+<script type="module">
+  import {
+    parseCatalogText,
+    splitLiveBlocks,
+    parseLiveBlock,
+    parseFinalSummaryText,
+    b64ToBytes
+  } from "/src/parsers.js";
 
-  // ====== CSRF取得（このモジュール内で完結）======
-  let csrfToken = '';
-  async function ensureCsrf() {
-    if (csrfToken) return csrfToken;
-    const r = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
-      credentials: 'same-origin',
-      cache: 'no-store'
-      });
-    const j = await r.json();
-    if (!r.ok || !j?.token) throw new Error('CSRF token fetch failed');
-    csrfToken = j.token;
-    return csrfToken;
-  }
-
-  // ====== メタ（ユーザー識別 & 用途）======
-  function getUserId() {
-    return (window.localStorage.getItem('uid') || 'guest');
-  }
-  const PURPOSE = 'zips';
-  const RECEIVE_TOKEN_TTL_DAYS = 7; // 共有リンクの既定有効期限（必要なら環境に合わせて変更）
-
-  // ====== 受け取り用リンク発行API呼び出し ======
-  async function issueReceiveShareUrl({ url, name, purpose = PURPOSE, validUntil }) {
-    await ensureCsrf();
-    const body = {
-      url,
-      name,
-      purpose,
-      validUntil: validUntil || new Date(Date.now() + RECEIVE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
-      csrf: csrfToken
-    };
-    const res = await fetch('/api/receive/token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(body)
-    });
-    const j = await res.json().catch(()=> ({}));
-    if (!res.ok || !j?.ok) {
-      const msg = j?.error || `Token API failed (${res.status})`;
-      throw new Error(msg);
-    }
-    // j: { ok:true, token, shareUrl, exp }
-    return j;
-  }
-
-  // ====== 公開ブリッジ：ZIP Blob を Vercel Blob へ直送 ======
-  // 使い方: const put = await window.__vercelBlobUpload(filename, blob)
-  window.__vercelBlobUpload = async (filename, blob) => {
-    await ensureCsrf();
-    const userId = getUserId();
-    const put = await upload(filename, blob, {
-      access: 'public',
-      multipart: true,                 // 100–200MB想定のためmultipartを有効化
-      contentType: 'application/zip',
-      handleUploadUrl: '/api/blob/upload',
-      clientPayload: JSON.stringify({ csrf: csrfToken, userId, purpose: PURPOSE })
-    });
-    return put; // { url, downloadUrl, pathname, ... }
-  };
-
-  // ====== モーダル内UI制御 ======
-  const saveOptionModal = document.getElementById('saveOptionModal');
-  const closeBtn   = document.getElementById('saveOptClose');
-  const saveBtn    = document.getElementById('saveDeviceBtn');
-  const uploadBtn  = document.getElementById('uploadBlobBtn');
-  const resultBox  = document.getElementById('uploadResult');
-  const urlLink    = document.getElementById('uploadUrlLink');
-  const urlText    = document.getElementById('uploadUrlText');
-  const copyBtn    = document.getElementById('copyUploadUrlBtn');
-
-  // 閉じる
-  closeBtn?.addEventListener('click', () => close(saveOptionModal));
-
-  // 追加：ユーザーキャンセル検出（各ブラウザの文言に広めに対応）
-  function isUserAbort(err){
-    const msg = String(err?.message || err || '').toLowerCase();
-    return (
-      err?.name === 'AbortError' ||
-      /aborted a request|user aborted|user canceled|user cancelled|キャンセル/.test(msg)
-    );
-  }
-
-  // デバイス保存
-  saveBtn?.addEventListener('click', async () => {
-    const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
-    if (!user || !gobj) return;
-
-    const old = saveBtn.textContent;
-    saveBtn.disabled = true; saveBtn.textContent = '保存準備…';
-    try {
-      const { blob } = await buildZipForUser(user, gobj);
-      const filename = `${sanitize(user)}_gacha.zip`;
-
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: filename,
-            types: [{ description:'ZIP archive', accept:{ 'application/zip':['.zip'] } }]
-          });
-          const w = await handle.createWritable(); await w.write(blob); await w.close();
-        } catch (e) {
-          if (!isUserAbort(e)) throw e; // キャンセルは黙って終了
-        }
-      } else if (navigator.canShare) {
-        const file = new File([blob], filename, { type:'application/zip' });
-        if (navigator.canShare({ files:[file] })) {
-          try {
-            await navigator.share({ files:[file], title: filename });
-          } catch (e) {
-            if (!isUserAbort(e)) throw e; // シェアのキャンセルも無視
-          }
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href = url; a.download = filename;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
-        }
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 2000);
-      }
-    } catch (e) {
-      alert('保存に失敗: ' + (e?.message || e));
-    } finally {
-      saveBtn.disabled = false; saveBtn.textContent = old;
-    }
-  });
-
-  // ZIPをアップロード → 受け取り用リンク発行 → UI表示
-  uploadBtn?.addEventListener('click', async () => {
-    const user = window.__saveTargetUser, gobj = window.__saveTargetGobj;
-    if (!user || !gobj) return;
-
-    const old = uploadBtn.textContent;
-    uploadBtn.disabled = true; uploadBtn.textContent = 'アップロード中…';
-    try {
-      // 1) ZIP生成
-      const { blob } = await buildZipForUser(user, gobj);
-      const filename = `${sanitize(user)}_gacha.zip`;
-
-      // 2) Vercel Blobへ直送アップロード
-      const put = await window.__vercelBlobUpload(filename, blob);
-      const downloadUrl = put.downloadUrl || put.url;
-      if (!downloadUrl) throw new Error('upload response has no downloadUrl');
-
-      // 3) 受け取り用リンクを発行（サーバが shareUrl を返す）
-      const tokenRes = await issueReceiveShareUrl({
-        url: downloadUrl,
-        name: filename,
-        purpose: PURPOSE
-        // validUntil は既定の7日（RECEIVE_TOKEN_TTL_DAYS）をサーバ側で運用/丸め込み
-      });
-      const shareUrl = tokenRes?.shareUrl || '';
-      if (!shareUrl) throw new Error('Token API returned no shareUrl');
-
-      // 4) ユーザー別の最新URLとして保存（以後、一覧の「URLをコピー」で共有リンクをコピー）
-      setLastUploadUrl(user, shareUrl);
-      renderUsersList();
-
-      // 5) UI反映（受け取り用URLを表示）
-      if (resultBox && urlLink) {
-        resultBox.style.display = 'block';
-        urlLink.href = shareUrl;
-        urlLink.title = shareUrl;      // ホバーで全体を確認
-        if (urlText) urlText.textContent = shareUrl;
-        else urlLink.textContent = shareUrl; // ★ フォールバック（#uploadUrlText が無い環境でも表示）
-      }
-    } catch (e) {
-      console.error(e);
-      alert('アップロード/共有リンク発行に失敗: ' + (e?.message || e));
-    } finally {
-      uploadBtn.disabled = false; uploadBtn.textContent = old;
-    }
-  });
-
-  // URLコピー（受け取り用URLをコピー）
-  copyBtn?.addEventListener('click', async () => {
-    const url = urlLink?.href || '';
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      copyBtn.textContent = 'コピーしました';
-      setTimeout(() => (copyBtn.textContent = 'URLをコピー'), 1200);
-    } catch {
-      window.prompt('このURLをコピーしてください', url);
-    }
+  // 互換維持：既存の index.html 内の関数呼び出しをそのまま動かす
+  Object.assign(window, {
+    parseCatalogText,
+    splitLiveBlocks,
+    parseLiveBlock,
+    parseFinalSummaryText,
+    b64ToBytes
   });
 </script>
-
 <script>
 /* ====== 小ユーティリティ ====== */
 const $ = (sel, el=document) => el.querySelector(sel);
@@ -2747,88 +2571,6 @@ function mergeIntoGData(delta){
   saveAppStateDebounced();
 }
 
-/* ====== 解析: 出現アイテム一覧 ======
-   行の並びが ①タブ区切り（1\tR\t7.5%\tC）
-            または ②縦4行（1 / R / 7.5% / C） を両対応 */
-function parseCatalogText(text){
-  const items = [];
-  const clean = text.replace(/\r/g,'').replace(/[ \t]+\n/g,'\n').trim();
-  // ① タブ区切り
-  const reTab = /^\s*\d+\s*\t\s*([^\t]+)\t([^\t\n]+)\t([^\t\n]+)\s*$/gm;
-  let m;
-  while((m = reTab.exec(clean)) !== null){
-    const rarity=(m[1]||"").trim(); const code=(m[3]||"").trim();
-    if(rarity) items.push({rarity, code});
-  }
-  if(items.length>0) return items;
-
-  // ② 縦4行
-  const lines = clean.split(/\n+/);
-  // ヘッダ除去
-  while(lines.length && /No\./.test(lines[0])) lines.shift();
-  while(lines.length && /レアリティ|景品名|出現率/.test(lines[0])) lines.shift();
-
-  for(let i=0;i+3<lines.length;i++){
-    const a=lines[i].trim(), b=lines[i+1].trim(), c=lines[i+2].trim(), d=lines[i+3].trim();
-    if(/^\d+$/.test(a) && b && d){ items.push({rarity:b, code:d}); i+=3; }
-  }
-  return items;
-}
-
-/* ====== 解析: リアルタイム結果（1ブロック） ====== */
-function splitLiveBlocks(text){
-  const clean = text.replace(/\r/g, '').trim();
-  // 「#なまずつーるず」(末尾に空白があっても可) だけを区切りに採用
-  return clean
-    .split(/#なまずつーるず[^\S\r\n]*/g)
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-function parseLiveBlock(block){
-  const lines = block.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-  if(lines.length<3) return null;
-  const gacha = lines[0];
-  const mUser = /^(.+?)\s*([0-9]+)\s*連$/.exec(lines[1]);
-  if(!mUser) return null;
-  const user = mUser[1].trim(); const pulls = parseInt(mUser[2],10)||0;
-  const items = {};
-  const counts = {}; // counts[rarity][code] = number
-
-  for(let i=2;i<lines.length;i++){
-    const line = lines[i];
-    const m = /【([^】]+)】\s*([^\s　]+)[\s　]+(\d+)個?/.exec(line);
-    if(!m) continue;
-    const rarity=m[1].trim(), code=m[2].trim(), num=parseInt(m[3],10)||0;
-    items[rarity]=items[rarity]||[]; if(!items[rarity].includes(code)) items[rarity].push(code);
-    counts[rarity]=counts[rarity]||{}; counts[rarity][code]=(counts[rarity][code]||0)+num;
-  }
-  return {gacha,user,pulls,items,counts};
-}
-
-/* ====== 解析: 最終結果一覧 ======
-   構造： (数字) → (ユーザー名) → 多数の「番号\tレアリティ\t景品\t個数」行 → 次の (数字) ... */
-function parseFinalSummaryText(text){
-  const lines = text.replace(/\r/g,'').split(/\n/).map(s=>s.trim());
-  const out = [];
-  // ヘッダをスキップ
-  let i=0; while(i<lines.length && (/^ガチャ$/.test(lines[i]) || /^No\./.test(lines[i]) || /名前$/.test(lines[i]) || /レアリティ/.test(lines[i]))) i++;
-  while(i<lines.length){
-    // 数字行
-    if(!/^\d+$/.test(lines[i]||"")){ i++; continue; }
-    i++;
-    const user = (lines[i++]||"").trim(); if(!user){ continue; }
-    const entries=[];
-    while(i<lines.length){
-      const s=lines[i];
-      if(/^\d+$/.test(s)) break;  // 次ユーザー
-      const m=/^\s*\d+\s*\t\s*([^\t]+)\t([^\t]+)\t(\d+)\s*$/.exec(s);
-      if(m){ entries.push({rarity:m[1].trim(), code:m[2].trim(), count:parseInt(m[3],10)||0}); i++; }
-      else { i++; }
-    }
-    if(entries.length) out.push({user, entries});
-  }
-  return out;
-}
 
 /* ====== フィルタ＆その他イベント ====== */
 $("#hideMiss").addEventListener("change", renderUsersList);
@@ -2861,62 +2603,12 @@ $("#clearMapBtn").addEventListener("click", async ()=>{
     renderItemGrid(); renderUsersList();
   }
 });
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js', { type: 'module' });
-
-      // ★ ページ表示時・可視化時・定期的にアップデートチェック
-      reg.update();
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') reg.update();
-      });
-      setInterval(() => reg.update(), 60 * 60 * 1000); // 1時間おき
-
-      // ★ 新SWが waiting になったら即座に skipWaiting を依頼
-      reg.addEventListener('updatefound', () => {
-        const sw = reg.installing;
-        if (!sw) return;
-        sw.addEventListener('statechange', () => {
-          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
-            sw.postMessage({ type: 'SKIP_WAITING' });
-          }
-        });
-      });
-
-      // ★ controller が切り替わったら自動リロード（1回だけ）
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        // SPA の状態保持が必要なら、ここで軽いダイアログを挟むのも可
-        window.location.reload();
-      });
-
-      // 受信ログ（任意）
-      navigator.serviceWorker.addEventListener('message', (ev) => {
-        if (ev.data?.type === 'SW_ACTIVATED') {
-          console.log('[SW] activated:', ev.data.version);
-        }
-      });
-    } catch (e) {
-      console.warn('SW registration failed', e);
-    }
-  });
-}
-
-// --- TXT(base64 + DEFLATE raw) を復元して取り込む ---
-
-// base64 → Uint8Array（URL-safe/改行を除去）
-function b64ToBytes(b64){
-  const s = (b64||"").replace(/\s+/g,'').replace(/-/g,'+').replace(/_/g,'/');
-  const pad = s.length % 4 ? 4 - (s.length % 4) : 0;
-  const bin = atob(s + '='.repeat(pad));
-  const arr = new Uint8Array(bin.length);
-  for (let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
-  return arr;
-}
+</script>
+<script type="module">
+  import { initPWA } from "/src/pwa.js";
+  initPWA();
+</script>
+<script>
 
 // 外部state(JSON) → 既存構造へ取り込み
 async function importFromExternalState(state){
@@ -3001,45 +2693,6 @@ async function importFromExternalState(state){
     alert("取り込みに失敗しました: " + (err?.message || err));
   }
 }
-/* --- PWA(standalone) × モバイル端末のみで、ズーム挙動を抑止 --- */
-(function () {
-  // “モバイル相当”かつ PWA(standalone) 判定
-  const isMobile =
-    window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
-  const isStandalone =
-    window.matchMedia('(display-mode: standalone)').matches || // PWA（多くのブラウザ）
-    (typeof navigator.standalone === 'boolean' && navigator.standalone === true); // iOS Safari
-
-  if (!isMobile || !isStandalone) return;
-
-  // 入力系はズーム抑止の対象外
-  const isInteractive = (el) =>
-    !!el.closest('input, textarea, select, button, [role="button"], [contenteditable="true"], .allow-zoom, .tab, #gachaTabs');
-
-  // ダブルタップズーム抑止
-  let lastTouchEnd = 0;
-  document.addEventListener(
-    'touchend',
-    (e) => {
-      if (isInteractive(e.target)) return;
-      const now = Date.now();
-      if (now - lastTouchEnd <= 300) e.preventDefault();
-      lastTouchEnd = now;
-    },
-    { passive: false }
-  );
-
-  // ピンチズーム抑止（2本指開始をキャンセル）
-  document.addEventListener(
-    'touchstart',
-    (e) => {
-      if (isInteractive(e.target)) return;
-      if (e.touches.length > 1) e.preventDefault();
-    },
-    { passive: false }
-  );
-})();
-
 </script>
 <script>
 /* App⇔モジュールのブリッジ（let 変数を window へ安全に受け渡す） */
