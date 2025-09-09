@@ -414,7 +414,7 @@ button, a, [role="button"] {
     opacity: 0; pointer-events: none;
     transition: transform .28s ease, opacity .28s ease;
   }
-  #mainUI[data-gacha-open="1"] #gachaPanel{
+  #mainUI[data-gacha-open="1"] ~ #gachaPanel{
     transform: translateY(0);
     opacity: 1; pointer-events: auto;
   }
@@ -1702,18 +1702,41 @@ $("#idelConfirm").addEventListener("click", async () => {
 });
 
 
-/* ====== 画像モーダル（既存） ====== */
-const imageModal=$("#imageModal"); let tempPreviewURL="";
+/* ====== 画像モーダル（共通ヘルパーに統一） ====== */
+const imageModal = $("#imageModal");
+let tempPreviewURL = "";
+
 function openImageModal(it){
-  const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)) return;
-  currentModalTarget=it; $("#modalTarget").textContent=`${it.gacha} / ${it.rarity}:${it.code}`;
-  const cur=immediateSrcFor(k); $("#modalPreview").src=cur||""; $("#modalStatus").textContent=(lookupVal(imgMap,k)?"設定済み":"未設定");
-  $("#fileInput").value=""; $("#urlInput").value=(cur && !cur.startsWith("data:"))?cur:"";
-  imageModal.classList.add("show"); imageModal.setAttribute("aria-hidden","false");
+  const k = keyOf(it.gacha, it.rarity, it.code);
+  if (skipHas(k)) return;
+
+  currentModalTarget = it;
+  $("#modalTarget").textContent = `${it.gacha} / ${it.rarity}:${it.code}`;
+
+  const cur = immediateSrcFor(k);
+  $("#modalPreview").src = cur || "";
+  $("#modalStatus").textContent = (lookupVal(imgMap, k) ? "設定済み" : "未設定");
+
+  $("#fileInput").value = "";
+  $("#urlInput").value = (cur && !cur.startsWith("data:")) ? cur : "";
+
+  // ★ここがポイント：共通 open() を使う
+  open(imageModal);
 }
-function closeImageModal(){ imageModal.classList.remove("show"); imageModal.setAttribute("aria-hidden","true"); if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; } }
+
+function closeImageModal(){
+  // ★共通 close() を使いつつ、プレビューURLの後始末は維持
+  close(imageModal);
+  if (tempPreviewURL) {
+    URL.revokeObjectURL(tempPreviewURL);
+    tempPreviewURL = "";
+  }
+}
+
 $("#closeBtn").addEventListener("click", closeImageModal);
-imageModal.addEventListener("click",(e)=>{ if(e.target===imageModal) closeImageModal(); });
+imageModal.addEventListener("click", (e) => {
+  if (e.target === imageModal) closeImageModal();
+});
 
 $("#fileInput").addEventListener("change", async ()=>{
   if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; }
@@ -2348,7 +2371,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* === PC用 ガチャFAB（中央下）。非表示条件：スクロール中＋モーダル中のみ === */
-const gachaFab = document.getElementById('gachaFab');
+let gachaFab = null;
 
 function canShowFab(){
   const main = window.mainUI || getMainUI();
@@ -2357,30 +2380,34 @@ function canShowFab(){
   if (document.body.classList.contains('modal-open')) return false;
   return true;
 }
-function hideFab(){ gachaFab?.classList.remove('visible'); }
-function showFab(){ if (canShowFab()) gachaFab?.classList.add('visible'); }
+function _$fab(){ return gachaFab || (gachaFab = document.getElementById('gachaFab')); }
+function hideFab(){ _$fab()?.classList.remove('visible'); }
+function showFab(){ if (canShowFab()) _$fab()?.classList.add('visible'); }
 
 let _fabScrollTimer = null;
 function bumpFab(){
   hideFab();
   clearTimeout(_fabScrollTimer);
-  _fabScrollTimer = setTimeout(showFab, 1000); // スクロール後1秒で“ふわっ”
+  _fabScrollTimer = setTimeout(showFab, 1000); // スクロール停止後に“ふわっ”
 }
 
-// スクロール/ホイールで非表示→停止後に再表示
 window.addEventListener('scroll', bumpFab, { passive:true });
 window.addEventListener('wheel',  bumpFab, { passive:true });
 
-// 初期表示（起動完了後）
-document.addEventListener('DOMContentLoaded', ()=> setTimeout(showFab, 800));
+document.addEventListener('DOMContentLoaded', () => {
+  gachaFab = document.getElementById('gachaFab');
+  if (!gachaFab) return;
 
-// FABクリック → ガチャパネルをスライドイン
-gachaFab?.addEventListener('click', () => {
-  const main = window.mainUI || getMainUI(); if(!main) return;
-  main.setAttribute('data-gacha-open', '1');
-  // ページが開いている間はFABは見えていても役目が重複するので念のため隠す
-  hideFab();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 初期表示（起動完了後）
+  setTimeout(showFab, 800);
+
+  // FABクリック → ガチャパネルをスライドイン
+  gachaFab.addEventListener('click', () => {
+    const main = window.mainUI || getMainUI(); if(!main) return;
+    main.setAttribute('data-gacha-open', '1');
+    hideFab();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 });
 
 // Escで閉じる（戻れる導線）
