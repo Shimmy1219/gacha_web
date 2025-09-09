@@ -87,7 +87,10 @@ function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 18
       selected = next.size === 0 ? '*' : next;
     }
     updateButtonLabel();
-    if (pop) renderItems();
+    // まだヘッダ（「すべて」）が無い段階では描画しない（重複防止）
+    if (pop && pop.querySelector('.gf-all')) {
+      renderItems();
+    }
   }
 
   function getSelection(){ return selected === '*' ? '*' : new Set(selected); }
@@ -167,8 +170,14 @@ function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 18
 
   function open(){
     if (!wrap || !btn || !pop) return;
-    // まだ未構築なら初回構築
-    if (pop.children.length === 0) buildOnce();
+    // ヘッダ未構築なら一度クリアしてから初期構築
+    if (!pop.querySelector('.gf-all')) {
+      pop.innerHTML = '';
+      buildOnce();
+    } else {
+      // すでに構築済みなら、候補や選択状態の変更を反映
+      renderItems();
+    }
 
     // body 直下にフローティング表示
     detachFloating = openFloatingPopover(wrap, btn, pop);
