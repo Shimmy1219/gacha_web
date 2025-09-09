@@ -35,7 +35,7 @@ export function splitLiveBlocks(text){
     .map(s => s.trim())
     .filter(Boolean);
 }
-function parseLiveBlock(block){
+export function parseLiveBlock(block){
   const lines = block.split(/\n+/).map(s=>s.trim()).filter(Boolean);
   if(lines.length<3) return null;
   const gacha = lines[0];

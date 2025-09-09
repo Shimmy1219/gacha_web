@@ -885,10 +885,6 @@ const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
 let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
 function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
 
-const LS_KEY_SUBCTRL = "user_subcontrols_collapsed_v1";
-let gSubCtrlCollapsed = !!loadLocalJSON(LS_KEY_SUBCTRL, false);
-function setSubCtrlCollapsed(v){ gSubCtrlCollapsed = !!v; saveLocalJSON(LS_KEY_SUBCTRL, gSubCtrlCollapsed); }
-
 /* ====== JSON 読み込み／UI 再描画 ====== */
 function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
 
@@ -2041,40 +2037,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('subcontrolsToggle');
-  const body   = document.getElementById('subcontrolsBody');
-  if (!toggle || !body) return;
-
-  // 初期状態
-  if (gSubCtrlCollapsed) {
-    body.style.height = "0px"; body.style.opacity = "0";
-    toggle.setAttribute('aria-expanded','false');
-  } else {
-    body.style.height = "auto"; body.style.opacity = "1";
-    toggle.setAttribute('aria-expanded','true');
-  }
-
-  toggle.addEventListener('click', () => {
-    const isOpen = toggle.getAttribute('aria-expanded') !== 'false';
-    if (isOpen){
-      const h = body.scrollHeight;
-      body.style.height = h + "px"; void body.offsetHeight;
-      body.style.height = "0px"; body.style.opacity = "0";
-      const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
-        toggle.setAttribute('aria-expanded','false'); setSubCtrlCollapsed(true); };
-      body.addEventListener('transitionend', onEnd);
-    } else {
-      body.style.height = "0px"; body.style.opacity = "0"; void body.offsetHeight;
-      const h = body.scrollHeight;
-      body.style.height = h + "px"; body.style.opacity = "1";
-      const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
-        body.style.height = "auto"; toggle.setAttribute('aria-expanded','true'); setSubCtrlCollapsed(false); };
-      body.addEventListener('transitionend', onEnd);
-    }
-  });
-});
-
-document.addEventListener('DOMContentLoaded', () => {
   const panel = document.getElementById('skipPanel');
   if (!panel) return;
 
@@ -2238,39 +2200,6 @@ function mergeIntoGData(delta){
   }
   saveAppStateDebounced();
 }
-
-
-/* ====== フィルタ＆その他イベント ====== */
-$("#hideMiss").addEventListener("change", renderUsersList);
-$("#userSearch").addEventListener("input", renderUsersList);
-$("#showCounts")?.addEventListener("change", renderUsersList);
-$("#showSkipOnly")?.addEventListener("change", renderUsersList);
-
-$("#exportMapBtn").addEventListener("click", async ()=>{
-  const bundle={ images:imgMap, skip:Array.from(skipSet), original:origMap };
-  const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="gacha_image_map_bundle.json"; document.body.appendChild(a); a.click(); a.remove();
-});
-$("#importMapInput").addEventListener("change", ()=>{
-  const f=$("#importMapInput").files[0]; if(!f) return;
-  const fr=new FileReader(); fr.onload=()=>{ try{
-    const json=JSON.parse(fr.result);
-    if(json.images&&typeof json.images==="object") imgMap=json.images; else if(typeof json==="object" && !json.original){ imgMap=json; }
-    if(Array.isArray(json.skip)) skipSet=new Set(json.skip);
-    if(json.original && typeof json.original==="object") origMap=json.original;
-    saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); saveLocalJSON(LS_KEY_ORIG,origMap);
-    renderItemGrid(); renderUsersList();
-  }catch(e){ alert("画像マップの読み込みに失敗: "+e.message); } };
-  fr.readAsText(f,"utf-8");
-});
-$("#clearMapBtn").addEventListener("click", async ()=>{
-  if(confirm("ローカルの画像マップ/オリジナル/リアグ設定を削除します。よろしいですか？")){
-    imgMap={}; origMap={}; skipSet=new Set();
-    saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveLocalJSON(LS_KEY_SKIP,[]);
-    await idbClear(); for(const url of urlCache.values()) URL.revokeObjectURL(url); urlCache.clear();
-    renderItemGrid(); renderUsersList();
-  }
-});
 </script>
 <script type="module">
   import { initPWA } from "/src/pwa.js";
