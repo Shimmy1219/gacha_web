@@ -384,6 +384,47 @@ button, a, [role="button"] {
   #riaguTabs { overflow:auto hidden; white-space:nowrap; padding-bottom:2px; }
   #riaguTabs .tab { display:inline-flex; }
 
+  /* === Gacha FAB：PCの中央下に浮く === */
+  .gacha-fab{
+    position: fixed;
+    left: 50%; bottom: max(24px, env(safe-area-inset-bottom) + 16px);
+    transform: translateX(-50%) scale(.98);
+    z-index: 70; /* モーダル(50)より上に出したいなら 60～70帯を使用 */
+    min-width: 220px; min-height: 56px;
+    border-radius: 999px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .24s ease, transform .24s ease;
+  }
+  .gacha-fab.visible{ opacity: 1; pointer-events: auto; transform: translateX(-50%) scale(1); }
+  /* モーダル中は常に消す */
+  body.modal-open .gacha-fab{ opacity:0 !important; pointer-events:none !important; }
+  /* モバイルUI時はFABは使わない（下部タブで操作するため） */
+  #mainUI.mobile-views ~ .gacha-fab{ display:none; }
+
+  /* === ガチャの“下からスライドイン”ページ === */
+  .gacha-panel{
+    position: fixed; left:0; right:0; top:0; bottom:0;
+    z-index: 60; /* モーダル(50)より下/上は用途に応じて調整。メインUIより上 */
+    background: var(--panel);
+    border-top-left-radius: 16px; border-top-right-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    /* 常時レンダリング：translate だけを切替（display切替はしない） */
+    transform: translateY(100%);
+    opacity: 0; pointer-events: none;
+    transition: transform .28s ease, opacity .28s ease;
+  }
+  #mainUI[data-gacha-open="1"] #gachaPanel{
+    transform: translateY(0);
+    opacity: 1; pointer-events: auto;
+  }
+
+  /* モバイルタブ：「ガチャ」だけ赤背景 */
+  #mainUI.mobile-views .mobile-tabs button[data-view="gacha"]{
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    color: #fff;
+    border-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -503,10 +544,13 @@ button, a, [role="button"] {
       <nav id="mobileTabs" class="mobile-tabs" aria-label="画面切り替え">
         <button type="button" data-view="controls" class="active">設定</button>
         <button type="button" data-view="items">景品</button>
+        <button type="button" data-view="gacha">ガチャ</button>
         <button type="button" data-view="users">ユーザー</button>
         <button type="button" data-view="riagu">リアグ</button>
       </nav>
     </section>
+
+    <section id="gachaPanel" class="gacha-panel" data-page="gacha"></section>
   </div>
 
   <!-- Start Modal -->
@@ -1444,8 +1488,12 @@ $("#mobileTabs")?.addEventListener("click", (e)=>{
   const b = e.target.closest('button[data-view]'); if(!b) return;
   const view = b.getAttribute('data-view');
   mainUI.setAttribute('data-view', view);
+
+  // ★ ガチャタブ = スライドインを有効化 / 他タブ = 無効化
+  if (view === 'gacha') mainUI.setAttribute('data-gacha-open','1');
+  else mainUI.removeAttribute('data-gacha-open');
+
   $$("#mobileTabs button").forEach(x=>x.classList.toggle('active', x===b));
-  // スクロール位置を上に
   syncMobileTabs();
   window.scrollTo({top:0, behavior:'smooth'});
 });
@@ -2409,18 +2457,21 @@ function open(modal){
   modal.classList.add("show");
   modal.setAttribute("aria-hidden","false");
   if (++modalCount === 1) document.body.classList.add("modal-open");
+  hideFab?.();
 }
 function close(modal){
   if (!modal || !modal.classList.contains("show")) return;
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden","true");
   if (--modalCount <= 0){ modalCount = 0; document.body.classList.remove("modal-open"); }
+  bumpFab?.(); // モーダルが閉じたら再表示を許可
 }
 function startDone(){
   if (splash) splash.style.display = "none";
   if (mainUI) mainUI.style.display = "block";
   document.body.classList.remove('splash-locked');
   close(startModal);
+  setTimeout(()=>bumpFab?.(), 200); // 起動後に“ふわっ”開始
 }
 
 /* ▼ DOM構築後に安全にバインド */
@@ -3045,6 +3096,53 @@ document.addEventListener('DOMContentLoaded', () => {
     .finally(()=>{ e.target.value = ""; });
   });
 });
+
+/* === PC用 ガチャFAB（中央下）。非表示条件：スクロール中＋モーダル中のみ === */
+const gachaFab = document.getElementById('gachaFab');
+
+function canShowFab(){
+  const main = window.mainUI || getMainUI();
+  if (!main || main.style.display === 'none') return false;
+  if (main.classList.contains('mobile-views')) return false; // モバイル時は出さない
+  if (document.body.classList.contains('modal-open')) return false;
+  return true;
+}
+function hideFab(){ gachaFab?.classList.remove('visible'); }
+function showFab(){ if (canShowFab()) gachaFab?.classList.add('visible'); }
+
+let _fabScrollTimer = null;
+function bumpFab(){
+  hideFab();
+  clearTimeout(_fabScrollTimer);
+  _fabScrollTimer = setTimeout(showFab, 1000); // スクロール後1秒で“ふわっ”
+}
+
+// スクロール/ホイールで非表示→停止後に再表示
+window.addEventListener('scroll', bumpFab, { passive:true });
+window.addEventListener('wheel',  bumpFab, { passive:true });
+
+// 初期表示（起動完了後）
+document.addEventListener('DOMContentLoaded', ()=> setTimeout(showFab, 800));
+
+// FABクリック → ガチャパネルをスライドイン
+gachaFab?.addEventListener('click', () => {
+  const main = window.mainUI || getMainUI(); if(!main) return;
+  main.setAttribute('data-gacha-open', '1');
+  // ページが開いている間はFABは見えていても役目が重複するので念のため隠す
+  hideFab();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// Escで閉じる（戻れる導線）
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const main = window.mainUI || getMainUI();
+  if (main?.getAttribute('data-gacha-open') === '1') {
+    main.removeAttribute('data-gacha-open');
+    bumpFab();
+  }
+});
 </script>
+<button id="gachaFab" type="button" class="btn gacha-fab">ガチャを引く</button>
 </body>
 </html>
