@@ -56,31 +56,6 @@ export function parseLiveBlock(block){
   return {gacha,user,pulls,items,counts};
 }
 
-/* ====== 解析: 最終結果一覧 ======
-   構造： (数字) → (ユーザー名) → 多数の「番号\tレアリティ\t景品\t個数」行 → 次の (数字) ... */
-export function parseFinalSummaryText(text){
-  const lines = text.replace(/\r/g,'').split(/\n/).map(s=>s.trim());
-  const out = [];
-  // ヘッダをスキップ
-  let i=0; while(i<lines.length && (/^ガチャ$/.test(lines[i]) || /^No\./.test(lines[i]) || /名前$/.test(lines[i]) || /レアリティ/.test(lines[i]))) i++;
-  while(i<lines.length){
-    // 数字行
-    if(!/^\d+$/.test(lines[i]||"")){ i++; continue; }
-    i++;
-    const user = (lines[i++]||"").trim(); if(!user){ continue; }
-    const entries=[];
-    while(i<lines.length){
-      const s=lines[i];
-      if(/^\d+$/.test(s)) break;  // 次ユーザー
-      const m=/^\s*\d+\s*\t\s*([^\t]+)\t([^\t]+)\t(\d+)\s*$/.exec(s);
-      if(m){ entries.push({rarity:m[1].trim(), code:m[2].trim(), count:parseInt(m[3],10)||0}); i++; }
-      else { i++; }
-    }
-    if(entries.length) out.push({user, entries});
-  }
-  return out;
-}
-
 // base64 → Uint8Array（URL-safe/改行を除去）
 export function b64ToBytes(b64){
   const s = (b64||"").replace(/\s+/g,'').replace(/-/g,'+').replace(/_/g,'/');
