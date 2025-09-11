@@ -307,16 +307,34 @@ export function initRarityUI(){
     if (newName === oldName) return;
 
     const cfg = (rarityConfigByGacha[current] ||= {});
-    // 既に同名があるなら拒否
-    if (cfg[newName]) {
+
+    // 衝突判定は「有効なエントリ（__deleted!==true）」のみ対象
+    const existsAndActive =
+      Object.prototype.hasOwnProperty.call(cfg, newName) &&
+      cfg[newName]?.__deleted !== true;
+    if (existsAndActive) {
       alert('同名のレアリティがすでに存在します。別名を指定してください。');
       el.textContent = oldName;
       return;
     }
 
-    // 現行エントリを新キーへ移動（※この行は edit 可能＝cfg[oldName] が存在）
-    const entry = (cfg[oldName] ||= structuredClone(getRarityMeta(current, oldName)));
-    delete cfg[oldName];
+    // 旧名が「元々ガチャ固有にあったか」を先に記録
+    const hadOwn = Object.prototype.hasOwnProperty.call(cfg, oldName);
+
+    // エントリ素材を決定（元々なければマージ済みメタのコピーを使う）
+    const entry = hadOwn
+      ? (cfg[oldName] || structuredClone(getRarityMeta(current, oldName)))
+      : structuredClone(getRarityMeta(current, oldName));
+
+    // 旧名の掃除：元々なかった＝ベース/カタログ/実績由来なら tombstone を立てる
+    if (!hadOwn) {
+      cfg[oldName] = { __deleted: true };
+    } else {
+      delete cfg[oldName];
+    }
+
+    // 新名に反映（もし新名に tombstone があれば消してから設定）
+    if (cfg[newName]?.__deleted === true) delete cfg[newName];
     cfg[newName] = entry;
 
     saveRarityConfig();
@@ -337,12 +355,9 @@ export function initRarityUI(){
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
       // そのタブ設定に存在するキーはリネーム可能（contenteditable）
-      const isEditableName = !!cfg[r];
-      const ce = isEditableName ? ' contenteditable="true" spellcheck="false" data-orig="'+escapeHtml(r)+'"' : '';
-      const rainbow = (m.color === RAINBOW_VALUE);
+      const rainbow   = (m.color === RAINBOW_VALUE);
       const styleAttr = rainbow ? '' : ` style="color:${m.color||''}"`;
-      const extraCls  = `rarity${rainbow?' rainbow':''}${isEditableName?' rarity-name':''}`;
-      const raritySpan = `<span class="${extraCls}"${ce}${styleAttr}>${escapeHtml(r)}</span>`;
+      const raritySpan = `<span class="rarity${rainbow?' rainbow':''} rarity-name" contenteditable="true" spellcheck="false" data-orig="${escapeHtml(r)}"${styleAttr}>${escapeHtml(r)}</span>`;
 
       return `
         <tr data-rarity="${escapeHtml(r)}">
