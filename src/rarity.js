@@ -23,44 +23,58 @@ export function loadRarityConfig(){
   try{
     const raw = localStorage.getItem(LS_KEY_RARITY);
     if(!raw) return {};
-    const obj = JSON.parse(raw);
+    const obj = JSON.parse(raw) || {};
+    if (obj && typeof obj === 'object' && obj[BASE_KEY]) {
+      // ベースは廃止：読み込み時に破棄して即時クリーンアップ
+      delete obj[BASE_KEY];
+      try { localStorage.setItem(LS_KEY_RARITY, JSON.stringify(obj)); } catch(_){}
+    }
     return (obj && typeof obj === 'object') ? obj : {};
   }catch(_){ return {}; }
 }
+
 export function saveRarityConfig(obj = rarityConfigByGacha){
-  try{ localStorage.setItem(LS_KEY_RARITY, JSON.stringify(obj)); }
-  catch(e){ console.warn("rarity 保存失敗:", e); }
-}
-export function getRarityConfigByGacha(){ return rarityConfigByGacha; }
-export function setRarityConfigForGacha(gacha, map){
-  rarityConfigByGacha[gacha] = map || {};
-  saveRarityConfig();
-  dispatchChanged();
+  try{
+    let out = obj || {};
+    if (out && typeof out === 'object' && out[BASE_KEY]) {
+      // ベースは保存しない
+      const { [BASE_KEY]: _drop, ...rest } = out;
+      out = rest;
+    }
+    localStorage.setItem(LS_KEY_RARITY, JSON.stringify(out));
+  }catch(e){
+    console.warn("rarity 保存失敗:", e);
+  }
 }
 
 // ================= コア関数 =================
 // 1) getRarityMeta
 export function getRarityMeta(gacha, rarity){
-  const baseUser = rarityConfigByGacha?.[BASE_KEY] || null;
   const fromGacha = rarityConfigByGacha?.[gacha]?.[rarity] || null;
   if (fromGacha) return fromGacha;
-  if (baseUser && baseUser[rarity]) return baseUser[rarity];
-  if (baseRarityConfig[rarity]) return baseRarityConfig[rarity];
-  return { color:null, rarityNum:1, emitRate:null };
+
+  // ベース（ハードコード既定）は UI から編集できない読み取り専用のデフォルト
+  if (baseRarityConfig[rarity]) {
+    // 共有参照の事故を防ぐためコピーを返す
+    return structuredClone(baseRarityConfig[rarity]);
+  }
+  return { color: null, rarityNum: 1, emitRate: null };
 }
 
-// 2) listRaritiesForGacha
+// 2) listRaritiesForGacha  — ベースタブ/ベース上書きの取り込みと __deleted を撤廃
 export function listRaritiesForGacha(gacha, opts = {}){
-  if (gacha === BASE_KEY){
-    const set = new Set([
-      ...Object.keys(baseRarityConfig),
-      ...Object.keys(rarityConfigByGacha?.[BASE_KEY] || {}),
-    ]);
-    return sortRarityNames(Array.from(set), gacha);
-  }
-  const { gData, gCatalogByGacha } = opts.gData ? opts : getStateSafe();
+  const { gData, gCatalogByGacha } = (opts && opts.gData) ? opts : getStateSafe();
+
+  // 非 BASE：各情報源をマージしてユニーク化（ベース上書きは無視）
   const set = new Set();
 
+  // 0) ベース定義（新規ガチャでも既定の並びを出すために含める）
+  for (const r of Object.keys(baseRarityConfig)) set.add(r);
+
+  // 1) ガチャ固有のユーザー設定
+  for (const r of Object.keys(rarityConfigByGacha?.[gacha] || {})) set.add(r);
+
+  // 2) 実データ（集計済みデータ：items のキーがレアリティ名）
   if (gData) {
     for (const user of Object.keys(gData)) {
       const perGacha = gData[user]?.[gacha];
@@ -69,12 +83,29 @@ export function listRaritiesForGacha(gacha, opts = {}){
       for (const r of Object.keys(items)) set.add(r);
     }
   }
-  const cat = gCatalogByGacha?.[gacha] || [];
-  for (const it of cat) if (it?.rarity) set.add(it.rarity);
 
-  for (const r of Object.keys(rarityConfigByGacha?.[gacha] || {})) set.add(r);
+  // 3) カタログ（貼り付け解析済みのアイテム一覧）
+  const cat = gCatalogByGacha?.[gacha] || [];
+  if (Array.isArray(cat)) {
+    for (const it of cat) {
+      const r = (it && (it.rarity ?? it.rarityName ?? it.rank ?? it.rarityLabel));
+      if (typeof r === 'string' && r) set.add(r);
+    }
+  } else if (cat && typeof cat === 'object') {
+    for (const it of Object.values(cat)) {
+      const r = (it && (it.rarity ?? it.rarityName ?? it.rank ?? it.rarityLabel));
+      if (typeof r === 'string' && r) set.add(r);
+    }
+  }
+
+  // 4) __deleted フィルタ（ガチャ固有のみ尊重）
+  for (const [r, meta] of Object.entries(rarityConfigByGacha?.[gacha] || {})) {
+    if (meta && meta.__deleted === true) set.delete(r);
+  }
+
   return sortRarityNames(Array.from(set), gacha);
 }
+
 
 function sortRarityNames(arr, gacha){
   return arr.sort((a,b)=>{
@@ -107,20 +138,16 @@ export function initRarityUI(){
 
     <div class="subcontrols" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
       <button id="addRarityRow" class="btn ghost">レアリティを追加</button>
-      <button id="resetRarityCfg" class="btn subtle">このタブの設定を既定に戻す</button>
-      <span class="muted" style="margin-left:auto" id="raritySumHint"></span>
     </div>
 
     <div id="rarityTableWrap" class="rarity-wrap"></div>
   `;
 
-  ensureAddModal(); // 追加モーダルをDOMに常駐させる
 
   const tabs = panel.querySelector('#rarityGachaTabs');
   const wrap = panel.querySelector('#rarityTableWrap');
-  const sumHint = panel.querySelector('#raritySumHint');
 
-  let current = BASE_KEY; // 既定でベース（要件）
+  let current = null; // 既定でベース（要件）
 
   function gachaNames(){
     const { gData, gCatalogByGacha } = getStateSafe();
@@ -133,10 +160,9 @@ export function initRarityUI(){
 
   function renderTabs(){
     const names = gachaNames();
-    const html = [
-      `<button type="button" class="tab ${current===BASE_KEY?'active':''}" data-gacha="${BASE_KEY}">ベース</button>`,
-      ...names.map(g => `<button type="button" class="tab ${current===g?'active':''}" data-gacha="${escapeHtml(g)}">${escapeHtml(g)}</button>`)
-    ].join('');
+    const html = names.map(g =>
+      `<button type="button" class="tab ${current===g?'active':''}" data-gacha="${escapeHtml(g)}">${escapeHtml(g)}</button>`
+    ).join('');
     tabs.innerHTML = html;
   }
 
@@ -148,29 +174,36 @@ export function initRarityUI(){
     renderTable();
   });
 
-  panel.querySelector('#resetRarityCfg').addEventListener('click', ()=>{
-    if (!confirm("このタブのレアリティ設定を既定に戻します。よろしいですか？")) return;
-    if (current === BASE_KEY){
-      delete rarityConfigByGacha[BASE_KEY];
-    }else{
-      delete rarityConfigByGacha[current];
-    }
+  panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
+    // モーダル廃止版：強さ0の「はずれ」行を即時追加（名前は後で編集可能）
+    const cfg = (rarityConfigByGacha[current] ||= {});
+    const baseName = 'はずれ';
+    const existing = new Set(listRaritiesForGacha(current));
+    let name = baseName;
+    let i = 2;
+    while (existing.has(name)) { name = baseName + i; i++; }
+
+    const baseMeta = baseRarityConfig['はずれ'] || {};
+    cfg[name] = { color: baseMeta.color || null, rarityNum: 0, emitRate: null };
     saveRarityConfig();
     dispatchChanged();
     renderTable();
-  });
 
-  panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
-    openAddModal({
-      onSubmit: ({ name, rarityNum, color })=>{
-        const target = (rarityConfigByGacha[current] ||= {});
-        if (target[name]) { alert("同名のレアリティが既に存在します。"); return; }
-        target[name] = { color, rarityNum, emitRate: null };
-        saveRarityConfig();
-        dispatchChanged();
-        renderTable();
+    // 追加直後に名前セルへフォーカス（全選択）
+    try{
+      const wrapEl = panel.querySelector('#rarityTableWrap');
+      const trEl = Array.from(wrapEl?.querySelectorAll('tr[data-rarity]')||[])
+        .find(tr => tr.getAttribute('data-rarity') === name);
+      const nameEl = trEl?.querySelector('.rarity-name');
+      nameEl?.focus();
+      const sel = window.getSelection?.();
+      if (nameEl && sel) {
+        sel.removeAllRanges?.();
+        const range = document.createRange();
+        range.selectNodeContents(nameEl);
+        sel.addRange(range);
       }
-    });
+    }catch(_){}
   });
 
   wrap.addEventListener('input', (e)=>{
@@ -188,51 +221,31 @@ export function initRarityUI(){
     }
     cfg[rarity] = entry;
     saveRarityConfig();
-    updateSumHint();
   }, { passive:true });
 
   wrap.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button.del'); if(!btn) return;
-    const tr = btn.closest('tr[data-rarity]'); if(!tr) return;
-    const rarity = tr.getAttribute('data-rarity');
+    const delBtn = e.target.closest('button.del');
+    if (!delBtn) return;
 
-    if (current === BASE_KEY){
-      // ベースは「上書き分」だけ削除可。ベース本体は削除不可。
-      const baseUser = rarityConfigByGacha?.[BASE_KEY] || {};
-      if (!baseUser[rarity]) { alert("既定ベースのレアリティは削除できません。"); return; }
-      delete baseUser[rarity];
-      saveRarityConfig();
-      dispatchChanged();
-      renderTable();
-      return;
+    e.preventDefault();
+
+    const tr = delBtn.closest('tr[data-rarity]');
+    if (!tr) return;
+
+    const rarity = tr.getAttribute('data-rarity');
+    const cfg = (rarityConfigByGacha[current] ||= {});
+
+    // ガチャ固有設定に“その名前のエントリがある” → 物理削除
+    // そうでない（ベース/カタログ/実績由来の行）   → 論理削除（__deleted=true のトゥームストーン）
+    if (Object.prototype.hasOwnProperty.call(cfg, rarity)) {
+      delete cfg[rarity];
+    } else {
+      cfg[rarity] = { __deleted: true };
     }
 
-    // 既に誰かが引いているか？
-    const used = hasAnyHitForRarity(current, rarity);
-
-    const proceed = (onOk)=>{
-      // 既存の「アイテム削除」モーダル流用（存在すれば）
-      if (typeof window.openConfirmDialog === 'function'){
-        window.openConfirmDialog({
-          title: "確認",
-          message: used ? "すでにガチャを引いた方がいますが、本当に削除しますか？" : "削除しますか？",
-          confirmText: "削除する",
-          onConfirm: onOk,
-        });
-      }else{
-        // フォールバック
-        const ok = confirm(used ? "すでにガチャを引いた方がいますが、本当に削除しますか？" : "削除しますか？");
-        if (ok) onOk();
-      }
-    };
-
-    proceed(()=>{
-      const cfg = (rarityConfigByGacha[current] ||= {});
-      delete cfg[rarity];
-      saveRarityConfig();
-      dispatchChanged();
-      renderTable();
-    });
+    saveRarityConfig();
+    dispatchChanged();
+    renderTable();         // 再描画（__deleted 除外が効く）
   });
 
   // 変更確定（blur や Enter 後）に一度だけ通知して他UIを更新
@@ -315,14 +328,12 @@ export function initRarityUI(){
     renderTabs(); // タブ表示（アクティブ反映）
     const rarities = listRaritiesForGacha(current);
     const cfg = rarityConfigByGacha[current] || {};
-    let total = 0;
 
     const rows = rarities.map(r => {
       const m = getRarityMeta(current, r);
       const color = sanitizeColor(m.color) || '#ffffff';
       const num = (typeof m.rarityNum === 'number') ? m.rarityNum : '';
       const rate = (typeof m.emitRate === 'number') ? String(m.emitRate) : '';
-      if (typeof m.emitRate === 'number') total += m.emitRate;
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
       // そのタブ設定に存在するキーはリネーム可能（contenteditable）
@@ -380,20 +391,12 @@ export function initRarityUI(){
         }
       });
     });
-    sumHint.textContent = (total>0) ? `排出率の合計: ${total.toFixed(2)}%` : '';
-  }
-
-  function updateSumHint(){
-    if (current === BASE_KEY){ sumHint.textContent = ''; return; }
-    let t = 0;
-    const cfg = rarityConfigByGacha[current] || {};
-    for (const r of Object.keys(cfg)){ const v = cfg[r]?.emitRate; if (typeof v === 'number') t += v; }
-    sumHint.textContent = (t>0) ? `排出率の合計: ${t.toFixed(2)}%` : '';
   }
 
   // 初期化：AppStateBridge 準備待ち＋明示呼び出し
   const kickoff = ()=>{
-    current = BASE_KEY; // 既定でベース
+    const names = gachaNames();
+    current = names.length ? names[0] : null; // 最初の実ガチャを選ぶ。無ければ未選択
     renderTable();
   };
   if (document.readyState === 'loading') {
@@ -414,102 +417,6 @@ export function initRarityUI(){
     }
     renderTable();
   });
-}
-
-// =============== 追加モーダル（カスタムレアリティ） ===============
-function ensureAddModal(){
-  if (document.getElementById('rarityAddModal')) return;
-  const div = document.createElement('div');
-  div.innerHTML = `
-  <dialog id="rarityAddModal">
-    <form method="dialog" class="modal">
-      <h3>カスタムレアリティを追加</h3>
-      <div class="grid two-col" style="gap:8px">
-        <label>カスタムレアリティ名
-          <input type="text" id="rarityAddName" placeholder="例：限定" required>
-        </label>
-        <label>レアリティの強さ (rarityNum)
-          <input type="number" id="rarityAddNum" min="0" max="999" step="1" value="1" required>
-        </label>
-        <label>色
-          <div id="rarityAddColorHost"></div>
-        </label>
-      </div>
-      <div class="modal-actions">
-        <button type="submit" id="rarityAddOk" class="btn primary">追加</button>
-        <button type="button" id="rarityAddCancel" class="btn">キャンセル</button>
-      </div>
-    </form>
-  </dialog>`;
-  document.body.appendChild(div.firstElementChild);
-}
-
-function openAddModal({ onSubmit }){
-  const dlg = document.getElementById('rarityAddModal');
-  const name = dlg.querySelector('#rarityAddName');
-  const num = dlg.querySelector('#rarityAddNum');
-  const colorHost = dlg.querySelector('#rarityAddColorHost');
-  name.value = ''; num.value = '1';
-  let _addColorValue = '#ffffff';
-  import("/src/color_picker.js").then(mod => {
-    mod.mountColorPicker(colorHost, {
-      value: _addColorValue,
-      onChange: v => { _addColorValue = v; }
-    });
-  });
-
-  const onCancel = ()=> dlg.close();
-  const onOk = (ev)=>{
-    ev?.preventDefault?.();
-    const n = name.value.trim();
-    const vv = clampInt(parseInt(num.value, 10), 0, 999);
-    const cc = (_addColorValue === "rainbow") ? "rainbow" :
-           (sanitizeColor(_addColorValue) || '#ffffff');
-    if (!n){ name.focus(); return; }
-    if (vv === null){ num.focus(); return; }
-    try{ onSubmit && onSubmit({ name:n, rarityNum: vv, color: cc }); }
-    finally{ dlg.close(); }
-  };
-
-  dlg.addEventListener('close', ()=> {
-    // cleanup listeners
-    okBtn.removeEventListener('click', onOk);
-    cancelBtn.removeEventListener('click', onCancel);
-    form.removeEventListener('submit', onOk);
-  }, { once:true });
-
-  const form = dlg.querySelector('form');
-  const okBtn = dlg.querySelector('#rarityAddOk');
-  const cancelBtn = dlg.querySelector('#rarityAddCancel');
-  okBtn.addEventListener('click', onOk);
-  cancelBtn.addEventListener('click', onCancel);
-  form.addEventListener('submit', onOk);
-
-  dlg.showModal();
-}
-
-// =============== ヘルパ群 ===============
-function hasAnyHitForRarity(gacha, rarity){
-  const { gData, gHitCounts } = getStateSafe();
-  // counts 優先（実数）、無ければ data（種の集合）
-  if (gHitCounts){
-    for (const u of Object.keys(gHitCounts)){
-      const perG = gHitCounts[u]?.[gacha]?.[rarity];
-      if (!perG) continue;
-      for (const code of Object.keys(perG)){
-        if ((perG[code] || 0) > 0) return true;
-      }
-    }
-  }
-  if (gData){
-    for (const u of Object.keys(gData)){
-      const perG = gData[u]?.[gacha];
-      if (!perG) continue;
-      const items = perG.items || {};
-      if ((items[rarity] || []).length) return true;
-    }
-  }
-  return false;
 }
 
 function clampInt(v, min, max){
