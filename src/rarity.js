@@ -6,6 +6,7 @@ export const LS_KEY_RARITY = "gacha_rarity_config_v1";
 export const BASE_KEY = "__BASE__"; // ベース既定を編集するための特別タブ
 export const baseRarityOrder = ["UR","SSR","SR","R","N","はずれ"];
 import { mountColorPicker, RAINBOW_VALUE, GOLD_HEX, SILVER_HEX } from "/src/color_picker.js";
+import { ensureAutoEmitRatesForGacha, normalizeEmitRatesForGacha, clampFloatN, PRECISION_DECIMALS } from "/src/rarity_emit_calc.js";
 // 既存CSSに合わせた既定色（UR は暫定）
 export const baseRarityConfig = {
   // 既定の排出率：UR=1, SSR=5, SR=10, R=15, N=20, はずれ=49
@@ -180,6 +181,14 @@ export function initRarityUI(){
 
     const MAX_NUM = 20;
 
+    // ★NEW: 10桁丸め（Number を 10 桁に丸めて返す）
+    function roundTo10(x){
+      if (x == null || Number.isNaN(x)) return null;
+      // EPSILON 加味で丸め誤差を抑制
+      const f = 1e10;
+      return Math.round((x + Number.EPSILON) * f) / f;
+    }
+
     if (e.target.classList.contains('rarity-num')){
       const raw = e.target.value.trim();
       let n = (raw === '') ? null : parseInt(raw, 10);
@@ -192,21 +201,34 @@ export function initRarityUI(){
       cfg[rarity] = entry;
       saveRarityConfig();
 
-      // 強さ変更 → 単調性が影響するので正規化して再描画
-      normalizeEmitRatesForGacha(current);
-      renderTable();
+      // ★ 入力中は再描画しない（確定は change / Enter 時）
 
     } else if (e.target.classList.contains('rarity-rate')){
-      const v = e.target.value.trim();
-      entry.emitRate = v==='' ? null : clampFloat(parseFloat(v), 0, 100);
+      // ★NEW: 10桁までを許容しつつ 0〜100 にクランプして保存
+      const raw = e.target.value.trim();
+      if (raw === '') {
+        entry.emitRate = null;
+      } else {
+        let num = parseFloat(raw);
+        // NaN 安全化
+        if (Number.isNaN(num)) num = 0;
+        // 0〜100 にクランプ
+        num = Math.min(100, Math.max(0, num));
+        // 10桁に丸め
+        num = roundTo10(num);
+        entry.emitRate = num;
+        // 入力欄にも 10桁丸め後を反映（指数表記を避け、末尾0は削る）
+        const txt = num.toFixed(10).replace(/\.?0+$/,'');
+        if (txt !== raw) e.target.value = txt;
+      }
       cfg[rarity] = entry;
       saveRarityConfig();
 
-      // 排出率編集 → 最弱から帳尻合わせして100%化（単調性も担保）
-      normalizeEmitRatesForGacha(current, { changed: rarity });
-      renderTable();
+      // ★ 入力中は再描画しない（確定は change / Enter 時）
+      // 　帳尻合わせ＆単調性（強さが弱いほど確率は大きい）維持は change ハンドラ側で実施
     }
   });
+
 
 
   wrap.addEventListener('click', (e)=>{
@@ -233,9 +255,16 @@ export function initRarityUI(){
   wrap.addEventListener('change', (e)=>{
     const tr = e.target.closest('tr[data-rarity]');
     if(!tr) return;
-    // 値は input ハンドラですでに保存済み
-    if (current) normalizeEmitRatesForGacha(current);
-    dispatchChanged();     // ← ここで state:changed を出す
+
+    const rarity = tr.getAttribute('data-rarity') || null;
+
+    if (current) {
+      const isRate = e.target.classList.contains('rarity-rate');
+      const changed = isRate ? rarity : null;
+      normalizeEmitRatesForGacha(rarityConfigByGacha, current, { changed });
+    }
+
+    dispatchChanged();
   });
 
   // 名称編集: フォーカスで元名を保持 & 全選択
@@ -330,15 +359,21 @@ export function initRarityUI(){
         saveRarityConfig();
       }
     }
-    ensureAutoEmitRatesForGacha(current)
+    ensureAutoEmitRatesForGacha(rarityConfigByGacha, current);
 
     const rarities = listRaritiesForGacha(current).slice(0, MAX_TYPES);
     const cfg = rarityConfigByGacha[current] || {};
 
+    // ★NEW: UI表示用の10桁フォーマッタ（指数表記回避＆末尾0削除）
+    function formatRate10(v){
+      if (typeof v !== 'number' || Number.isNaN(v)) return '';
+      return v.toFixed(10).replace(/\.?0+$/,'');
+    }
+
     const rows = rarities.map(r => {
       const m = getRarityMeta(current, r) || {};
       const num  = (typeof m.rarityNum === 'number') ? Math.min(m.rarityNum, MAX_NUM) : '';
-      const rate = (typeof m.emitRate === 'number') ? String(m.emitRate) : '';
+      const rate = (typeof m.emitRate === 'number') ? formatRate10(m.emitRate) : '';
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
 
@@ -359,7 +394,8 @@ export function initRarityUI(){
           <th scope="row">${raritySpan}</th>
           <td><div class="cp-host" data-value="${colorToken}" aria-label="色"></div></td>
           <td><input type="number" class="rarity-num" inputmode="numeric" min="0" max="${MAX_NUM}" step="1" value="${escapeHtml(num)}" aria-label="強さ"></td>
-          <td class="emit-cell"><input type="number" class="rarity-rate" inputmode="decimal" min="0" max="100" step="0.01" value="${escapeHtml(rate)}" aria-label="排出率"><span class="unit">%</span></td>
+          <!-- ★CHANGE: step を 0.0000000001 (=1e-10) に引き上げ、10桁入力OKに -->
+          <td class="emit-cell"><input type="number" class="rarity-rate" inputmode="decimal" min="0" max="100" step="0.0000000001" value="${escapeHtml(rate)}" aria-label="排出率"><span class="unit">%</span></td>
           <td class="ops"><button class="btn subtle danger del" title="このレアリティ設定を削除">削除</button></td>
         </tr>`;
     }).join('');
@@ -404,6 +440,7 @@ export function initRarityUI(){
       });
     });
   }
+
 
 
   // 初期化：AppStateBridge 準備待ち＋明示呼び出し
@@ -468,165 +505,4 @@ function getStateSafe(){
 function dispatchChanged(){
   try{ document.dispatchEvent(new CustomEvent('rarityconfig:changed', { detail: { rarityConfigByGacha } })); }catch(_){}
   try{ document.dispatchEvent(new Event('state:changed')); }catch(_){}
-}
-
-// ===== 排出率の自動配分・正規化ヘルパ =====
-
-// 小数点2桁に丸める（UIのstep=0.01に揃える）
-function round2(x){ return Math.round((+x + Number.EPSILON) * 100) / 100; }
-
-// rarityNumが小さい=弱い（当たりやすい）。弱いほど確率が高くなるよう、配列を
-// rarityNum 昇順（弱い→強い）で並べ替えて扱う。
-function sortEntriesByStrength(cfg){
-  const arr = Object.entries(cfg).map(([name, meta]) => {
-    const rn = (typeof meta.rarityNum === 'number') ? meta.rarityNum : 0;
-    let rate = (typeof meta.emitRate === 'number') ? clampFloat(meta.emitRate, 0, 100) : null;
-    return { name, rn, rate };
-  });
-  arr.sort((a,b)=>{
-    if (a.rn !== b.rn) return a.rn - b.rn; // 弱い→強い
-    return a.name.localeCompare(b.name, 'ja');
-  });
-  return arr;
-}
-
-// 合計100%に合わせる。弱い側(配列先頭)から増減させ、単調性(弱い>=強い)を守る。
-function adjustSumTo100KeepMonotone(entries){
-  // 単調性を一度保証（弱い>=強い）
-  for (let i = entries.length - 2; i >= 0; i--){
-    const nxt = entries[i+1].rate ?? 0;
-    const cur = entries[i].rate ?? 0;
-    if (cur < nxt) entries[i].rate = nxt;
-  }
-
-  // 合計計算
-  let sum = entries.reduce((s, e)=> s + (e.rate ?? 0), 0);
-  sum = round2(sum);
-  let residual = round2(100 - sum);
-  if (residual === 0) return;
-
-  if (residual > 0){
-    // 弱い方から加算。各要素は最大100まで、かつ弱い>=強いを維持
-    for (let i = 0; i < entries.length && residual > 0; i++){
-      const prev = (i === 0) ? 100 : entries[i-1].rate;  // 上(弱い側)の上限
-      const cap  = Math.min(100, (prev ?? 100));
-      const room = round2(cap - (entries[i].rate ?? 0));
-      const add  = Math.min(residual, Math.max(0, room));
-      entries[i].rate = round2((entries[i].rate ?? 0) + add);
-      residual = round2(residual - add);
-    }
-  }else if (residual < 0){
-    // 弱い方から減算。ただし「弱い>=強い」を壊さないよう下限は次(強い側)の値
-    residual = -residual;
-    for (let i = 0; i < entries.length && residual > 0; i++){
-      const next = (i === entries.length-1) ? 0 : (entries[i+1].rate ?? 0); // 下限
-      const room = round2((entries[i].rate ?? 0) - next);
-      const sub  = Math.min(residual, Math.max(0, room));
-      entries[i].rate = round2((entries[i].rate ?? 0) - sub);
-      residual = round2(residual - sub);
-    }
-  }
-
-  // 念のためもう一度単調性を保証
-  for (let i = entries.length - 2; i >= 0; i--){
-    const nxt = entries[i+1].rate ?? 0;
-    const cur = entries[i].rate ?? 0;
-    if (cur < nxt) entries[i].rate = nxt;
-  }
-}
-
-// 未設定の排出率を強さで自動配分（弱いほど高確率）。最後に合計100%化。
-export function ensureAutoEmitRatesForGacha(gacha){
-  const cfg = (rarityConfigByGacha[gacha] ||= {});
-  const entries = sortEntriesByStrength(cfg);
-
-  const hasAnyNull = entries.some(e => e.rate == null);
-  if (!hasAnyNull) return; // すでに全て数値なら何もしない
-
-  // 既知アンカー（rate!=null）で区間内を線形補間、未端は端の値を延長
-  // 既知アンカーがゼロの場合は三角重みで自動生成（弱い側が重い）
-  const idxKnown = entries
-    .map((e,i)=> e.rate!=null ? i : -1)
-    .filter(i=> i>=0);
-
-  if (idxKnown.length === 0){
-    // 三角重み：w_i = (N - i) で弱いほど重く
-    const N = entries.length;
-    const sumW = N*(N+1)/2;
-    entries.forEach((e,i)=>{
-      const w = (N - i);
-      e.rate = round2(100 * w / sumW);
-    });
-  }else{
-    // アンカーの単調性を事前に是正（弱い>=強い）
-    for (let i = entries.length - 2; i >= 0; i--){
-      const nxt = entries[i+1].rate ?? 0;
-      const cur = entries[i].rate ?? 0;
-      if (cur != null && nxt != null && cur < nxt){
-        entries[i].rate = nxt;
-      }
-    }
-    // 各区間を線形補間
-    const known = idxKnown;
-    // 左端〜最初のアンカー
-    for (let i = 0; i < known[0]; i++){
-      entries[i].rate = entries[known[0]].rate;
-    }
-    // アンカー間
-    for (let k = 0; k < known.length - 1; k++){
-      const L = known[k], R = known[k+1];
-      const left = entries[L].rate, right = entries[R].rate;
-      const span = R - L;
-      for (let i = L+1; i < R; i++){
-        const t = (i - L) / span; // 0→1
-        const v = round2(left - (left - right) * t); // 弱い→強いで減少
-        entries[i].rate = v;
-      }
-    }
-    // 最後のアンカー〜右端（強い側）は値を延長
-    for (let i = known[known.length - 1] + 1; i < entries.length; i++){
-      entries[i].rate = entries[known[known.length - 1]].rate;
-    }
-  }
-
-  // 合計100%へ調整（弱い側から）
-  adjustSumTo100KeepMonotone(entries);
-
-  // 保存
-  entries.forEach(e=>{
-    const meta = (cfg[e.name] ||= { color:null, rarityNum:0, emitRate:null });
-    meta.emitRate = round2(e.rate);
-  });
-  saveRarityConfig();
-}
-
-// 編集後の正規化（changed には今回直接編集したレアリティ名を渡せる）
-export function normalizeEmitRatesForGacha(gacha, { changed = null } = {}){
-  const cfg = (rarityConfigByGacha[gacha] ||= {});
-  const entries = sortEntriesByStrength(cfg);
-
-  // 文字入力直後など null が混じるケースは自動補完
-  const hasAnyNull = entries.some(e => e.rate == null);
-  if (hasAnyNull) {
-    ensureAutoEmitRatesForGacha(gacha);
-    return;
-  }
-
-  // 単調性（弱い>=強い）を維持。ユーザーが強い側を上げすぎたら、
-  // 必要に応じて弱い側を底上げして矛盾を解消。
-  for (let i = entries.length - 2; i >= 0; i--){
-    const nxt = entries[i+1].rate;
-    if (entries[i].rate < nxt) entries[i].rate = nxt;
-  }
-
-  // 合計100%に補正（弱い側から）
-  adjustSumTo100KeepMonotone(entries);
-
-  // 保存
-  entries.forEach(e=>{
-    const meta = (cfg[e.name] ||= { color:null, rarityNum:0, emitRate:null });
-    meta.emitRate = round2(e.rate);
-  });
-  saveRarityConfig();
-  dispatchChanged();
 }
