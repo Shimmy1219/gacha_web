@@ -50,60 +50,15 @@ export function saveRarityConfig(obj = rarityConfigByGacha){
 // ================= コア関数 =================
 // 1) getRarityMeta
 export function getRarityMeta(gacha, rarity){
-  const fromGacha = rarityConfigByGacha?.[gacha]?.[rarity] || null;
-  if (fromGacha) return fromGacha;
-
-  // ベース（ハードコード既定）は UI から編集できない読み取り専用のデフォルト
-  if (baseRarityConfig[rarity]) {
-    // 共有参照の事故を防ぐためコピーを返す
-    return structuredClone(baseRarityConfig[rarity]);
-  }
-  return { color: null, rarityNum: 1, emitRate: null };
+  // シンプル方針：表示＝保存。ベースは初期シード時のみ使用。
+  return rarityConfigByGacha?.[gacha]?.[rarity] || null;
 }
 
 // 2) listRaritiesForGacha  — ベースタブ/ベース上書きの取り込みと __deleted を撤廃
-export function listRaritiesForGacha(gacha, opts = {}){
-  const { gData, gCatalogByGacha } = (opts && opts.gData) ? opts : getStateSafe();
-
-  // 非 BASE：各情報源をマージしてユニーク化（ベース上書きは無視）
-  const set = new Set();
-
-  // 0) ベース定義（新規ガチャでも既定の並びを出すために含める）
-  for (const r of Object.keys(baseRarityConfig)) set.add(r);
-
-  // 1) ガチャ固有のユーザー設定
-  for (const r of Object.keys(rarityConfigByGacha?.[gacha] || {})) set.add(r);
-
-  // 2) 実データ（集計済みデータ：items のキーがレアリティ名）
-  if (gData) {
-    for (const user of Object.keys(gData)) {
-      const perGacha = gData[user]?.[gacha];
-      if (!perGacha) continue;
-      const items = perGacha.items || {};
-      for (const r of Object.keys(items)) set.add(r);
-    }
-  }
-
-  // 3) カタログ（貼り付け解析済みのアイテム一覧）
-  const cat = gCatalogByGacha?.[gacha] || [];
-  if (Array.isArray(cat)) {
-    for (const it of cat) {
-      const r = (it && (it.rarity ?? it.rarityName ?? it.rank ?? it.rarityLabel));
-      if (typeof r === 'string' && r) set.add(r);
-    }
-  } else if (cat && typeof cat === 'object') {
-    for (const it of Object.values(cat)) {
-      const r = (it && (it.rarity ?? it.rarityName ?? it.rank ?? it.rarityLabel));
-      if (typeof r === 'string' && r) set.add(r);
-    }
-  }
-
-  // 4) __deleted フィルタ（ガチャ固有のみ尊重）
-  for (const [r, meta] of Object.entries(rarityConfigByGacha?.[gacha] || {})) {
-    if (meta && meta.__deleted === true) set.delete(r);
-  }
-
-  return sortRarityNames(Array.from(set), gacha);
+export function listRaritiesForGacha(gacha){
+  // シンプル方針：そのガチャの config に存在するキーのみを表示
+  const names = Object.keys(rarityConfigByGacha?.[gacha] || {});
+  return sortRarityNames(names, gacha);
 }
 
 
@@ -220,16 +175,14 @@ export function initRarityUI(){
     const tr = e.target.closest('tr[data-rarity]'); if(!tr) return;
     const rarity = tr.getAttribute('data-rarity');
     const cfg = (rarityConfigByGacha[current] ||= {});
-    const entry = (cfg[rarity] ||= structuredClone(getRarityMeta(current, rarity)));
+    const entry = (cfg[rarity] ||= { color: null, rarityNum: 1, emitRate: null });
 
     const MAX_NUM = 20;
 
     if (e.target.classList.contains('rarity-num')){
       const raw = e.target.value.trim();
       let n = (raw === '') ? null : parseInt(raw, 10);
-
       if (n != null && n > MAX_NUM) {
-        // UI側でも即座に丸め、ユーザーに通知
         n = MAX_NUM;
         e.target.value = String(MAX_NUM);
         alert('強さの最大値は20です。20に丸めました。');
@@ -242,7 +195,7 @@ export function initRarityUI(){
     }
     cfg[rarity] = entry;
     saveRarityConfig();
-  }, { passive:true });
+  });
 
   wrap.addEventListener('click', (e)=>{
     const delBtn = e.target.closest('button.del');
@@ -256,17 +209,12 @@ export function initRarityUI(){
     const rarity = tr.getAttribute('data-rarity');
     const cfg = (rarityConfigByGacha[current] ||= {});
 
-    // ガチャ固有設定に“その名前のエントリがある” → 物理削除
-    // そうでない（ベース/カタログ/実績由来の行）   → 論理削除（__deleted=true のトゥームストーン）
-    if (Object.prototype.hasOwnProperty.call(cfg, rarity)) {
-      delete cfg[rarity];
-    } else {
-      cfg[rarity] = { __deleted: true };
-    }
+    // シンプル方針：常に物理削除
+    delete cfg[rarity];
 
     saveRarityConfig();
     dispatchChanged();
-    renderTable();         // 再描画（__deleted 除外が効く）
+    renderTable(); // config-only なので復活しない
   });
 
   // 変更確定（blur や Enter 後）に一度だけ通知して他UIを更新
@@ -329,39 +277,27 @@ export function initRarityUI(){
 
     const cfg = (rarityConfigByGacha[current] ||= {});
 
-    // 衝突判定は「有効なエントリ（__deleted!==true）」のみ対象
-    const existsAndActive =
-      Object.prototype.hasOwnProperty.call(cfg, newName) &&
-      cfg[newName]?.__deleted !== true;
-    if (existsAndActive) {
+    // 衝突は弾く（自ガチャ config に既にある場合）
+    if (Object.prototype.hasOwnProperty.call(cfg, newName)) {
       alert('同名のレアリティがすでに存在します。別名を指定してください。');
       el.textContent = oldName;
       return;
     }
 
-    // 旧名が「元々ガチャ固有にあったか」を先に記録
-    const hadOwn = Object.prototype.hasOwnProperty.call(cfg, oldName);
-
-    // エントリ素材を決定（元々なければマージ済みメタのコピーを使う）
-    const entry = hadOwn
-      ? (cfg[oldName] || structuredClone(getRarityMeta(current, oldName)))
-      : structuredClone(getRarityMeta(current, oldName));
-
-    // 旧名の掃除：元々なかった＝ベース/カタログ/実績由来なら tombstone を立てる
-    if (!hadOwn) {
-      cfg[oldName] = { __deleted: true };
-    } else {
-      delete cfg[oldName];
-    }
-
-    // 新名に反映（もし新名に tombstone があれば消してから設定）
-    if (cfg[newName]?.__deleted === true) delete cfg[newName];
+    // 物理移動（旧→新）
+    const entry = cfg[oldName] || { color: null, rarityNum: 1, emitRate: null };
+    delete cfg[oldName];
     cfg[newName] = entry;
 
+    // in-place 更新（再描画しない）
+    tr.setAttribute('data-rarity', newName);
+    el.setAttribute('data-orig', newName);
+    el.textContent = newName;
+
     saveRarityConfig();
-    dispatchChanged();   // 他UIに通知
-    renderTable();       // 再描画して data-rarity を更新
+    dispatchChanged();
   });
+
 
   function renderTable(){
     const MAX_TYPES = 20;
@@ -369,20 +305,30 @@ export function initRarityUI(){
 
     renderTabs(); // タブ表示（アクティブ反映）
 
-    // tr が20を超えないよう、描画対象を制限
-    const allRarities = listRaritiesForGacha(current);
-    const rarities    = allRarities.slice(0, MAX_TYPES);
+    // シンプル方針：表示＝保存。
+    // このガチャの設定が空なら、初回だけ baseRarityOrder を元にシードして保存。
+    if (current) {
+      const seedCfg = (rarityConfigByGacha[current] ||= {});
+      if (Object.keys(seedCfg).length === 0) {
+        for (const r of baseRarityOrder) {
+          const base = baseRarityConfig[r] || { color: null, rarityNum: 1, emitRate: null };
+          seedCfg[r] = structuredClone(base);
+        }
+        saveRarityConfig();
+      }
+    }
 
+    const rarities = listRaritiesForGacha(current).slice(0, MAX_TYPES);
     const cfg = rarityConfigByGacha[current] || {};
 
     const rows = rarities.map(r => {
-      const m = getRarityMeta(current, r);
+      const m = getRarityMeta(current, r) || {};
       const num  = (typeof m.rarityNum === 'number') ? Math.min(m.rarityNum, MAX_NUM) : '';
       const rate = (typeof m.emitRate === 'number') ? String(m.emitRate) : '';
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
 
-      // 金/銀/虹対応（既存の高機能版を踏襲）
+      // 金/銀/虹 表示
       const isRainbow = (m.color === RAINBOW_VALUE);
       const isGold    = (m.color === GOLD_HEX);
       const isSilver  = (m.color === SILVER_HEX);
@@ -411,7 +357,7 @@ export function initRarityUI(){
       </table>
     `;
 
-    // カラーピッカー装着（既存ロジックを踏襲）
+    // カラーピッカー装着（config-only で保存）
     wrap.querySelectorAll('.cp-host').forEach(el => {
       const tr = el.closest('tr[data-rarity]'); if(!tr) return;
       const rarity  = tr.getAttribute('data-rarity');
@@ -421,7 +367,7 @@ export function initRarityUI(){
         value: initial,
         onChange: (v) => {
           const cfg = (rarityConfigByGacha[current] ||= {});
-          const entry = (cfg[rarity] ||= structuredClone(getRarityMeta(current, rarity)));
+          const entry = (cfg[rarity] ||= { color: null, rarityNum: 1, emitRate: null });
 
           // 保存
           entry.color = (v === RAINBOW_VALUE) ? RAINBOW_VALUE : (v || null);
@@ -444,6 +390,7 @@ export function initRarityUI(){
       });
     });
   }
+
 
   // 初期化：AppStateBridge 準備待ち＋明示呼び出し
   const kickoff = ()=>{
