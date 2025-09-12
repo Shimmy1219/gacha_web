@@ -1,0 +1,22 @@
+@media (hover: none) and (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+}
+
+@media (max-width: 900px){
+    .start-grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+
+@media (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+
+    html, body { overscroll-behavior: none; }
+
+    body {
+      background: #000;
+      -webkit-text-size-adjust: 100%; /* iOSの自動文字拡大を抑止 */
+      overscroll-behavior: none;   /* Androidの引っ張り更新/バウンス抑制（iOSは効果弱） */
+    }
+  }
+
+@media (max-width:600px){
+    .gacha-filter .gf-btn, .rarity-filter .gf-btn{ max-width:72vw; }
+  }

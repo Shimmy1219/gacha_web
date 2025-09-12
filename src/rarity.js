@@ -174,7 +174,13 @@ export function initRarityUI(){
 
 
   wrap.addEventListener('input', (e)=>{
-    const tr = e.target.closest('tr[data-rarity]'); if(!tr) return;
+    const tr = e.target.closest('tr[data-rarity]');
+    if(!tr) return;
+    if (t.classList?.contains('rarity-rate') || t.classList?.contains('rarity-num')) {
+      // “0.”や“0.000001”など中間状態を壊さないため、ここでは何もしない
+      return;
+    }
+
     const rarity = tr.getAttribute('data-rarity');
     const cfg = (rarityConfigByGacha[current] ||= {});
     const entry = (cfg[rarity] ||= { color: null, rarityNum: 1, emitRate: null });
@@ -243,27 +249,107 @@ export function initRarityUI(){
     const rarity = tr.getAttribute('data-rarity');
     const cfg = (rarityConfigByGacha[current] ||= {});
 
-    // シンプル方針：常に物理削除
+    // 物理削除（強さ=0でも可）
     delete cfg[rarity];
 
+    // 削除後に排出率を再計算（合計100%・単調性を維持）
+    normalizeEmitRatesForGacha(rarityConfigByGacha, current);
+
+    // 保存してUI更新
     saveRarityConfig();
     dispatchChanged();
-    renderTable(); // config-only なので復活しない
+    renderTable();
   });
 
+  
   // 変更確定（blur や Enter 後）に一度だけ通知して他UIを更新
+  // 変更確定（blur/Enter）時にのみ保存・正規化・重複検査を実施
   wrap.addEventListener('change', (e)=>{
-    const tr = e.target.closest('tr[data-rarity]');
+    const tr = e.target.closest('tr[data-rarity]'); 
     if(!tr) return;
-
     const rarity = tr.getAttribute('data-rarity') || null;
+    const cfg = (rarityConfigByGacha[current] ||= {});
+    const entry = (cfg[rarity] ||= { color: null, rarityNum: 1, emitRate: null });
 
+    // 1) 強さ(rarityNum)
+    if (e.target.classList.contains('rarity-num')) {
+      const raw = String(e.target.value ?? '').trim();
+      let n = (raw === '') ? null : parseInt(raw, 10);
+      if (n != null) {
+        if (Number.isNaN(n)) n = null;
+        else n = Math.min(20, Math.max(0, n|0));
+      }
+      const old = (entry.rarityNum ?? null);
+
+      // 重複チェック（nullは対象外）
+      if (n != null) {
+        const dup = Object.entries(cfg).some(([name, m]) => 
+          name !== rarity && (m?.rarityNum ?? null) === n
+        );
+        if (dup) {
+          alert('強さ(rarityNum)が重複しています。別の値を指定してください。');
+          // UIを元に戻す（保存しない）
+          e.target.value = (old == null ? '' : String(old));
+          return;
+        }
+      }
+
+      // 採用＆保存
+      entry.rarityNum = n;
+      cfg[rarity] = entry;
+      saveRarityConfig();
+
+      // 強さの並びが変わり得るので、排出率の単調性・合計100%を再調整
+      normalizeEmitRatesForGacha(rarityConfigByGacha, current);
+
+      dispatchChanged();
+      // 強さ=0のUI無効化を反映（emit率入力/削除ボタン）
+      renderTable();
+      return;
+    }
+
+    // 2) 排出率(rarity-rate)
+    if (e.target.classList.contains('rarity-rate')) {
+      const raw = String(e.target.value ?? '').trim();
+      let num = null;
+      if (raw !== '') {
+        const f = parseFloat(raw);
+        // 10桁まで有効で0〜100にクランプ
+        num = clampFloatN(f, 0, 100, PRECISION_DECIMALS);
+        if (num === null) num = 0; // NaN防御
+      }
+
+      // 強さ=0の行は編集不可（念のためガード）
+      if ((entry.rarityNum|0) === 0) {
+        // UIを空に戻す
+        e.target.value = '';
+        return;
+      }
+
+      entry.emitRate = num;
+      cfg[rarity] = entry;
+      saveRarityConfig();
+
+      // 入力欄の表示を正規形へ（指数表記回避、末尾0削除）
+      if (typeof num === 'number') {
+        const txt = num.toFixed(PRECISION_DECIMALS).replace(/\.?0+$/,'');
+        if (txt !== raw) e.target.value = txt;
+      } else {
+        e.target.value = '';
+      }
+
+      // 単調性＆合計100%調整（変更行をヒントとして渡す）
+      normalizeEmitRatesForGacha(rarityConfigByGacha, current, { changed: rarity });
+      dispatchChanged();
+      return;
+    }
+
+    // 3) その他（名前など）は既存の正規化を最小限で
     if (current) {
       const isRate = e.target.classList.contains('rarity-rate');
       const changed = isRate ? rarity : null;
       normalizeEmitRatesForGacha(rarityConfigByGacha, current, { changed });
     }
-
     dispatchChanged();
   });
 
@@ -372,8 +458,9 @@ export function initRarityUI(){
 
     const rows = rarities.map(r => {
       const m = getRarityMeta(current, r) || {};
-      const num  = (typeof m.rarityNum === 'number') ? Math.min(m.rarityNum, MAX_NUM) : '';
-      const rate = (typeof m.emitRate === 'number') ? formatRate10(m.emitRate) : '';
+      const numRaw  = (typeof m.rarityNum === 'number') ? Math.min(m.rarityNum, MAX_NUM) : '';
+      const rate    = (typeof m.emitRate === 'number') ? formatRate10(m.emitRate) : '';
+      const num = (numRaw === '' ? null : numRaw);
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
 
@@ -389,13 +476,15 @@ export function initRarityUI(){
       const raritySpan =
         `<span class="${extraCls}" contenteditable="true" spellcheck="false" data-orig="${escapeHtml(r)}"${styleAttr}>${escapeHtml(r)}</span>`;
 
+      // ★強さ=0 のときは排出率だけ無効化（削除は可能）
+      const rateDisabled = (num === 0) ? 'disabled aria-disabled="true" title="強さ=0は排出率を編集できません"' : '';
+
       return `
         <tr data-rarity="${escapeHtml(r)}">
           <th scope="row">${raritySpan}</th>
           <td><div class="cp-host" data-value="${colorToken}" aria-label="色"></div></td>
-          <td><input type="number" class="rarity-num" inputmode="numeric" min="0" max="${MAX_NUM}" step="1" value="${escapeHtml(num)}" aria-label="強さ"></td>
-          <!-- ★CHANGE: step を 0.0000000001 (=1e-10) に引き上げ、10桁入力OKに -->
-          <td class="emit-cell"><input type="number" class="rarity-rate" inputmode="decimal" min="0" max="100" step="0.0000000001" value="${escapeHtml(rate)}" aria-label="排出率"><span class="unit">%</span></td>
+          <td><input type="number" class="rarity-num" inputmode="numeric" min="0" max="${MAX_NUM}" step="1" value="${escapeHtml(numRaw)}" aria-label="強さ"></td>
+          <td class="emit-cell"><input type="number" class="rarity-rate" inputmode="decimal" min="0" max="100" step="0.0000000001" ${rateDisabled} value="${escapeHtml(rate)}" aria-label="排出率"><span class="unit">%</span></td>
           <td class="ops"><button class="btn subtle danger del" title="このレアリティ設定を削除">削除</button></td>
         </tr>`;
     }).join('');
