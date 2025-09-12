@@ -5,7 +5,7 @@
 export const LS_KEY_RARITY = "gacha_rarity_config_v1";
 export const BASE_KEY = "__BASE__"; // ベース既定を編集するための特別タブ
 export const baseRarityOrder = ["UR","SSR","SR","R","N","はずれ"];
-import { mountColorPicker, RAINBOW_VALUE } from "/src/color_picker.js";
+import { mountColorPicker, RAINBOW_VALUE, GOLD_HEX, SILVER_HEX } from "/src/color_picker.js";
 // 既存CSSに合わせた既定色（UR は暫定）
 export const baseRarityConfig = {
   UR:      { color: "#f59e0b", rarityNum: 8, emitRate: null },
@@ -175,10 +175,19 @@ export function initRarityUI(){
   });
 
   panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
-    // モーダル廃止版：強さ0の「はずれ」行を即時追加（名前は後で編集可能）
+    const MAX_TYPES = 20;
+
+    // いま表示対象のレアリティ件数を取得
+    const existingList = listRaritiesForGacha(current);
+    if (existingList.length >= MAX_TYPES) {
+      alert('レアリティの種類は最大20までです。これ以上は追加できません。');
+      return;
+    }
+
+    // 「はずれ」をベースに一意名を作って追加
     const cfg = (rarityConfigByGacha[current] ||= {});
     const baseName = 'はずれ';
-    const existing = new Set(listRaritiesForGacha(current));
+    const existing = new Set(existingList);
     let name = baseName;
     let i = 2;
     while (existing.has(name)) { name = baseName + i; i++; }
@@ -206,16 +215,28 @@ export function initRarityUI(){
     }catch(_){}
   });
 
+
   wrap.addEventListener('input', (e)=>{
     const tr = e.target.closest('tr[data-rarity]'); if(!tr) return;
     const rarity = tr.getAttribute('data-rarity');
     const cfg = (rarityConfigByGacha[current] ||= {});
     const entry = (cfg[rarity] ||= structuredClone(getRarityMeta(current, rarity)));
 
+    const MAX_NUM = 20;
+
     if (e.target.classList.contains('rarity-num')){
-      const v = e.target.value.trim();
-      entry.rarityNum = v==='' ? null : clampInt(parseInt(v,10), 0, 999);
-    }else if (e.target.classList.contains('rarity-rate')){
+      const raw = e.target.value.trim();
+      let n = (raw === '') ? null : parseInt(raw, 10);
+
+      if (n != null && n > MAX_NUM) {
+        // UI側でも即座に丸め、ユーザーに通知
+        n = MAX_NUM;
+        e.target.value = String(MAX_NUM);
+        alert('強さの最大値は20です。20に丸めました。');
+      }
+      entry.rarityNum = (n === null) ? null : clampInt(n, 0, MAX_NUM);
+
+    } else if (e.target.classList.contains('rarity-rate')){
       const v = e.target.value.trim();
       entry.emitRate = v==='' ? null : clampFloat(parseFloat(v), 0, 100);
     }
@@ -343,27 +364,41 @@ export function initRarityUI(){
   });
 
   function renderTable(){
+    const MAX_TYPES = 20;
+    const MAX_NUM   = 20;
+
     renderTabs(); // タブ表示（アクティブ反映）
-    const rarities = listRaritiesForGacha(current);
+
+    // tr が20を超えないよう、描画対象を制限
+    const allRarities = listRaritiesForGacha(current);
+    const rarities    = allRarities.slice(0, MAX_TYPES);
+
     const cfg = rarityConfigByGacha[current] || {};
 
     const rows = rarities.map(r => {
       const m = getRarityMeta(current, r);
-      const color = sanitizeColor(m.color) || '#ffffff';
-      const num = (typeof m.rarityNum === 'number') ? m.rarityNum : '';
+      const num  = (typeof m.rarityNum === 'number') ? Math.min(m.rarityNum, MAX_NUM) : '';
       const rate = (typeof m.emitRate === 'number') ? String(m.emitRate) : '';
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor(m.color) || '#ffffff');
-      // そのタブ設定に存在するキーはリネーム可能（contenteditable）
-      const rainbow   = (m.color === RAINBOW_VALUE);
-      const styleAttr = rainbow ? '' : ` style="color:${m.color||''}"`;
-      const raritySpan = `<span class="rarity${rainbow?' rainbow':''} rarity-name" contenteditable="true" spellcheck="false" data-orig="${escapeHtml(r)}"${styleAttr}>${escapeHtml(r)}</span>`;
+
+      // 金/銀/虹対応（既存の高機能版を踏襲）
+      const isRainbow = (m.color === RAINBOW_VALUE);
+      const isGold    = (m.color === GOLD_HEX);
+      const isSilver  = (m.color === SILVER_HEX);
+      const isMetal   = isGold || isSilver;
+
+      const styleAttr = (isRainbow || isMetal) ? '' : ` style="color:${m.color||''}"`;
+      const extraCls  = `rarity${isRainbow?' rainbow':''}${isGold?' metal-gold':''}${isSilver?' metal-silver':''} rarity-name`;
+
+      const raritySpan =
+        `<span class="${extraCls}" contenteditable="true" spellcheck="false" data-orig="${escapeHtml(r)}"${styleAttr}>${escapeHtml(r)}</span>`;
 
       return `
         <tr data-rarity="${escapeHtml(r)}">
           <th scope="row">${raritySpan}</th>
           <td><div class="cp-host" data-value="${colorToken}" aria-label="色"></div></td>
-          <td><input type="number" class="rarity-num" inputmode="numeric" min="0" max="999" step="1" value="${escapeHtml(num)}" aria-label="強さ"></td>
+          <td><input type="number" class="rarity-num" inputmode="numeric" min="0" max="${MAX_NUM}" step="1" value="${escapeHtml(num)}" aria-label="強さ"></td>
           <td class="emit-cell"><input type="number" class="rarity-rate" inputmode="decimal" min="0" max="100" step="0.01" value="${escapeHtml(rate)}" aria-label="排出率"><span class="unit">%</span></td>
           <td class="ops"><button class="btn subtle danger del" title="このレアリティ設定を削除">削除</button></td>
         </tr>`;
@@ -375,10 +410,11 @@ export function initRarityUI(){
         <tbody>${rows}</tbody>
       </table>
     `;
-    // 生成したセルにカラーピッカーを装着
+
+    // カラーピッカー装着（既存ロジックを踏襲）
     wrap.querySelectorAll('.cp-host').forEach(el => {
       const tr = el.closest('tr[data-rarity]'); if(!tr) return;
-      const rarity = tr.getAttribute('data-rarity');
+      const rarity  = tr.getAttribute('data-rarity');
       const initial = el.getAttribute('data-value') || '#ffffff';
 
       mountColorPicker(el, {
@@ -387,18 +423,19 @@ export function initRarityUI(){
           const cfg = (rarityConfigByGacha[current] ||= {});
           const entry = (cfg[rarity] ||= structuredClone(getRarityMeta(current, rarity)));
 
-          // "rainbow" は特別値として保存／表示
+          // 保存
           entry.color = (v === RAINBOW_VALUE) ? RAINBOW_VALUE : (v || null);
 
-          // 表示を即時反映
+          // 表示を即時反映（金/銀/虹クラス切替）
           const span = tr.querySelector('.rarity');
-          if (v === RAINBOW_VALUE){
-            span.classList.add('rainbow');
-            span.style.color = '';
-          }else{
-            span.classList.remove('rainbow');
-            span.style.color = v || '';
-          }
+          const isGold    = (v === GOLD_HEX);
+          const isSilver  = (v === SILVER_HEX);
+          const isRainbow = (v === RAINBOW_VALUE);
+
+          span.classList.toggle('rainbow',     isRainbow);
+          span.classList.toggle('metal-gold',  isGold);
+          span.classList.toggle('metal-silver',isSilver);
+          span.style.color = (isRainbow || isGold || isSilver) ? '' : (v || '');
 
           cfg[rarity] = entry;
           saveRarityConfig();

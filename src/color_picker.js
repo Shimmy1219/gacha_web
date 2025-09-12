@@ -4,8 +4,8 @@
 
 export const RAINBOW_VALUE = "rainbow";
 
-const GOLD_HEX   = "#d4af37";
-const SILVER_HEX = "#c0c0c0";
+export const GOLD_HEX   = "#d4af37";
+export const SILVER_HEX = "#c0c0c0";
 
 export const DEFAULT_PALETTE = [
   // 既存ベース色
@@ -65,7 +65,7 @@ function injectStyles(){
     border-color: #9ca3af;
   }
 
-  /* === ポップオーバーは body 直下に固定配置（panel の overflow を回避） === */
+  /* === ポップオーバー === */
   .cp-pop{ position:fixed; z-index:4000; left:0; top:0; display:none;
            background: var(--panel); border:1px solid var(--border); border-radius:12px;
            box-shadow: var(--shadow); padding:10px; }
@@ -92,18 +92,29 @@ function injectStyles(){
   .cp-custom{ border:1px dashed var(--border); border-radius:6px; padding:6px 8px; font-size:.85rem; }
   .cp-native{ position:absolute; left:-9999px; opacity:0; }
 
-  /* 虹色テキスト（既存の rarity 表示用） */
+  /* 虹色テキスト（既存） */
   .rarity.rainbow{
     background: linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f);
+    -webkit-background-clip: text; background-clip: text; color: transparent !important;
+  }
+  /* ★追加：金属調テキスト（rarity span 用） */
+  .rarity.metal-gold{
+    background:
+      linear-gradient(135deg, #7a5c13 0%, #ffd56a 30%, #a67c00 50%, #ffe69a 70%, #7a5c13 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent !important;
+  }
+  .rarity.metal-silver{
+    background:
+      linear-gradient(135deg, #6b7280 0%, #e5e7eb 35%, #9ca3af 55%, #f3f4f6 75%, #6b7280 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent !important;
   }`;
   const st = document.createElement('style'); st.textContent = css;
   document.head.appendChild(st);
 }
 
-function isMetal(v){ return v === GOLD_HEX || v === SILVER_HEX; }
-function isGold(v){ return v === GOLD_HEX; }
-function isSilver(v){ return v === SILVER_HEX; }
+export function isMetal(v){ return v === GOLD_HEX || v === SILVER_HEX; }
+export function isGold(v){ return v === GOLD_HEX; }
+export function isSilver(v){ return v === SILVER_HEX; }
 
 let _currentOpen = null; // 同時に1つだけ開く
 
