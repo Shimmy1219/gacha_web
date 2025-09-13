@@ -71,8 +71,20 @@ button, a, [role="button"] {
   .muted{color:var(--muted)}.sep{height:1px;background:var(--border);margin:.75rem 0 1rem}
   .visually-hidden{position:absolute!important;inset:0 auto auto 0;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
   /* Tabs + item grid */
-  .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap}
-  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none; touch-action: manipulation; position: relative; }
+  .tabs{
+    /* 既存: display:flex; gap; border-bottom; ... は残しつつ、横スクロール化 */
+    display: flex;
+    flex-wrap: nowrap;                /* ← 折り返さず1行で流す */
+    overflow-x: auto;                 /* ← 横スクロールを許可 */
+    -webkit-overflow-scrolling: touch;/* ← iOSで慣性スクロール */
+    overscroll-behavior-x: contain;   /* ← 横スクロールのはみ出し抑制 */
+    gap: 8px;                         /* 既存と整合（重複宣言はOK） */
+    scrollbar-width: none;          /* Firefox: スクロールバー幅を0に */
+    margin-bottom: 12px;  
+    border-bottom: 1px solid var(--border)          /* Firefox: スクロールバー非表示 */
+  }
+  .tabs::-webkit-scrollbar{ display:none; } /* WebKit: スクロールバー非表示 */
+  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none; touch-action: manipulation; position: relative; flex: 0 0 auto;white-space: nowrap;}
   .tab.active{background:#191922;color:#fff;border-color:var(--accent)}
   .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
   .item-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}

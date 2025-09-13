@@ -1391,17 +1391,17 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
   const tabsWrap = document.getElementById('gachaTabs');
   if (tabsWrap && !tabsWrap.__boundPointer) {
-    tabsWrap.addEventListener('pointerdown', (e) => {
+    // 横スクロールを阻害しないため click に変更（preventDefault 撤去）
+    tabsWrap.addEventListener('click', (e) => {
       const t = e.target.closest('.tab');
       if (!t || t.classList.contains('add')) return;      // “＋”タブは除外
       const g = t.dataset.gacha;
       if (!g) return;
-      // 既存の選択処理をそのまま流用
       selectedGacha = g;
       $$(".tab", tabsWrap).forEach(x => x.classList.toggle("active", x.dataset.gacha === g));
       renderItemGrid();
-      e.preventDefault(); // 300ms遅延/ゴーストクリックを抑止
-    }, { passive:false });
+      // ※ preventDefault しない：スワイプ操作を殺さないため
+    }, { passive:true });
     tabsWrap.__boundPointer = true;
   }
 });
