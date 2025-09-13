@@ -238,6 +238,39 @@ export function initRarityUI(){
 
 
   wrap.addEventListener('click', (e)=>{
+    // まず、“⋮”メニュー以外をクリックしたら全メニューを閉じる
+    const inMore = e.target.closest('.more-wrap');
+    if (!inMore) {
+      wrap.querySelectorAll('.more-menu').forEach(m=>{
+        m.style.display = 'none';
+        const btn = m.parentElement?.querySelector('.more-btn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    // “⋮”ボタンの開閉
+    const moreBtn = e.target.closest('.more-btn');
+    if (moreBtn) {
+      e.preventDefault();
+      const holder = moreBtn.closest('.more-wrap');
+      const menu   = holder?.querySelector('.more-menu');
+      if (menu) {
+        // ほかを閉じてからトグル
+        wrap.querySelectorAll('.more-menu').forEach(m=>{
+          if (m !== menu) {
+            m.style.display = 'none';
+            const b = m.parentElement?.querySelector('.more-btn');
+            if (b) b.setAttribute('aria-expanded', 'false');
+          }
+        });
+        const willOpen = menu.style.display !== 'block';
+        menu.style.display = willOpen ? 'block' : 'none';
+        moreBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      }
+      return; // メニュー開閉時はここで終了
+    }
+
+    // 「削除」（PCの直ボタン と モバイルのメニュー内の両方に class="del" を付けてある）
     const delBtn = e.target.closest('button.del');
     if (!delBtn) return;
 
@@ -495,6 +528,48 @@ export function initRarityUI(){
         <tbody>${rows}</tbody>
       </table>
     `;
+
+const isMobileView =
+  document.getElementById('mainUI')?.classList.contains('mobile-views') ||
+  window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
+
+if (isMobileView) {
+  // 1) ヘッダー「排出率」→「排出率(%)」
+  const hdr = wrap.querySelector('thead th:nth-child(4)');
+  if (hdr) hdr.textContent = '排出率(%)';
+
+  // 1) セル内の “%” は非表示（td.emit-cell の .unit を隠す）
+  wrap.querySelectorAll('td.emit-cell .unit').forEach(u => { u.style.display = 'none'; });
+
+  // 2) 右端の「削除」ボタンを “⋮” メニューに差し替え
+  wrap.querySelectorAll('td.ops').forEach(td => {
+    const delBtn = td.querySelector('button.del');
+    if (!delBtn) return;
+
+    // ポップアップを左側に出す、三点幅18px、ポップアップ全体=削除ボタン
+    td.innerHTML = `
+      <div class="more-wrap" style="position:relative; display:inline-block">
+        <button type="button" class="icon-btn more-btn"
+                aria-haspopup="true" aria-expanded="false" title="操作メニュー"
+                style="width:18px; min-width:18px; height:28px; display:inline-flex; align-items:center; justify-content:center; padding:0;">
+          ⋮
+        </button>
+        <div class="more-menu" role="menu"
+             style="display:none; position:absolute;
+                    right: calc(100% + 8px); /* ←ボタンの左に表示 */
+                    top: 50%; transform: translateY(-50%);
+                    background:var(--panel-2); border:1px solid var(--border);
+                    border-radius:10px; padding:0; min-width:120px; z-index:5;
+                    box-shadow: 0 6px 24px rgba(0,0,0,.25);">
+          <button type="button" class="btn small ghost menu-del del" role="menuitem"
+                  style="display:block; width:100%; padding:10px 14px; text-align:center; border-radius:10px;">
+            削除
+          </button>
+        </div>
+      </div>
+    `;
+  });
+}
 
     // カラーピッカー装着（config-only で保存）
     wrap.querySelectorAll('.cp-host').forEach(el => {

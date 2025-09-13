@@ -47,7 +47,7 @@
     </button>
 
     <h1>四遊楽ガチャツール  <span class="tag">v24.3.0</span></h1>
-    <p class="muted">（…説明…）</p>
+    <p class="muted">設定・ガチャ・アップロード・配布まで全て完結</p>
   </header>
 
   <!-- ▼ ドロワー本体（モバイル時のみオーバーレイ） -->
@@ -533,6 +533,9 @@ function updateMobileViewMode(){
   if (!main) return;
   const mobile = isMobileLike();
 
+  // ← 追加：body にもモバイル判定のクラスを付与（CSS が header に届くように）
+  document.body.classList.toggle('mobile-views', !!mobile);
+
   if (mobile) {
     main.classList.add('mobile-views');
     // 既定ビューを「レアリティ」に変更（設定タブは廃止）
@@ -542,7 +545,7 @@ function updateMobileViewMode(){
     main.classList.remove('mobile-views');
     main.removeAttribute('data-view');
     ensureControlsLocation(false);  // controlsPage を元位置へ戻す
-    closeDrawer(true);              // 念のため閉じる
+    window.closeDrawer(true);              // 念のため閉じる
   }
 
   syncMobileTabs();

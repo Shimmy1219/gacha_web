@@ -181,11 +181,11 @@ button, a, [role="button"] {
   #mainUI.mobile-views[data-view="riagu"]    #skipPanel { display:block; } /* NEW */
 
   /* --- ハンバーガー（モバイルのみ表示） --- */
-  .menu-btn{ display:none; align-items:center; justify-content:center;
+  .menu-btn{display:none; align-items:center; justify-content:center;
     width:40px; height:40px; border:1px solid var(--border); border-radius:10px;
     background:#15151b; color:#cbd5e1; margin-right:8px;
   }
-  #mainUI.mobile-views .menu-btn{ display:inline-flex; }
+  #mainUI.mobile-views .menu-btn, body.mobile-views .menu-btn{display:inline-flex;}
   .menu-btn .menu-icon{ display:inline-block; width:20px; height:16px; position:relative; }
   .menu-btn .menu-icon span{ position:absolute; left:0; right:0; height:2px; background:#cbd5e1; }
   .menu-btn .menu-icon span:nth-child(1){ top:0; }
@@ -217,7 +217,16 @@ button, a, [role="button"] {
   body.drawer-open{ overflow:hidden; }
 
   /* モバイル時：ヘッダーを横並びに（ハンバーガー+タイトル） */
-  #mainUI.mobile-views header{ display:flex; align-items:center; gap:10px; }
+  #mainUI.mobile-views header,
+  body.mobile-views header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+
+  /* 説明文は次の行に回して全幅表示（タイトルの下に来る） */
+  body.mobile-views header > p{
+    flex-basis:100%;
+    margin: 0.25rem 0 0;
+  }
 
   /* ボトムタブ：通常は非表示、mobile-views 時のみ表示 */
   .mobile-tabs{ display:none; }
