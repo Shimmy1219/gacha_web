@@ -15,6 +15,10 @@
       -webkit-text-size-adjust: 100%; /* iOSの自動文字拡大を抑止 */
       overscroll-behavior: none;   /* Androidの引っ張り更新/バウンス抑制（iOSは効果弱） */
     }
+
+    .container {
+      max-width:none; margin:6px 0 80px; padding:0 8px
+    }
   }
 
 @media (max-width:600px){

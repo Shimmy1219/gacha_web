@@ -443,7 +443,7 @@ button, a, [role="button"] {
   /* レアリティ設定テーブル体裁 */
   .rarity-wrap{ overflow:auto; }
   .rarity-table{ width:100%; border-collapse:collapse; }
-  .rarity-table th, .rarity-table td{ padding:8px; border-bottom:1px solid var(--border); text-align:left; }
+  .rarity-table th, .rarity-table td{ padding:8px 3px; border-bottom:1px solid var(--border); text-align:left; }
   .rarity-table thead th{ font-size:.9rem; color:#cbd5e1; font-weight:700; }
   .rarity-table .emit-cell{ white-space:nowrap; }
   .rarity-table .emit-cell .unit{ margin-left:4px; color:#9ca3af; }
