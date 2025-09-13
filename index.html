@@ -38,10 +38,30 @@
 </head>
 <body>
   <div class="container">
-    <header style="margin-bottom:16px">
-      <h1>四遊楽ガチャツール  <span class="tag">v21.3.4</span></h1>
-      <div class="muted">ガチャ・景品まとめ・アップロードまで出来るガチャツールです</div>
-    </header>
+  <header>
+    <!-- ▼ ハンバーガー（モバイルのみ表示） -->
+    <button id="menuBtn" class="menu-btn" aria-label="メニュー" aria-controls="mobileDrawer" aria-expanded="false">
+      <span class="menu-icon" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </span>
+    </button>
+
+    <h1>四遊楽ガチャツール  <span class="tag">v21.3.4</span></h1>
+    <p class="muted">（…説明…）</p>
+  </header>
+
+  <!-- ▼ ドロワー本体（モバイル時のみオーバーレイ） -->
+  <aside id="mobileDrawer" class="drawer" aria-hidden="true">
+    <div id="drawerOverlay" class="drawer-overlay" tabindex="-1"></div>
+    <div class="drawer-panel" role="dialog" aria-label="ツールバー">
+      <div class="drawer-head">
+        <strong>ツール</strong>
+        <button id="drawerClose" class="btn ghost small" aria-label="閉じる">×</button>
+      </div>
+      <!-- ここに #controlsPage を動的に移設 -->
+      <div id="drawerContent"></div>
+    </div>
+  </aside>
 
     <!-- Splash -->
     <section id="splash" class="splash">
@@ -148,8 +168,7 @@
       
       <!-- モバイル用ボトムナビ -->
       <nav id="mobileTabs" class="mobile-tabs" aria-label="画面切り替え">
-        <button type="button" data-view="controls" class="active">設定</button>
-        <button type="button" data-view="rarity">レアリティ</button>
+        <button type="button" data-view="rarity" class="active">レアリティ</button>
         <button type="button" data-view="items">景品</button>
         <button type="button" data-view="gacha">ガチャ</button>
         <button type="button" data-view="users">ユーザー</button>
@@ -510,16 +529,22 @@ function loadAppState(){
 }
 
 function updateMobileViewMode(){
-  const main = getMainUI();        // ← ここで取得（まだ無ければ何もしない）
+  const main = getMainUI();
   if (!main) return;
   const mobile = isMobileLike();
+
   if (mobile) {
     main.classList.add('mobile-views');
-    if (!main.getAttribute('data-view')) main.setAttribute('data-view','controls'); // ← 既定を「設定」
+    // 既定ビューを「レアリティ」に変更（設定タブは廃止）
+    if (!main.getAttribute('data-view')) main.setAttribute('data-view','rarity');
+    ensureControlsLocation(true);   // controlsPage をドロワーへ
   } else {
     main.classList.remove('mobile-views');
     main.removeAttribute('data-view');
+    ensureControlsLocation(false);  // controlsPage を元位置へ戻す
+    closeDrawer(true);              // 念のため閉じる
   }
+
   syncMobileTabs();
 }
 
@@ -1707,7 +1732,75 @@ document.addEventListener('keydown', (e) => {
     bumpFab();
   }
 });
+
+// controlsPage をモバイル時はドロワーへ、PC時は元位置へ
+function ensureControlsLocation(toDrawer){
+  const controls = document.getElementById('controlsPage');
+  if (!controls) return;
+
+  // 退避用にプレースホルダ（コメントノード）を用意
+  if (!controls._placeholder){
+    controls._placeholder = document.createComment('controls-placeholder');
+  }
+
+  if (toDrawer){
+    if (!controls._inDrawer){
+      // 現在位置にプレースホルダを差し込み → ドロワーへ移設
+      controls.parentNode.insertBefore(controls._placeholder, controls);
+      const mount = document.getElementById('drawerContent');
+      if (mount) mount.appendChild(controls);
+      controls._inDrawer = true;
+    }
+  } else {
+    // 元の位置（プレースホルダ箇所）へ戻す
+    if (controls._inDrawer && controls._placeholder?.parentNode){
+      controls._placeholder.parentNode.replaceChild(controls, controls._placeholder);
+      controls._inDrawer = false;
+    }
+  }
+}
+
+// ハンバーガー & ドロワーの初期化
+function setupHamburger(){
+  const btn     = document.getElementById('menuBtn');
+  const drawer  = document.getElementById('mobileDrawer');
+  const overlay = document.getElementById('drawerOverlay');
+  const closeBt = document.getElementById('drawerClose');
+
+  if (!btn || !drawer) return;
+
+  function openDrawer(){
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden','false');
+    btn.setAttribute('aria-expanded','true');
+    document.body.classList.add('drawer-open');
+  }
+  function _close(){
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+    btn.setAttribute('aria-expanded','false');
+    document.body.classList.remove('drawer-open');
+  }
+
+  // 他所からも閉じられるようにエクスポート
+  window.closeDrawer = function(force){ _close(); };
+
+  btn.addEventListener('click', ()=>{
+    if (drawer.classList.contains('open')) _close();
+    else openDrawer();
+  });
+  overlay?.addEventListener('click', _close);
+  closeBt?.addEventListener('click', _close);
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape' && drawer.classList.contains('open')) _close();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', setupHamburger);
+
 </script>
+
+
 <script type="module">
   import { initFilters } from "/src/filters.js";
   initFilters();

@@ -170,13 +170,54 @@ button, a, [role="button"] {
   .toggle .label{ font-weight:700; color:#cbd5e1; }
 
   /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
+  /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
   #mainUI.mobile-views { padding-bottom: 98px; } /* ボトムタブ分の余白 */
 
   #mainUI.mobile-views [data-page]{ display:none; }
-  #mainUI.mobile-views[data-view="controls"] #controlsPage{ display:block; }
+  /* controls はドロワーに移すため、モバイルでは常に非表示 */
+  #mainUI.mobile-views #controlsPage{ display:none; }
   #mainUI.mobile-views[data-view="items"]    #itemsPanel{ display:block; }
   #mainUI.mobile-views[data-view="users"]    #usersPanel{ display:block; }
   #mainUI.mobile-views[data-view="riagu"]    #skipPanel { display:block; } /* NEW */
+
+  /* --- ハンバーガー（モバイルのみ表示） --- */
+  .menu-btn{ display:none; align-items:center; justify-content:center;
+    width:40px; height:40px; border:1px solid var(--border); border-radius:10px;
+    background:#15151b; color:#cbd5e1; margin-right:8px;
+  }
+  #mainUI.mobile-views .menu-btn{ display:inline-flex; }
+  .menu-btn .menu-icon{ display:inline-block; width:20px; height:16px; position:relative; }
+  .menu-btn .menu-icon span{ position:absolute; left:0; right:0; height:2px; background:#cbd5e1; }
+  .menu-btn .menu-icon span:nth-child(1){ top:0; }
+  .menu-btn .menu-icon span:nth-child(2){ top:7px; }
+  .menu-btn .menu-icon span:nth-child(3){ bottom:0; }
+
+  /* --- ドロワー --- */
+  .drawer{ position:fixed; inset:0; z-index:80; pointer-events:none; }
+  .drawer .drawer-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.45); opacity:0; transition:opacity .2s; }
+  .drawer .drawer-panel{
+    position:absolute; left:0; top:0; bottom:0; width:min(86vw, 360px);
+    transform:translateX(-100%); transition:transform .2s ease;
+    background:#0f1016; border-right:1px solid var(--border);
+    padding:16px 12px 12px; padding-bottom:calc(12px + env(safe-area-inset-bottom));
+    overflow:auto;
+  }
+  .drawer.open{ pointer-events:auto; }
+  .drawer.open .drawer-overlay{ opacity:1; }
+  .drawer.open .drawer-panel{ transform:translateX(0); }
+  .drawer .drawer-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+
+  /* ツールバーを縦積みに最適化 */
+  .drawer .toolbar .row{ display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+  .drawer .toolbar .row .btn,
+  .drawer .toolbar .row .toggle,
+  .drawer .toolbar .row .user-search{ width:100%; }
+
+  /* ドロワー開時は背面スクロールを抑止 */
+  body.drawer-open{ overflow:hidden; }
+
+  /* モバイル時：ヘッダーを横並びに（ハンバーガー+タイトル） */
+  #mainUI.mobile-views header{ display:flex; align-items:center; gap:10px; }
 
   /* ボトムタブ：通常は非表示、mobile-views 時のみ表示 */
   .mobile-tabs{ display:none; }

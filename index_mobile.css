@@ -20,3 +20,6 @@
 @media (max-width:600px){
     .gacha-filter .gf-btn, .rarity-filter .gf-btn{ max-width:72vw; }
   }
+
+/* 端末がモバイル相当のときにボタンサイズを少しだけ広めに */
+#mainUI.mobile-views .menu-btn{ width:44px; height:44px; }
