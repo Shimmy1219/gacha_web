@@ -162,7 +162,7 @@ button, a, [role="button"] {
 .item-card .close:hover{ background:#e11d48; color:#fff; border-color:#e11d48; }
 
   /* 再設計トグル（スライド式） */
-  .toggle{display:inline-flex; align-items:center; gap:.5rem;padding:.2rem .5rem; background:#23232b; border:1px solid var(--border);border-radius:999px;}
+  .toggle{display:inline-flex; align-items:center;gap:.5rem; padding: 0; background: transparent; border-radius: 0; box-shadow: none; }
   .toggle input.switch{appearance:none; width:44px; height:24px; border-radius:999px;background:#0f1016; border:1px solid var(--border);position:relative; outline:none; cursor:pointer;transition:background .2s,border-color .2s;}
   .toggle input.switch::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;border-radius:50%; background:#9ca3af; transition:left .2s, background .2s;}
   .toggle input.switch:checked{ background:#e11d48; border-color:#e11d48; }
@@ -371,6 +371,32 @@ button, a, [role="button"] {
   /* 検索欄は行内で収まりよく。デスクトップは程よい幅、モバイルは横幅を譲る */
   .user-subcontrols #userSearch{ max-width: 280px; flex: 0 1 280px; }
   .user-subcontrols .user-search-label{ white-space:nowrap; }
+
+  /* ---- Users サブコントロール: 2カラム化 --------------------- */
+  .user-subcontrols.usc-grid{
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 12px;
+    row-gap: 10px;
+    align-items: center;
+  }
+
+  .user-subcontrols .usc-label{
+    white-space: nowrap;
+    font-weight: 700;
+    /* 既存のフィルタラベルとトーンを合わせる */
+    font-size: var(--gf-font, .95rem);
+    line-height: var(--gf-line, 1.1);
+    color: var(--text, #f5f5f6);
+  }
+
+  .user-subcontrols .usc-ctrl{
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0; /* ボタンのellipsis維持 */
+  }
 
   /* リアグサマリー */
   #riaguSummary{ display:grid; gap:12px; }

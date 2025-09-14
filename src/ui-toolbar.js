@@ -34,18 +34,22 @@
 
   // ---------- サブコントロール開閉 ----------
   const LS_KEY_SUBCTRL = 'user_subcontrols_collapsed_v1';
-  let subctrlCollapsed = false;
+  let subctrlCollapsed = true; // ★ 初期値を「閉」に
 
   function loadSubctrlState() {
     try {
-      // index 側の loadLocalJSON があれば使う
+      // index 側の loadLocalJSON があれば優先
       if (typeof global.loadLocalJSON === 'function') {
-        subctrlCollapsed = !!global.loadLocalJSON(LS_KEY_SUBCTRL, false);
+        // ★ 既定値を true（閉）に
+        subctrlCollapsed = !!global.loadLocalJSON(LS_KEY_SUBCTRL, true);
       } else {
-        subctrlCollapsed = !!JSON.parse(localStorage.getItem(LS_KEY_SUBCTRL) || 'false');
+        // ★ localStorage 未保存(null)なら true（閉）を採用
+        const raw = localStorage.getItem(LS_KEY_SUBCTRL);
+        subctrlCollapsed = (raw == null) ? true : !!JSON.parse(raw);
       }
     } catch {
-      subctrlCollapsed = false;
+      // ★ パース失敗時も閉
+      subctrlCollapsed = true;
     }
   }
 

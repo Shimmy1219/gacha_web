@@ -15,6 +15,7 @@
   content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <!-- 電話番号の自動リンク無効化 -->
 <meta name="format-detection" content="telephone=no">
+<script src="/src/ui-toolbar.js" defer></script>
 <title>四遊楽ガチャツール v21.3.2</title>
 
 <!-- 先にライブラリ（ローカル） -->
@@ -112,45 +113,61 @@
         <section class="panel" id="usersPanel" data-page="users">
           <h2 style="display:flex;align-items:center;gap:8px">
             ユーザーごとの獲得内訳
-            <button class="icon-btn collapse-btn" id="subcontrolsToggle" aria-expanded="true" title="フィルタを折りたたむ/開く"></button>
+            <button type="button" class="icon-btn collapse-btn" id="subcontrolsToggle" aria-expanded="false" title="フィルタを折りたたむ/開く"></button>
           </h2>
           <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
           <div class="sep"></div>
 
           <!-- 折りたたみ対象のコンテナ -->
           <div id="subcontrolsBody" class="subcontrols-body">
-            <div class="row user-subcontrols">
-              <!-- ① ガチャ絞り込み（移動） -->
-              <div class="gacha-filter" id="gachaFilterWrap">
-                <span class="gf-label">ガチャ絞り込み:</span>
-                <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
-                        aria-haspopup="listbox" aria-expanded="false">すべて</button>
-                <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+            <div class="row user-subcontrols usc-grid">
+              <!-- ① ガチャ絞り込み -->
+              <div class="usc-label"><label for="gachaFilterBtn">ガチャ絞り込み：</label></div>
+              <div class="usc-ctrl">
+                <div class="gacha-filter" id="gachaFilterWrap">
+                  <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
+                          aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                  <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+                </div>
               </div>
 
-              <!-- ② レア度（新規：ガチャと同デザインのマルチセレクト） -->
-              <div class="rarity-filter" id="rarityFilterWrap">
-                <span class="gf-label">レア度:</span>
-                <button type="button" id="rarityFilterBtn" class="btn subtle gf-btn"
-                        aria-haspopup="listbox" aria-expanded="false">すべて</button>
-                <div id="rarityPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+              <!-- ② レア度 -->
+              <div class="usc-label"><label for="rarityFilterBtn">レア度</label></div>
+              <div class="usc-ctrl">
+                <div class="rarity-filter" id="rarityFilterWrap">
+                  <button type="button" id="rarityFilterBtn" class="btn subtle gf-btn"
+                          aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                  <div id="rarityPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+                </div>
               </div>
 
-              <!-- ③ 既存トグル & 検索 -->
-              <div class="toggle">
-                <input type="checkbox" id="hideMiss" class="switch">
-                <span class="label">はずれを隠す</span>
+              <!-- ③ はずれを隠す -->
+              <div class="usc-label"><label for="hideMiss">はずれを隠す</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="hideMiss" class="switch">
+                </div>
               </div>
-              <div class="toggle">
-                <input type="checkbox" id="showCounts" class="switch">
-                <span class="label">獲得数を表示</span>
+
+              <!-- ④ 獲得数を表示 -->
+              <div class="usc-label"><label for="showCounts">獲得数を表示</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="showCounts" class="switch">
+                </div>
               </div>
-              <div class="toggle">
-                <input type="checkbox" id="showSkipOnly" class="switch">
-                <span class="label">リアグのみを表示</span>
+
+              <!-- ⑤ リアグのみを表示 -->
+              <div class="usc-label"><label for="showSkipOnly">リアグのみを表示</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="showSkipOnly" class="switch">
+                </div>
               </div>
-              <div class="user-search">
-                <label for="userSearch" class="user-search-label">ユーザー検索:</label>
+
+              <!-- ⑥ ユーザー検索 -->
+              <div class="usc-label"><label for="userSearch">ユーザー検索：</label></div>
+              <div class="usc-ctrl">
                 <input id="userSearch" type="text" placeholder="名前で検索..." />
               </div>
             </div>
