@@ -283,7 +283,18 @@
   <div class="modal" id="imageModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <h3 id="modalTitle">画像を設定</h3>
-      <div class="muted" id="modalSubtitle">対象: <span class="tag" id="modalTarget"></span></div>
+      <div class="muted modal-subtitle-row" id="modalSubtitle">
+        <label class="inline-label" for="modalTarget">対象:</label>
+        <input id="modalTarget" type="text" class="inline-input" placeholder="アイテム名（コード）" />
+
+        <div class="inline-right">
+          <label class="inline-label" for="modalRarity">レアリティ:</label>
+          <select id="modalRarity" class="inline-select">
+            <option value="" disabled selected>選択...</option>
+            <!-- ※ この options は次フェーズでJSから埋め込みます -->
+          </select>
+        </div>
+      </div>
       <div class="sep"></div>
       <div class="grid-2">
         <div class="preview-box" style="background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px;display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center">

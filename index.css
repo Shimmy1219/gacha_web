@@ -535,3 +535,33 @@ button, a, [role="button"] {
     font-size:.9rem;
     border-radius:10px;
   }
+  /* 画像モーダル：サブタイトル行のインライン編集UI */
+  #imageModal #modalSubtitle.modal-subtitle-row{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+
+  /* 左右のラベルをやや強調（既存Muted上に乗せる） */
+  #imageModal #modalSubtitle .inline-label{
+    font-weight:700; color:#cbd5e1;
+  }
+
+  /* 対象名のテキスト入力は可変幅（モバイルで折返し優先） */
+  #imageModal #modalSubtitle .inline-input{
+    flex:1 1 340px; min-width:160px;
+  }
+
+  /* 右側ブロックは右寄せ配置 */
+  #imageModal #modalSubtitle .inline-right{
+    display:flex; align-items:center; gap:8px; margin-left:auto;
+  }
+
+  /* セレクトの最小幅を少し確保 */
+  #imageModal #modalSubtitle .inline-select{
+    min-width:160px;
+  }
+
+  /* モバイル時は自然に折り返す（既存の16pxフォント適用あり） */
+  @media (max-width: 600px){
+    #imageModal #modalSubtitle .inline-input { flex:1 1 100%; }
+    #imageModal #modalSubtitle .inline-right { width:100%; justify-content:flex-start; margin-left:0; }
+  }
