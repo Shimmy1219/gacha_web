@@ -21,7 +21,11 @@
 <!-- 先にライブラリ（ローカル） -->
 <script src="/lib/jszip.min.js"></script>
 <script src="/lib/pako.min.js"></script>
-
+<script type="module">
+  import { createServices } from "/src/services/indexService.js";
+  // 二重初期化を避ける
+  window.Services ||= createServices();
+</script>
 <!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
 (function ensureLibs(){
@@ -458,6 +462,147 @@ const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&l
 const sanitize = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
 const uniqPush = (arr, v) => { if(!arr.includes(v)) arr.push(v); };
 
+/* === 追加: レアリティ設定のLS I/Fと補助 === */
+const DEFAULT_RARITY_COLORS = {
+  "UR": "#f59e0b",
+  "SSR": "#fde68a",
+  "SR": "#a78bfa",
+  "R": "#93c5fd",
+  "N": "#a7f3d0",
+  "はずれ": "#fca5a5"
+};
+function loadRarityConfigLS(){
+  try{
+    const raw = localStorage.getItem(LS_KEY_RARITY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw) || {};
+    return (obj && typeof obj === 'object') ? obj : {};
+  }catch(_){
+    return {};
+  }
+}
+function saveRarityConfigLS(cfg){
+  try{
+    const obj = (cfg && typeof cfg === 'object') ? cfg : {};
+    if (Object.keys(obj).length === 0) {
+      localStorage.removeItem(LS_KEY_RARITY);
+    } else {
+      localStorage.setItem(LS_KEY_RARITY, JSON.stringify(obj));
+    }
+  }catch(_){}
+}
+function buildCatalogsFromGData(data){
+  const result = {};
+  Object.entries(data || {}).forEach(([user, gmap])=>{
+    Object.entries(gmap || {}).forEach(([gacha, info])=>{
+      const items = info?.items || {};
+      const pulls = +info?.pulls || 0;
+      result[gacha] = result[gacha] || { pulls: 0, items: {} };
+      result[gacha].pulls += pulls;
+      Object.entries(items).forEach(([rarity, codes])=>{
+        const arr = (result[gacha].items[rarity] ||= []);
+        (codes||[]).forEach(code=>{
+          if (code && !arr.includes(code)) arr.push(code);
+        });
+      });
+    });
+  });
+  // sort codes inside each rarity for stable UI
+  Object.values(result).forEach(v=>{
+    Object.keys(v.items).forEach(r=> v.items[r].sort((a,b)=> a.localeCompare(b,'ja')));
+  });
+  return result;
+}
+function mergeRarityConfigFromGData(data, cfg){
+  // cfg: フラット辞書 { "ガチャ::レア": { color, rarityNum, emitRate } }
+  const out = (cfg && typeof cfg === 'object') ? { ...cfg } : {};
+  Object.entries(data || {}).forEach(([user, gmap])=>{
+    Object.entries(gmap || {}).forEach(([gacha, info])=>{
+      const items = info?.items || {};
+
+      // 既存 rarityNum の使用状況（このガチャ内のみ）を収集
+      const usedNums = new Set(
+        Object.keys(out)
+          .filter(k => k.startsWith(gacha + '::'))
+          .map(k => out[k]?.rarityNum)
+          .filter(v => typeof v === 'number')
+      );
+      const nextNum = ()=> {
+        for(let n=1;n<=20;n++){ if(!usedNums.has(n)) { usedNums.add(n); return n; } }
+        return 20;
+      };
+
+      Object.keys(items).forEach(rarity=>{
+        const key  = `${gacha}::${rarity}`;
+        const meta = out[key] || (out[key] = {});
+        if (meta.color == null) meta.color = DEFAULT_RARITY_COLORS[rarity] || "#c0c0c0";
+        if (typeof meta.rarityNum !== 'number') {
+          // 既定順があれば採用、なければ自動採番
+          const idx = Array.isArray(baseRarityOrder) ? baseRarityOrder.indexOf(rarity) : -1;
+          meta.rarityNum = (idx >= 0)
+            ? ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[rarity] ?? nextNum())
+            : nextNum();
+        }
+        // emitRate は推論しない（未指定は null のまま）
+        if (typeof meta.emitRate !== 'number') meta.emitRate = null;
+      });
+    });
+  });
+  return out;
+}
+
+function importRarityConfigFromTxtExternal(state, cfg, gacha){
+  if (!state || !cfg || !gacha) return;
+  const rbase = Array.isArray(state?.gacha_data?.rarity_base) ? state.gacha_data.rarity_base : [];
+  if (!rbase.length) return;
+
+  // 採番の準備（このガチャ内の使用済み番号を収集）
+  const usedNums = new Set(
+    Object.keys(cfg)
+      .filter(k => k.startsWith(gacha + '::'))
+      .map(k => cfg[k]?.rarityNum)
+      .filter(v => typeof v === 'number')
+  );
+  const nextNum = ()=> { for(let n=1;n<=20;n++){ if(!usedNums.has(n)) { usedNums.add(n); return n; } } return 20; };
+
+  // 値 > 100 があれば 100 で割る（%化）
+  const maxVal = Math.max(...rbase.map(row => +((Array.isArray(row)? row[1] : row?.value) ?? 0) || 0), 0);
+  const scale = (maxVal > 100) ? 100 : 1;
+
+  for (const row of rbase){
+    const rarity = String(Array.isArray(row) ? row[0] : (row?.name ?? "")).trim();
+    const raw    = +((Array.isArray(row) ? row[1] : row?.value) ?? 0);
+    if (!rarity) continue;
+
+    const key  = `${gacha}::${rarity}`;
+    const meta = (cfg[key] ||= {});
+    if (meta.color == null) meta.color = DEFAULT_RARITY_COLORS[rarity] || "#c0c0c0";
+    if (typeof meta.rarityNum !== 'number') {
+      const idx = Array.isArray(baseRarityOrder) ? baseRarityOrder.indexOf(rarity) : -1;
+      meta.rarityNum = (idx >= 0)
+        ? ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[rarity] ?? nextNum())
+        : nextNum();
+    }
+    // 外部の確率を真として上書き（推論せず）
+    meta.emitRate = (raw / scale);
+  }
+
+  // （互換）正規化関数がネスト前提なら、同一オブジェクト参照で一時ネストを作って呼ぶ
+  if (window.normalizeEmitRatesForGacha) {
+    try {
+      const shim = { [gacha]: {} };
+      for (const k of Object.keys(cfg)) {
+        if (k.startsWith(gacha + '::')) {
+          const r = k.split('::')[1];
+          shim[gacha][r] = cfg[k];  // ★同じオブジェクト参照を渡すので in-place 更新はフラットにも反映
+        }
+      }
+      window.normalizeEmitRatesForGacha(shim, gacha);
+    } catch(_) {}
+  }
+}
+
+
 /* ====== 画像保存系（既存） ====== */
 let gData = {};                     // { user: { gacha: { pulls:int, items:{rarity:[code...]}}}}
 let gCatalogByGacha = {};           // { gacha: [{gacha,rarity,code}, ...]} ← 追加：カタログ定義
@@ -468,14 +613,49 @@ const LS_KEY_IMG="gacha_item_image_map_v1";
 const LS_KEY_SKIP="gacha_item_image_skip_v1";
 const LS_KEY_ORIG="gacha_item_original_v1";
 const LS_KEY_RIAGU_META = "gacha_riagu_meta_v1";
+const LS_KEY_RARITY = "gacha_rarity_config_v1";
+window.LS_KEY_RARITY = LS_KEY_RARITY;
 let riaguMeta = loadLocalJSON(LS_KEY_RIAGU_META, {});
 function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
 function saveLocalJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e){ if(e && (e.name==="QuotaExceededError"||e.code===22)){ console.warn("quota",key); return false; } throw e; } }
 let imgMap=loadLocalJSON(LS_KEY_IMG,{}), origMap=loadLocalJSON(LS_KEY_ORIG,{}), skipSet=new Set(loadLocalJSON(LS_KEY_SKIP,[]));
-const skipHas=(key)=>skipSet.has(key)||skipSet.has(stripGacha(key));
-const skipAdd=(key)=>{ skipSet.add(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
-const skipDel=(key)=>{ skipSet.delete(key); skipSet.delete(stripGacha(key)); saveLocalJSON(LS_KEY_SKIP,Array.from(skipSet)); };
+const skipHas = (key) => {
+  const services = window?.Services || {};
+  const riagu = services.riaguService || services.riagu || null;
 
+  // Service があれば、常に最新のキー集合で判定（レガシー "ガチャ抜き" も考慮）
+  if (riagu && typeof riagu.listKeys === 'function') {
+    const s = riagu.listKeys(); // Set を想定
+    return s.has(key) || s.has(stripGacha(key));
+  }
+
+  // フォールバック：従来のローカル Set
+  return skipSet.has(key) || skipSet.has(stripGacha(key));
+};
+
+function skipAdd(key){
+  // 1) ローカルミラーも更新（互換・エクスポートのため維持）
+  skipSet.add(key);
+  skipSet.delete(stripGacha(key));
+  saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
+
+  // 2) Service があれば、そちらも更新（内部キャッシュ/監視に追随）
+  const services = window?.Services || {};
+  const riagu = services.riaguService || services.riagu || null;
+  if (riagu && typeof riagu.addKey === 'function') riagu.addKey(key);
+}
+
+function skipDel(key){
+  // 1) ローカルミラーを更新
+  skipSet.delete(key);
+  skipSet.delete(stripGacha(key));
+  saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
+
+  // 2) Service があれば、そちらも更新
+  const services = window?.Services || {};
+  const riagu = services.riaguService || services.riagu || null;
+  if (riagu && typeof riagu.delKey === 'function') riagu.delKey(key);
+}
 const DB_NAME="gachaImagesDB", STORE="images";
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)}; r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });}
 async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
@@ -573,7 +753,7 @@ function updateMobileViewMode(){
     main.classList.remove('mobile-views');
     main.removeAttribute('data-view');
     ensureControlsLocation(false);  // controlsPage を元位置へ戻す
-    window.closeDrawer(true);              // 念のため閉じる
+    if (typeof window.closeDrawer === 'function') window.closeDrawer(true);             // 念のため閉じる
   }
 
   syncMobileTabs();
@@ -628,6 +808,28 @@ function incCount(user, gacha, rarity, code, by=1){
 
 function onJsonLoaded(data){
   gData = data || {};
+
+  // 1) gData から catalogs を合成（誰かが獲得したものベース）
+  const catalogs = buildCatalogsFromGData(gData);
+  // 形式を gCatalogByGacha に変換（{gacha:{items}}→[{gacha,rarity,code}...]）
+  gCatalogByGacha = {};
+  Object.entries(catalogs).forEach(([gacha, info])=>{
+    const arr = [];
+    Object.entries(info.items||{}).forEach(([rarity, codes])=>{
+      (codes||[]).forEach(code=> arr.push({ gacha, rarity, code }));
+    });
+    gCatalogByGacha[gacha] = arr.sort(byRarityThenCode);
+  });
+
+  // 2) レアリティ設定を最小構築
+  //    ※ JSON経路では emitRate の推論・自動補完は行わない。
+  //    ※ mergeRarityConfigFromGData は emitRate が未指定のとき null を入れる実装。
+  const rarityCfg = loadRarityConfigLS();
+  mergeRarityConfigFromGData(gData, rarityCfg);
+  // ★ ensureAutoEmitRatesForGacha の呼び出しを削除（推論しない）
+  saveRarityConfigLS(rarityCfg);
+
+  // 3) 既存の再描画フロー
   rebuildGachaCaches();
   renderTabs();
   renderItemGrid();
@@ -1042,23 +1244,109 @@ function openDeleteConfirm(gacha){
   open(deleteModal);
 }
 $("#delCancel").addEventListener("click", ()=>{ pendingDeleteGacha=null; close(deleteModal); });
-$("#delConfirm").addEventListener("click", ()=>{
-  const g = pendingDeleteGacha; pendingDeleteGacha=null; close(deleteModal);
-  if(!g) return;
-  // カタログから削除
-  delete gCatalogByGacha[g];
-  // 集計から削除 & カウントも削除
-  for(const user of Object.keys(gData)){
-    if(gData[user] && gData[user][g]) delete gData[user][g];
-    if(gHitCounts[user] && gHitCounts[user][g]) delete gHitCounts[user][g];
-    // ユーザーの全ガチャが無くなったら空を掃除
-    if(gData[user] && Object.keys(gData[user]).length===0) delete gData[user];
+$("#delConfirm").addEventListener("click", async ()=>{
+  console.log("Deleting gacha を開始します");
+  const gName = pendingDeleteGacha; 
+  pendingDeleteGacha = null; 
+  close(deleteModal);
+  if (!gName) return;
+
+  // 1) カタログ/集計/カウントから削除
+  delete gCatalogByGacha[gName];
+  for (const user of Object.keys(gData)) {
+    if (gData[user] && gData[user][gName]) delete gData[user][gName];
+    if (gHitCounts[user] && gHitCounts[user][gName]) delete gHitCounts[user][gName];
+    if (gData[user] && Object.keys(gData[user]).length === 0) delete gData[user];
   }
-  // 選択ガチャの調整
-  if(selectedGacha === g) selectedGacha = null;
+  if (selectedGacha === gName) selectedGacha = null;
+
+  // 2) 画像/原本/スキップ/RIAGUメタ/レアリティ設定 をクリーンアップ
+  try {
+    const prefix = gName + "::";
+
+    // 2-1) 画像マップ（thumb）
+    for (const [k, v] of Object.entries(imgMap || {})) {
+      if (!k.startsWith(prefix)) continue;
+      if (typeof v === "string" && v.startsWith("idb:")) {
+        const id = v.slice(4); // "...|thumb"
+        try { await idbDelete(id); } catch(e) { console.warn("idbDelete thumb failed:", id, e); }
+        const u = urlCache?.get?.(id);
+        if (u) { URL.revokeObjectURL(u); urlCache.delete(id); }
+      }
+      delete imgMap[k];
+    }
+
+    // 2-2) オリジナル（orig）
+    for (const [k, v] of Object.entries(origMap || {})) {
+      if (!k.startsWith(prefix)) continue;
+      if (typeof v === "string" && v.startsWith("idb:")) {
+        const id = v.slice(4); // "...|orig"
+        try { await idbDelete(id); } catch(e) { console.warn("idbDelete orig failed:", id, e); }
+        const u = urlCache?.get?.(id);
+        if (u) { URL.revokeObjectURL(u); urlCache.delete(id); }
+      }
+      delete origMap[k];
+    }
+
+    // 2-3) リアグ（スキップ指定）
+    for (const k of Array.from(skipSet || [])) {
+      if (String(k).startsWith(prefix)) skipSet.delete(k);
+    }
+
+    // 2-4) RIAGUメタ（cost/type 等）
+    //   形式: { "ガチャ::レア::コード": {...}, ... }
+    for (const k of Object.keys(riaguMeta || {})) {
+      if (k.startsWith(prefix)) delete riaguMeta[k];
+    }
+
+    // 2-5) レアリティ設定（gacha_rarity_config_v1 のフラット辞書）→ Service に委譲
+    try {
+      if (window.Services?.rarity) {
+        window.Services.rarity.deleteGacha(gName); // 内部で save() + change 発火
+      } else {
+        // フォールバック（保険）：サービスを動的 import して実行
+        const { RarityService } = await import("/src/services/rarityService.js");
+        const svc = new RarityService((window.LS_KEY_RARITY || "gacha_rarity_config_v1"));
+        svc.load();
+        svc.deleteGacha(gName);
+      }
+    } catch(e) {
+      console.warn("rarity cleanup via service failed:", e);
+    }
+
+    // 2-6) LSへ保存（空なら removeItem） ※画像/orig/skip/riagu のみ明示保存
+    const K_IMG  = window.LS_KEY_IMG  || "gacha_item_image_map_v1";
+    const K_ORIG = window.LS_KEY_ORIG || "gacha_item_original_v1";
+    const K_SKIP = window.LS_KEY_SKIP || "gacha_item_image_skip_v1";
+    const K_RIAGU= window.LS_KEY_RIAGU_META || "gacha_riagu_meta_v1";
+
+    if (imgMap && Object.keys(imgMap).length > 0) localStorage.setItem(K_IMG, JSON.stringify(imgMap));
+    else localStorage.removeItem(K_IMG);
+
+    if (origMap && Object.keys(origMap).length > 0) localStorage.setItem(K_ORIG, JSON.stringify(origMap));
+    else localStorage.removeItem(K_ORIG);
+
+    if (skipSet && skipSet.size > 0) localStorage.setItem(K_SKIP, JSON.stringify(Array.from(skipSet)));
+    else localStorage.removeItem(K_SKIP);
+
+    if (riaguMeta && Object.keys(riaguMeta).length > 0) localStorage.setItem(K_RIAGU, JSON.stringify(riaguMeta));
+    else localStorage.removeItem(K_RIAGU);
+
+  } catch (e) {
+    console.warn("image/riagu/rarity cleanup block failed", e);
+  }
+
+  // 3) 再構築 & 再描画 & 状態保存
   rebuildGachaCaches();
-  renderTabs(); renderItemGrid(); renderUsersList(); renderRiaguPanel(); saveAppStateDebounced();
+  renderTabs(); 
+  renderItemGrid(); 
+  renderUsersList(); 
+  renderRiaguPanel(); 
+  saveAppStateDebounced();
 });
+
+
+
 
 /* ====== アイテム削除確認モーダル ====== */
 const itemDeleteModal = $("#itemDeleteModal");
@@ -1575,7 +1863,7 @@ function mergeIntoGData(delta){
 <script>
 
 // 外部state(JSON) → 既存構造へ取り込み
-async function importFromExternalState(state){
+function importFromExternalState(state){
   try{
     // 1) ガチャ名の決定
     const nameMap = state?.gacha_name_list || {};
@@ -1612,6 +1900,7 @@ async function importFromExternalState(state){
       delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
 
       let pulls = 0;
+
       for(const e of entries){
         // e: [id, rarity, itemName, count]
         const rarity = String(e?.[1] ?? "");
@@ -1650,6 +1939,15 @@ async function importFromExternalState(state){
       mergeIntoGData(delta);
     }
 
+    // 4) TXT 由来のレアリティ設定（emitRate）の取り込み
+    try{
+      const rarityCfg = loadRarityConfigLS();
+      importRarityConfigFromTxtExternal(state, rarityCfg, gacha);
+      // 未設定のレア度があれば色/強さも補完（gDataを見ておく）
+      mergeRarityConfigFromGData(gData, rarityCfg);
+      saveRarityConfigLS(rarityCfg);
+    }catch(_){ /* 端末により LS が無効な場合もあるので握りつぶす */ }
+
     rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList(); renderRiaguPanel();
     startDone(); close(startModal); saveAppStateDebounced();
   }catch(err){
@@ -1657,6 +1955,7 @@ async function importFromExternalState(state){
     alert("取り込みに失敗しました: " + (err?.message || err));
   }
 }
+
 </script>
 <script>
 /* App⇔モジュールのブリッジ（let 変数を window へ安全に受け渡す） */
@@ -1797,6 +2096,10 @@ function setupHamburger(){
   const drawer  = document.getElementById('mobileDrawer');
   const overlay = document.getElementById('drawerOverlay');
   const closeBt = document.getElementById('drawerClose');
+  
+  if (typeof window.closeDrawer !== 'function') {
+    window.closeDrawer = function(){ /* no-op */ };
+  }
 
   if (!btn || !drawer) return;
 
@@ -1831,16 +2134,15 @@ document.addEventListener('DOMContentLoaded', setupHamburger);
 
 </script>
 
-
 <script type="module">
   import { initFilters } from "/src/filters.js";
   initFilters();
 </script>
 <script type="module">
-  import { initRarityUI, getRarityMeta, listRaritiesForGacha, isMiss } from "/src/rarity.js";
+  import { initRarityUI, getRarityMeta, listRaritiesForGacha, isMiss} from "/src/rarity.js";
   initRarityUI();
   // 段階移行用に window へも露出（後工程で byRarityThenCode などに置換利用）
-  Object.assign(window, { getRarityMeta, listRaritiesForGacha, isMiss });
+  Object.assign(window, { getRarityMeta, listRaritiesForGacha, isMiss, LS_KEY_RARITY });
 </script>
 <script type="module" src="/src/ui-riagu.js"></script>
 <script type="module">
@@ -1873,6 +2175,20 @@ document.addEventListener('DOMContentLoaded', setupHamburger);
     closeModal: close
   });
 </script>
+<!-- 追加: 排出率ユーティリティ（UIに依存しない純関数）を window にブリッジ -->
+<script type="module">
+  import {
+    ensureAutoEmitRatesForGacha,
+    normalizeEmitRatesForGacha,
+    PRECISION_DECIMALS
+  } from "/src/rarity_emit_calc.js";
+  Object.assign(window, {
+    ensureAutoEmitRatesForGacha,
+    normalizeEmitRatesForGacha,
+    PRECISION_DECIMALS
+  });
+</script>
+
 <button id="gachaFab" type="button" class="btn gacha-fab">ガチャを引く</button>
 </body>
 </html>
