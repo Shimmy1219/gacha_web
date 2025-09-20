@@ -21,10 +21,30 @@
 <!-- 先にライブラリ（ローカル） -->
 <script src="/lib/jszip.min.js"></script>
 <script src="/lib/pako.min.js"></script>
+<script>
+  window.LS_KEY_APP  = 'gacha_app_state_v1';
+  window.LS_KEY_IMG  = 'gacha_item_image_map_v1';
+  window.LS_KEY_ORIG = 'gacha_item_original_v1';
+  window.LS_KEY_SKIP = 'gacha_item_image_skip_v1';
+  window.LS_KEY_RIAGU_META = 'gacha_riagu_meta_v1';
+  window.LS_KEY_RARITY = 'gacha_rarity_config_v1';
+</script>
 <script type="module">
   import { createServices } from "/src/services/indexService.js";
-  // 二重初期化を避ける
-  window.Services ||= createServices();
+  // レジストリキーは head 先出しの値をそのまま使用（乖離をゼロに）
+  window.Services ||= createServices({
+    app:    window.LS_KEY_APP,
+    rarity: window.LS_KEY_RARITY,
+    imgMap: window.LS_KEY_IMG,
+    origMap:window.LS_KEY_ORIG,
+    skipSet:window.LS_KEY_SKIP,
+    riagu:  window.LS_KEY_RIAGU_META
+  });
+  
+</script>
+<script type="module">
+  import { rarityNameSpanHTML, applyRarityColor } from "/src/rarity_style.js";
+  Object.assign(window, { rarityNameSpanHTML, applyRarityColor });
 </script>
 <!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
@@ -471,6 +491,34 @@ const DEFAULT_RARITY_COLORS = {
   "N": "#a7f3d0",
   "はずれ": "#fca5a5"
 };
+// --- Service ショートカット＆AppStateブリッジ ---
+function S(){ return window.Services || {}; }
+
+// Service → ローカル変数へ反映（起動時/読込時）
+function applyAppStateFromService(){
+  const app = S().app || S().appStateService;
+  if (!app) return false;
+  const ok = app.load?.() ?? true;        // load() は保存済みを読み込む実装
+  const st = app.get?.() || {};           // { data, catalogs, counts, selected }
+  gData             = st.data     || {};
+  gCatalogByGacha   = st.catalogs || {};
+  gHitCounts        = st.counts   || {};
+  selectedGacha     = st.selected || null;
+  return ok;
+}
+
+// ローカル変数のスナップショットを Service 側へ保存（debounce は Service 内）
+function commitAppStateSnapshot(){
+  const app = S().app || S().appStateService;
+  if (!app) return;
+  app.patch(s=>{
+    s.data     = gData || {};
+    s.catalogs = gCatalogByGacha || {};
+    s.counts   = gHitCounts || {};
+    s.selected = selectedGacha || null;
+  });
+}
+
 function loadRarityConfigLS(){
   try{
     const raw = localStorage.getItem(LS_KEY_RARITY);
@@ -619,43 +667,31 @@ let riaguMeta = loadLocalJSON(LS_KEY_RIAGU_META, {});
 function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
 function saveLocalJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e){ if(e && (e.name==="QuotaExceededError"||e.code===22)){ console.warn("quota",key); return false; } throw e; } }
 let imgMap=loadLocalJSON(LS_KEY_IMG,{}), origMap=loadLocalJSON(LS_KEY_ORIG,{}), skipSet=new Set(loadLocalJSON(LS_KEY_SKIP,[]));
-const skipHas = (key) => {
-  const services = window?.Services || {};
-  const riagu = services.riaguService || services.riagu || null;
-
-  // Service があれば、常に最新のキー集合で判定（レガシー "ガチャ抜き" も考慮）
-  if (riagu && typeof riagu.listKeys === 'function') {
-    const s = riagu.listKeys(); // Set を想定
-    return s.has(key) || s.has(stripGacha(key));
+function skipHas(itemKey){
+  const { riagu, images } = S();
+  // 1) リアグ（正）を優先
+  if (riagu?.listKeys) {
+    const set = riagu.listKeys();                 // Set<string>
+    if (set.has(itemKey)) return true;
+    const leg = stripGacha(itemKey);              // "rarity::code" 旧形式
+    if (set.has(leg)) return true;
   }
-
-  // フォールバック：従来のローカル Set
-  return skipSet.has(key) || skipSet.has(stripGacha(key));
-};
-
-function skipAdd(key){
-  // 1) ローカルミラーも更新（互換・エクスポートのため維持）
-  skipSet.add(key);
-  skipSet.delete(stripGacha(key));
-  saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
-
-  // 2) Service があれば、そちらも更新（内部キャッシュ/監視に追随）
-  const services = window?.Services || {};
-  const riagu = services.riaguService || services.riagu || null;
-  if (riagu && typeof riagu.addKey === 'function') riagu.addKey(key);
+  // 2) 互換：images の skip にも残っていれば true
+  return !!(images?.hasSkip?.(itemKey) || images?.hasSkip?.(stripGacha(itemKey)));
 }
 
-function skipDel(key){
-  // 1) ローカルミラーを更新
-  skipSet.delete(key);
-  skipSet.delete(stripGacha(key));
-  saveLocalJSON(LS_KEY_SKIP, Array.from(skipSet));
-
-  // 2) Service があれば、そちらも更新
-  const services = window?.Services || {};
-  const riagu = services.riaguService || services.riagu || null;
-  if (riagu && typeof riagu.delKey === 'function') riagu.delKey(key);
+function skipAdd(itemKey){
+  const { riagu, images } = S();
+  riagu?.addKey?.(itemKey);   // 正（riagu）
+  images?.addSkip?.(itemKey); // 互換ミラー
 }
+
+function skipDel(itemKey){
+  const { riagu, images } = S();
+  riagu?.delKey?.(itemKey);   // 正（riagu）
+  images?.delSkip?.(itemKey); // 互換ミラー
+}
+
 const DB_NAME="gachaImagesDB", STORE="images";
 function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)}; r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });}
 async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
@@ -666,8 +702,10 @@ const urlCache=new Map(); async function urlForKey(key){ if(urlCache.has(key)) r
 
 function lookupVal(map,key){ if(map[key]) return map[key]; const leg=stripGacha(key); return map[leg]||""; }
 function immediateSrcFor(key){ const v=lookupVal(imgMap,key); if(!v) return ""; if(v.startsWith("idb:")) return ""; return v; }
-function thumbInnerHTML(it){ const key=keyOf(it.gacha,it.rarity,it.code); const src=immediateSrcFor(key); return src?`<img src="${src}" alt="${escapeHtml(it.code)}" />`:`<span class="muted">No Image</span>`; }
-
+function thumbInnerHTML(it){
+  // 実画像は resolveThumbs() 側で非同期に埋める
+  return `<span class="muted">No Image</span>`;
+}
 // スプラッシュ中はスクロール不可
 document.body.classList.add('splash-locked');
 
@@ -707,33 +745,18 @@ function syncMobileTabs(){
 // 自動保存関係
 const LS_KEY_APP = "gacha_app_state_v1";
 function saveAppState(){
-  try{
-    const state = {
-      data: gData,
-      catalogs: gCatalogByGacha,
-      counts: gHitCounts,
-      selected: selectedGacha || null,
-    };
-    localStorage.setItem(LS_KEY_APP, JSON.stringify(state));
-  }catch(e){ console.warn("saveAppState failed:", e); }
+  // Service 側に委譲（内部でdebounce保存される）
+  commitAppStateSnapshot();
 }
 
 function saveAppStateDebounced(){
-  clearTimeout(saveAppStateDebounced._t);
-  saveAppStateDebounced._t = setTimeout(saveAppState, 150);
+  // ここでは区別をつけず、常に patch を投げる（Service側が debounce 済み）
+  commitAppStateSnapshot();
 }
 
 function loadAppState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY_APP);
-    if(!raw) return false;
-    const s = JSON.parse(raw);
-    gData = s?.data || {};
-    gCatalogByGacha = s?.catalogs || {};
-    gHitCounts = s?.counts || {};
-    selectedGacha = s?.selected || selectedGacha;
-    return true;
-  }catch(e){ console.warn("loadAppState failed:", e); return false; }
+  // Service 側から読み込んでローカル変数へ反映
+  return applyAppStateFromService();
 }
 
 function updateMobileViewMode(){
@@ -769,7 +792,29 @@ document.addEventListener('DOMContentLoaded', () => {
     startDone();
     saveAppStateDebounced();             // スプラッシュを閉じて通常画面へ
     }
+    wireRarityColorLiveSync();
 });
+
+function wireRarityColorLiveSync(){
+  console.log('wireRarityColorLiveSync called');
+  const services = window.Services || {};
+  const raritySvc = services.rarity || services.rarityService || null;
+  if (!raritySvc || typeof raritySvc.onChange !== 'function') return;
+  if (wireRarityColorLiveSync._installed) return; // 二重購読防止
+  wireRarityColorLiveSync._installed = true;
+
+  raritySvc.onChange(() => {
+    console.log('rarity config changed, live sync triggered');
+    try {
+      // レアリティ設定テーブルは rarity.js 内で行内更新済み。
+      // 他セクションだけ再描画して色を即時反映。
+      renderItemGrid();
+      renderUsersList();
+    } catch (e) {
+      console.warn('rarity color live sync skipped:', e);
+    }
+  });
+}
 
 // DOM 構築後に初回実行（早すぎる呼び出しを防止）
 document.addEventListener('DOMContentLoaded', updateMobileViewMode);
@@ -809,9 +854,8 @@ function incCount(user, gacha, rarity, code, by=1){
 function onJsonLoaded(data){
   gData = data || {};
 
-  // 1) gData から catalogs を合成（誰かが獲得したものベース）
+  // 1) gData → catalogs 合成
   const catalogs = buildCatalogsFromGData(gData);
-  // 形式を gCatalogByGacha に変換（{gacha:{items}}→[{gacha,rarity,code}...]）
   gCatalogByGacha = {};
   Object.entries(catalogs).forEach(([gacha, info])=>{
     const arr = [];
@@ -821,15 +865,33 @@ function onJsonLoaded(data){
     gCatalogByGacha[gacha] = arr.sort(byRarityThenCode);
   });
 
-  // 2) レアリティ設定を最小構築
-  //    ※ JSON経路では emitRate の推論・自動補完は行わない。
-  //    ※ mergeRarityConfigFromGData は emitRate が未指定のとき null を入れる実装。
-  const rarityCfg = loadRarityConfigLS();
-  mergeRarityConfigFromGData(gData, rarityCfg);
-  // ★ ensureAutoEmitRatesForGacha の呼び出しを削除（推論しない）
-  saveRarityConfigLS(rarityCfg);
+  // 2) レアリティ設定の最小反映（emitRateは推論せずnull）
+  const rarity = S().rarity || S().rarityService;
+  if (rarity) {
+    const perGacha = {};
+    Object.values(gData).forEach(gmap=>{
+      Object.entries(gmap||{}).forEach(([gacha, info])=>{
+        const items = info?.items || {};
+        (perGacha[gacha] ||= new Set());
+        Object.keys(items).forEach(r=> perGacha[gacha].add(r));
+      });
+    });
+    for (const [gacha, rset] of Object.entries(perGacha)) {
+      for (const r of rset) {
+        const baseColor = (typeof DEFAULT_RARITY_COLORS === 'object' && DEFAULT_RARITY_COLORS[r]) || '#c0c0c0';
+        const baseNum = ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[r]);
+        const prev = rarity.getMeta(gacha, r) || {};
+        const meta = {
+          color:     prev.color ?? baseColor,
+          rarityNum: (typeof prev.rarityNum === 'number') ? prev.rarityNum : (baseNum ?? null),
+          emitRate:  (typeof prev.emitRate === 'number')  ? prev.emitRate  : null
+        };
+        rarity.upsert(gacha, r, meta);
+      }
+    }
+  }
 
-  // 3) 既存の再描画フロー
+  // 3) 以降既存フロー
   rebuildGachaCaches();
   renderTabs();
   renderItemGrid();
@@ -981,6 +1043,18 @@ function renderItemGrid(){
         <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
       </div>
       <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
+
+    // ★ 追加：item-card のレアリティ色を適用（rarityService + rarityNameSpanHTML）
+    {
+      const services = window.Services
+      const raritySvc = services.rarity || services.rarityService || null;
+      const color = raritySvc?.getMeta?.(it.gacha, it.rarity)?.color ?? null;
+      console.log("色適用", it.gacha, it.rarity, color);
+      const spanHtml = window.rarityNameSpanHTML(it.rarity, color, { extraClasses: String(it.rarity) })
+      const el = card.querySelector('.muted .rarity');
+      console.log("spanHtml", spanHtml, el);
+      if (el) el.outerHTML = spanHtml;
+    }
 
     card.querySelector('[data-action="primary"]').addEventListener("click", () => {
       const nowHas = !!lookupVal(imgMap, key);
@@ -1186,7 +1260,19 @@ function renderUsersList(){
         if (rSel !== "*" && !rSel.has(rarity)) return;
 
         const row=document.createElement("div"); row.className="rarity-row";
-        const label=document.createElement("span"); label.className=`rarity-label rarity ${rarity}`; label.textContent=rarity;
+        const services = window.Services || {};
+        const raritySvc = services.rarity || services.rarityService || null;
+        const color = raritySvc?.getMeta?.(gacha, rarity)?.color ?? null;
+
+        const label=document.createElement("span");
+        label.className="rarity-label";
+        {
+          const spanHtml = (window.rarityNameSpanHTML
+            ? window.rarityNameSpanHTML(rarity, color, { extraClasses: String(rarity) })
+            : `<span class="rarity ${escapeHtml(String(rarity))}">${escapeHtml(String(rarity))}</span>`);
+          label.innerHTML = spanHtml;
+        }
+
         const itemsWrap=document.createElement("div"); itemsWrap.className="rarity-items";
 
         list.forEach(code=>{
@@ -1419,30 +1505,57 @@ $("#idelConfirm").addEventListener("click", async () => {
 });
 
 
-/* ====== 画像モーダル（共通ヘルパーに統一） ====== */
+/* ====== 画像モーダル（Service クラス対応版） ====== */
 const imageModal = $("#imageModal");
 let tempPreviewURL = "";
+
+// Services ショートカット（存在しなければ空オブジェクト）
+function _S(){ return window.Services || {}; }
 
 function openImageModal(it){
   const k = keyOf(it.gacha, it.rarity, it.code);
   if (skipHas(k)) return;
 
   currentModalTarget = it;
-  $("#modalTarget").textContent = `${it.gacha} / ${it.rarity}:${it.code}`;
 
+  // 1) 見出し（補助）とプレビュー
   const cur = immediateSrcFor(k);
   $("#modalPreview").src = cur || "";
   $("#modalStatus").textContent = (lookupVal(imgMap, k) ? "設定済み" : "未設定");
 
+  // 2) アイテム名 input の初期値を現在コードで埋める
+  const nameIn = $("#modalTarget");
+  if (nameIn) nameIn.value = String(it.code || "");
+
+  // 3) レアリティ select の生成（rarityService を優先）
+  (function buildRaritySelect(){
+    const sel = $("#modalRarity");
+    if (!sel) return;
+    const services  = (window.Services || {});
+    const raritySvc = services.rarity || services.rarityService || null;
+
+    let rarities = [];
+    if (raritySvc && typeof raritySvc.listRarities === "function") {
+      rarities = raritySvc.listRarities(it.gacha) || [];
+    } else {
+      // フォールバック：カタログから
+      rarities = Object.keys(((gCatalogByGacha[it.gacha] || {}).items) || {});
+    }
+
+    sel.innerHTML = rarities.map(r => 
+      `<option value="${escapeHtml(r)}"${r===it.rarity ? ' selected' : ''}>${escapeHtml(r)}</option>`
+    ).join("");
+  })();
+
+  // 4) ファイル/URL 入力の初期化
   $("#fileInput").value = "";
   $("#urlInput").value = (cur && !cur.startsWith("data:")) ? cur : "";
 
-  // ★ここがポイント：共通 open() を使う
   open(imageModal);
 }
 
 function closeImageModal(){
-  // ★共通 close() を使いつつ、プレビューURLの後始末は維持
+  // 共通 close()
   close(imageModal);
   if (tempPreviewURL) {
     URL.revokeObjectURL(tempPreviewURL);
@@ -1456,71 +1569,206 @@ imageModal.addEventListener("click", (e) => {
 });
 
 $("#fileInput").addEventListener("change", async ()=>{
-  if(tempPreviewURL){ URL.revokeObjectURL(tempPreviewURL); tempPreviewURL=""; }
-  const file=$("#fileInput").files[0]; if(!file){ $("#modalPreview").src=""; return; }
-  const kind=getFileKind(file);
+  if (tempPreviewURL) { URL.revokeObjectURL(tempPreviewURL); tempPreviewURL = ""; }
+  const file = $("#fileInput").files[0];
+  if (!file) { $("#modalPreview").src = ""; return; }
+
+  const kind = getFileKind(file);
   try{
-    if(kind==="image"){ tempPreviewURL=URL.createObjectURL(file); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（画像）"; return; }
-    if(kind==="audio"){ const blob=await makeNotePlaceholder(256); tempPreviewURL=URL.createObjectURL(blob); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（音声:♫）"; return; }
-    if(kind==="video"){ const thumb=await extractVideoThumbnail(file,{time:0.1,maxSize:256}); tempPreviewURL=URL.createObjectURL(thumb); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="未保存のプレビュー（動画サムネ）"; return; }
-  }catch(e){ const ph=await makeFilmPlaceholder(256); tempPreviewURL=URL.createObjectURL(ph); $("#modalPreview").src=tempPreviewURL; $("#modalStatus").textContent="プレビュー生成に失敗（プレースホルダ）"; }
+    if (kind === "image"){
+      tempPreviewURL = URL.createObjectURL(file);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（画像）";
+      return;
+    }
+    if (kind === "audio"){
+      const blob = await makeNotePlaceholder(256);
+      tempPreviewURL = URL.createObjectURL(blob);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（音声:♫）";
+      return;
+    }
+    if (kind === "video"){
+      const thumb = await extractVideoThumbnail(file, { time:0.1, maxSize:256 });
+      tempPreviewURL = URL.createObjectURL(thumb);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（動画サムネ）";
+      return;
+    }
+  }catch(e){
+    const ph = await makeFilmPlaceholder(256);
+    tempPreviewURL = URL.createObjectURL(ph);
+    $("#modalPreview").src = tempPreviewURL;
+    $("#modalStatus").textContent = "プレビュー生成に失敗（プレースホルダ）";
+  }
 });
-$("#urlInput").addEventListener("input", ()=>{ const url=($("#urlInput").value||"").trim(); if(url){ $("#modalPreview").src=url; $("#modalStatus").textContent="未保存のプレビュー（URL）"; } });
+
+$("#urlInput").addEventListener("input", ()=>{
+  const url = ($("#urlInput").value || "").trim();
+  if (url){
+    $("#modalPreview").src = url;
+    $("#modalStatus").textContent = "未保存のプレビュー（URL）";
+  }
+});
 
 $("#applyBtn").addEventListener("click", async ()=>{
-  if(!currentModalTarget) return;
-  const k=keyOf(currentModalTarget.gacha,currentModalTarget.rarity,currentModalTarget.code);
-  const file=$("#fileInput").files[0]; const url=($("#urlInput").value||"").trim();
+  if (!currentModalTarget) return;
+
+  // Service 取得
+  const { app, images, riagu } = (_S?.() || {});
+  if (!images){ alert("画像サービスが初期化されていません。"); return; }
+
+  // 入力値
+  const nameInput = $("#modalTarget");   // input type="text"（アイテム名=code）
+  const selRarity = $("#modalRarity");   // <select>（レアリティ）
+  const nextCode   = (nameInput?.value || "").trim();
+  const nextRarity = (selRarity?.value || "").trim();
+
+  // 現在の参照
+  const it = currentModalTarget;
+  let gacha   = it.gacha;
+  let curR    = it.rarity;
+  let curCode = it.code;
+
+  // --- ① 名前変更（code の rename） ---
+  if (nextCode && nextCode !== curCode && app?.renameItemCode){
+    // app 状態を更新
+    app.renameItemCode(gacha, curR, curCode, nextCode);
+    // images / riagu 側のキーも追随
+    const oldK = keyOf(gacha, curR, curCode);
+    const newK = keyOf(gacha, curR, nextCode);
+    images?.renameKey?.(oldK, newK);
+    riagu?.renameKey?.(oldK, newK);
+    // ローカル変数を更新
+    curCode = nextCode;
+  }
+
+  // --- ② レアリティ変更（move） ---
+  if (nextRarity && nextRarity !== curR && app?.moveItemRarity){
+    // app 状態を更新
+    app.moveItemRarity(gacha, curR, curCode, nextRarity);
+    // images / riagu 側のキーも追随
+    const oldK = keyOf(gacha, curR, curCode);
+    const newK = keyOf(gacha, nextRarity, curCode);
+    images?.renameKey?.(oldK, newK);
+    riagu?.renameKey?.(oldK, newK);
+    // ローカル変数を更新
+    curR = nextRarity;
+  }
+
+  // 保存先キー（ここで最新の rarity/code を使って確定）
+  const k = keyOf(gacha, curR, curCode);
+
+  // --- ③ 画像/URL 保存（元の分岐ロジックを踏襲） ---
+  const file = $("#fileInput").files[0];
+  const url  = ($("#urlInput").value || "").trim();
+
   try{
-    if(file){
-      const kind=getFileKind(file);
-      await idbPut(k+"|orig", file);           // オリジナル
-      origMap[k] = "idb:" + (k+"|orig");
-      let thumbBlob=null;
-      if(kind==="image"){ thumbBlob = await compressImage(file,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
-      else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
-      else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(file,{time:0.1,maxSize:256}); }
-      await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb");
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveAppStateDebounced();
-    }else if(url){
-      let ok=false;
+    if (file){
+      const kind = getFileKind(file);
+      if (kind === "image"){
+        await images.putBlob(k, file);
+      } else if (kind === "audio"){
+        const ph = await makeNotePlaceholder(256);
+        await images.putBlob(k, ph);
+      } else if (kind === "video"){
+        const thumb = await extractVideoThumbnail(file, { time:0.1, maxSize:256 });
+        await images.putBlob(k, thumb);
+      } else {
+        alert("未対応のファイル形式です。");
+        return;
+      }
+    } else if (url){
+      let ok = false;
       try{
-        const resp = await fetch(url,{mode:"cors"}); const blob = await resp.blob();
-        await idbPut(k+"|orig", blob); origMap[k] = "idb:"+(k+"|orig");
-        const kind = blob.type.startsWith("image/") ? "image" : blob.type.startsWith("video/") ? "video" : blob.type.startsWith("audio/") ? "audio" : "unknown";
-        let thumbBlob=null;
-        if(kind==="image"){ thumbBlob = await compressImage(blob,{maxSize:256,typePrefer:["image/webp","image/jpeg"],quality:0.85}); }
-        else if(kind==="audio"){ thumbBlob = await makeNotePlaceholder(256); }
-        else if(kind==="video"){ thumbBlob = await extractVideoThumbnail(blob,{time:0.1,maxSize:256}); }
-        if(thumbBlob){ await idbPut(k+"|thumb", thumbBlob); imgMap[k]="idb:"+(k+"|thumb"); ok=true; }
-      }catch(_e){}
-      if(!ok){ imgMap[k]=url; }
-      saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap); saveAppStateDebounced();
-    }else{ alert("ファイルまたはURLを指定してください。"); return; }
-    closeImageModal(); renderItemGrid(); renderUsersList(); renderRiaguPanel(); saveAppStateDebounced();
-  }catch(err){ console.error(err); alert("保存に失敗: "+(err?.message||err)); }
+        const resp = await fetch(url, { mode: "cors" });
+        const blob = await resp.blob();
+        const mime = blob.type || "";
+        if (mime.startsWith("image/")){
+          await images.putBlob(k, blob);
+          ok = true;
+        } else if (mime.startsWith("audio/")){
+          const ph = await makeNotePlaceholder(256);
+          await images.putBlob(k, ph);
+          ok = true;
+        } else if (mime.startsWith("video/")){
+          const thumb = await extractVideoThumbnail(blob, { time:0.1, maxSize:256 });
+          await images.putBlob(k, thumb);
+          ok = true;
+        }
+      } catch(_e){}
+      if (!ok) {
+        images.map[k] = url;
+        images.save?.();
+        images._emit?.();
+      }
+    } else {
+      // 画像変更が無くても「名前/レアリティだけ変更」は許容する
+      // ここで保存を強制中断せずに後続の再描画へ進む
+    }
+
+    // モーダルを閉じる前に currentModalTarget も更新（再オープン時の初期表示のため）
+    currentModalTarget.rarity = curR;
+    currentModalTarget.code   = curCode;
+
+    // 画面更新
+    closeImageModal?.();
+    renderItemGrid?.();
+    renderUsersList?.();
+    renderRiaguPanel?.();
+
+    // AppState 側の永続化トリガ
+    // （既存のデバウンス保存に便乗）
+    saveAppStateDebounced?.();
+
+  } catch(err){
+    console.error(err);
+    alert("保存に失敗: " + (err?.message || err));
+  }
 });
 
 /* ====== 解除／リアグ ====== */
 async function clearImage(it){
-  const kNew=keyOf(it.gacha,it.rarity,it.code), kOld=legacyKey(it.rarity,it.code);
-  for(const k of [kNew,kOld]){
-    const v=imgMap[k]; if(v && v.startsWith("idb:")){ const real=v.slice(4); await idbDelete(real); if(urlCache.has(real)){ URL.revokeObjectURL(urlCache.get(real)); urlCache.delete(real); } }
-    const o=origMap[k]; if(o && o.startsWith("idb:")){ await idbDelete(o.slice(4)); }
-    delete imgMap[k]; delete origMap[k];
-  }
-  saveLocalJSON(LS_KEY_IMG,imgMap); saveLocalJSON(LS_KEY_ORIG,origMap);
-  renderItemGrid(); renderUsersList(); renderRiaguPanel(); saveAppStateDebounced();
-}
-async function toggleSkip(it){ const k=keyOf(it.gacha,it.rarity,it.code); if(skipHas(k)){ skipDel(k); } else { await clearImage(it); skipAdd(k); } renderItemGrid(); }
+  const { images } = _S();
+  if (!images || typeof images.clear !== 'function') return;
 
-/* ====== 画像のプレビュー解決 ====== */
-async function resolveThumbs(root=document){
-  const nodes=$$('[data-thumb-key]',root);
+  await images.clear({ gacha: it.gacha, rarity: it.rarity, code: it.code });
+
+  renderItemGrid();
+  renderUsersList();
+  renderRiaguPanel();
+  saveAppStateDebounced();
+}
+
+async function toggleSkip(it){
+  const k = keyOf(it.gacha, it.rarity, it.code);
+  const { images } = _S();
+  if (!images) return;
+
+  if (images.hasSkip?.(k)){
+    images.delSkip?.(k);
+  }else{
+    await clearImage(it); // 画像を外してからスキップへ
+    images.addSkip?.(k);
+  }
+  renderItemGrid();
+}
+
+/* ====== 画像のプレビュー解決（Service で透過解決） ====== */
+async function resolveThumbs(root = document){
+  const { images } = _S();
+  if (!images || typeof images.getBlobUrl !== 'function') return;
+
+  const nodes = $$('[data-thumb-key]', root);
   await Promise.all(nodes.map(async el=>{
-    const key=el.getAttribute('data-thumb-key'); if(!key) return;
-    if(immediateSrcFor(key)) return;
-    const v=lookupVal(imgMap,key); if(v && v.startsWith("idb:")){ const idbKey=v.slice(4); const url=await urlForKey(idbKey); if(url){ el.innerHTML=`<img src="${url}" alt="${escapeHtml(key.split('::')[2]||'item')}" />`; } }
+    const key = el.getAttribute('data-thumb-key'); if (!key) return;
+    try{
+      const url = await images.getBlobUrl(key);
+      if (url){
+        const alt = escapeHtml(key.split('::')[2] || 'item');
+        el.innerHTML = `<img src="${url}" alt="${alt}" />`;
+      }
+    }catch{}
   }));
 }
 

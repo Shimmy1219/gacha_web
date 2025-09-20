@@ -7,7 +7,7 @@ export class RiaguService extends BaseService {
     this.key = key; 
     this.meta = {}; 
   }
-  
+
   load(){ this.meta = loadLocalJSON(this.key, {}) || {}; this._emit(); return true; }
   save(){ saveLocalJSON(this.key, this.meta); }
   get(){ return this.meta; }
@@ -93,5 +93,29 @@ export class RiaguService extends BaseService {
       localStorage.setItem('gacha_item_image_skip_v1', JSON.stringify(arr));
     }catch{}
   }
+  // リアグ関連キーのリネーム（meta + skipSet）
+  renameKey(oldKey, newKey){
+    if (!oldKey || !newKey || oldKey === newKey) return false;
+
+    // メタ移行
+    this.patch(m=>{
+      if (m && (oldKey in m)){
+        m[newKey] = typeof structuredClone === "function" ? structuredClone(m[oldKey]) : JSON.parse(JSON.stringify(m[oldKey]));
+        delete m[oldKey];
+      }
+    });
+
+    // skipSet も更新
+    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray?.() || []);
+    if (this._skipSet?.has(oldKey)){
+      this._skipSet.delete(oldKey);
+      this._skipSet.add(newKey);
+      this._saveSkipArray?.();
+    }
+
+    this._emit?.();
+    return true;
+  }
+
 
 }

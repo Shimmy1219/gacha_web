@@ -17,6 +17,7 @@ export const baseRarityConfig = {
 };
 // 追加：サービスを利用
 import { RarityService } from '/src/services/rarityService.js';
+import { rarityNameSpanHTML, applyRarityColor } from "/src/rarity_style.js";
 
 // LSキーは既存の窓口を尊重
 const raritySvc = new RarityService((typeof window !== 'undefined' && window.LS_KEY_RARITY) || 'gacha_rarity_config_v1');
@@ -460,17 +461,9 @@ export function initRarityUI(){
 
       const colorToken = (m.color === RAINBOW_VALUE) ? RAINBOW_VALUE : (sanitizeColor?.(m.color) || '#ffffff');
 
-      const isRainbow = (m.color === RAINBOW_VALUE);
-      const isGold    = (m.color === GOLD_HEX);
-      const isSilver  = (m.color === SILVER_HEX);
-      const isMetal   = isGold || isSilver;
-
-      const styleAttr = (isRainbow || isMetal) ? '' : ` style="color:${m.color||''}"`;
-      const extraCls  = `rarity${isRainbow?' rainbow':''}${isGold?' metal-gold':''}${isSilver?' metal-silver':''} rarity-name`;
-
-      const raritySpan =
-        `<span class="${extraCls}" contenteditable="true" spellcheck="false" data-orig="${escapeHtml(r)}"${styleAttr}>${escapeHtml(r)}</span>`;
-
+      const raritySpan = rarityNameSpanHTML(r, m.color, {
+        attrs: { contenteditable: "true", spellcheck: "false", "data-orig": r }
+      });
       const rateDisabled = (num === 0) ? 'disabled aria-disabled="true" title="強さ=0は排出率を編集できません"' : '';
 
       return `
@@ -542,17 +535,9 @@ export function initRarityUI(){
           const next = { ...cur, color: (v === RAINBOW_VALUE) ? RAINBOW_VALUE : (v || null) };
 
           raritySvc.upsert(current, rarity, next);
-
           const span = tr.querySelector('.rarity');
-          const isGold    = (v === GOLD_HEX);
-          const isSilver  = (v === SILVER_HEX);
-          const isRainbow = (v === RAINBOW_VALUE);
-
-          span.classList.toggle('rainbow',     isRainbow);
-          span.classList.toggle('metal-gold',  isGold);
-          span.classList.toggle('metal-silver',isSilver);
-          span.style.color = (isRainbow || isGold || isSilver) ? '' : (v || '');
-
+          applyRarityColor(span, v);
+          
           dispatchChanged?.();
         }
       });

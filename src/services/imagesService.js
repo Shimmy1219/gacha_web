@@ -66,4 +66,34 @@ export class ImagesService extends BaseService {
     for (const k of toDel) { const v = this.map[k]; if (v?.startsWith('idb:')) await idbDelete(v.slice(4)); delete this.map[k]; delete this.orig[k]; }
     this.save(); this._emit();
   }
+  // 画像関連キーのリネーム（map, orig, skipSet 相当をまとめて置換）
+  renameKey(oldKey, newKey){
+    if (!oldKey || !newKey || oldKey === newKey) return false;
+    let touched = false;
+
+    if (this.map && (oldKey in this.map)){
+      this.map[newKey] = this.map[oldKey];
+      delete this.map[oldKey];
+      touched = true;
+    }
+    if (this.orig && (oldKey in this.orig)){
+      this.orig[newKey] = this.orig[oldKey];
+      delete this.orig[oldKey];
+      touched = true;
+    }
+    // skipSet（配列互換）もあれば刷新
+    if (!this._skipSet && typeof this._loadSkipArray === "function"){
+      this._skipSet = new Set(this._loadSkipArray() || []);
+    }
+    if (this._skipSet?.has(oldKey)){
+      this._skipSet.delete(oldKey);
+      this._skipSet.add(newKey);
+      if (typeof this._saveSkipArray === "function") this._saveSkipArray();
+      touched = true;
+    }
+
+    if (touched){ this.save?.(); this._emit?.(); }
+    return touched;
+  }
+
 }

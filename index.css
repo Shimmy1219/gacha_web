@@ -80,7 +80,7 @@ button, a, [role="button"] {
   .item-thumb{aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .item-thumb img{width:100%;height:100%;object-fit:contain;display:block}
   .item-code{font-weight:800;font-size:1.15rem;letter-spacing:.03em}
-  .rarity{font-weight:700}.rarity.SSR{color:#fde68a}.rarity.SR{color:#a78bfa}.rarity.R{color:#93c5fd}.rarity.N{color:#a7f3d0}.rarity.はずれ{color:#fca5a5}
+  .rarity{font-weight:700}
   .card-actions{display:flex;gap:8px;flex-wrap:wrap}
   .card-actions .btn[data-action="primary"]{width:100%}
   .badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.5rem;border:1px solid var(--border);background:#0e0f14;color:#a6a6b3}
