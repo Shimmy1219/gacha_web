@@ -19,9 +19,20 @@ export const baseRarityConfig = {
 import { RarityService } from '/src/services/rarityService.js';
 import { rarityNameSpanHTML, applyRarityColor } from "/src/rarity_style.js";
 
+const _W = (typeof window !== 'undefined') ? window : {};
+const existing = _W.Services && (_W.Services.rarity || _W.Services.rarityService);
+
 // LSキーは既存の窓口を尊重
-const raritySvc = new RarityService((typeof window !== 'undefined' && window.LS_KEY_RARITY) || 'gacha_rarity_config_v1');
-raritySvc.load();
+const raritySvc = existing || (() => {
+  const key = (_W && _W.LS_KEY_RARITY) || 'gacha_rarity_config_v1';
+  const svc = new RarityService(key);
+  svc.load();
+  // 共有レジストリがなければ作る
+  _W.Services = _W.Services || {};
+  // 一貫したキー名で載せる
+  _W.Services.rarity = svc;
+  return svc;
+})();
 
 // 補助：並び順（強さ desc → 既定順 → 名前）
 function sortRarityNamesSvc(gacha, names){

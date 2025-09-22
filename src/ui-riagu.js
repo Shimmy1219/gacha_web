@@ -12,7 +12,7 @@ const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
 const get = (name) => (BRIDGE && name in BRIDGE) ? BRIDGE[name] : (window?.[name]);
 
 let __lastOpener = null;
-
+import { rarityNameSpanHTML } from "/src/rarity_style.js";
 function listRiaguSourceItems(gacha){
   const services   = (window.BRIDGE?.services) || window.Services || {};
   const app        = services.appStateService || services.app || null;
@@ -116,8 +116,9 @@ export function renderRiaguPanel(){
   const tabs = $('#riaguTabs');
   if (!box || !tabs) return;
 
-  const services = BRIDGE?.services || window?.Services || {};
-  const riagu = services.riaguService || services.riagu || null;
+  const services  = BRIDGE?.services || window?.Services || {};
+  const riagu     = services.riaguService || services.riagu || null;
+  const raritySvc = services.rarityService || services.rarity || null; // ★追加
   const escapeHtml = ensureEscapeHtml();
 
   // Service からキー一覧（なければ旧 skipSet）
@@ -168,14 +169,14 @@ export function renderRiaguPanel(){
   const itemsHtml = [];
 
   list.forEach(k => {
-    const [, rarity, code] = k.split('::');
+    const [gacha, rarity, code] = k.split('::'); // ★gacha も受け取る（色取得に必要）
 
     // メタ
     let meta = {};
     if (riagu && typeof riagu.getMeta === 'function') meta = riagu.getMeta(k) || {};
     else meta = (get('riaguMeta') || {})[k] || {};
 
-    const { winners, total } = winnersForKey(k);
+    const { winners, total } = winnersForKey(k); // ←従来の勝者集計をそのまま使用
     const cost = +meta.cost || 0;
     const typeTxt = meta.type ? String(meta.type) : '-';
     const orderQty = total;
@@ -186,12 +187,19 @@ export function renderRiaguPanel(){
       ? winners.map(w => `<span class="riagu-chip">${escapeHtml(w.user)} ×${w.count}</span>`).join('')
       : '<span class="muted">獲得者なし</span>';
 
+    // ★変更点：レアリティ色を rarity_style.js で生成
+    // rarityNameSpanHTML(表示テキスト, color, { extraClasses })
+    const color = raritySvc?.getMeta?.(gacha, rarity)?.color ?? null;
+    const rarityHTML = typeof rarityNameSpanHTML === 'function'
+      ? rarityNameSpanHTML(`【${escapeHtml(rarity)}】`, color, { extraClasses: `rarity ${escapeHtml(rarity)}` })
+      : `<span class="rarity ${escapeHtml(rarity)}">${`【${escapeHtml(rarity)}】`}</span>`; // フォールバック
+
     // 旧UIのDOM構造に合わせたマークアップ
     itemsHtml.push(`
       <div class="riagu-item" data-riagu-key="${escapeHtml(k)}">
         <div class="riagu-head">
           <div class="riagu-title">
-            <span class="rarity ${escapeHtml(rarity)}">【${escapeHtml(rarity)}】</span>
+            ${rarityHTML}
             <span class="item-name">${escapeHtml(code)}</span>
           </div>
           <div class="riagu-meta"><span class="badge">種別: ${escapeHtml(typeTxt)}</span></div>
@@ -243,6 +251,7 @@ export function renderRiaguPanel(){
     });
   });
 }
+
 
 
 
@@ -370,12 +379,16 @@ export function initRiaguUI(opts = {}){
 
   // 変更監視（Service 側があれば確実に追随）
   const svc = (BRIDGE?.services || window?.Services || {});
-  const riaguSvc = svc.riaguService || svc.riagu || null;
-  if (riaguSvc && typeof riaguSvc.onChange === 'function') {
-    riaguSvc.onChange(() => {
-      // サービス側が LS 更新→_emit() したら確実に追随
-      renderRiaguPanel();
-    });
+  const riaguSvc   = svc.riaguService || svc.riagu || null;
+  const raritySvc2 = svc.rarityService || svc.rarity || null;
+
+  if (riaguSvc?.onChange) {
+    riaguSvc.onChange(() => { renderRiaguPanel(); });
+  }
+
+  // ★追記：レアリティ設定が変わったら riagu も再描画（色反映）
+  if (raritySvc2?.onChange) {
+    raritySvc2.onChange(() => { renderRiaguPanel(); });
   }
 }
 
