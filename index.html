@@ -492,7 +492,7 @@ const DEFAULT_RARITY_COLORS = {
   "はずれ": "#fca5a5"
 };
 // --- Service ショートカット＆AppStateブリッジ ---
-function S(){ return window.Services || {}; }
+function S(){ return window.Services}
 
 // Service → ローカル変数へ反映（起動時/読込時）
 function applyAppStateFromService(){
@@ -517,137 +517,6 @@ function commitAppStateSnapshot(){
     s.counts   = gHitCounts || {};
     s.selected = selectedGacha || null;
   });
-}
-
-function loadRarityConfigLS(){
-  try{
-    const raw = localStorage.getItem(LS_KEY_RARITY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw) || {};
-    return (obj && typeof obj === 'object') ? obj : {};
-  }catch(_){
-    return {};
-  }
-}
-function saveRarityConfigLS(cfg){
-  try{
-    const obj = (cfg && typeof cfg === 'object') ? cfg : {};
-    if (Object.keys(obj).length === 0) {
-      localStorage.removeItem(LS_KEY_RARITY);
-    } else {
-      localStorage.setItem(LS_KEY_RARITY, JSON.stringify(obj));
-    }
-  }catch(_){}
-}
-function buildCatalogsFromGData(data){
-  const result = {};
-  Object.entries(data || {}).forEach(([user, gmap])=>{
-    Object.entries(gmap || {}).forEach(([gacha, info])=>{
-      const items = info?.items || {};
-      const pulls = +info?.pulls || 0;
-      result[gacha] = result[gacha] || { pulls: 0, items: {} };
-      result[gacha].pulls += pulls;
-      Object.entries(items).forEach(([rarity, codes])=>{
-        const arr = (result[gacha].items[rarity] ||= []);
-        (codes||[]).forEach(code=>{
-          if (code && !arr.includes(code)) arr.push(code);
-        });
-      });
-    });
-  });
-  // sort codes inside each rarity for stable UI
-  Object.values(result).forEach(v=>{
-    Object.keys(v.items).forEach(r=> v.items[r].sort((a,b)=> a.localeCompare(b,'ja')));
-  });
-  return result;
-}
-function mergeRarityConfigFromGData(data, cfg){
-  // cfg: フラット辞書 { "ガチャ::レア": { color, rarityNum, emitRate } }
-  const out = (cfg && typeof cfg === 'object') ? { ...cfg } : {};
-  Object.entries(data || {}).forEach(([user, gmap])=>{
-    Object.entries(gmap || {}).forEach(([gacha, info])=>{
-      const items = info?.items || {};
-
-      // 既存 rarityNum の使用状況（このガチャ内のみ）を収集
-      const usedNums = new Set(
-        Object.keys(out)
-          .filter(k => k.startsWith(gacha + '::'))
-          .map(k => out[k]?.rarityNum)
-          .filter(v => typeof v === 'number')
-      );
-      const nextNum = ()=> {
-        for(let n=1;n<=20;n++){ if(!usedNums.has(n)) { usedNums.add(n); return n; } }
-        return 20;
-      };
-
-      Object.keys(items).forEach(rarity=>{
-        const key  = `${gacha}::${rarity}`;
-        const meta = out[key] || (out[key] = {});
-        if (meta.color == null) meta.color = DEFAULT_RARITY_COLORS[rarity] || "#c0c0c0";
-        if (typeof meta.rarityNum !== 'number') {
-          // 既定順があれば採用、なければ自動採番
-          const idx = Array.isArray(baseRarityOrder) ? baseRarityOrder.indexOf(rarity) : -1;
-          meta.rarityNum = (idx >= 0)
-            ? ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[rarity] ?? nextNum())
-            : nextNum();
-        }
-        // emitRate は推論しない（未指定は null のまま）
-        if (typeof meta.emitRate !== 'number') meta.emitRate = null;
-      });
-    });
-  });
-  return out;
-}
-
-function importRarityConfigFromTxtExternal(state, cfg, gacha){
-  if (!state || !cfg || !gacha) return;
-  const rbase = Array.isArray(state?.gacha_data?.rarity_base) ? state.gacha_data.rarity_base : [];
-  if (!rbase.length) return;
-
-  // 採番の準備（このガチャ内の使用済み番号を収集）
-  const usedNums = new Set(
-    Object.keys(cfg)
-      .filter(k => k.startsWith(gacha + '::'))
-      .map(k => cfg[k]?.rarityNum)
-      .filter(v => typeof v === 'number')
-  );
-  const nextNum = ()=> { for(let n=1;n<=20;n++){ if(!usedNums.has(n)) { usedNums.add(n); return n; } } return 20; };
-
-  // 値 > 100 があれば 100 で割る（%化）
-  const maxVal = Math.max(...rbase.map(row => +((Array.isArray(row)? row[1] : row?.value) ?? 0) || 0), 0);
-  const scale = (maxVal > 100) ? 100 : 1;
-
-  for (const row of rbase){
-    const rarity = String(Array.isArray(row) ? row[0] : (row?.name ?? "")).trim();
-    const raw    = +((Array.isArray(row) ? row[1] : row?.value) ?? 0);
-    if (!rarity) continue;
-
-    const key  = `${gacha}::${rarity}`;
-    const meta = (cfg[key] ||= {});
-    if (meta.color == null) meta.color = DEFAULT_RARITY_COLORS[rarity] || "#c0c0c0";
-    if (typeof meta.rarityNum !== 'number') {
-      const idx = Array.isArray(baseRarityOrder) ? baseRarityOrder.indexOf(rarity) : -1;
-      meta.rarityNum = (idx >= 0)
-        ? ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[rarity] ?? nextNum())
-        : nextNum();
-    }
-    // 外部の確率を真として上書き（推論せず）
-    meta.emitRate = (raw / scale);
-  }
-
-  // （互換）正規化関数がネスト前提なら、同一オブジェクト参照で一時ネストを作って呼ぶ
-  if (window.normalizeEmitRatesForGacha) {
-    try {
-      const shim = { [gacha]: {} };
-      for (const k of Object.keys(cfg)) {
-        if (k.startsWith(gacha + '::')) {
-          const r = k.split('::')[1];
-          shim[gacha][r] = cfg[k];  // ★同じオブジェクト参照を渡すので in-place 更新はフラットにも反映
-        }
-      }
-      window.normalizeEmitRatesForGacha(shim, gacha);
-    } catch(_) {}
-  }
 }
 
 
@@ -714,17 +583,6 @@ const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
 let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
 function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
 
-/* ====== JSON 読み込み／UI 再描画 ====== */
-function handleFiles(files){ if(!files||!files.length) return; const f=files[0]; const rd=new FileReader(); rd.onload=()=>{ try{ onJsonLoaded(JSON.parse(rd.result)); startDone(); }catch(err){ alert("JSONの解析に失敗: "+err.message);} }; rd.readAsText(f,"utf-8"); }
-
-const drop=$("#dropzone");
-if (drop) {
-  drop.addEventListener("dragover",(e)=>{e.preventDefault();drop.classList.add("dragover")});
-  drop.addEventListener("dragleave",()=>drop.classList.remove("dragover"));
-  drop.addEventListener("drop",(e)=>{e.preventDefault();drop.classList.remove("dragover");handleFiles(e.dataTransfer.files)});
-}
-$("#loadJsonBtn")?.addEventListener("click",()=>handleFiles($("#jsonFile").files));
-
 // ---- mobile 判定 & 切替（mainUI を安全に取得してから動かす） ----
 let __mainUI = null;
 function getMainUI(){ return __mainUI || (__mainUI = document.getElementById('mainUI')); }
@@ -784,7 +642,7 @@ function updateMobileViewMode(){
 
 document.addEventListener('DOMContentLoaded', () => {
   if (loadAppState() && Object.keys(gData || {}).length > 0) {
-    rebuildGachaCaches();
+    //rebuildGachaCaches();
     renderTabs();
     renderItemGrid();
     renderRiaguPanel();
@@ -849,55 +707,6 @@ function incCount(user, gacha, rarity, code, by=1){
   gHitCounts[user][gacha] = gHitCounts[user][gacha] || {};
   gHitCounts[user][gacha][rarity] = gHitCounts[user][gacha][rarity] || {};
   gHitCounts[user][gacha][rarity][code] = (gHitCounts[user][gacha][rarity][code] || 0) + (by||0);
-}
-
-function onJsonLoaded(data){
-  gData = data || {};
-
-  // 1) gData → catalogs 合成
-  const catalogs = buildCatalogsFromGData(gData);
-  gCatalogByGacha = {};
-  Object.entries(catalogs).forEach(([gacha, info])=>{
-    const arr = [];
-    Object.entries(info.items||{}).forEach(([rarity, codes])=>{
-      (codes||[]).forEach(code=> arr.push({ gacha, rarity, code }));
-    });
-    gCatalogByGacha[gacha] = arr.sort(byRarityThenCode);
-  });
-
-  // 2) レアリティ設定の最小反映（emitRateは推論せずnull）
-  const rarity = S().rarity || S().rarityService;
-  if (rarity) {
-    const perGacha = {};
-    Object.values(gData).forEach(gmap=>{
-      Object.entries(gmap||{}).forEach(([gacha, info])=>{
-        const items = info?.items || {};
-        (perGacha[gacha] ||= new Set());
-        Object.keys(items).forEach(r=> perGacha[gacha].add(r));
-      });
-    });
-    for (const [gacha, rset] of Object.entries(perGacha)) {
-      for (const r of rset) {
-        const baseColor = (typeof DEFAULT_RARITY_COLORS === 'object' && DEFAULT_RARITY_COLORS[r]) || '#c0c0c0';
-        const baseNum = ({ "はずれ":0, "N":2, "R":4, "SR":5, "SSR":6, "UR":8 }[r]);
-        const prev = rarity.getMeta(gacha, r) || {};
-        const meta = {
-          color:     prev.color ?? baseColor,
-          rarityNum: (typeof prev.rarityNum === 'number') ? prev.rarityNum : (baseNum ?? null),
-          emitRate:  (typeof prev.emitRate === 'number')  ? prev.emitRate  : null
-        };
-        rarity.upsert(gacha, r, meta);
-      }
-    }
-  }
-
-  // 3) 以降既存フロー
-  rebuildGachaCaches();
-  renderTabs();
-  renderItemGrid();
-  renderUsersList();
-  renderRiaguPanel();
-  saveAppStateDebounced();
 }
 
 function rebuildGachaCaches(){
@@ -985,20 +794,51 @@ function rebuildGachaCaches(){
 }
 
 function renderTabs(){
-  const tabs=$("#gachaTabs"); if(!tabs) return;
-  tabs.innerHTML="";
-  gAllGachas.forEach((g,idx)=>{
-    const el=document.createElement("div");
-    el.className="tab"+((selectedGacha?selectedGacha===g:idx===0)?" active":"");
-    el.textContent=g; el.dataset.gacha=g;
-    el.addEventListener("click",()=>{ selectedGacha=g; $$(".tab",tabs).forEach(t=>t.classList.toggle("active",t.dataset.gacha===g)); renderItemGrid(); });
-        // 右上 × ボタン
-    const x=document.createElement("button");
-    x.type="button";
-    x.className="close";
-    x.textContent="×";
-    x.title="このガチャを削除";
-    x.addEventListener("click",(ev)=>{
+  const tabs = $("#gachaTabs"); if (!tabs) return;
+  tabs.innerHTML = "";
+  console.log("renderTabsを実行");
+
+  const services = window.Services || {};
+  const app      = services.appStateService || services.app || null;
+
+  // catalogs からガチャ一覧を取得（サービス化）
+  const gachas = app?.listGachas ? app.listGachas({ sorted: true }) : [];
+
+  // 現在選択中を AppState から取得（無ければ先頭を自動選択して保存）
+  let selected = app?.getSelectedGacha ? app.getSelectedGacha()
+                : (app?.get ? (app.get()?.selected ?? null) : null);
+
+  if (!selected && gachas.length){
+    selected = gachas[0];
+    app?.selectGacha?.(selected);       // ← AppState に保存
+  }
+
+  console.log("ガチャ一覧:", gachas, "選択中:", selected);
+
+  gachas.forEach((g, idx) => {
+    const el = document.createElement("div");
+    el.className = "tab" + ((selected ? selected === g : idx === 0) ? " active" : "");
+    el.textContent = g;
+    el.dataset.gacha = g;
+
+    el.addEventListener("click", () => {
+      // 選択 → AppState に保存
+      app?.selectGacha?.(g);
+      // グローバルを併用している既存処理があれば同期しておく
+      window.selectedGacha = g;
+
+      console.log("ガチャ選択:", g);
+      $$(".tab", tabs).forEach(t => t.classList.toggle("active", t.dataset.gacha === g));
+      renderItemGrid();
+    });
+
+    // 右上 × ボタン
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "close";
+    x.textContent = "×";
+    x.title = "このガチャを削除";
+    x.addEventListener("click", (ev) => {
       ev.stopPropagation();
       openDeleteConfirm(g);
     });
@@ -1008,27 +848,39 @@ function renderTabs(){
   });
 
   // ＋ボタン：新しいガチャを追加（開始モーダルを開く）
-  const add=document.createElement("div");
-  add.className="tab add";
-  add.title="ガチャの種類を追加";
-  add.textContent="＋";
-  add.style.fontWeight="800";
-  add.style.borderStyle="solid";
+  const add = document.createElement("div");
+  add.className = "tab add";
+  add.title = "ガチャの種類を追加";
+  add.textContent = "＋";
+  add.style.fontWeight = "800";
+  add.style.borderStyle = "solid";
   add.addEventListener("click", ()=> open(startModal));
   tabs.appendChild(add);
-
-  if(!selectedGacha && gAllGachas.length) selectedGacha=gAllGachas[0];
 }
 
 function renderItemGrid(){
+  console.log("renderItemGridを実行");
   const grid=$("#itemGrid"); if(!grid){ return; }
   grid.innerHTML="";
   if(!selectedGacha){ grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。"; return; }
+  // Services から取得
+  const services   = window.Services || {};
+  const app        = services.appStateService || services.app || null;
+  const raritySvc  = services.rarityService   || services.rarity || null;
+
+  // gItemsByGacha は使わず、カタログ → 完成リストを毎回生成
+  const baseOrder = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
+  const all = app?.listItemsFromCatalog
+    ? app.listItemsFromCatalog(selectedGacha, { rarityService: raritySvc, baseOrder })
+    : [];
+
+  // レア度フィルタ
   const rSel = getSelectedRarities();
-  const list = (gItemsByGacha[selectedGacha]||[]).filter(it => {
-    return (rSel === "*" || rSel.has(it.rarity));
-  });
+  const list = all.filter(it => (rSel === "*" || rSel.has(it.rarity)));
+
+  console.log("対象アイテム数:", list.length);
   for(const it of list){
+    console.log("描画", it);
     const key=keyOf(it.gacha,it.rarity,it.code);
     const skipped=skipHas(key);
     const hasImage=!!lookupVal(imgMap,key);
@@ -1049,10 +901,10 @@ function renderItemGrid(){
       const services = window.Services
       const raritySvc = services.rarity || services.rarityService || null;
       const color = raritySvc?.getMeta?.(it.gacha, it.rarity)?.color ?? null;
-      console.log("色適用", it.gacha, it.rarity, color);
+      // console.log("色適用", it.gacha, it.rarity, color);
       const spanHtml = window.rarityNameSpanHTML(it.rarity, color, { extraClasses: String(it.rarity) })
       const el = card.querySelector('.muted .rarity');
-      console.log("spanHtml", spanHtml, el);
+      //console.log("spanHtml", spanHtml, el);
       if (el) el.outerHTML = spanHtml;
     }
 
@@ -1423,7 +1275,7 @@ $("#delConfirm").addEventListener("click", async ()=>{
   }
 
   // 3) 再構築 & 再描画 & 状態保存
-  rebuildGachaCaches();
+  //rebuildGachaCaches();
   renderTabs(); 
   renderItemGrid(); 
   renderUsersList(); 
@@ -1496,7 +1348,7 @@ $("#idelConfirm").addEventListener("click", async () => {
   }
 
   // 再構築・描画・保存
-  rebuildGachaCaches();
+  //rebuildGachaCaches();
   renderTabs();
   renderItemGrid();
   renderUsersList();
@@ -1614,52 +1466,45 @@ $("#urlInput").addEventListener("input", ()=>{
 $("#applyBtn").addEventListener("click", async ()=>{
   if (!currentModalTarget) return;
 
-  // Service 取得
-  const { app, images, riagu } = (_S?.() || {});
+  const { app, images, riagu } = S();          // ← _S() でもOK。S()で統一
   if (!images){ alert("画像サービスが初期化されていません。"); return; }
 
-  // 入力値
-  const nameInput = $("#modalTarget");   // input type="text"（アイテム名=code）
-  const selRarity = $("#modalRarity");   // <select>（レアリティ）
+  // 1) 入力値（名前＝code、レアリティ）
+  const nameInput = $("#modalTarget");          // <input type="text">
+  const selRarity = $("#modalRarity");          // <select>
   const nextCode   = (nameInput?.value || "").trim();
   const nextRarity = (selRarity?.value || "").trim();
 
-  // 現在の参照
-  const it = currentModalTarget;
-  let gacha   = it.gacha;
-  let curR    = it.rarity;
-  let curCode = it.code;
+  // 2) 現在の参照
+  let { gacha } = currentModalTarget;
+  let curRarity = currentModalTarget.rarity;
+  let curCode   = currentModalTarget.code;
 
-  // --- ① 名前変更（code の rename） ---
-  if (nextCode && nextCode !== curCode && app?.renameItemCode){
-    // app 状態を更新
-    app.renameItemCode(gacha, curR, curCode, nextCode);
-    // images / riagu 側のキーも追随
-    const oldK = keyOf(gacha, curR, curCode);
-    const newK = keyOf(gacha, curR, nextCode);
+  // 3) 名前変更（Service → images/riagu へキー追随）
+  if (app && nextCode && nextCode !== curCode && typeof app.renameItemCode === 'function'){
+    app.renameItemCode(gacha, curRarity, curCode, nextCode);
+    const oldK = keyOf(gacha, curRarity, curCode);
+    const newK = keyOf(gacha, curRarity, nextCode);
     images?.renameKey?.(oldK, newK);
     riagu?.renameKey?.(oldK, newK);
-    // ローカル変数を更新
     curCode = nextCode;
   }
 
-  // --- ② レアリティ変更（move） ---
-  if (nextRarity && nextRarity !== curR && app?.moveItemRarity){
-    // app 状態を更新
-    app.moveItemRarity(gacha, curR, curCode, nextRarity);
-    // images / riagu 側のキーも追随
-    const oldK = keyOf(gacha, curR, curCode);
+  // 4) レアリティ変更（Service → images/riagu へキー追随）
+  if (app && nextRarity && nextRarity !== curRarity && typeof app.moveItemRarity === 'function'){
+    app.moveItemRarity(gacha, curRarity, curCode, nextRarity);
+    const oldK = keyOf(gacha, curRarity, curCode);
     const newK = keyOf(gacha, nextRarity, curCode);
     images?.renameKey?.(oldK, newK);
     riagu?.renameKey?.(oldK, newK);
-    // ローカル変数を更新
-    curR = nextRarity;
+    curRarity = nextRarity;
   }
 
-  // 保存先キー（ここで最新の rarity/code を使って確定）
-  const k = keyOf(gacha, curR, curCode);
+  // 5) Serviceの最新状態を「グローバル変数」へ引き戻す（★重要）
+  syncGlobalsFromServiceLive();                 // ← 追記関数。load()は呼ばない
 
-  // --- ③ 画像/URL 保存（元の分岐ロジックを踏襲） ---
+  // 6) 画像/URL 保存（元ロジックを新キーで踏襲）
+  const k    = keyOf(gacha, curRarity, curCode);
   const file = $("#fileInput").files[0];
   const url  = ($("#urlInput").value || "").trim();
 
@@ -1703,29 +1548,41 @@ $("#applyBtn").addEventListener("click", async ()=>{
         images._emit?.();
       }
     } else {
-      // 画像変更が無くても「名前/レアリティだけ変更」は許容する
-      // ここで保存を強制中断せずに後続の再描画へ進む
+      // 画像指定が無くても、名前/レアリティ更新だけで進める
     }
 
-    // モーダルを閉じる前に currentModalTarget も更新（再オープン時の初期表示のため）
-    currentModalTarget.rarity = curR;
+    // 7) currentModalTarget も更新（次回オープン時の初期表示用）
+    currentModalTarget.rarity = curRarity;
     currentModalTarget.code   = curCode;
 
-    // 画面更新
+    // 8) 再描画
     closeImageModal?.();
     renderItemGrid?.();
     renderUsersList?.();
     renderRiaguPanel?.();
 
-    // AppState 側の永続化トリガ
-    // （既存のデバウンス保存に便乗）
-    saveAppStateDebounced?.();
+    // 9) Service 側の保存（debounce）
+    app?.saveDebounced?.();                   // ← ★ここで Service を保存
+    //   ↑ ここで saveAppStateDebounced() を呼ぶと commitAppStateSnapshot() が走り、
+    //     古い gData を Service に上書きしてしまうため呼ばない。
 
   } catch(err){
     console.error(err);
     alert("保存に失敗: " + (err?.message || err));
   }
 });
+
+function syncGlobalsFromServiceLive(){
+  const app = S().app || S().appStateService;
+  if (!app) return false;
+  const st = app.get?.() || {};
+  gData           = st.data     || {};
+  gCatalogByGacha = st.catalogs || {};
+  gHitCounts      = st.counts   || {};
+  selectedGacha   = st.selected || null;
+  return true;
+}
+
 
 /* ====== 解除／リアグ ====== */
 async function clearImage(it){
@@ -1836,7 +1693,7 @@ const guessExt = (mime) => {
   if(!mime) return "";
   if(mime==="image/jpeg") return "jpg";
   const map = { "image/png":"png","image/webp":"webp","image/gif":"gif","image/svg+xml":"svg",
-                "video/mp4":"mp4","video/webm":"webm","audio/mpeg":"mp3","audio/wav":"wav","audio/mp4":"m4a" };
+                "video/mp4":"mp4","video/webm":"webm","audio/mpeg":"mp3","audio/wav":"wav","audio/mp4":"m4a","audio/ogg":"ogg" };
   return map[mime] || (mime.split("/")[1]||"");
 };
 
@@ -1905,49 +1762,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $("#openStart")?.addEventListener("click", ()=> open(startModal));
   $("#closeStart")?.addEventListener("click", ()=> close(startModal));
 
-  $("#tileJson")?.addEventListener("click", ()=> $("#jsonFile2")?.click());
-  $("#tileTxt")?.addEventListener("click",  ()=> $("#txtFileInput")?.click());
-
-  $("#jsonFile2")?.addEventListener("change", ()=>{
-    const inp = $("#jsonFile2");
-    const f = inp?.files?.[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        onJsonLoaded(JSON.parse(rd.result));
-        startDone();
-      } catch (err) {
-        alert("JSONの解析に失敗: " + (err?.message || err));
-      } finally {
-        if (inp) inp.value = "";
-      }
-    };
-    rd.readAsText(f, "utf-8");
-
-  });
-
   $("#catClose").addEventListener("click", ()=>close(catalogModal));
   $("#openLivePaste").addEventListener("click", ()=>open(liveModal));
   $("#liveClose").addEventListener("click", ()=>close(liveModal));
 
-  // TXT(.txt) を選択 → base64(raw deflate) → JSON → 取り込み
-  $("#txtFileInput")?.addEventListener("change", async (ev)=>{
-    const inp = ev.currentTarget;
-    const f = ev.target.files?.[0]; if (!f) return;
-    try{
-      if (typeof pako === "undefined") throw new Error("pako が読み込まれていません。");
-      const b64 = (await f.text()).trim();
-      const bytes = b64ToBytes(b64);                 // ※ URL-safe/改行除去版を使用
-      const jsonStr = pako.inflateRaw(bytes, { to: "string" }); // ★ raw が必須
-      const state = JSON.parse(jsonStr);
-      await importFromExternalState(state);          // ※ この中で startDone() 済み
-    }catch(err){
-      console.error(err);
-      alert("TXTの復元に失敗しました: " + (err?.message || err));
-    }finally{
-      if (inp) inp.value = ""; // 同じファイルを連続選択可
-    }
-  });
   RarityFilter.onChange = () => { renderItemGrid(); renderUsersList(); };
   GachaFilter.onChange = () => { renderUsersList(); };
 });
@@ -2010,7 +1828,8 @@ $("#catParse").addEventListener("click", ()=>{
   });
   gCatalogByGacha[gacha] = arr;
   selectedGacha = gacha;
-  rebuildGachaCaches(); renderTabs(); renderItemGrid(); // ユーザーは空でもOK
+  //rebuildGachaCaches(); 
+  renderTabs(); renderItemGrid(); // ユーザーは空でもOK
   startDone(); close(catalogModal);
   // 次：ライブ貼り付けを促す
   open(guideModal);
@@ -2080,7 +1899,7 @@ $("#liveApply").addEventListener("click", () => {
   $("#liveText").value = "";
   close(liveModal);          // ← 反映後にモーダルを閉じる
   startDone();               // ← まだスプラッシュ表示なら通常画面へ
-  rebuildGachaCaches();
+  //rebuildGachaCaches();
   renderTabs();
   renderItemGrid();
   renderUsersList();
@@ -2109,100 +1928,6 @@ function mergeIntoGData(delta){
   initPWA();
 </script>
 <script>
-
-// 外部state(JSON) → 既存構造へ取り込み
-function importFromExternalState(state){
-  try{
-    // 1) ガチャ名の決定
-    const nameMap = state?.gacha_name_list || {};
-    const selKey  = String(state?.gacha_select ?? Object.keys(nameMap)[0] ?? "0");
-    const gacha   = nameMap[selKey] || "ガチャ";
-
-    // 2) カタログ（item_base × rarity_base）
-    const rarityBase = Array.isArray(state?.gacha_data?.rarity_base) ? state.gacha_data.rarity_base : [];
-    // 位置インデックス → レア名（例: 0->"N"）
-    const rarityIdxToName = rarityBase.map(row => Array.isArray(row) ? String(row[0]) : String(row?.name||""));
-    const itemBase = Array.isArray(state?.gacha_data?.item_base) ? state.gacha_data.item_base : [];
-
-    const cat = [];
-    for(const row of itemBase){
-      // 形式: [rarityIndex, weight, itemName]
-      const ridx = parseInt(row?.[0],10);
-      const code = String(row?.[2] ?? "");
-      if(!code) continue;
-      const rarity = rarityIdxToName[ridx] || String(row?.[1] ?? "N"); // 念のためフォールバック
-      cat.push({ gacha, rarity, code });
-    }
-    if(cat.length) gCatalogByGacha[gacha] = cat.sort(byRarityThenCode);
-
-    // 3) 履歴（history_list）
-    // 形式: [ [ userName, [ [itemId, rarityStr, itemName, count], ... ] ], ... ]
-    const hist = Array.isArray(state?.gacha_data?.history_list) ? state.gacha_data.history_list : [];
-    const delta = {};
-    for(const pair of hist){
-      const user  = String(pair?.[0] ?? "");
-      const entries = Array.isArray(pair?.[1]) ? pair[1] : [];
-      if(!user || !entries.length) continue;
-
-      delta[user] = delta[user] || {};
-      delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
-
-      let pulls = 0;
-
-      for(const e of entries){
-        // e: [id, rarity, itemName, count]
-        const rarity = String(e?.[1] ?? "");
-        const code   = String(e?.[2] ?? "");
-        const n      = +e?.[3] || 0;
-        if(!rarity || !code) continue;
-
-        // items: 種類（ユニーク）
-        const arr = (delta[user][gacha].items[rarity] ||= []);
-        if(!arr.includes(code)) arr.push(code);
-
-        // 獲得数＆pulls
-        incCount(user, gacha, rarity, code, n);
-        pulls += n;
-
-        // カタログ補完（history にしか無い名称も拾う）
-        if(!gCatalogByGacha[gacha]){
-          gCatalogByGacha[gacha] = [{gacha,rarity,code}];
-        }else{
-          const k = keyOf(gacha,rarity,code);
-          // 既存に無ければ追加
-          if(!(gCatalogByGacha[gacha].some(it => keyOf(it.gacha,it.rarity,it.code) === k))){
-            gCatalogByGacha[gacha].push({gacha,rarity,code});
-          }
-        }
-      }
-      delta[user][gacha].pulls += pulls;
-    }
-
-    if(Object.keys(delta).length){
-      // カタログのソート
-      if(Array.isArray(gCatalogByGacha[gacha])) {
-        gCatalogByGacha[gacha].sort(byRarityThenCode);
-      }
-      // マージ→再描画
-      mergeIntoGData(delta);
-    }
-
-    // 4) TXT 由来のレアリティ設定（emitRate）の取り込み
-    try{
-      const rarityCfg = loadRarityConfigLS();
-      importRarityConfigFromTxtExternal(state, rarityCfg, gacha);
-      // 未設定のレア度があれば色/強さも補完（gDataを見ておく）
-      mergeRarityConfigFromGData(gData, rarityCfg);
-      saveRarityConfigLS(rarityCfg);
-    }catch(_){ /* 端末により LS が無効な場合もあるので握りつぶす */ }
-
-    rebuildGachaCaches(); renderTabs(); renderItemGrid(); renderUsersList(); renderRiaguPanel();
-    startDone(); close(startModal); saveAppStateDebounced();
-  }catch(err){
-    console.error(err);
-    alert("取り込みに失敗しました: " + (err?.message || err));
-  }
-}
 
 </script>
 <script>
@@ -2237,7 +1962,7 @@ window.AppStateBridge = {
       localStorage.setItem(LS_KEY_RIAGU_META, JSON.stringify(riaguMeta));
     }catch(e){}
 
-    if (typeof rebuildGachaCaches === 'function') rebuildGachaCaches();
+    //if (typeof rebuildGachaCaches === 'function') rebuildGachaCaches();
     if (typeof renderTabs        === 'function') renderTabs();
     if (typeof renderItemGrid    === 'function') renderItemGrid();
     if (typeof renderUsersList   === 'function') renderUsersList();
@@ -2381,7 +2106,14 @@ function setupHamburger(){
 document.addEventListener('DOMContentLoaded', setupHamburger);
 
 </script>
-
+<script type="module">
+  import { wireJsonInputs } from "/src/imp_json.js";
+  import { wireTxtInputs }  from "/src/imp_txt.js";
+  window.addEventListener("DOMContentLoaded", () => {
+    wireJsonInputs();
+    wireTxtInputs();
+  });
+</script>
 <script type="module">
   import { initFilters } from "/src/filters.js";
   initFilters();
@@ -2417,7 +2149,6 @@ document.addEventListener('DOMContentLoaded', setupHamburger);
     escapeHtml,
     clearImage,
     gCatalogByGacha,
-    gItemsByGacha,
     // モーダル操作（index.html の open/close を明示注入）
     openModal: open,
     closeModal: close

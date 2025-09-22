@@ -13,6 +13,15 @@ const get = (name) => (BRIDGE && name in BRIDGE) ? BRIDGE[name] : (window?.[name
 
 let __lastOpener = null;
 
+function listRiaguSourceItems(gacha){
+  const services   = (window.BRIDGE?.services) || window.Services || {};
+  const app        = services.appStateService || services.app || null;
+  const raritySvc  = services.rarityService   || services.rarity || null;
+  const baseOrder  = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
+  if (!app?.listItemsFromCatalog) return [];
+  return app.listItemsFromCatalog(gacha, { rarityService: raritySvc, baseOrder });
+}
+
 function getModalOpen(){
   if (typeof BRIDGE.openModal === 'function') return BRIDGE.openModal;
   return (m, { focus = '#riaguClose' } = {}) => {

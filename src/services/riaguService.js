@@ -116,6 +116,41 @@ export class RiaguService extends BaseService {
     this._emit?.();
     return true;
   }
+  pruneByCatalog(catalogs){
+    const valid = new Set();
+    for (const [gacha, cat] of Object.entries(catalogs || {})) {
+      const items = cat?.items || {};
+      for (const [rarity, codes] of Object.entries(items)) {
+        for (const code of (codes || [])) {
+          valid.add(`${gacha}::${rarity}::${code}`);
+        }
+      }
+    }
 
+    let touched = false;
 
+    // meta
+    this.patch(meta=>{
+      for (const k of Object.keys(meta || {})) {
+        if (!valid.has(k)) { delete meta[k]; touched = true; }
+      }
+    });
+
+    // skip
+    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray?.() || []);
+    const next = new Set();
+    for (const v of this._skipSet) {
+      if (typeof v === 'string' && v.split('::').length >= 3) {
+        if (valid.has(v)) next.add(v);
+      } else {
+        next.add(v); // ガチャ単位などは維持
+      }
+    }
+    if (next.size !== this._skipSet.size) {
+      this._skipSet = next; this._saveSkipArray?.(); touched = true;
+    }
+
+    if (touched) this._emit?.();
+    return touched;
+  }
 }

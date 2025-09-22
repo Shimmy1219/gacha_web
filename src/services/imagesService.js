@@ -95,5 +95,50 @@ export class ImagesService extends BaseService {
     if (touched){ this.save?.(); this._emit?.(); }
     return touched;
   }
+  // catalogs 形式: { [gacha]: { pulls, items: { [rarity]: [code, ...] } } }
+  pruneByCatalog(catalogs){
+    const valid = new Set();
+    for (const [gacha, cat] of Object.entries(catalogs || {})) {
+      const items = cat?.items || {};
+      for (const [rarity, codes] of Object.entries(items)) {
+        for (const code of (codes || [])) {
+          valid.add(`${gacha}::${rarity}::${code}`);
+        }
+      }
+    }
 
+    let touched = false;
+
+    // map
+    for (const k of Object.keys(this.map || {})) {
+      if (!valid.has(k)) { delete this.map[k]; touched = true; }
+    }
+
+    // orig
+    for (const k of Object.keys(this.orig || {})) {
+      if (!valid.has(k)) { delete this.orig[k]; touched = true; }
+    }
+
+    // skip（"gacha::" のガチャ単位スキップは維持。itemKey 形式のみ精査）
+    if (!this._skipSet && typeof this._loadSkipArray === 'function') {
+      this._skipSet = new Set(this._loadSkipArray() || []);
+    }
+    const nextSkip = new Set();
+    for (const v of (this._skipSet || [])) {
+      if (typeof v === 'string' && v.split('::').length >= 3) {
+        if (valid.has(v)) nextSkip.add(v);
+      } else {
+        // "gacha::" 等はそのまま残す
+        nextSkip.add(v);
+      }
+    }
+    if (this._skipSet && nextSkip.size !== this._skipSet.size) {
+      this._skipSet = nextSkip;
+      if (typeof this._saveSkipArray === 'function') this._saveSkipArray();
+      touched = true;
+    }
+
+    if (touched) { this.save?.(); this._emit?.(); }
+    return touched;
+  }
 }
