@@ -249,6 +249,66 @@ export function initFilters(){
   RarityFilter.init();
 }
 
+// === NEW: AppState/RarityService からフィルタ候補を同期するヘルパ ===
+export function syncFiltersFromApp(services = {}) {
+  const app = services.appStateService || services.app || null;
+  const raritySvc = services.rarityService || services.rarity || null;
+  if (!app) return;
+
+  // --- ガチャ候補: catalogs のキー一覧 ---
+  const catalogs = app.get?.()?.catalogs || {};
+  const gachas = Object.keys(catalogs).sort((a,b)=>a.localeCompare(b,'ja'));
+  if (typeof GachaFilter?.setOptions === 'function') {
+    const prev = GachaFilter.getSelection();
+    GachaFilter.setOptions(gachas);
+    if (prev === '*') GachaFilter.setSelection('*');
+    else if (prev && prev.size) {
+      const keep = new Set([...prev].filter(g=>gachas.includes(g)));
+      GachaFilter.setSelection(keep.size ? keep : '*');
+    } else {
+      GachaFilter.setSelection('*');
+    }
+  }
+
+  // --- レアリティ候補: 基本順 → 追加分の順でユニオン ---
+  const base = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
+  const rset = new Set();
+
+  // rarityService があれば各ガチャの順序を尊重してユニオン
+  for (const g of gachas) {
+    let list = Array.isArray(raritySvc?.listRarities?.(g))
+      ? raritySvc.listRarities(g)
+      : Object.keys(catalogs[g]?.items || {});
+    for (const r of list) rset.add(r);
+  }
+  const extra = [...rset].filter(r=>!base.includes(r)).sort((a,b)=>a.localeCompare(b,'ja'));
+  const rOrder = [...base.filter(r=>rset.has(r)), ...extra];
+
+  if (typeof RarityFilter?.setOptions === 'function') {
+    const prevR = RarityFilter.getSelection();
+    RarityFilter.setOptions(rOrder);
+    if (prevR === '*') RarityFilter.setSelection('*');
+    else if (prevR && prevR.size) {
+      const keepR = new Set([...prevR].filter(r=>rOrder.includes(r)));
+      RarityFilter.setSelection(keepR.size ? keepR : '*');
+    } else {
+      RarityFilter.setSelection('*');
+    }
+  }
+}
+
+// === NEW: AppState の変更に追随して自動同期（購読） ===
+export function attachAppStateFilters(services = {}) {
+  const app = services.appStateService || services.app || null;
+  if (!app?.onChange) { syncFiltersFromApp(services); return; }
+  syncFiltersFromApp(services);       // 初期同期
+  app.onChange(()=>{                  // 以降、状態変化ごとに同期
+    try { syncFiltersFromApp(services); }
+    catch(e){ console.warn('filter sync failed', e); }
+  });
+}
+
+
 // 互換API：既存コードが使うヘルパ
 export function getSelectedGachas(){ return GachaFilter.getSelection(); }
 export function getSelectedRarities(){ return RarityFilter.getSelection(); }
@@ -257,6 +317,8 @@ export function getSelectedRarities(){ return RarityFilter.getSelection(); }
 if (typeof window !== 'undefined') {
   Object.assign(window, {
     GachaFilter, RarityFilter, openFloatingPopover,
-    getSelectedGachas, getSelectedRarities
+    getSelectedGachas, getSelectedRarities,
+    // NEW
+    syncFiltersFromApp, attachAppStateFilters
   });
 }

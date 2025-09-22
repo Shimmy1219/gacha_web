@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
@@ -657,6 +657,9 @@ function updateMobileViewMode(){
 
 document.addEventListener('DOMContentLoaded', () => {
   if (loadAppState() && Object.keys(gData || {}).length > 0) {
+    if (window.attachAppStateFilters) {
+      console.log('Attaching app state filters...');
+      window.attachAppStateFilters(window.Services || {});}
     //rebuildGachaCaches();
     renderTabs();
     renderItemGrid();
@@ -722,90 +725,6 @@ function incCount(user, gacha, rarity, code, by=1){
   gHitCounts[user][gacha] = gHitCounts[user][gacha] || {};
   gHitCounts[user][gacha][rarity] = gHitCounts[user][gacha][rarity] || {};
   gHitCounts[user][gacha][rarity][code] = (gHitCounts[user][gacha][rarity][code] || 0) + (by||0);
-}
-
-function rebuildGachaCaches(){
-  // gItemsByGacha: gData 由来のアイテム
-  const perGachaMap = {};
-  let usersCount=0, gachaEntries=0, itemUniqueTotal=0;
-
-  Object.entries(gData).forEach(([user,gobj])=>{
-    usersCount++;
-    Object.entries(gobj).forEach(([gacha,info])=>{
-      gachaEntries++;
-      if(!perGachaMap[gacha]) perGachaMap[gacha]=new Map();
-      Object.entries(info.items||{}).forEach(([rarity,arr])=>{
-        (arr||[]).forEach(code=>{
-          const k=keyOf(gacha,rarity,code);
-          if(!perGachaMap[gacha].has(k)) perGachaMap[gacha].set(k,{gacha,rarity,code});
-        });
-      });
-    });
-  });
-
-  // まず全レアリティを収集（データ＋カタログ）
-  const raritySet = new Set();
-  Object.values(perGachaMap).forEach(map => map.forEach(it => raritySet.add(it.rarity)));
-  Object.values(gCatalogByGacha).forEach(arr => (arr||[]).forEach(it => raritySet.add(it.rarity)));
-
-  // ★ 動的レアリティ順を決定：基本順 → 未知はアルファベット順で後置
-  const customRarities = Array.from(raritySet).filter(r => !baseRarityOrder.includes(r)).sort((a,b)=>a.localeCompare(b,'ja'));
-  gRarityOrder = [
-    ...baseRarityOrder.filter(r => raritySet.has(r)),
-    ...customRarities,
-  ];
-
-  // gItemsByGacha を作成（並びは gRarityOrder に従う）
-  const gSet = new Set([...Object.keys(perGachaMap), ...Object.keys(gCatalogByGacha)]);
-  gItemsByGacha = {};
-  gSet.forEach(g=>{
-    const fromData = Array.from(perGachaMap[g]?.values()||[]);
-    const fromCat  = Array.from((gCatalogByGacha[g]||[]).values());
-    const map = new Map();
-    [...fromData, ...fromCat].forEach(it=>map.set(keyOf(it.gacha,it.rarity,it.code), it));
-    const arr = Array.from(map.values()).sort(byRarityThenCode);
-    gItemsByGacha[g] = arr;
-    itemUniqueTotal += arr.length;
-  });
-  gAllGachas = Array.from(gSet);
-
-  if(!selectedGacha) selectedGacha = gAllGachas[0] || null;
-
-  // 概要
-  $("#summaryTag").textContent = `${Object.keys(gData).length}ユーザー / ${gSet.size}ガチャ / ${itemUniqueTotal}アイテム`;
-
-  // ガチャ絞り込みセレクト更新
-  // ガチャ絞り込みセレクト更新（複数選択 & 直前の状態を復元）
-  // --- ガチャ絞り込み（独自UI）更新 ---
-  {
-    const prev = getSelectedGachas();               // 直前の選択を保存
-    // UIへ候補を流し込む
-    GachaFilter.setOptions(gAllGachas);
-
-    // 直前の選択を復元（存在しないガチャは落とす）
-    if (prev === '*') {
-      GachaFilter.setSelection('*');
-    } else if (prev && prev.size) {
-      const keep = new Set([...prev].filter(g => gAllGachas.includes(g)));
-      GachaFilter.setSelection(keep.size ? keep : '*');
-    } else {
-      GachaFilter.setSelection('*');
-    }
-  }
-
-  // ★ レアリティ（マルチセレクト）の候補更新
-  {
-    const prev = getSelectedRarities();
-    RarityFilter.setOptions(gRarityOrder);
-    if (prev === '*') {
-      RarityFilter.setSelection('*');
-    } else if (prev && prev.size) {
-      const keep = new Set([...prev].filter(r => gRarityOrder.includes(r)));
-      RarityFilter.setSelection(keep.size ? keep : '*');
-    } else {
-      RarityFilter.setSelection('*');
-    }
-  }
 }
 
 function renderTabs(){
