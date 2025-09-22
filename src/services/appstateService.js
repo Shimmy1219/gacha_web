@@ -248,25 +248,39 @@ export class AppStateService extends BaseService {
 
   /** レア順を返す。rarityService があればそれを優先。 */
   _rarityOrderFor(gacha, { rarityService=null, baseOrder=[] } = {}){
-    // 1) rarityService があれば listRarities(gacha) で順を得る
-    let order = Array.isArray(rarityService?.listRarities?.(gacha))
-      ? rarityService.listRarities(gacha).slice()
-      : [];
+    // 1) 候補の集合を作る（service / baseOrder / カタログ内の未知レア）
+    const names = new Set();
 
-    // 2) 無ければ baseOrder（アプリ既定の UR/SSR/SR/R/N/はずれ …）
-    if (order.length === 0 && Array.isArray(baseOrder)) order = baseOrder.slice();
-
-    // 3) カタログにある未知レアを抽出して末尾にアルファベット順で追加
+    if (Array.isArray(rarityService?.listRarities?.(gacha))) {
+      for (const r of rarityService.listRarities(gacha)) names.add(r);
+    }
+    if (Array.isArray(baseOrder)) {
+      for (const r of baseOrder) names.add(r);
+    }
     const cat = this.getCatalog(gacha);
-    const have = new Set(order);
     if (cat?.items && typeof cat.items === 'object') {
-      const extra = Object.keys(cat.items).filter(r => !have.has(r)).sort();
-      order.push(...extra);
+      for (const r of Object.keys(cat.items)) names.add(r);
     }
 
-    // 比較用マップ
-    const idx = new Map(order.map((r,i)=>[r,i]));
-    return { order, indexOf:(r)=> (idx.has(r) ? idx.get(r) : (order.length + 999)) };
+    // 2) 並べ替え：強さ(rarityNum) desc → 既定順(baseOrder) → 名前(ja)
+    const sorted = [...names].sort((a, b) => {
+      const ma = rarityService?.getMeta?.(gacha, a) || {};
+      const mb = rarityService?.getMeta?.(gacha, b) || {};
+      const na = (typeof ma.rarityNum === 'number') ? ma.rarityNum : -1;
+      const nb = (typeof mb.rarityNum === 'number') ? mb.rarityNum : -1;
+
+      if (na !== nb) return nb - na; // 強いほど先
+      const ia = Array.isArray(baseOrder) ? baseOrder.indexOf(a) : -1;
+      const ib = Array.isArray(baseOrder) ? baseOrder.indexOf(b) : -1;
+      if (ia !== -1 || ib !== -1) {
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      }
+      return String(a).localeCompare(String(b), 'ja');
+    });
+
+    // 3) indexOf を構築（未知レアは常に末尾扱い）
+    const idx = new Map(sorted.map((r, i) => [r, i]));
+    return { order: sorted, indexOf: (r) => (idx.has(r) ? idx.get(r) : (sorted.length + 999)) };
   }
 
   /** items[rarity] が配列/連想/文字列でも配列に正規化 */
