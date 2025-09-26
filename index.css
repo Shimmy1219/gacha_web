@@ -565,3 +565,190 @@ button, a, [role="button"] {
     #imageModal #modalSubtitle .inline-input { flex:1 1 100%; }
     #imageModal #modalSubtitle .inline-right { width:100%; justify-content:flex-start; margin-left:0; }
   }
+
+  /* ===== PT課金フォーム（.pt-controls） ===== */
+
+.pt-controls input.pt-input,
+.pt-controls select.pt-select {
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 数値は右寄せ（レアリティ表の数値入力と整合） */
+.pt-controls input.pt-input[type="number"] {
+  text-align: right;
+}
+
+/* セレクトの行間を合わせる */
+.pt-controls select.pt-select {
+  line-height: 34px;
+}
+
+/* フォーカス表現（表と同系色） */
+.pt-controls input.pt-input:focus,
+.pt-controls select.pt-select:focus {
+  border-color: var(--accent, #60a5fa);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #60a5fa) 20%, transparent);
+}
+
+/* 連結チップ内の余白調整（横スクロール時の詰まり防止） */
+.pt-controls .nowrap .pt-item-row > input.pt-input,
+.pt-controls .nowrap .pt-item-row > select.pt-select {
+  margin: 2px 0;
+}
+/* ===== PT課金フォーム（.pt-controls）常設スタイル ===== */
+
+/* 2カラム：左ラベルは現在幅のまま、右フォームは伸ばす */
+.pt-controls .pt-controls-row {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 10px;
+  height: 34px;      /* ラベル行は固定でOK */
+  margin: 6px 0;
+}
+
+/* ラベル直下に置く“全幅”のサブ行（バンドル/保証の本体） */
+.pt-controls .pt-controls-row-sub {
+  display: block;
+  min-height: 34px;  /* 下限は34px */
+  height: auto;      /* 中身に合わせて伸びる */
+  margin: 6px 0;
+  overflow: visible;
+}
+
+/* 既存の fullspan 指定を新クラスに対応 */
+.pt-controls .pt-controls-row-sub.fullspan {
+  grid-column: 1 / -1;
+}
+
+/* ラベルの体裁（既存 .usc-label を流用） */
+.pt-controls .pt-controls-row .usc-label {
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: var(--gf-font, .95rem);
+  line-height: var(--gf-line, 1.1);
+  color: var(--text, #f5f5f6);
+}
+
+/* 右カラム側の内側ラッパ */
+.pt-controls .pt-controls-row > .inline {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  justify-content: flex-end;
+}
+
+/* 横スクロール可能な行アイテム（バンドル/保証の本体） */
+.pt-controls .nowrap {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: .5rem;
+  overflow: auto;
+}
+
+/* 行内の小要素（既存） */
+.pt-controls .pt-item-row { display:flex; align-items:center; gap:.35rem; }
+.pt-controls .pt-item-row .btn-inline {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 .6rem;
+  margin-left: auto;       /* ← 右端に寄せる */
+}
+
+#rarityPanel .subcontrols {
+  display: block;
+  width: 100%;
+}
+
+/* 入力・セレクトの“箱”の見た目（index全体トーンと整合） */
+.pt-controls input.pt-input,
+.pt-controls select.pt-select {
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 数値入力は右寄せ（レア表と整合） */
+.pt-controls input.pt-input[type="number"] {
+  text-align: right;
+}
+
+/* セレクトは高さ・最小幅を合わせる */
+.pt-controls select.pt-select {
+  line-height: 34px;
+  min-width: 7ch;
+}
+
+/* “約6桁+余白”の幅感 */
+.pt-controls input.pt-input[type="number"] {
+  width: 10ch;
+}
+
+/* フォーカス表現（アクセント色を利用） */
+.pt-controls input.pt-input:focus,
+.pt-controls select.pt-select:focus {
+  border-color: var(--accent, #60a5fa);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #60a5fa) 20%, transparent);
+}
+
+/* 連結チップ内の間詰まり防止 */
+.pt-controls .nowrap .pt-item-row > input.pt-input,
+.pt-controls .nowrap .pt-item-row > select.pt-select {
+  margin: 2px 0;
+}
+
+/* 小さめボタン */
+.pt-controls .btn-inline {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 .6rem;
+}
+
+
+/* 下部のアクション群の余白 */
+.pt-controls .pt-actions { margin-top: .5rem; }
+/* pt-controls: 右カラムのフォームを右寄せ */
+.pt-controls .row > .inline { justify-content: flex-end; }
+
+/* ラベル直下に置くサブ行を2カラム全幅に拡張 */
+.pt-controls .row-sub.fullspan { grid-column: 1 / -1; }
+
+/* --- number入力のスピンボタンを消す（WebKit系: Chrome/Edge/Safari） --- */
+#rarityPanel input[type="number"]::-webkit-outer-spin-button,
+#rarityPanel input[type="number"]::-webkit-inner-spin-button,
+.pt-controls   input[type="number"]::-webkit-outer-spin-button,
+.pt-controls   input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* --- Firefox 向け（スピンをテキスト風に） --- */
+#rarityPanel input[type="number"],
+.pt-controls   input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* 追加行を“縦積み”で下に並べる */
+.pt-controls #ptBundles.stack,
+.pt-controls #ptGuarantees.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

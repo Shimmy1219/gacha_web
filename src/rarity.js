@@ -141,12 +141,14 @@ export function initRarityUI(){
     </div>
 
     <div id="rarityGachaTabs" class="tabs"></div>
-
-    <div class="subcontrols" style="display:flex;gap:8px;align-items:center;margin:8px 0 12px">
-      <button id="addRarityRow" class="btn ghost">レアリティを追加</button>
-    </div>
+    
+    <div class="subcontrols" style="display:block;width:100%;margin:12px 0 0"></div>
 
     <div id="rarityTableWrap" class="rarity-wrap"></div>
+
+    <div class="addRarityBtn" style="display:flex;gap:8px;align-items:center;margin:12px 0 0">
+      <button id="addRarityRow" class="btn ghost">レアリティを追加</button>
+    </div>
   `;
 
 
@@ -167,19 +169,31 @@ export function initRarityUI(){
 
   function renderTabs(){
     const names = gachaNames();
-    if (current == null) current = names[0] || null; // ← 最初の1件を既定選択
+    if (current == null) current = names[0] || null;
     const html = names.map(g =>
       `<button type="button" class="tab ${current===g?'active':''}" data-gacha="${escapeHtml(g)}">${escapeHtml(g)}</button>`
     ).join('');
     tabs.innerHTML = html;
+
+    // --- 追加：pt-controls を rarity の subcontrols へ取り付け＆現在ガチャで描画
+    try{
+      if (window.PTControls?.attach) window.PTControls.attach(window.Services||{});
+      if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
+    }catch(_){}
   }
   
   tabs.addEventListener('click', (e)=>{
     const btn = e.target.closest('button.tab'); if(!btn) return;
     const g = btn.getAttribute('data-gacha');
     current = g;
+
     renderTabs();
     renderTable();
+
+    // --- 追加：pt-controls 側もこのガチャで再描画
+    try{
+      if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
+    }catch(_){}
   });
 
   panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
@@ -700,6 +714,11 @@ export function initRarityUI(){
   } else {
     requestAnimationFrame(kickoff);
   }
+
+  try{
+    if (window.PTControls?.attach) window.PTControls.attach(window.Services||{});
+    if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
+  }catch(_){}
 
   // 既存ガチャの読込に追従
   document.addEventListener('state:changed', ()=>{
