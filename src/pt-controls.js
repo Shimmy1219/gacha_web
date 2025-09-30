@@ -303,28 +303,6 @@
     return document.querySelector('.subcontrols');
   }
 
-  // 「レアリティを追加」ボタンをテーブルの下に移動（index.htmlは編集しない）
-  function relocateAddRarityButton(){
-    try{
-      // よくある候補を総当り
-      let btn = document.querySelector('#addRarityBtn') ||
-                Array.from(document.querySelectorAll('button, .btn'))
-                  .find(b=> /レアリティを追加/.test(b.textContent||''));
-      if (!btn) return;
-
-      // 近傍のテーブルを探す
-      let table = btn.closest('section,div')?.querySelector('table') ||
-                  btn.parentElement?.querySelector('table') ||
-                  document.querySelector('.rarity-table');
-      if (!table) return;
-
-      // テーブル直後へ
-      if (table.nextSibling !== btn){
-        table.parentElement.insertBefore(btn, table.nextSibling);
-      }
-    }catch(_){}
-  }
-
   function attach(services, options={}){
     const mountInto = findSubcontrolsRoot(options.root || null);
     if (!mountInto) return false;
@@ -360,9 +338,6 @@
 
     const g = getSelectedGacha();
     if (g) render(g);
-
-    // レアリティ追加ボタンの再配置
-    relocateAddRarityButton();
 
     return true;
   }

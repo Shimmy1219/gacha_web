@@ -752,3 +752,13 @@ button, a, [role="button"] {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Discord login button */
+.btn.discord{
+  /* Discord Blurple from official brand guide */
+  background: linear-gradient(180deg, #5865F2, #4752C4);
+  border-color: #5865F2;
+  color: #fff;
+}
+.btn.discord:hover{ filter: brightness(.96); }
+.btn.discord .bi-discord{ display:inline-block; }
