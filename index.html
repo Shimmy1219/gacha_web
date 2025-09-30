@@ -52,8 +52,8 @@
   async function refreshDiscordLoginUI() {
     const slot = document.getElementById("discordLoginSlot");
     try {
-      const res = await fetch("/api/discord/me", { credentials: "include", cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
+      const res = await fetch('/api/discord/me?soft=1', { credentials: "include", cache: "no-store" });
+      const data = await res.json();
 
       if (res.ok && data?.ok && data.user?.id) {
         // DiscordのアバターURLを生成（無ければ空）
