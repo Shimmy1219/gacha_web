@@ -1,21 +1,23 @@
-// /api/discord/me.js
-// ログイン状態確認用（右上表示に使う）: uid/name/avatar を返す
-import { getCookies } from '../_lib/cookies.js';
-import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
+// 起動時のUI更新（再掲・微調整）
+async function refreshDiscordLoginUI() {
+  const slot = document.getElementById("discordLoginSlot");
+  try {
+    const res = await fetch("/api/discord/me", { credentials: "include", cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+    if (res.ok && data?.ok && data.user?.id) {
+      const avatarUrl = data.user.avatar
+        ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png?size=64`
+        : "";
+      renderDiscordLoginButton({ mount: slot, loggedIn: true, username: data.user.name || "", avatarUrl });
+      console.info("[discord-login] logged in:", data.user);
+    } else {
+      renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
+      console.info("[discord-login] not logged in (expected 401 before login).");
+    }
+  } catch (e) {
+    renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
+    console.warn("[discord-login] /api/discord/me check failed:", e);
   }
-  const { sid } = getCookies(req);
-  if (!sid) return res.status(401).json({ ok: false, error: 'no session' });
-
-  const sess = await getSessionWithRefresh(sid);
-  if (!sess) return res.status(401).json({ ok: false, error: 'invalid session' });
-
-  return res.status(200).json({
-    ok: true,
-    user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
-  });
 }
+
