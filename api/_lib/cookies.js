@@ -6,8 +6,6 @@ const BASE = {
   secure: true,
   sameSite: 'lax',
   path: '/',
-  // サブドメイン横断（stg/本番）したい場合は下行を有効化
-  domain: '.shimmy3.com',
 };
 
 export function getCookies(req) {
