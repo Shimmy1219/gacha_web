@@ -13,6 +13,23 @@ const UPDATE_INTERVAL_MS = 60 * 60 * 1000; // 1h
 
 let _regPromise = null;
 
+// 追加: バックオフ付きリトライ
+async function retryRegister(maxAttempts = 6) { // 6回で ~63秒程度
+  let attempt = 0;
+  while (attempt < maxAttempts) {
+    try {
+      const reg = await navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTIONS);
+      return reg;
+    } catch (e) {
+      attempt++;
+      const delay = Math.min(1000 * 2 ** (attempt - 1), 15000); // 1s,2s,4s,8s,15s,15s...
+      console.warn(`[pwa] register attempt ${attempt} failed:`, e);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw new Error(`[pwa] SW register failed after ${maxAttempts} attempts`);
+}
+
 /** Service Worker を登録（多重呼び出しガード付き） */
 export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return null;
@@ -21,7 +38,7 @@ export async function registerServiceWorker() {
   _regPromise = new Promise((resolve) => {
     window.addEventListener('load', async () => {
       try {
-        const reg = await navigator.serviceWorker.register(SW_URL, SW_REGISTER_OPTIONS);
+        const reg = await retryRegister();
 
         // 起動直後にアップデート確認
         try { reg.update(); } catch {}
@@ -59,8 +76,36 @@ export async function registerServiceWorker() {
 
         resolve(reg);
       } catch (e) {
+        // ★ここで終わらせない：可視化のたびに再試行する
         console.warn('SW registration failed', e);
-        resolve(null);
+
+        const retryOnVisible = async () => {
+          try {
+            const reg = await retryRegister();
+            document.removeEventListener('visibilitychange', onVisible);
+            resolve(reg);
+          } catch (err) {
+            console.warn('[pwa] retry on visible failed:', err);
+          }
+        };
+        const onVisible = () => {
+          if (document.visibilityState === 'visible') {
+            retryOnVisible();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisible);
+
+        // さらに、一定間隔で自動再試行（最後は resolve する）
+        const interval = setInterval(async () => {
+          try {
+            const reg = await retryRegister();
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisible);
+            resolve(reg);
+          } catch (err) {
+            console.warn('[pwa] periodic retry failed:', err);
+          }
+        }, 15000); // 15sごと
       }
     }, { once: true });
   });
