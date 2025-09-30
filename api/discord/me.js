@@ -1,23 +1,20 @@
-// 起動時のUI更新（再掲・微調整）
-async function refreshDiscordLoginUI() {
-  const slot = document.getElementById("discordLoginSlot");
-  try {
-    const res = await fetch("/api/discord/me", { credentials: "include", cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
+// /api/discord/me.js
+import { getCookies } from '../_lib/cookies.js';
+import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 
-    if (res.ok && data?.ok && data.user?.id) {
-      const avatarUrl = data.user.avatar
-        ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png?size=64`
-        : "";
-      renderDiscordLoginButton({ mount: slot, loggedIn: true, username: data.user.name || "", avatarUrl });
-      console.info("[discord-login] logged in:", data.user);
-    } else {
-      renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
-      console.info("[discord-login] not logged in (expected 401 before login).");
-    }
-  } catch (e) {
-    renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
-    console.warn("[discord-login] /api/discord/me check failed:", e);
+export default async function handler(req, res) {
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
   }
-}
+  const { sid } = getCookies(req);
+  if (!sid) return res.status(401).json({ ok:false, error:'no session' });
 
+  const sess = await getSessionWithRefresh(sid);
+  if (!sess) return res.status(401).json({ ok:false, error:'invalid session' });
+
+  return res.status(200).json({
+    ok: true,
+    user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
+  });
+}
