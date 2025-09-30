@@ -49,15 +49,44 @@
 <script type="module">
   import { renderDiscordLoginButton } from "./src/discord-login-button.js";
 
-  // ここでは“未ログイン表示”で描画（ログイン実装時に差し替え）
-  const slot = document.getElementById("discordLoginSlot");
-  renderDiscordLoginButton({
-    mount: slot,
-    loggedIn: false,      // ← ログイン状態に応じて true/false を切替
-    username: "",         // ← ログイン時は Discord の表示名
-    avatarUrl: ""         // ← ログイン時は Discord のアバターURL
-  });
+  async function refreshDiscordLoginUI() {
+    const slot = document.getElementById("discordLoginSlot");
+    try {
+      const res = await fetch("/api/discord/me", { credentials: "include", cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data?.ok && data.user?.id) {
+        // DiscordのアバターURLを生成（無ければ空）
+        const avatarUrl = data.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png?size=64`
+          : "";
+        renderDiscordLoginButton({
+          mount: slot,
+          loggedIn: true,
+          username: data.user.name || "",
+          avatarUrl
+        });
+        console.info("[discord-login] logged in:", data.user);
+      } else {
+        renderDiscordLoginButton({
+          mount: slot,
+          loggedIn: false,
+          username: "",
+          avatarUrl: ""
+        });
+        console.info("[discord-login] not logged in:", data);
+      }
+    } catch (e) {
+      // 失敗時は未ログインとして描画し、デバッグ出力
+      renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
+      console.error("[discord-login] /api/discord/me failed:", e);
+    }
+  }
+
+  // 初回描画
+  window.addEventListener("DOMContentLoaded", refreshDiscordLoginUI);
 </script>
+
 <script src="./src/pt-controls.js"></script>
 <!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
