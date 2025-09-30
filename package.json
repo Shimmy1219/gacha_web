@@ -1,6 +1,8 @@
 {
   "dependencies": {
-    "@vercel/blob": "^0.25.1"
+    "@vercel/blob": "^0.25.1",
+    "cookie": "^0.6.0",
+    "@upstash/redis": "^1.28.4"
   },
   "devDependencies": {
     "eslint": "^9.35.0",
