@@ -762,3 +762,81 @@ button, a, [role="button"] {
 }
 .btn.discord:hover{ filter: brightness(.96); }
 .btn.discord .bi-discord{ display:inline-block; }
+
+/* ===== Discord Login Button ===== */
+.btn.dlb {
+  /* 他ボタンとサイズ感を揃える（必要なら値を微調整） */
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+}
+
+/* Discordブランドカラー */
+.btn.dlb.dlb--discord {
+  background: #5865F2;           /* blurple */
+  color: #fff;
+}
+.btn.dlb.dlb--discord:hover { background: #4752C4; }
+.btn.dlb.dlb--discord:active { background: #3C45A5; }
+.btn.dlb.dlb--discord:focus-visible {
+  outline: 2px solid #99A2FF;    /* 明度高いアウトライン */
+  outline-offset: 2px;
+}
+
+/* ログイン済みでも色はDiscordに統一 */
+.btn.dlb.dlb--discord.dlb--loggedin { background: #5865F2; }
+
+/* 中身のレイアウト */
+.dlb-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.dlb-label,
+.dlb-username {
+  font-size: 14px;
+}
+
+/* アバターを円形に切り抜き */
+.dlb-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px; /* 完全な円 */
+  object-fit: cover;     /* 四角画像でもはみ出さず中央トリミング */
+  background: rgba(255,255,255,0.2);
+  display: inline-block;
+}
+
+/* ログインメニューの簡易スタイル（必要に応じて調整） */
+.dlb-menu {
+  position: absolute;
+  margin-top: 8px;
+  padding: 6px;
+  background: #1f1f25;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  z-index: 30;
+}
+.dlb-menu__item {
+  display: block;
+  width: 100%;
+  min-width: 140px;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.dlb-menu__item:hover { background: rgba(255,255,255,0.06); }

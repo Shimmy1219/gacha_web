@@ -1,4 +1,4 @@
-// 何もしない“見た目だけ”のレンダラ → ログイン/ログアウトの挙動を追加
+// src/discord-login-button.js
 export function renderDiscordLoginButton({
   mount,
   loggedIn = false,
@@ -6,34 +6,30 @@ export function renderDiscordLoginButton({
   avatarUrl = ""
 } = {}) {
   if (!mount) return;
-  mount.innerHTML = ""; // 再描画に備えてクリア
+  mount.innerHTML = "";
 
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.id = "btnDiscordLogin";
-  btn.className = loggedIn ? "btn dlb black" : "btn dlb discord";
+  // 統一クラス: .btn .dlb .dlb--discord （状態で --loggedin 付与）
+  btn.className = `btn dlb dlb--discord${loggedIn ? " dlb--loggedin" : ""}`;
   btn.setAttribute("aria-label", loggedIn ? `Discord: ${username}` : "Discordでログイン");
 
-  // 未ログイン：テキストのみ
   if (!loggedIn) {
-    btn.textContent = "Discordでログイン";
+    // 未ログイン表示
+    const label = document.createElement("span");
+    label.className = "dlb-label";
+    label.textContent = "Discordでログイン";
+    btn.appendChild(label);
   } else {
-    // ログイン済：丸アイコン + ユーザー名
+    // ログイン済み表示（円形アバター＋名前）
     const wrap = document.createElement("span");
     wrap.className = "dlb-inner";
 
-    if (avatarUrl) {
-      const img = document.createElement("img");
-      img.src = avatarUrl;
-      img.alt = "";
-      img.className = "dlb-avatar";
-      wrap.appendChild(img);
-    } else {
-      // アバターが無い場合はDiscord風の丸プレースホルダ（無地）
-      const ph = document.createElement("span");
-      ph.className = "dlb-avatar dlb-avatar--placeholder";
-      wrap.appendChild(ph);
-    }
+    const img = document.createElement("img");
+    if (avatarUrl) img.src = avatarUrl;
+    img.alt = "";
+    img.className = "dlb-avatar"; // ← CSSで円形にする
+    wrap.appendChild(img);
 
     const name = document.createElement("span");
     name.className = "dlb-username";
@@ -43,36 +39,25 @@ export function renderDiscordLoginButton({
     btn.appendChild(wrap);
   }
 
-  // ====== イベントハンドラ（安全実装） ======
-  // 未ログイン → 認可開始（PKCE/state はサーバ側で扱う）
+  // クリック動作
   const startDiscordLogin = () => {
-    // 多重クリック防止 & 視覚的フィードバック
     btn.disabled = true;
     btn.setAttribute("aria-busy", "true");
     try {
-      // セキュリティ：
-      // - 外部Urlの混入やオープンリダイレクトを防ぐため固定パスに同タブ遷移
-      // - stateはHttpOnlyクッキーで往復するためフロントから付与しない
       window.location.assign("/api/auth/discord/start");
     } catch (e) {
-      // 失敗時は復帰
       btn.disabled = false;
       btn.removeAttribute("aria-busy");
       console.error(e);
     }
   };
 
-  // ログイン済 → 簡易メニュー（ログアウト）
   const openLoggedInMenu = () => {
-    // 既にあればトグルで閉じる
     const exists = mount.querySelector(".dlb-menu");
-    if (exists) {
-      exists.remove();
-      return;
-    }
+    if (exists) return exists.remove();
+
     const menu = document.createElement("div");
     menu.className = "dlb-menu";
-    // スタイルは既存CSSに合わせる。最低限アクセシビリティ属性を。
     menu.setAttribute("role", "menu");
 
     const logoutBtn = document.createElement("button");
@@ -89,55 +74,36 @@ export function renderDiscordLoginButton({
 
     menu.appendChild(logoutBtn);
     menu.appendChild(closeBtn);
-    // ボタン直下に重ならないよう、マウント内に差し込む
     mount.appendChild(menu);
 
-    // フォーカス管理（簡易）
-    logoutBtn.focus();
-
-    // ログアウト実行
     logoutBtn.addEventListener("click", async () => {
       logoutBtn.disabled = true;
       try {
-        // セッションはHttpOnly Cookieなのでfetchはcredentials省略でも同一オリジンで送信されるが、
-        // 安全のため include を明示
         await fetch("/api/auth/logout", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" }
         });
-      } catch (e) {
-        console.error(e);
       } finally {
-        // 状態を確実に更新
         window.location.reload();
       }
     });
 
-    closeBtn.addEventListener("click", () => {
-      menu.remove();
-    });
-
-    // メニュー外クリックで閉じる（イベントバブリングに注意）
+    // 外側クリックで閉じる
     const onDocClick = (ev) => {
       if (!menu.contains(ev.target) && ev.target !== btn) {
         menu.remove();
         document.removeEventListener("click", onDocClick, true);
       }
     };
-    // キャプチャ段階で拾って、他要素のstopPropagation影響を受けにくくする
     setTimeout(() => document.addEventListener("click", onDocClick, true), 0);
   };
 
-  // クリック登録
   if (!loggedIn) {
-    // once: true で誤連打抑止（サーバ側はstateも検証するため二重送信耐性あり）
     btn.addEventListener("click", startDiscordLogin, { once: true });
   } else {
     btn.addEventListener("click", openLoggedInMenu);
   }
-
-  // キーボード操作はbutton既定でEnter/Spaceがclickになるので追加実装不要
 
   mount.appendChild(btn);
 }
