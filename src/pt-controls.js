@@ -1,31 +1,39 @@
 // pt-controls.js
 // レアリティ設定セクション内の .subcontrols に「PT課金設定」フォームを動的挿入。
-// 見た目は pt-input と同等のスタイルを適用。保存先は window + gacha_global_setting_v1。
+// 見た目は pt-input と同等のスタイルを適用。保存先は window + gacha_global_setting_v1（キーは gachaId ）。
 
 (function(){
   'use strict';
 
   const GLOBAL_NS = 'gacha_global_setting_v1';
-  let CURRENT_GACHA = null;
+  let CURRENT_GACHA = null;  // ← gachaId を保持
 
   // ========== Storage ==========
   function _getApp(){
     const S = window.Services || {};
-    return S.appStateService || S.app || null;
+    return S.app || S.appStateService || null;
   }
   function loadAll(){
+    // 優先: window グローバル
     const w = (window[GLOBAL_NS] && typeof window[GLOBAL_NS] === 'object') ? window[GLOBAL_NS] : null;
     if (w) return { ...w };
+
+    // 次点: AppState の state[GLOBAL_NS]（任意領域）
     try{
       const app = _getApp();
       const raw = app?.state?.[GLOBAL_NS] || null;
       if (raw && typeof raw === 'object') return { ...raw };
     }catch(_){}
+
+    // 最後: localStorage
     try{ return JSON.parse(localStorage.getItem(GLOBAL_NS) || '{}'); }catch(_){ return {}; }
   }
   function saveAll(obj){
     const data = obj || {};
+    // 1) window 反映
     window[GLOBAL_NS] = { ...data };
+
+    // 2) AppState の任意領域に反映（存在すれば）
     try{
       const app = _getApp();
       if (app?.save){
@@ -34,35 +42,42 @@
         app.save();
       }
     }catch(_){}
+
+    // 3) localStorage 退避
     try{ localStorage.setItem(GLOBAL_NS, JSON.stringify(data)); }catch(_){}
   }
-  function loadFor(gacha){
+  function loadFor(gachaId){
     const all = loadAll();
-    return all[gacha] || { perPull:0, complete:0, bundles:[], guarantees:[] };
+    return all[gachaId] || { perPull:0, complete:0, bundles:[], guarantees:[] };
   }
-  function saveFor(gacha, meta){
+  function saveFor(gachaId, meta){
     const all = loadAll();
-    all[gacha] = meta;
+    all[gachaId] = meta;
     saveAll(all);
   }
 
   // ========== State helpers ==========
   function getSelectedGacha(){
-    // まずは pt-controls が最後に render したガチャ名を信頼する
+    // まずは pt-controls が最後に render した gachaId を信頼
     if (CURRENT_GACHA) return CURRENT_GACHA;
 
     // フォールバック：アプリ側が持つ選択状態 or グローバル
     const app = _getApp();
-    return app?.state?.selected || window.selectedGacha || null;
+    // AppState v2 の selected は gachaId
+    return app?.getSelectedGacha?.() ?? app?.state?.selected ?? window.selectedGacha ?? null;
   }
-  function listRarities(gacha){
+  function listRarities(gachaId){
     const S = window.Services || {};
-    const r = S.rarityService || S.rarity || null;
+    const r = S.rarity || S.rarityService || null;
     if (r?.listRarities){
-      const a = r.listRarities(gacha);
+      const a = r.listRarities(gachaId);
       if (Array.isArray(a) && a.length) return a.slice();
     }
-    return ['UR','SSR','SR','R','N','はずれ'];
+    // フォールバック：AppState のカタログから拾う
+    const app = _getApp();
+    const items = app?.getCatalog?.(gachaId)?.items || {};
+    const names = Object.keys(items);
+    return names.length ? names : ['UR','SSR','SR','R','N','はずれ'];
   }
 
   // ========== DOM helpers ==========
@@ -82,7 +97,6 @@
     const s = document.createElement('style'); s.id = id; s.textContent = css;
     document.head.appendChild(s);
   }
-
 
   // 1行削除ボタン
   function delBtn(onClick){
@@ -116,8 +130,8 @@
 
   // 4) 保証行追加
   function addGuaranteeRow(wrap, rowData){
-    const gacha = getSelectedGacha();
-    const rars  = listRarities(gacha);
+    const gachaId = getSelectedGacha();
+    const rars  = listRarities(gachaId);
     const ipN   = h('input', { type:'number', min:'1', step:'1',
       class:'pt-input', placeholder:'n' });
     const sel   = h('select', { class:'pt-select' });
@@ -133,7 +147,6 @@
     wrap.appendChild(row);
   }
 
-  // ルートUI（h3の「PT課金設定」は入れない）
   // ルートUI（h3の「PT課金設定」は入れない）
   function buildUI(){
 
@@ -193,25 +206,24 @@
     return root;
   }
 
-
   // 描画・読み取り
-  function render(gacha){
-    if (!gacha) return;
+  function render(gachaId){
+    if (!gachaId) return;
 
-    // ★ この表示フォームが紐づくガチャ名を固定
-    CURRENT_GACHA = gacha;
+    // ★ この表示フォームが紐づく gachaId を固定
+    CURRENT_GACHA = gachaId;
 
     // 1) ロード（無ければデフォルトを用意）
-    let meta = loadFor(gacha);
+    let meta = loadFor(gachaId);
     const existed =
-      !!(window.gacha_global_setting_v1 && gacha in window.gacha_global_setting_v1) ||
+      !!(window.gacha_global_setting_v1 && gachaId in window.gacha_global_setting_v1) ||
       !!((_getApp()?.state?.gacha_global_setting_v1 || null) &&
-        (gacha in _getApp().state.gacha_global_setting_v1)) ||
+        (gachaId in _getApp().state.gacha_global_setting_v1)) ||
       !!(localStorage.getItem('gacha_global_setting_v1') &&
         (function(){
             try{
               const o = JSON.parse(localStorage.getItem('gacha_global_setting_v1')||'{}');
-              return gacha in o;
+              return gachaId in o;
             }catch(_){ return false; }
           })());
 
@@ -247,13 +259,13 @@
     // 6) 初回生成なら、今のフォーム状態を保存して “ある状態” にする
     if (!existed) {
       const now = readFromForm();
-      saveFor(gacha, now);
+      saveFor(gachaId, now);
     }
   }
 
-  function hasSetting(gacha){
+  function hasSetting(gachaId){
     const all = loadAll();
-    return Object.prototype.hasOwnProperty.call(all, gacha);
+    return Object.prototype.hasOwnProperty.call(all, gachaId);
   }
 
   function readFromForm(){
@@ -322,7 +334,7 @@
 
       // オートセーブ：入力/変更/追加・削除の都度
       const autoSave = () => {
-        // ★ 表示中ガチャを最優先で保存
+        // ★ 表示中 gachaId を最優先で保存
         const g = CURRENT_GACHA || getSelectedGacha();
         if (!g) return;
         saveFor(g, readFromForm());
@@ -342,14 +354,13 @@
     return true;
   }
 
-
   // 公開API
   window.PTControls = {
     attach,
-    renderPtControls: (gacha)=> render(gacha || getSelectedGacha()),
+    renderPtControls: (gachaId)=> render(gachaId || getSelectedGacha()),
     loadFor,
     saveFor,
-    hasSetting  // ← ここで公開する（未定義代入エラーを回避）
+    hasSetting
   };
 
   document.addEventListener('DOMContentLoaded', ()=>{

@@ -39,11 +39,11 @@ const raritySvc = existing || (() => {
 })();
 
 // 補助：並び順（強さ desc → 既定順 → 名前）
-function sortRarityNamesSvc(gacha, names){
+function sortRarityNamesSvc(gachaId, names){
   const baseOrder = Array.isArray(baseRarityOrder) ? baseRarityOrder : [];
   return [...names].sort((a,b)=>{
-    const ma = raritySvc.getMeta(gacha, a) || {};
-    const mb = raritySvc.getMeta(gacha, b) || {};
+    const ma = raritySvc.getMeta(gachaId, a) || {};
+    const mb = raritySvc.getMeta(gachaId, b) || {};
     const na = (typeof ma.rarityNum === 'number') ? ma.rarityNum : -1;
     const nb = (typeof mb.rarityNum === 'number') ? mb.rarityNum : -1;
     if (na !== nb) return nb - na;
@@ -52,34 +52,32 @@ function sortRarityNamesSvc(gacha, names){
     return a.localeCompare(b, "ja");
   });
 }
-
 // 補助：emit 正規化をサービスに合わせて呼ぶ（in-place 変化 → save）
 // 旧: normalizeEmitViaService(gacha) を差し替え
-function normalizeEmitViaService(gacha){
-  if (!gacha) return;
+function normalizeEmitViaService(gachaId){
+  if (!gachaId) return;
 
-  const bottom = getBottomRarityName(gacha);
+  const bottom = getBottomRarityName(gachaId);
   if (!bottom) return;
 
-  // 他行の合計を出す（数値のものだけ足す）
   let sumOthers = 0;
-  const names = raritySvc.listRarities(gacha);
+  const names = raritySvc.listRarities(gachaId);
   for (const r of names){
     if (r === bottom) continue;
-    const v = raritySvc.getMeta(gacha, r)?.emitRate;
+    const v = raritySvc.getMeta(gachaId, r)?.emitRate;
     if (typeof v === 'number' && !Number.isNaN(v)) sumOthers += v;
   }
 
-  // 最下位だけ自動で残差を割り当て（0〜100にクランプ）
   let rest = 100 - sumOthers;
   rest = clampFloatN(typeof rest === 'number' ? rest : 0, 0, 100, PRECISION_DECIMALS);
 
-  const meta = raritySvc.getMeta(gacha, bottom) || {};
+  const meta = raritySvc.getMeta(gachaId, bottom) || {};
   if (meta.emitRate !== rest){
-    raritySvc.upsert(gacha, bottom, { ...meta, emitRate: rest });
+    raritySvc.upsert(gachaId, bottom, { ...meta, emitRate: rest });
   }
   raritySvc.save();
 }
+
 
 export function saveRarityConfig(obj = rarityFlat){
   raritySvc.save();
@@ -87,36 +85,33 @@ export function saveRarityConfig(obj = rarityFlat){
 
 function getFlatKey(gacha, rarity){ return `${gacha}::${rarity}`; }
 
-export function getRarityMeta(gacha, rarity){
-  return raritySvc.getMeta(gacha, rarity);
+export function getRarityMeta(gachaId, rarity){
+  return raritySvc.getMeta(gachaId, rarity);
 }
-
-export function setRarityMeta(gacha, rarity, meta){
-  raritySvc.upsert(gacha, rarity, {
+export function setRarityMeta(gachaId, rarity, meta){
+  raritySvc.upsert(gachaId, rarity, {
     color:     meta?.color ?? null,
     rarityNum: (typeof meta?.rarityNum === "number" ? meta.rarityNum : (meta?.rarityNum == null ? null : (meta.rarityNum|0))),
     emitRate:  (typeof meta?.emitRate === "number" ? meta.emitRate : null),
   });
 }
-function getBottomRarityName(gacha){
-  const sorted = listRaritiesForGacha(gacha); // UI並びと同じ：強さ降順→末尾が最下位
+function getBottomRarityName(gachaId){
+  const sorted = listRaritiesForGacha(gachaId); // UI並び→末尾が最下位
   return sorted.length ? sorted[sorted.length - 1] : null;
 }
-export function deleteRarityMeta(gacha, rarity){
-  raritySvc.deleteRarity(gacha, rarity);
+export function deleteRarityMeta(gachaId, rarity){
+  raritySvc.deleteRarity(gachaId, rarity);
 }
-
-export function listRaritiesForGacha(gacha){
-  const names = raritySvc.listRarities(gacha);
-  return sortRarityNamesSvc(gacha, names);
+export function listRaritiesForGacha(gachaId){
+  const names = raritySvc.listRarities(gachaId);
+  return sortRarityNamesSvc(gachaId, names);
 }
-
-function sortRarityNames(arr, gacha){
+function sortRarityNames(arr, gachaId){
   return arr.sort((a,b)=>{
-    const ma = getRarityMeta(gacha, a);
-    const mb = getRarityMeta(gacha, b);
-    const na = (typeof ma.rarityNum === 'number') ? ma.rarityNum : -1;
-    const nb = (typeof mb.rarityNum === 'number') ? mb.rarityNum : -1;
+    const ma = getRarityMeta(gachaId, a);
+    const mb = getRarityMeta(gachaId, b);
+    const na = (typeof ma?.rarityNum === 'number') ? ma.rarityNum : -1;
+    const nb = (typeof mb?.rarityNum === 'number') ? mb.rarityNum : -1;
     if (na !== nb) return nb - na;
     const ia = baseRarityOrder.indexOf(a), ib = baseRarityOrder.indexOf(b);
     if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
@@ -125,10 +120,9 @@ function sortRarityNames(arr, gacha){
 }
 
 // 3) isMiss
-export function isMiss(gacha, rarity){
-  return (raritySvc.getMeta(gacha, rarity)?.rarityNum|0) === 0;
+export function isMiss(gachaId, rarity){
+  return (raritySvc.getMeta(gachaId, rarity)?.rarityNum|0) === 0;
 }
-
 // =============== UI（タブ＋テーブル＋モーダル） ===============
 export function initRarityUI(){
   const panel = document.getElementById('rarityPanel');
@@ -141,9 +135,7 @@ export function initRarityUI(){
     </div>
 
     <div id="rarityGachaTabs" class="tabs"></div>
-    
     <div class="subcontrols" style="display:block;width:100%;margin:12px 0 0"></div>
-
     <div id="rarityTableWrap" class="rarity-wrap"></div>
 
     <div class="addRarityBtn" style="display:flex;gap:8px;align-items:center;margin:12px 0 0">
@@ -151,46 +143,56 @@ export function initRarityUI(){
     </div>
   `;
 
-
   const tabs = panel.querySelector('#rarityGachaTabs');
   const wrap = panel.querySelector('#rarityTableWrap');
 
-  let current = null; // 既定でベース（要件）
+  // ▼ 以降 “current” は gachaId を保持
+  let current = null;
 
-  function gachaNames(){
-    const { gData, gCatalogByGacha } = getStateSafe();
-    const set = new Set([
-      ...Object.keys(gCatalogByGacha || {}),
-      ...Object.keys(gData || {}).flatMap(u => Object.keys(gData[u]||{})),
-      ...raritySvc.listGachas(), // ← 追加：サービスに保持されているガチャ名も含める
-    ]);
-    return Array.from(set).sort((a,b)=>a.localeCompare(b,'ja'));
+  // -- gachaId 一覧（AppState と RarityService の和集合）
+  function listGachaIds(){
+    const app = (window.Services && window.Services.app) || null;
+    const idsFromApp = app?.listGachas?.({ sort:true }) || [];
+    const idsFromRty = raritySvc.listGachas() || [];
+    // 和集合で重複排除、表示は app 側の order を優先
+    const set = new Set(idsFromApp);
+    for (const id of idsFromRty) set.add(id);
+    return Array.from(set);
+  }
+  // id→表示名
+  function dispName(id){
+    const app = (window.Services && window.Services.app) || null;
+    return app?.getDisplayName?.(id) || id;
   }
 
   function renderTabs(){
-    const names = gachaNames();
-    if (current == null) current = names[0] || null;
-    const html = names.map(g =>
-      `<button type="button" class="tab ${current===g?'active':''}" data-gacha="${escapeHtml(g)}">${escapeHtml(g)}</button>`
-    ).join('');
+    const ids = listGachaIds();
+    if (current == null) current = ids[0] || null;
+
+    const html = ids.map(id => {
+      const label = escapeHtml(dispName(id));
+      return `<button type="button" class="tab ${current===id?'active':''}" data-gacha-id="${id}">${label}</button>`;
+    }).join('');
     tabs.innerHTML = html;
 
-    // --- 追加：pt-controls を rarity の subcontrols へ取り付け＆現在ガチャで描画
+    // pt-controls の紐付け（gachaId を渡す）
     try{
       if (window.PTControls?.attach) window.PTControls.attach(window.Services||{});
       if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
     }catch(_){}
   }
-  
+
   tabs.addEventListener('click', (e)=>{
     const btn = e.target.closest('button.tab'); if(!btn) return;
-    const g = btn.getAttribute('data-gacha');
-    current = g;
+    const id = btn.getAttribute('data-gacha-id');
+    current = id;
+
+    // 選択状態を AppState にも反映（任意）
+    try{ window.Services?.app?.selectGacha?.(current); }catch(_){}
 
     renderTabs();
     renderTable();
 
-    // --- 追加：pt-controls 側もこのガチャで再描画
     try{
       if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
     }catch(_){}
@@ -199,14 +201,12 @@ export function initRarityUI(){
   panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
     if (!current) return;
     const MAX_TYPES = 20;
-
     const existingList = raritySvc.listRarities(current);
     if (existingList.length >= MAX_TYPES) {
       alert('レアリティの種類は最大20までです。これ以上は追加できません。');
       return;
     }
-
-    // 「はずれ」をベースにユニーク名を採番
+    // 「はずれ」を基点にユニーク名を採番
     const baseName = 'はずれ';
     const existing = new Set(existingList);
     let name = baseName, i = 2;
@@ -218,7 +218,7 @@ export function initRarityUI(){
     dispatchChanged?.();
     renderTable();
 
-    // 追加直後に名前セルへフォーカス（全選択）
+    // 追加直後に名前セルへフォーカス
     try{
       const wrapEl = panel.querySelector('#rarityTableWrap');
       const trEl = Array.from(wrapEl?.querySelectorAll('tr[data-rarity]')||[])
@@ -235,13 +235,12 @@ export function initRarityUI(){
     }catch(_){}
   });
 
-
   wrap.addEventListener('input', (e) => {
     const t  = e.target;
     const tr = t.closest('tr[data-rarity]');
     if (!tr) return;
 
-    // 1) 強さ：入力中だけ軽いクランプ（従来どおり）
+    // 強さ：入力中の軽クランプのみ
     if (t.classList?.contains('rarity-num')) {
       const raw = String(t.value ?? '').trim();
       if (raw === '') return;
@@ -252,11 +251,9 @@ export function initRarityUI(){
       return;
     }
 
-    // 2) 排出率：入力中は一切フォーマットしない（"0.", "0.0001" などの途中状態を保持）
+    // 排出率：入力中はフォーマットしない
     if (t.classList?.contains('rarity-rate')) {
       const rarity = tr.getAttribute('data-rarity');
-
-      // 最下位(自動欄)は編集不可 → 現在値に即戻す（見た目だけ）
       if (rarity === getBottomRarityName(current)) {
         const meta = raritySvc.getMeta(current, rarity) || {};
         const v = (typeof meta.emitRate === 'number' && !Number.isNaN(meta.emitRate))
@@ -264,18 +261,11 @@ export function initRarityUI(){
         t.value = (v === '' ? '' : String(v).replace(/\.?0+$/, ''));
         return;
       }
-
-      // ← ここでは何もしない：
-      //    ・parseFloatしない
-      //    ・toFixedしない
-      //    ・0〜100クランプもしない
-      //    （確定は change/keydown(Enter→blur) 側で検証・保存）
       return;
     }
   });
 
   wrap.addEventListener('click', (e)=>{
-    // “⋮”メニュー以外をクリック → 全メニューを閉じる
     const inMore = e.target.closest('.more-wrap');
     if (!inMore) {
       wrap.querySelectorAll('.more-menu').forEach(m=>{
@@ -284,8 +274,6 @@ export function initRarityUI(){
         if (btn) btn.setAttribute('aria-expanded', 'false');
       });
     }
-
-    // “⋮”トグル
     const moreBtn = e.target.closest('.more-btn');
     if (moreBtn) {
       e.preventDefault();
@@ -306,29 +294,21 @@ export function initRarityUI(){
       return;
     }
 
-    // 削除（PC直ボタン/モバイルメニュー共通）
     const delBtn = e.target.closest('button.del');
     if (!delBtn) return;
-
     e.preventDefault();
 
     const tr = delBtn.closest('tr[data-rarity]');
     if (!tr || !current) return;
 
     const rarity = tr.getAttribute('data-rarity');
-
-    // 物理削除（強さ=0でも可）
     raritySvc.deleteRarity(current, rarity);
-
-    // 削除後に排出率を再計算（合計100%・単調性）
     normalizeEmitViaService(current);
 
     dispatchChanged?.();
     renderTable();
   });
-  
-  // 変更確定（blur や Enter 後）に一度だけ通知して他UIを更新
-  // 変更確定（blur/Enter）時にのみ保存・正規化・重複検査を実施
+
   wrap.addEventListener('change', (e)=>{
     const t = e.target;
     const tr = t.closest('tr[data-rarity]'); 
@@ -336,7 +316,7 @@ export function initRarityUI(){
 
     const rarity = tr.getAttribute('data-rarity');
 
-    // --- 強さ(rarityNum) 確定 ---
+    // 強さ(rarityNum)
     if (t.classList.contains('rarity-num')) {
       const raw = String(t.value ?? '').trim();
       let n = (raw === '') ? null : parseInt(raw, 10);
@@ -344,77 +324,62 @@ export function initRarityUI(){
         if (Number.isNaN(n)) n = null;
         else n = Math.min(20, Math.max(0, n|0));
       }
-
-      // 重複チェック（nullは対象外）
       if (n != null) {
         const dup = raritySvc.listRarities(current).some(r =>
           r !== rarity && (raritySvc.getMeta(current, r)?.rarityNum ?? null) === n
         );
         if (dup) {
           alert('強さ(rarityNum)が重複しています。別の値を指定してください。');
-          // ロールバック
           t.value = t.dataset.prev ?? (raritySvc.getMeta(current, rarity)?.rarityNum ?? '');
           return;
         }
       }
-
-      // 保存
       const meta = { ...(raritySvc.getMeta(current, rarity) || {}) , rarityNum: n };
       raritySvc.upsert(current, rarity, meta);
 
-      // 合計100%維持（最下位だけ自動）
       normalizeEmitViaService(current);
       dispatchChanged?.();
       renderTable();
       return;
     }
 
-    // --- 排出率(rarity-rate) 確定 ---
+    // 排出率(rarity-rate)
     if (t.classList.contains('rarity-rate')) {
       const bottom = getBottomRarityName(current);
       if (rarity === bottom) {
-        // 自動欄は編集不可：即ロールバック
         const meta = raritySvc.getMeta(current, rarity) || {};
         t.value = (typeof meta.emitRate === 'number')
           ? String(meta.emitRate).replace(/\.?0+$/, '')
           : '';
         return;
       }
-
-      // 入力値 → 数値化
       const raw = String(t.value ?? '').trim();
       let num = null;
       if (raw !== '') {
         const f = parseFloat(raw);
         num = clampFloatN(f, 0, 100, PRECISION_DECIMALS);
-        if (num === null) num = 0; // NaN防御
+        if (num === null) num = 0;
       }
-
-      // ここで“合計>100%”を先に検証
       let sumOthers = 0;
       const names = raritySvc.listRarities(current);
       for (const r of names) {
         if (r === bottom) continue;
-        if (r === rarity) continue; // 今回の新値は後で足す
+        if (r === rarity) continue;
         const v = raritySvc.getMeta(current, r)?.emitRate;
         if (typeof v === 'number' && !Number.isNaN(v)) sumOthers += v;
       }
       const wouldTotal = sumOthers + (typeof num === 'number' ? num : 0);
-      if (wouldTotal > 100 + 1e-9) { // 微小誤差許容
+      if (wouldTotal > 100 + 1e-9) {
         alert('合計が100%を超えています。値を調整してください。');
-        // ロールバック
         t.value = t.dataset.prev ?? (()=>{
           const old = raritySvc.getMeta(current, rarity)?.emitRate;
           return (typeof old === 'number') ? String(old).replace(/\.?0+$/, '') : '';
         })();
         return;
       }
-
-      // 保存
       const currentMeta = raritySvc.getMeta(current, rarity) || {};
       raritySvc.upsert(current, rarity, { ...currentMeta, emitRate: num });
 
-      // 表示は正規形へ
       if (typeof num === 'number') {
         const txt = num.toFixed(PRECISION_DECIMALS).replace(/\.?0+$/,'');
         if (txt !== raw) t.value = txt;
@@ -422,23 +387,17 @@ export function initRarityUI(){
         t.value = '';
       }
 
-      // 合計100%のために最下位だけ再調整（合計=100なら bottom は0%になる）
       normalizeEmitViaService(current);
       dispatchChanged?.();
       renderTable();
-
       return;
     }
 
-    // 3) その他（帳尻合わせのみ）
     normalizeEmitViaService(current);
     dispatchChanged?.();
   });
 
-
-  // 名称編集: フォーカスで元名を保持 & 全選択
   wrap.addEventListener('focusin', (e) => {
-    // 既存：rarity-name の全選択ロジックはそのまま残す
     const nameEl = e.target.closest('.rarity-name');
     if (nameEl) {
       nameEl.setAttribute('data-orig', (nameEl.textContent || '').trim());
@@ -447,32 +406,24 @@ export function initRarityUI(){
       const sel = window.getSelection();
       sel.removeAllRanges(); sel.addRange(r);
     }
-
-    // ★ 追加：排出率/強さの直前値を data-prev に記録
     const t = e.target;
     const tr = t?.closest?.('tr[data-rarity]');
     if (!tr) return;
-
     if (t.classList?.contains('rarity-rate') || t.classList?.contains('rarity-num')) {
       t.dataset.prev = String(t.value ?? '');
     }
   });
 
-
-  // 名称編集: Enterで確定、Escで取り消し
   wrap.addEventListener('keydown', (e) => {
     const t = e.target;
     if (!t) return;
-
-    // Enter 確定：name/num/rate 全て共通で blur → change を発火
     if (e.key === 'Enter' &&
         (t.classList?.contains('rarity-num') ||
-        t.classList?.contains('rarity-rate') ||
-        t.classList?.contains('rarity-name'))) {
+         t.classList?.contains('rarity-rate') ||
+         t.classList?.contains('rarity-name'))) {
       e.preventDefault();
       e.stopPropagation();
 
-      // PCのみ「次の行の同じ列」にフォーカス移動を予約
       if (!isMobileLike()) {
         const tr = t.closest('tr[data-rarity]');
         const curRarity = tr?.getAttribute('data-rarity') || null;
@@ -485,11 +436,8 @@ export function initRarityUI(){
       } else {
         __pendingNextFocus = null;
       }
-
-      t.blur(); // ← これで change → renderTable の順に進む
+      t.blur();
     }
-
-    // Esc は既存の名称編集キャンセルを維持
     if (e.key === 'Escape' && t.classList?.contains('rarity-name')) {
       e.preventDefault();
       const orig = t.getAttribute('data-orig') || '';
@@ -498,8 +446,6 @@ export function initRarityUI(){
     }
   });
 
-  // 名称編集: フォーカスが外れたタイミングでリネームを確定
-  // 名称編集（blur確定）
   wrap.addEventListener('focusout', (e) => {
     const el = e.target.closest('.rarity-name'); if (!el) return;
     const tr = el.closest('tr[data-rarity]'); if (!tr) return;
@@ -509,14 +455,11 @@ export function initRarityUI(){
     const newName = (el.textContent || '').trim();
     if (!newName || newName === oldName) { el.textContent = oldName; return; }
 
-    // 同名チェック
     if (raritySvc.hasRarity(current, newName)) {
       alert('同名のレアリティがすでに存在します。別名を指定してください。');
       el.textContent = oldName; 
       return;
     }
-
-    // 改名（metaはそのまま移動）
     const ok = raritySvc.renameRarity(current, oldName, newName, { override:false });
     if (!ok) { el.textContent = oldName; return; }
 
@@ -524,19 +467,16 @@ export function initRarityUI(){
     el.setAttribute('data-orig', newName);
     el.textContent = newName;
 
-    // 合計/単調性の再調整
     normalizeEmitViaService(current);
-
     dispatchChanged?.();
     renderTable();
   });
-
 
   function renderTable(){
     const MAX_TYPES = 20;
     const MAX_NUM   = 20;
 
-    renderTabs(); // タブ表示（アクティブ反映）
+    renderTabs();
 
     if (current) {
       const seedCfg = raritySvc.listRarities(current);
@@ -548,7 +488,6 @@ export function initRarityUI(){
         raritySvc.save();
       }
     }
-    // emit の自動補完（未設定のみ）※既存ロジックを尊重
     normalizeEmitViaService(current);
 
     const rarities = listRaritiesForGacha(current).slice(0, MAX_TYPES);
@@ -591,18 +530,12 @@ export function initRarityUI(){
       </table>
     `;
 
-    // ★ ここを修正：モバイル表示かどうかは #mainUI のクラスだけで判定
     const isMobileView = document.getElementById('mainUI')?.classList.contains('mobile-views') === true;
 
     if (isMobileView) {
-      // 1) ヘッダー「排出率」→「排出率(%)」
       const hdr = wrap.querySelector('thead th:nth-child(4)');
       if (hdr) hdr.textContent = '排出率(%)';
-
-      // 1) セル内の “%” は非表示
       wrap.querySelectorAll('td.emit-cell .unit').forEach(u => { u.style.display = 'none'; });
-
-      // 2) 右端の「削除」を “⋮” メニューに差し替え
       wrap.querySelectorAll('td.ops').forEach(td => {
         const delBtn = td.querySelector('button.del');
         if (!delBtn) return;
@@ -630,7 +563,7 @@ export function initRarityUI(){
       });
     }
 
-    // カラーピッカー装着（サービスに保存）
+    // カラーピッカー装着
     wrap.querySelectorAll('.cp-host').forEach(el => {
       const tr = el.closest('tr[data-rarity]'); if(!tr) return;
       const rarity  = tr.getAttribute('data-rarity');
@@ -645,7 +578,6 @@ export function initRarityUI(){
           raritySvc.upsert(current, rarity, next);
           const span = tr.querySelector('.rarity');
           applyRarityColor(span, v);
-          
           dispatchChanged?.();
         }
       });
@@ -653,12 +585,11 @@ export function initRarityUI(){
 
     try{
       if (__pendingNextFocus && !isMobileLike()) {
-        const kind   = __pendingNextFocus.kind;           // 'rate' | 'num' | 'name'
-        const from   = __pendingNextFocus.fromRarityName; // いま確定した行のレア名
+        const kind   = __pendingNextFocus.kind;
+        const from   = __pendingNextFocus.fromRarityName;
         __pendingNextFocus = null;
 
-        // いま描画に使った“並び順（UI順）”を使って、次の有効セルを探す
-        const order = rarities; // renderTable() 内で作った配列
+        const order = rarities;
         const start = Math.max(0, order.indexOf(from));
         for (let i = start + 1; i < order.length; i++) {
           const r  = order[i];
@@ -667,46 +598,41 @@ export function initRarityUI(){
 
           if (kind === 'rate') {
             sel = tr?.querySelector('.rarity-rate');
-            // disabled（自動行/強さ0）はスキップ
             if (sel && sel.disabled) { sel = null; }
           } else if (kind === 'num') {
             sel = tr?.querySelector('.rarity-num');
             if (sel && sel.disabled) { sel = null; }
           } else {
-            // name（contenteditable）
             sel = tr?.querySelector('.rarity-name') || null;
           }
-
           if (sel) {
             sel.focus?.();
-            // number input は select しておくと連続入力がラク
             if (typeof sel.select === 'function') sel.select();
-            // contenteditableはテキスト全選択
             if (kind === 'name' && sel !== null) {
               const range = document.createRange();
               range.selectNodeContents(sel);
               const s = window.getSelection();
               s.removeAllRanges(); s.addRange(range);
             }
-            break; // 決まったら終了
+            break;
           }
-          // 見つからなければ次の行へ（= disabled 行は飛ばす）
         }
       }
     } catch (_){}
 
-    // ------- 内部補助：この関数内だけで使う normalize/ensure ラッパ -------
-
-    // 旧: ensureAutoEmitViaService(gacha) も同方針へ
-    function ensureAutoEmitViaService(gacha){
-      normalizeEmitViaService(gacha);
+    function ensureAutoEmitViaService(gachaId){
+      normalizeEmitViaService(gachaId);
     }
   }
 
-  // 初期化：AppStateBridge 準備待ち＋明示呼び出し
   const kickoff = ()=>{
-    const names = gachaNames();
-    current = names.length ? names[0] : null; // 最初の実ガチャを選ぶ。無ければ未選択
+    const ids = listGachaIds();
+    current = ids.length ? ids[0] : null;
+    // AppState の selected を尊重したい場合は下記を有効化：
+    try{
+      const sel = window.Services?.app?.getSelectedGacha?.();
+      if (sel && ids.includes(sel)) current = sel;
+    }catch(_){}
     renderTable();
   };
   if (document.readyState === 'loading') {
@@ -720,18 +646,17 @@ export function initRarityUI(){
     if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
   }catch(_){}
 
-  // 既存ガチャの読込に追従
   document.addEventListener('state:changed', ()=>{
-    // いま rarity パネル内の入力にフォーカスがあるなら再描画を抑止
     const ae = document.activeElement;
     if (ae && wrap.contains(ae)) return;
 
-    const names = gachaNames();
-    if (!names.includes(current)) current = names[0] || null;
+    const ids = listGachaIds();
+    if (!ids.includes(current)) current = ids[0] || null;
 
     renderTable();
   });
 }
+
 
 function clampInt(v, min, max){
   if (Number.isNaN(v)) return null;

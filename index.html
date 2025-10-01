@@ -22,12 +22,12 @@
 <script src="/lib/jszip.min.js"></script>
 <script src="/lib/pako.min.js"></script>
 <script>
-  window.LS_KEY_APP  = 'gacha_app_state_v1';
-  window.LS_KEY_IMG  = 'gacha_item_image_map_v1';
-  window.LS_KEY_ORIG = 'gacha_item_original_v1';
-  window.LS_KEY_SKIP = 'gacha_item_image_skip_v1';
-  window.LS_KEY_RIAGU_META = 'gacha_riagu_meta_v1';
-  window.LS_KEY_RARITY = 'gacha_rarity_config_v1';
+  window.LS_KEY_APP  = 'gacha_app_state_v2';
+  window.LS_KEY_IMG  = 'gacha_item_image_map_v2';
+  window.LS_KEY_ORIG = 'gacha_item_original_v2';
+  window.LS_KEY_SKIP = 'gacha_item_image_skip_v2';
+  window.LS_KEY_RIAGU_META = 'gacha_riagu_meta_v2';
+  window.LS_KEY_RARITY = 'gacha_rarity_config_v2';
 </script>
 <script type="module">
   import { createServices } from "/src/services/indexService.js";
@@ -783,43 +783,37 @@ function incCount(user, gacha, rarity, code, by=1){
 function renderTabs(){
   const tabs = $("#gachaTabs"); if (!tabs) return;
   tabs.innerHTML = "";
-  console.log("renderTabsを実行");
 
   const services = window.Services || {};
-  const app      = services.appStateService || services.app || null;
+  const app      = services.app || services.appStateService || null;
 
-  // catalogs からガチャ一覧を取得（サービス化）
-  const gachas = app?.listGachas ? app.listGachas({ sorted: true }) : [];
+  // ID 一覧（ソート済）
+  const ids = app?.listGachas ? app.listGachas({ sort: true }) : [];
+  let selectedId = app?.getSelectedGacha ? app.getSelectedGacha()
+                  : (app?.get ? (app.get()?.selected ?? null) : null);
 
-  // 現在選択中を AppState から取得（無ければ先頭を自動選択して保存）
-  let selected = app?.getSelectedGacha ? app.getSelectedGacha()
-                : (app?.get ? (app.get()?.selected ?? null) : null);
-
-  if (!selected && gachas.length){
-    selected = gachas[0];
-    app?.selectGacha?.(selected);       // ← AppState に保存
+  if (!selectedId && ids.length){
+    selectedId = ids[0];
+    app?.selectGacha?.(selectedId);
   }
 
-  console.log("ガチャ一覧:", gachas, "選択中:", selected);
+  ids.forEach((gachaId, idx) => {
+    const label = app?.getDisplayName?.(gachaId) || gachaId;
 
-  gachas.forEach((g, idx) => {
     const el = document.createElement("div");
-    el.className = "tab" + ((selected ? selected === g : idx === 0) ? " active" : "");
-    el.textContent = g;
-    el.dataset.gacha = g;
+    el.className = "tab" + ((selectedId ? selectedId === gachaId : idx === 0) ? " active" : "");
+    el.textContent = label;
+    el.dataset.gachaId = gachaId; // ★ ここ重要：ガチャIDを埋め込む
 
     el.addEventListener("click", () => {
-      // 選択 → AppState に保存
-      app?.selectGacha?.(g);
-      // グローバルを併用している既存処理があれば同期しておく
-      window.selectedGacha = g;
+      app?.selectGacha?.(gachaId);
+      window.selectedGacha = gachaId; // 既存コード互換のため残す（ID を入れる）
 
-      console.log("ガチャ選択:", g);
-      $$(".tab", tabs).forEach(t => t.classList.toggle("active", t.dataset.gacha === g));
+      $$(".tab", tabs).forEach(t => t.classList.toggle("active", t.dataset.gachaId === gachaId));
       renderItemGrid();
     });
 
-    // 右上 × ボタン
+    // 右上 × ボタン（削除）
     const x = document.createElement("button");
     x.type = "button";
     x.className = "close";
@@ -827,14 +821,14 @@ function renderTabs(){
     x.title = "このガチャを削除";
     x.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      openDeleteConfirm(g);
+      openDeleteConfirm(gachaId); // ★ ID 渡しに変更
     });
     el.appendChild(x);
 
     tabs.appendChild(el);
   });
 
-  // ＋ボタン：新しいガチャを追加（開始モーダルを開く）
+  // ＋ボタン：新しいガチャを追加（開始モーダルへ）
   const add = document.createElement("div");
   add.className = "tab add";
   add.title = "ガチャの種類を追加";
@@ -845,32 +839,47 @@ function renderTabs(){
   tabs.appendChild(add);
 }
 
+
 function renderItemGrid(){
-  console.log("renderItemGridを実行");
   const grid=$("#itemGrid"); if(!grid){ return; }
   grid.innerHTML="";
-  if(!selectedGacha){ grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。"; return; }
-  // Services から取得
-  const services   = window.Services || {};
-  const app        = services.appStateService || services.app || null;
-  const raritySvc  = services.rarityService   || services.rarity || null;
 
-  // gItemsByGacha は使わず、カタログ → 完成リストを毎回生成
+  const services   = window.Services || {};
+  const app        = services.app || services.appStateService || null;
+  const raritySvc  = services.rarity || services.rarityService || null;
+  if (!app) { grid.textContent = "サービス未初期化です。"; return; }
+
+  const selectedId = app.getSelectedGacha?.() ?? (app.get?.()?.selected ?? null);
+  if(!selectedId){
+    grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。";
+    return;
+  }
+
+  // UI 表示用の名前
+  const displayName = app.getDisplayName?.(selectedId) || selectedId;
+
   const baseOrder = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
-  const all = app?.listItemsFromCatalog
-    ? app.listItemsFromCatalog(selectedGacha, { rarityService: raritySvc, baseOrder })
+  const all = app.listItemsFromCatalog
+    ? app.listItemsFromCatalog(selectedId, { rarityService: raritySvc, baseOrder })
     : [];
 
   // レア度フィルタ
   const rSel = getSelectedRarities();
   const list = all.filter(it => (rSel === "*" || rSel.has(it.rarity)));
 
-  console.log("対象アイテム数:", list.length);
+  if (list.length === 0) {
+    grid.innerHTML = `<div class="muted">アイテムがありません。</div>`;
+    return;
+  }
+
   for(const it of list){
-    console.log("描画", it);
-    const key=keyOf(it.gacha,it.rarity,it.code);
-    const skipped=skipHas(key);
-    const hasImage=!!lookupVal(imgMap,key);
+    // it = { gachaId, rarity, code }
+    const gachaId = it.gachaId || it.gacha;
+    const key = `${gachaId}::${it.rarity}::${it.code}`;
+
+    const skipped = skipHas(key);
+    const hasImage = !!lookupVal(imgMap, key);
+
     const card = document.createElement("div"); 
     card.className = "item-card";
     card.innerHTML = `
@@ -881,27 +890,34 @@ function renderItemGrid(){
         <button class="btn" data-action="primary"${skipped?' disabled':''}>${hasImage?'解除':'画像設定'}</button>
         <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
       </div>
-      <div class="flag"><span class="badge">${it.gacha} / ${it.rarity}:${escapeHtml(it.code)}</span>${skipped?'<span class="badge skip">リアグ</span>':""}</div>`;
+      <div class="flag">
+        <span class="badge">${escapeHtml(displayName)} / ${it.rarity}:${escapeHtml(it.code)}</span>
+        ${skipped?'<span class="badge skip">リアグ</span>':""}
+      </div>`;
 
-    // ★ 追加：item-card のレアリティ色を適用（rarityService + rarityNameSpanHTML）
+    // レアリティ色（rarityService の color を適用）
     {
-      const services = window.Services
-      const raritySvc = services.rarity || services.rarityService || null;
-      const color = raritySvc?.getMeta?.(it.gacha, it.rarity)?.color ?? null;
-      // console.log("色適用", it.gacha, it.rarity, color);
-      const spanHtml = window.rarityNameSpanHTML(it.rarity, color, { extraClasses: String(it.rarity) })
+      const color = raritySvc?.getMeta?.(gachaId, it.rarity)?.color ?? null;
+      const spanHtml = window.rarityNameSpanHTML
+        ? window.rarityNameSpanHTML(it.rarity, color, { extraClasses: String(it.rarity) })
+        : `<span class="rarity ${escapeHtml(String(it.rarity))}">${escapeHtml(String(it.rarity))}</span>`;
       const el = card.querySelector('.muted .rarity');
-      //console.log("spanHtml", spanHtml, el);
       if (el) el.outerHTML = spanHtml;
     }
 
+    // 画像設定 / 解除
     card.querySelector('[data-action="primary"]').addEventListener("click", () => {
       const nowHas = !!lookupVal(imgMap, key);
-      if (nowHas) { clearImage(it); } else { openImageModal(it); }
+      const itCompat = { gacha: gachaId, rarity: it.rarity, code: it.code }; // 既存モーダルの引数に合わせる
+      if (nowHas) { clearImage(itCompat); } else { openImageModal(itCompat); }
     });
-    card.querySelector('[data-action="skip"]').addEventListener("click",()=>openRiaguModal(it));
 
-    // 追加：カード右上の削除（×）
+    // リアグ切替（既存モーダルそのまま利用）
+    card.querySelector('[data-action="skip"]').addEventListener("click",()=>{
+      openRiaguModal({ gacha: gachaId, rarity: it.rarity, code: it.code });
+    });
+
+    // 右上 ×（アイテム削除）
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "close";
@@ -909,30 +925,45 @@ function renderItemGrid(){
     closeBtn.title = "このアイテムを削除";
     closeBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      openItemDeleteConfirm(it);
+      openItemDeleteConfirm({ gacha: gachaId, rarity: it.rarity, code: it.code });
     });
     card.appendChild(closeBtn);
 
     grid.appendChild(card);
   }
+
   resolveThumbs(grid);
 }
 
 // 目的: ユーザー一覧の描画。保存ボタンは保存オプションモーダルを開く。既存のURLがあれば「URLをコピー」を出す。
+// 目的: ユーザー一覧の描画。保存ボタンは保存オプションモーダルを開く。既存のURLがあれば「URLをコピー」を出す。
+// gachaIdベースに全面変更（表示は displayName を使用）
 function renderUsersList(){
   const wrap=$("#usersList"); if(!wrap) return;
   wrap.innerHTML="";
-  const empty = Object.keys(gData).length===0;
-  if(empty){ wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>'; return; }
 
-  const selectedGachas = getSelectedGachas();
+  const services = (window.Services || {});
+  const app      = services.app || services.appStateService || null;
+  const rarity   = services.rarity || services.rarityService || null;
+
+  const data     = app?.getData?.()   || {};
+  const counts   = app?.getCounts?.() || {};
+  const catalogs = app?.get?.()?.catalogs || {};
+
+  const empty = Object.keys(data).length===0;
+  if(empty){
+    wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>';
+    return;
+  }
+
+  const selectedGachas = getSelectedGachas(); // "*" または Set<gachaId>
   const rSel = getSelectedRarities();
   const hideMiss = $("#hideMiss").checked;
   const q = ($("#userSearch").value || "").trim();
   const showCounts = $("#showCounts")?.checked;
   const showSkipOnly = $("#showSkipOnly")?.checked;
-  
-  Object.entries(gData).forEach(([user,gobj])=>{
+
+  Object.entries(data).forEach(([user, gOwned])=>{
     if(q && !user.includes(q)) return;
 
     const card=document.createElement("div"); card.className="user-card panel";
@@ -946,27 +977,22 @@ function renderUsersList(){
         <button class="icon-btn collapse-btn" data-collapse aria-expanded="true" title="折りたたむ/開く"></button>
       </div>`;
     card.appendChild(header);
-    // 見出しをクリック可能に + A11y
     header.classList.add('clickable');
     header.setAttribute('role','button');
     header.setAttribute('tabindex','0');
 
-    // body に id を振って関連付け（A11y）
     const bodyId = 'userBody_' + Math.random().toString(36).slice(2,8);
     header.setAttribute('aria-controls', bodyId);
 
-    // 折りたたみ対象のボディを用意（ここに各ガチャ箱を入れる）
     const body = document.createElement("div");
     body.className = "user-body";
     card.appendChild(body);
     body.id = bodyId;
 
-    // 内側ラッパ（高さアニメ対象は body / 余白は inner に）
     const bodyInner = document.createElement("div");
     bodyInner.className = "user-body-inner";
     body.appendChild(bodyInner);
 
-    // 初期状態（保存済みなら閉じる）
     if (gUserCollapsed[user]) {
       card.classList.add("collapsed");
       body.style.height = "0px";
@@ -975,102 +1001,78 @@ function renderUsersList(){
       body.style.height = "auto";
       body.style.opacity = "1";
     }
-    // 初期 aria 状態
     header.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
     const collapseBtn = header.querySelector('[data-collapse]');
     collapseBtn?.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
 
-    // 保存ボタン → 保存オプションモーダルを開く
     header.querySelector('[data-zip-save]')?.addEventListener('click', ()=>{
-      // モーダルに対象ユーザー情報をセット
       window.__saveTargetUser = user;
-      window.__saveTargetGobj = gobj;
-      // 前回の結果表示をリセット（span を壊さない）
+      window.__saveTargetGobj = gOwned;
       const ur   = document.getElementById('uploadResult');
       const link = document.getElementById('uploadUrlLink');
       const text = document.getElementById('uploadUrlText');
       if (ur) ur.style.display = 'none';
       if (link){ link.href = '#'; link.title = ''; }
       if (text) text.textContent = '';
-      // モーダルを開く
       open(document.getElementById('saveOptionModal'));
     });
 
-    // 折りたたみトグル（ボタン）
     collapseBtn?.addEventListener('click', (e) => { e.stopPropagation();
-    const isOpen = !card.classList.contains('collapsed');
-
-    if (isOpen){
-      // 閉じる：auto → px へ固定してから 0 へ
-      const h = body.scrollHeight;
-      body.style.height = h + "px";
-      body.style.opacity = "1";
-      // リフローして遷移を有効化
-      void body.offsetHeight;
-      body.style.height = "0px";
-      body.style.opacity = "0";
-      // 終了後に状態確定
-      const onEnd = (e)=>{
-        if (e.propertyName !== "height") return;
-        body.removeEventListener("transitionend", onEnd);
-        card.classList.add("collapsed");
-        collapseBtn?.setAttribute("aria-expanded","false");
-        header.setAttribute('aria-expanded','false');
-        setUserCollapsed(user, true);
-      };
-      body.addEventListener("transitionend", onEnd);
-    } else {
-      // 開く：0 → コンテンツ高 へ
-      card.classList.remove("collapsed");
-      collapseBtn?.setAttribute("aria-expanded","true");
-      header.setAttribute('aria-expanded','true');
-      body.style.height = "0px";
-      body.style.opacity = "0";
-      // リフロー
-      void body.offsetHeight;
-      const h = body.scrollHeight; // 中身の自然高
-      body.style.height = h + "px";
-      body.style.opacity = "1";
-      const onEnd = (e)=>{
-        if (e.propertyName !== "height") return;
-        body.removeEventListener("transitionend", onEnd);
-        body.style.height = "auto"; // 最後に auto に戻す
-        setUserCollapsed(user, false);
-      };
-      body.addEventListener("transitionend", onEnd);
-    }
-  });
-
-  // 見出し全体でトグル（ただし右側の .user-actions 内は除外）
-  header.addEventListener('click', (e)=>{
-    if (e.target.closest('.user-actions')) return;
-    // collapseBtn と同じ処理を流用
-    collapseBtn?.dispatchEvent(new Event('click', { bubbles:false }));
-    if(!collapseBtn){ // 安全策：ボタンがない場合はローカルに実装
       const isOpen = !card.classList.contains('collapsed');
       if (isOpen){
         const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1"; void body.offsetHeight;
         body.style.height = "0px"; body.style.opacity = "0";
-        const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
-          card.classList.add('collapsed'); header.setAttribute('aria-expanded','false'); setUserCollapsed(user,true); };
-        body.addEventListener('transitionend', onEnd);
-      }else{
-        card.classList.remove('collapsed'); header.setAttribute('aria-expanded','true');
-        body.style.height = '0px'; body.style.opacity = '0'; void body.offsetHeight;
-        const h = body.scrollHeight; body.style.height = h + 'px'; body.style.opacity = '1';
-        const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd); body.style.height = 'auto'; setUserCollapsed(user,false); };
-        body.addEventListener('transitionend', onEnd);
+        const onEnd = (e)=>{
+          if (e.propertyName !== "height") return;
+          body.removeEventListener("transitionend", onEnd);
+          card.classList.add("collapsed");
+          collapseBtn?.setAttribute("aria-expanded","false");
+          header.setAttribute('aria-expanded','false');
+          setUserCollapsed(user, true);
+        };
+        body.addEventListener("transitionend", onEnd);
+      } else {
+        card.classList.remove("collapsed");
+        collapseBtn?.setAttribute("aria-expanded","true");
+        header.setAttribute('aria-expanded','true');
+        body.style.height = "0px"; body.style.opacity = "0"; void body.offsetHeight;
+        const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1";
+        const onEnd = (e)=>{
+          if (e.propertyName !== "height") return;
+          body.removeEventListener("transitionend", onEnd);
+          body.style.height = "auto";
+          setUserCollapsed(user, false);
+        };
+        body.addEventListener("transitionend", onEnd);
       }
-    }
-  });
+    });
 
-  // キーボード操作（Enter / Space）
-  header.addEventListener('keydown', (e)=>{
-    if (e.target.closest('.user-actions')) return;
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); }
-  });
+    header.addEventListener('click', (e)=>{
+      if (e.target.closest('.user-actions')) return;
+      collapseBtn?.dispatchEvent(new Event('click', { bubbles:false }));
+      if(!collapseBtn){
+        const isOpen = !card.classList.contains('collapsed');
+        if (isOpen){
+          const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1"; void body.offsetHeight;
+          body.style.height = "0px"; body.style.opacity = "0";
+          const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
+            card.classList.add('collapsed'); header.setAttribute('aria-expanded','false'); setUserCollapsed(user,true); };
+          body.addEventListener('transitionend', onEnd);
+        }else{
+          card.classList.remove('collapsed'); header.setAttribute('aria-expanded','true');
+          body.style.height = '0px'; body.style.opacity = '0'; void body.offsetHeight;
+          const h = body.scrollHeight; body.style.height = h + 'px'; body.style.opacity = '1';
+          const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd); body.style.height = 'auto'; setUserCollapsed(user,false); };
+          body.addEventListener('transitionend', onEnd);
+        }
+      }
+    });
 
-    // 既存URLがある場合はコピー機能
+    header.addEventListener('keydown', (e)=>{
+      if (e.target.closest('.user-actions')) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); }
+    });
+
     const copyBtn = header.querySelector('[data-copy-url]');
     if (copyBtn){
       copyBtn.addEventListener('click', async ()=>{
@@ -1080,76 +1082,119 @@ function renderUsersList(){
       });
     }
 
-    
-    let hasAnyBox = false; 
-    Object.entries(gobj).forEach(([gacha,info])=>{
-      if (selectedGachas !== "*" && !selectedGachas.has(gacha)) return;
-      const box=document.createElement("div"); box.className="gacha-box";
-      const pulls=info.pulls??0; box.innerHTML=`<div><strong>${escapeHtml(gacha)}</strong> <span class="tag">${pulls}連</span></div>`;
-      const items=info.items||{};
+    let hasAnyBox = false;
+
+    // gOwned は { [gachaId]: { pulls, items } }
+    Object.entries(gOwned).forEach(([gachaId, info])=>{
+      if (selectedGachas !== "*" && !selectedGachas.has(gachaId)) return;
+
+      const box=document.createElement("div");
+      box.className="gacha-box";
+      box.setAttribute('data-gacha-id', gachaId);
+
+      const pulls = info.pulls ?? 0;
+      const disp  = app?.getDisplayName?.(gachaId) || gachaId;
+      box.innerHTML=`<div><strong>${escapeHtml(disp)}</strong> <span class="tag">${pulls}連</span></div>`;
+
+      const items = info.items || {};
       let boxHasAny = false;
-      
-      gRarityOrder.forEach(rarity=>{
-        let list = (items[rarity] || []);
-        if(showSkipOnly){
-          list = list.filter(code => skipHas(keyOf(gacha, rarity, code)));
+
+      // レア度の並び
+      const baseOrder = window.baseRarityOrder || ['UR','SSR','SR','R','N','はずれ'];
+      const rarityOrder = (() => {
+        const s = new Set(baseOrder);
+        const cat = catalogs[gachaId];
+        if (cat?.items) for (const r of Object.keys(cat.items)) s.add(r);
+        const arr = [...s];
+        arr.sort((a,b)=>{
+          const ma = rarity?.getMeta?.(gachaId, a) || {};
+          const mb = rarity?.getMeta?.(gachaId, b) || {};
+          const na = Number.isFinite(ma.rarityNum) ? ma.rarityNum : -1;
+          const nb = Number.isFinite(mb.rarityNum) ? mb.rarityNum : -1;
+          if (na !== nb) return nb - na;
+          const ia = baseOrder.indexOf(a), ib = baseOrder.indexOf(b);
+          if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+          return a.localeCompare(b,'ja');
+        });
+        return arr;
+      })();
+
+      for (const rarityName of rarityOrder){
+        let list = (items[rarityName] || []);
+        if (showSkipOnly){
+          list = list.filter(code => skipHas(keyOf(gachaId, rarityName, code)));
         }
-        if(!list.length) return; 
-        if (hideMiss && rarity === "はずれ") return;
-        if (rSel !== "*" && !rSel.has(rarity)) return;
+        if(!list.length) continue;
+        if (hideMiss && rarityName === "はずれ") continue;
+        if (rSel !== "*" && !rSel.has(rarityName)) continue;
 
         const row=document.createElement("div"); row.className="rarity-row";
-        const services = window.Services || {};
-        const raritySvc = services.rarity || services.rarityService || null;
-        const color = raritySvc?.getMeta?.(gacha, rarity)?.color ?? null;
 
+        // レアリティ色
+        const color = rarity?.getMeta?.(gachaId, rarityName)?.color ?? null;
         const label=document.createElement("span");
         label.className="rarity-label";
-        {
-          const spanHtml = (window.rarityNameSpanHTML
-            ? window.rarityNameSpanHTML(rarity, color, { extraClasses: String(rarity) })
-            : `<span class="rarity ${escapeHtml(String(rarity))}">${escapeHtml(String(rarity))}</span>`);
-          label.innerHTML = spanHtml;
-        }
+        label.innerHTML = (window.rarityNameSpanHTML
+          ? window.rarityNameSpanHTML(rarityName, color, { extraClasses: String(rarityName) })
+          : `<span class="rarity ${escapeHtml(String(rarityName))}">${escapeHtml(String(rarityName))}</span>`);
+        row.appendChild(label);
 
         const itemsWrap=document.createElement("div"); itemsWrap.className="rarity-items";
 
-        list.forEach(code=>{
-          const key=keyOf(gacha,rarity,code);
-          const pill=document.createElement("span");
-          const v=lookupVal(imgMap,key);
-          const immediate=v && !v.startsWith("idb:") ? v : "";
-          const countVal = showCounts ? (((gHitCounts[user]||{})[gacha]||{})[rarity]||{})[code] : null;
+        // counts から“確定数”を優先して表示
+        const cntRow = ((counts[user] || {})[gachaId] || {})[rarityName] || {};
+        const byCode = {};
+        for (const c of list) byCode[c] = (byCode[c]||0) + 1;
 
+        const codesSorted = Object.keys(byCode).sort((a,b)=>a.localeCompare(b,'ja'));
+        for (const code of codesSorted){
+          const n = showCounts ? (cntRow[code] || byCode[code] || 1) : null;
+          const key = keyOf(gachaId, rarityName, code);
+          const v = lookupVal(imgMap, key);
+          const immediate = v && !v.startsWith("idb:") ? v : "";
+
+          const pill=document.createElement("span");
           pill.className="item-pill"+(immediate?"":" no-img");
           pill.dataset.imgKey = key;
           pill.dataset.user  = user;
-          pill.dataset.gacha = gacha;
-          pill.dataset.rarity= rarity;
+          pill.dataset.gachaId = gachaId;
+          pill.dataset.rarity= rarityName;
           pill.dataset.code  = code;
 
-          const labelHtml = `<span>${escapeHtml(code)}</span>${(countVal!=null)?`<span class="count">×${countVal}</span>`:""}`;
-
+          const labelHtml = `<span>${escapeHtml(code)}</span>${(n!=null)?`<span class="count">×${n}</span>`:""}`;
           if(immediate){
             pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/>${labelHtml}`;
           }else{
             pill.innerHTML=labelHtml;
           }
+
+          // 画像モーダル起動（ID渡し）
+          pill.addEventListener('click', ()=>{
+            openImageModal({ gachaId, rarity: rarityName, code });
+          });
+
           itemsWrap.appendChild(pill);
-        });
+        }
 
         if(itemsWrap.children.length){
-          row.appendChild(label); row.appendChild(itemsWrap); box.appendChild(row);
+          row.appendChild(itemsWrap);
+          box.appendChild(row);
           boxHasAny = true;
         }
-      });
-      if (boxHasAny) { body.appendChild(box); hasAnyBox = true; }
+      }
+
+      if (boxHasAny) {
+        body.appendChild(box);
+        hasAnyBox = true;
+      }
     });
 
     if(hasAnyBox){ wrap.appendChild(card); } // 対象がないユーザーは出さない
   });
+
   resolvePills(wrap);
 }
+
   
 // 目的: アップロードURLの保持/復元（ユーザー単位）
 const LS_KEY_UPLOAD_URLS = "last_upload_urls_v1";
@@ -1163,111 +1208,49 @@ function setLastUploadUrl(user, url){
 const deleteModal = $("#deleteModal");
 let pendingDeleteGacha = null;
 
-function openDeleteConfirm(gacha){
-  pendingDeleteGacha = gacha;
-  $("#delTarget").textContent = gacha;
+function openDeleteConfirm(gachaId){
+  pendingDeleteGacha = gachaId;
+  const app = (window.Services?.app || window.Services?.appStateService);
+  const label = app?.getDisplayName?.(gachaId) || gachaId;
+  $("#delTarget").textContent = label;
   open(deleteModal);
 }
+
 $("#delCancel").addEventListener("click", ()=>{ pendingDeleteGacha=null; close(deleteModal); });
+
 $("#delConfirm").addEventListener("click", async ()=>{
-  console.log("Deleting gacha を開始します");
-  const gName = pendingDeleteGacha; 
+  const gachaId = pendingDeleteGacha; 
   pendingDeleteGacha = null; 
   close(deleteModal);
-  if (!gName) return;
+  if (!gachaId) return;
 
-  // 1) カタログ/集計/カウントから削除
-  delete gCatalogByGacha[gName];
-  for (const user of Object.keys(gData)) {
-    if (gData[user] && gData[user][gName]) delete gData[user][gName];
-    if (gHitCounts[user] && gHitCounts[user][gName]) delete gHitCounts[user][gName];
-    if (gData[user] && Object.keys(gData[user]).length === 0) delete gData[user];
-  }
-  if (selectedGacha === gName) selectedGacha = null;
+  const { app, images, riagu, rarity } = (window.Services || {});
 
-  // 2) 画像/原本/スキップ/RIAGUメタ/レアリティ設定 をクリーンアップ
   try {
-    const prefix = gName + "::";
+    // 1) AppState から削除（data / counts / catalogs 含む）
+    app?.deleteGacha?.(gachaId);
 
-    // 2-1) 画像マップ（thumb）
-    for (const [k, v] of Object.entries(imgMap || {})) {
-      if (!k.startsWith(prefix)) continue;
-      if (typeof v === "string" && v.startsWith("idb:")) {
-        const id = v.slice(4); // "...|thumb"
-        try { await idbDelete(id); } catch(e) { console.warn("idbDelete thumb failed:", id, e); }
-        const u = urlCache?.get?.(id);
-        if (u) { URL.revokeObjectURL(u); urlCache.delete(id); }
-      }
-      delete imgMap[k];
-    }
+    // 2) 画像・リアグの掃除（ID プレフィックスで一括）
+    await images?.clearByPrefix?.(`${gachaId}::`);
+    images?.save?.(); images?._emit?.();
 
-    // 2-2) オリジナル（orig）
-    for (const [k, v] of Object.entries(origMap || {})) {
-      if (!k.startsWith(prefix)) continue;
-      if (typeof v === "string" && v.startsWith("idb:")) {
-        const id = v.slice(4); // "...|orig"
-        try { await idbDelete(id); } catch(e) { console.warn("idbDelete orig failed:", id, e); }
-        const u = urlCache?.get?.(id);
-        if (u) { URL.revokeObjectURL(u); urlCache.delete(id); }
-      }
-      delete origMap[k];
-    }
+    // 3) リアグのメタ/skip と 画像側 skip の整合クリーニング
+    const catalogs = app?.get?.()?.catalogs || {};
+    images?.pruneByCatalog?.(catalogs);
+    riagu?.pruneByCatalog?.(catalogs);
 
-    // 2-3) リアグ（スキップ指定）
-    for (const k of Array.from(skipSet || [])) {
-      if (String(k).startsWith(prefix)) skipSet.delete(k);
-    }
-
-    // 2-4) RIAGUメタ（cost/type 等）
-    //   形式: { "ガチャ::レア::コード": {...}, ... }
-    for (const k of Object.keys(riaguMeta || {})) {
-      if (k.startsWith(prefix)) delete riaguMeta[k];
-    }
-
-    // 2-5) レアリティ設定（gacha_rarity_config_v1 のフラット辞書）→ Service に委譲
-    try {
-      if (window.Services?.rarity) {
-        window.Services.rarity.deleteGacha(gName); // 内部で save() + change 発火
-      } else {
-        // フォールバック（保険）：サービスを動的 import して実行
-        const { RarityService } = await import("/src/services/rarityService.js");
-        const svc = new RarityService((window.LS_KEY_RARITY || "gacha_rarity_config_v1"));
-        svc.load();
-        svc.deleteGacha(gName);
-      }
-    } catch(e) {
-      console.warn("rarity cleanup via service failed:", e);
-    }
-
-    // 2-6) LSへ保存（空なら removeItem） ※画像/orig/skip/riagu のみ明示保存
-    const K_IMG  = window.LS_KEY_IMG  || "gacha_item_image_map_v1";
-    const K_ORIG = window.LS_KEY_ORIG || "gacha_item_original_v1";
-    const K_SKIP = window.LS_KEY_SKIP || "gacha_item_image_skip_v1";
-    const K_RIAGU= window.LS_KEY_RIAGU_META || "gacha_riagu_meta_v1";
-
-    if (imgMap && Object.keys(imgMap).length > 0) localStorage.setItem(K_IMG, JSON.stringify(imgMap));
-    else localStorage.removeItem(K_IMG);
-
-    if (origMap && Object.keys(origMap).length > 0) localStorage.setItem(K_ORIG, JSON.stringify(origMap));
-    else localStorage.removeItem(K_ORIG);
-
-    if (skipSet && skipSet.size > 0) localStorage.setItem(K_SKIP, JSON.stringify(Array.from(skipSet)));
-    else localStorage.removeItem(K_SKIP);
-
-    if (riaguMeta && Object.keys(riaguMeta).length > 0) localStorage.setItem(K_RIAGU, JSON.stringify(riaguMeta));
-    else localStorage.removeItem(K_RIAGU);
+    // 4) レアリティ設定の削除
+    rarity?.deleteGacha?.(gachaId);
 
   } catch (e) {
-    console.warn("image/riagu/rarity cleanup block failed", e);
+    console.warn("delete gacha failed:", e);
   }
 
-  // 3) 再構築 & 再描画 & 状態保存
-  //rebuildGachaCaches();
+  // 5) 再描画
   renderTabs(); 
   renderItemGrid(); 
   renderUsersList(); 
   renderRiaguPanel(); 
-  saveAppStateDebounced();
 });
 
 
@@ -1352,10 +1335,11 @@ let tempPreviewURL = "";
 function _S(){ return window.Services || {}; }
 
 function openImageModal(it){
-  const k = keyOf(it.gacha, it.rarity, it.code);
+  const gachaId = it.gachaId;
+  const k = keyOf(gachaId, it.rarity, it.code);
   if (skipHas(k)) return;
 
-  currentModalTarget = it;
+  currentModalTarget = it; // { gachaId, rarity, code }
 
   // 1) 見出し（補助）とプレビュー
   const cur = immediateSrcFor(k);
@@ -1375,10 +1359,11 @@ function openImageModal(it){
 
     let rarities = [];
     if (raritySvc && typeof raritySvc.listRarities === "function") {
-      rarities = raritySvc.listRarities(it.gacha) || [];
+      rarities = raritySvc.listRarities(gachaId) || [];
     } else {
-      // フォールバック：カタログから
-      rarities = Object.keys(((gCatalogByGacha[it.gacha] || {}).items) || {});
+      // フォールバック：AppState のカタログから
+      const catalogs = services.app?.get?.()?.catalogs || {};
+      rarities = Object.keys(((catalogs[gachaId] || {}).items) || {});
     }
 
     sel.innerHTML = rarities.map(r => 
@@ -1762,18 +1747,22 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tabsWrap && !tabsWrap.__boundPointer) {
     tabsWrap.addEventListener('pointerdown', (e) => {
       const t = e.target.closest('.tab');
-      if (!t || t.classList.contains('add')) return;      // “＋”タブは除外
-      const g = t.dataset.gacha;
-      if (!g) return;
-      // 既存の選択処理をそのまま流用
-      selectedGacha = g;
-      $$(".tab", tabsWrap).forEach(x => x.classList.toggle("active", x.dataset.gacha === g));
+      if (!t || t.classList.contains('add')) return;
+      const gachaId = t.dataset.gachaId; // ★ 変更
+      if (!gachaId) return;
+
+      const app = (window.Services?.app || window.Services?.appStateService);
+      app?.selectGacha?.(gachaId);
+      window.selectedGacha = gachaId;
+
+      $$(".tab", tabsWrap).forEach(x => x.classList.toggle('active', x.dataset.gachaId === gachaId));
       renderItemGrid();
-      e.preventDefault(); // 300ms遅延/ゴーストクリックを抑止
+      e.preventDefault();
     }, { passive:false });
     tabsWrap.__boundPointer = true;
   }
 });
+
 
 document.addEventListener('DOMContentLoaded', () => {
   const panel = document.getElementById('skipPanel');

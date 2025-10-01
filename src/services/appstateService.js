@@ -1,314 +1,261 @@
-// src/services/appStateService.js
+// src/services/appStateService.js (v2)
 import { BaseService, loadLocalJSON, saveLocalJSON, json, debounce } from './core/base.js';
 
+const LS_KEY_DEFAULT = 'gacha_app_state_v2';
+const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`);
+
 export class AppStateService extends BaseService {
-  constructor(key) {
+  constructor(key = LS_KEY_DEFAULT) {
     super();
     this.key = key;
-    this.state = { data:{}, catalogs:{}, counts:{}, selected:null };
-    this.saveDebounced = debounce(()=>this.save(), 150);
+    this.state = { meta:{}, data:{}, catalogs:{}, counts:{}, selected:null };
+    this.saveDebounced = debounce(()=>this.save(), 120);
   }
+
+  // ---------------- storage ----------------
   load() {
     const v = loadLocalJSON(this.key, null);
-    if (v) this.state = { data:{}, catalogs:{}, counts:{}, selected:null, ...v };
+    if (v) {
+      // 後方互換不要だが、最低限の形を保証
+      this.state = { meta:{}, data:{}, catalogs:{}, counts:{}, selected:null, ...v };
+    }
     this._emit();
     return !!v;
   }
   save() { saveLocalJSON(this.key, this.state); }
+
   get() { return this.state; }
   set(next) { this.state = json.clone(next); this.saveDebounced(); this._emit(); }
-  patch(mutator) { const s=json.clone(this.state); mutator(s); this.set(s); }
-  selectGacha(name) { this.patch(s => { s.selected = name ?? null; }); }
-  // === 追記: 薄いゲッター ===
+  patch(mut) { const s = json.clone(this.state); mut(s); this.set(s); }
+
+  // ---------------- meta (ID/表示名) ----------------
+  /** 新規ガチャ（ID発行・空カタログ作成） */
+  createGacha(displayName) {
+    const id = newId();
+    const now = Date.now();
+    this.patch(s=>{
+      (s.meta ||= {}); (s.catalogs ||= {});
+      s.meta[id] = { displayName: String(displayName || '無題ガチャ'), createdAt: now };
+      s.catalogs[id] = { pulls:0, items:{} };
+      if (!s.selected) s.selected = id;
+    });
+    return id;
+  }
+
+  /** 既存IDの空器を確保する（外部でIDを決めてから使いたいケース） */
+  ensureGachaById(gachaId, displayName = null) {
+    if (!gachaId) return false;
+    this.patch(s=>{
+      (s.meta ||= {}); (s.catalogs ||= {});
+      if (!s.meta[gachaId]) {
+        s.meta[gachaId] = { displayName: displayName || '無題ガチャ', createdAt: Date.now() };
+      } else if (displayName && s.meta[gachaId].displayName !== displayName) {
+        // displayName を指定されたら更新（可変）
+        s.meta[gachaId].displayName = displayName;
+      }
+      if (!s.catalogs[gachaId]) s.catalogs[gachaId] = { pulls:0, items:{} };
+      if (!s.selected) s.selected = gachaId;
+    });
+    return true;
+  }
+
+  /** 表示名の更新（IDは不変） */
+  renameGachaDisplayName(gachaId, nextName) {
+    if (!gachaId) return false;
+    this.patch(s=>{
+      if (s.meta?.[gachaId]) s.meta[gachaId].displayName = String(nextName ?? '');
+    });
+    return true;
+  }
+
+  /** ガチャの削除（関連する data/counts も削除） */
+  deleteGacha(gachaId) {
+    if (!gachaId) return false;
+    this.patch(s=>{
+      if (s.meta) delete s.meta[gachaId];
+      if (s.catalogs) delete s.catalogs[gachaId];
+      // data / counts の各ユーザーからも除去
+      if (s.data) for (const u of Object.keys(s.data)) delete (s.data[u]||{})[gachaId];
+      if (s.counts) for (const u of Object.keys(s.counts)) delete (s.counts[u]||{})[gachaId];
+      if (s.selected === gachaId) {
+        const ids = Object.keys(s.catalogs || {});
+        s.selected = ids[0] || null;
+      }
+    });
+    return true;
+  }
+
+  // ---------------- selections ----------------
+  selectGacha(gachaId) { this.patch(s => { s.selected = gachaId ?? null; }); }
+  getSelectedGacha(){ return this.state?.selected ?? null; }
+
+  // ---------------- getters (thin) ----------------
+  getMeta(){ return (this.state && this.state.meta) || {}; }
+  getDisplayName(gachaId){ return this.state?.meta?.[gachaId]?.displayName ?? ''; }
   getData(){ return (this.state && this.state.data) || {}; }
   getCounts(){ return (this.state && this.state.counts) || {}; }
-  // アイテム名（code）を変更：同 rarity 内で oldCode -> newCode を反映
-  renameItemCode(gacha, rarity, oldCode, newCode){
-    if (!gacha || !rarity || !oldCode || !newCode || oldCode === newCode) return false;
+  getCatalog(gachaId){ return this.state?.catalogs?.[gachaId] || null; }
+  listGachas({ sort=true } = {}) {
+    const ids = Object.keys(this.state?.catalogs || {});
+    if (!sort) return ids;
+    // 画面上は表示名順が自然
+    ids.sort((a,b)=>{
+      const na = this.getDisplayName(a), nb = this.getDisplayName(b);
+      const t = String(na).localeCompare(String(nb), 'ja');
+      return t !== 0 ? t : a.localeCompare(b,'ja');
+    });
+    return ids;
+  }
+
+  // ---------------- catalog/data/counts ops ----------------
+  /** アイテムコード名変更（同 rarity 内） */
+  renameItemCode(gachaId, rarity, oldCode, newCode){
+    if (!gachaId || !rarity || !oldCode || !newCode || oldCode === newCode) return false;
 
     this.patch(s=>{
-      // ---- catalogs ----
-      (s.catalogs ||= {});
-      const cg = (s.catalogs[gacha] ||= { pulls:0, items:{} });
-      (cg.items ||= {});
+      // catalogs
+      const cg = (s.catalogs[gachaId] ||= { pulls:0, items:{} });
       const arr = (cg.items[rarity] ||= []);
-      // 置換（複数個所持している可能性もあるため全置換→ユニーク化）
-      for (let i=0;i<arr.length;i++){
-        if (arr[i] === oldCode) arr[i] = newCode;
-      }
+      for (let i=0;i<arr.length;i++) if (arr[i] === oldCode) arr[i] = newCode;
       cg.items[rarity] = Array.from(new Set(cg.items[rarity]));
 
-      // ---- data（ユーザーごとの獲得内訳）----
-      (s.data ||= {});
-      console.log(s.data);
-      for (const user of Object.keys(s.data)){
-        console.log('renameItemName', user);
-        const gmap = (s.data[user] ||= {});
-          console.log('gmap', gmap);
-        const dG   = gmap[gacha];
-          console.log('dG', dG);
+      // data
+      for (const user of Object.keys(s.data ||= {})) {
+        const dG = (s.data[user] ||= {})[gachaId];
         if (!dG) continue;
-        (dG.items ||= {});
-        console.log('dG.items', dG.items);
-        const got = dG.items[rarity];
-        console.log('got', got);
-        if (Array.isArray(got)){
-          console.log('renaming', oldCode, '->', newCode);
+        const got = (dG.items ||= {})[rarity];
+        if (Array.isArray(got)) {
           let touched = false;
           for (let i=0;i<got.length;i++){
-            if (got[i] === oldCode){ 
-              console.log('got[i]', got[i], '->', newCode);
-              got[i] = newCode; touched = true; }
+            if (got[i] === oldCode){ got[i] = newCode; touched = true; }
           }
-          if (touched){
-            dG.items[rarity] = Array.from(new Set(got)); // ユニーク化
-            console.log('after rename', dG.items[rarity]);
-          }
+          if (touched) dG.items[rarity] = Array.from(new Set(got));
         }
       }
 
-      // ---- counts ----
-      (s.counts ||= {});
-      for (const user of Object.keys(s.counts)){
-        const gmap = (s.counts[user] ||= {});
-        const byG  = gmap[gacha];
-        if (!byG) continue;
-        const bag  = (byG[rarity] ||= {});
-        if (Object.prototype.hasOwnProperty.call(bag, oldCode)){
+      // counts
+      for (const user of Object.keys(s.counts ||= {})) {
+        const bag = (((s.counts[user] ||= {})[gachaId] ||= {})[rarity] ||= {});
+        if (Object.prototype.hasOwnProperty.call(bag, oldCode)) {
           bag[newCode] = (bag[newCode] || 0) + (bag[oldCode] || 0);
           delete bag[oldCode];
         }
       }
     });
-
-    this._emit?.();
-    this.saveDebounced?.();
     return true;
   }
 
-  // レアリティ移動：fromRarity -> toRarity へ code を移す
-  moveItemRarity(gacha, fromRarity, code, toRarity){
-    if (!gacha || !fromRarity || !toRarity || !code || fromRarity === toRarity) return false;
+  /** レアリティ移動（from -> to） */
+  moveItemRarity(gachaId, fromRarity, code, toRarity){
+    if (!gachaId || !fromRarity || !toRarity || !code || fromRarity === toRarity) return false;
 
     this.patch(s=>{
-      // ---- catalogs ----
-      (s.catalogs ||= {});
-      const cg   = (s.catalogs[gacha] ||= { pulls:0, items:{} });
-      (cg.items  ||= {});
+      // catalogs
+      const cg = (s.catalogs[gachaId] ||= { pulls:0, items:{} });
       const from = (cg.items[fromRarity] ||= []);
       const to   = (cg.items[toRarity]   ||= []);
-      // from から全削除（重複があり得るため全部落とす）
-      for (let i=from.length-1;i>=0;i--){
-        if (from[i] === code) from.splice(i,1);
-      }
+      for (let i=from.length-1;i>=0;i--) if (from[i] === code) from.splice(i,1);
       if (!to.includes(code)) to.push(code);
 
-      // ---- data（ユーザーごとの獲得内訳）----
-      (s.data ||= {});
-      for (const user of Object.keys(s.data)){
-        console.log('renameItemRarity', user);
-        const gmap = (s.data[user] ||= {});
-        const dG   = gmap[gacha];
+      // data
+      for (const user of Object.keys(s.data ||= {})) {
+        const dG = (s.data[user] ||= {})[gachaId];
         if (!dG) continue;
-        (dG.items ||= {});
-        const gotFrom = (dG.items[fromRarity] ||= []);
-        const gotTo   = (dG.items[toRarity]   ||= []);
-        // from から全削除 → to に一度だけ追加
+        const gotFrom = (dG.items ||= {})[fromRarity] ||= [];
+        const gotTo   = (dG.items ||= {})[toRarity]   ||= [];
         let moved = false;
-        for (let i=gotFrom.length-1;i>=0;i--){
-          if (gotFrom[i] === code){ gotFrom.splice(i,1); moved = true; }
-        }
+        for (let i=gotFrom.length-1;i>=0;i--) if (gotFrom[i] === code){ gotFrom.splice(i,1); moved = true; }
         if (moved && !gotTo.includes(code)) gotTo.push(code);
       }
 
-      // ---- counts ----
-      (s.counts ||= {});
-      for (const user of Object.keys(s.counts)){
-        const gmap = (s.counts[user] ||= {});
-        const byG  = (gmap[gacha]    ||= {});
-        const cf   = (byG[fromRarity] ||= {});
-        const ct   = (byG[toRarity]   ||= {});
-        if (Object.prototype.hasOwnProperty.call(cf, code)){
+      // counts
+      for (const user of Object.keys(s.counts ||= {})) {
+        const byG = ((s.counts[user] ||= {})[gachaId] ||= {});
+        const cf  = (byG[fromRarity] ||= {});
+        const ct  = (byG[toRarity]   ||= {});
+        if (Object.prototype.hasOwnProperty.call(cf, code)) {
           ct[code] = (ct[code] || 0) + (cf[code] || 0);
           delete cf[code];
         }
       }
     });
-
-    this._emit?.();
-    this.saveDebounced?.();
-    return true;
-  }
-  // 追記: マージ系ユーティリティ（AppStateService クラスのメソッドとして）
-  mergeAll(payload = {}, { setSelectedIfEmpty = true } = {}) {
-    const { data = {}, catalogs = {}, counts = {}, selected = null } = payload;
-    this.patch(s => {
-      // --- data: pullsは加算、itemsはユニーク統合 ---
-      s.data ||= {};
-      for (const [user, gmap] of Object.entries(data)) {
-        const sd = (s.data[user] ||= {});
-        for (const [gacha, info] of Object.entries(gmap || {})) {
-          const tgt = (sd[gacha] ||= { pulls: 0, items: {} });
-          tgt.pulls = (tgt.pulls || 0) + (+info?.pulls || 0);
-          const items = info?.items || {};
-          for (const [rarity, codes] of Object.entries(items)) {
-            const arr = (tgt.items[rarity] ||= []);
-            for (const c of (codes || [])) if (c && !arr.includes(c)) arr.push(c);
-            arr.sort((a,b)=>a.localeCompare(b,'ja'));
-          }
-        }
-      }
-
-      // --- catalogs: pullsは加算、コードはユニーク統合 ---
-      s.catalogs ||= {};
-      for (const [gacha, cg] of Object.entries(catalogs)) {
-        const tgt = (s.catalogs[gacha] ||= { pulls: 0, items: {} });
-        tgt.pulls = (tgt.pulls || 0) + (+cg?.pulls || 0);
-        const items = cg?.items || {};
-        for (const [rarity, codes] of Object.entries(items)) {
-          const arr = (tgt.items[rarity] ||= []);
-          for (const c of (codes || [])) if (c && !arr.includes(c)) arr.push(c);
-          arr.sort((a,b)=>a.localeCompare(b,'ja'));
-        }
-      }
-
-      // --- counts: ユーザー×ガチャ×レア×コードの出現回数を加算 ---
-      s.counts ||= {};
-      for (const [user, gmap] of Object.entries(counts)) {
-        const su = (s.counts[user] ||= {});
-        for (const [gacha, rmap] of Object.entries(gmap || {})) {
-          const sg = (su[gacha] ||= {});
-          for (const [rarity, cmap] of Object.entries(rmap || {})) {
-            const sr = (sg[rarity] ||= {});
-            for (const [code, n] of Object.entries(cmap || {})) {
-              sr[code] = (sr[code] || 0) + (+n || 0);
-            }
-          }
-        }
-      }
-
-      // --- selected: 取り込み側が指定していれば尊重。無ければ初回のみ自動選択 ---
-      if (selected) {
-        s.selected = selected;
-      } else if (setSelectedIfEmpty && !s.selected) {
-        const names = new Set();
-        Object.values(s.data).forEach(gm=>Object.keys(gm||{}).forEach(n=>names.add(n)));
-        Object.keys(s.catalogs||{}).forEach(n=>names.add(n));
-        const arr=[...names]; arr.sort((a,b)=>a.localeCompare(b,'ja'));
-        s.selected = arr[0] || null;
-      }
-    });
     return true;
   }
 
-  // 追記: ガチャを“空で”新規追加（最小骨格だけ作る）
-  ensureGacha(gachaName) {
-    if (!gachaName) return false;
+  /** 一明細追記（ユーザー/ガチャ/レア/コード/N） */
+  upsertHit(user, gachaId, rarity, code, n = 1) {
+    if (!user || !gachaId || !rarity || !code) return false;
     this.patch(s=>{
-      s.catalogs ||= {};
-      s.data ||= {};
-      // catalogs 側に空の器
-      if (!s.catalogs[gachaName]) s.catalogs[gachaName] = { pulls: 0, items: {} };
-      // data 側はユーザー次第なのでここでは作らない（必要に応じて upsertHit を使う）
-    });
-    return true;
-  }
-
-  // 追記: 1ヒット単位の追記（ユーザー/ガチャ/レア/コード/N回）
-  upsertHit(user, gacha, rarity, code, n = 1) {
-    if (!user || !gacha || !rarity || !code) return false;
-    this.patch(s=>{
-      // catalogs：コードのユニーク集合
-      (s.catalogs ||= {});
-      const cg = (s.catalogs[gacha] ||= { pulls: 0, items: {} });
+      // catalog
+      const cg = (s.catalogs[gachaId] ||= { pulls:0, items:{} });
       const arr = (cg.items[rarity] ||= []);
       if (!arr.includes(code)) arr.push(code);
 
-      // data：ユーザーの獲得内訳（itemsはリスト＝1明細1件の履歴表現）
-      (s.data ||= {});
-      const dg = ((s.data[user] ||= {})[gacha] ||= { pulls: 0, items: {} });
+      // data
+      const dg = ((s.data[user] ||= {})[gachaId] ||= { pulls: 0, items: {} });
       dg.pulls += n;
       const dl = (dg.items[rarity] ||= []);
       for (let i=0;i<n;i++) dl.push(code);
 
-      // counts：集計は加算
-      (s.counts ||= {});
-      const cnt = (((s.counts[user] ||= {})[gacha] ||= {})[rarity] ||= {});
+      // counts
+      const cnt = (((s.counts[user] ||= {})[gachaId] ||= {})[rarity] ||= {});
       cnt[code] = (cnt[code] || 0) + n;
 
-      // selected が未設定ならこのガチャを選ぶ
-      if (!s.selected) s.selected = gacha;
+      if (!s.selected) s.selected = gachaId;
     });
     return true;
   }
-    getCatalog(gacha){
-    const c = this.state?.catalogs?.[gacha] || null;
-    return c || null;
-  }
 
-  /** レア順を返す。rarityService があればそれを優先。 */
-  _rarityOrderFor(gacha, { rarityService=null, baseOrder=[] } = {}){
-    // 1) 候補の集合を作る（service / baseOrder / カタログ内の未知レア）
+  /** rarity の基準順を返却（RarityService の rarityNum を優先） */
+  _rarityOrderFor(gachaId, { rarityService=null, baseOrder=[] } = {}){
     const names = new Set();
 
-    if (Array.isArray(rarityService?.listRarities?.(gacha))) {
-      for (const r of rarityService.listRarities(gacha)) names.add(r);
+    if (Array.isArray(rarityService?.listRarities?.(gachaId))) {
+      for (const r of rarityService.listRarities(gachaId)) names.add(r);
     }
-    if (Array.isArray(baseOrder)) {
-      for (const r of baseOrder) names.add(r);
-    }
-    const cat = this.getCatalog(gacha);
+    if (Array.isArray(baseOrder)) for (const r of baseOrder) names.add(r);
+
+    const cat = this.getCatalog(gachaId);
     if (cat?.items && typeof cat.items === 'object') {
       for (const r of Object.keys(cat.items)) names.add(r);
     }
 
-    // 2) 並べ替え：強さ(rarityNum) desc → 既定順(baseOrder) → 名前(ja)
     const sorted = [...names].sort((a, b) => {
-      const ma = rarityService?.getMeta?.(gacha, a) || {};
-      const mb = rarityService?.getMeta?.(gacha, b) || {};
-      const na = (typeof ma.rarityNum === 'number') ? ma.rarityNum : -1;
-      const nb = (typeof mb.rarityNum === 'number') ? mb.rarityNum : -1;
+      const ma = rarityService?.getMeta?.(gachaId, a) || {};
+      const mb = rarityService?.getMeta?.(gachaId, b) || {};
+      const na = Number.isFinite(ma.rarityNum) ? ma.rarityNum : -1;
+      const nb = Number.isFinite(mb.rarityNum) ? mb.rarityNum : -1;
 
       if (na !== nb) return nb - na; // 強いほど先
       const ia = Array.isArray(baseOrder) ? baseOrder.indexOf(a) : -1;
       const ib = Array.isArray(baseOrder) ? baseOrder.indexOf(b) : -1;
-      if (ia !== -1 || ib !== -1) {
-        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-      }
+      if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
       return String(a).localeCompare(String(b), 'ja');
     });
 
-    // 3) indexOf を構築（未知レアは常に末尾扱い）
     const idx = new Map(sorted.map((r, i) => [r, i]));
     return { order: sorted, indexOf: (r) => (idx.has(r) ? idx.get(r) : (sorted.length + 999)) };
   }
 
-  /** items[rarity] が配列/連想/文字列でも配列に正規化 */
   _ensureArray(v){
     if (Array.isArray(v)) return v;
     if (v && typeof v === 'object') return Object.keys(v);
     return v ? [String(v)] : [];
   }
 
-  /**
-   * カタログだけから完成リスト [{gacha, rarity, code}] を返す
-   * data との合流はしない
-   */
-  listItemsFromCatalog(gacha, { rarityService=null, baseOrder=[] } = {}){
-    const cat = this.getCatalog(gacha);
+  /** catalog から一覧を構築（data には依存しない） */
+  listItemsFromCatalog(gachaId, { rarityService=null, baseOrder=[] } = {}){
+    const cat = this.getCatalog(gachaId);
     if (!cat || !cat.items) return [];
-
-    const { indexOf } = this._rarityOrderFor(gacha, { rarityService, baseOrder });
+    const { indexOf } = this._rarityOrderFor(gachaId, { rarityService, baseOrder });
 
     const out = [];
     for (const [rarity, raw] of Object.entries(cat.items)){
       const arr = this._ensureArray(raw);
       for (const code of arr){
-        out.push({ gacha, rarity, code });
+        out.push({ gachaId, rarity, code });
       }
     }
-
-    // 並び：レア順 → コードのアルファベット
     out.sort((a,b)=>{
       const ra = indexOf(a.rarity), rb = indexOf(b.rarity);
       if (ra !== rb) return ra - rb;
@@ -316,14 +263,4 @@ export class AppStateService extends BaseService {
     });
     return out;
   }
-
-  listGachas({ sort = true } = {}) {
-    const names = Object.keys(this.state?.catalogs || {});
-    if (sort) names.sort((a,b)=> a.localeCompare(b, 'ja'));
-    return names;
-  }
-  getSelectedGacha(){
-  return this.state?.selected ?? null;
-}
-
 }

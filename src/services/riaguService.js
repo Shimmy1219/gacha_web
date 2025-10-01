@@ -1,11 +1,15 @@
-// src/services/riaguService.js
+// src/services/riaguService.js (v2)
 import { BaseService, loadLocalJSON, saveLocalJSON, json } from './core/base.js';
 
+const LS_KEY_DEFAULT = 'gacha_riagu_meta_v2';
+const SKIP_KEY = 'gacha_item_image_skip_v2'; // 画像スキップと同居（配列互換）
+
 export class RiaguService extends BaseService {
-  constructor(key='gacha_riagu_meta_v1'){ 
+  constructor(key = LS_KEY_DEFAULT){ 
     super(); 
     this.key = key; 
-    this.meta = {}; 
+    this.meta = {}; // { itemKey: {...} }
+    this._skipSet = null; // 遅延ロード
   }
 
   load(){ this.meta = loadLocalJSON(this.key, {}) || {}; this._emit(); return true; }
@@ -13,25 +17,26 @@ export class RiaguService extends BaseService {
   get(){ return this.meta; }
   set(v){ this.meta = json.clone(v); this.save(); this._emit(); }
   patch(mut){ const m = json.clone(this.meta); mut(m); this.set(m); }
-  // === 追記: 便宜関数群 ===
-  // key生成
-  keyOf(gacha, rarity, code){ return `${gacha}::${rarity}::${code}`; }
 
-  // メタ取得/設定（1キー）
+  // ---- key helpers ----
+  keyOf(gachaId, rarity, code){ return `${gachaId}::${rarity}::${code}`; }
+
+  // ---- meta ops ----
   getMeta(k){ return (this.meta || {})[k] || null; }
   setMeta(k, meta){ this.meta = { ...(this.meta||{}), [k]: { ...meta } }; this.save(); this._emit(); }
 
-  // 一括キー一覧（リアグの実体は skipSet を採用）
-  listKeys(){
-    if (!this._skipSet) {
-      // 既存の skipSet を内部管理（localStorage: gacha_item_image_skip_v1）
-      const arr = this._loadSkipArray();
-      this._skipSet = new Set(arr);
-    }
-    return new Set(this._skipSet);
+  // ---- skipSet 同期（画像と共用の配列キーを読む）----
+  _loadSkipArray(){
+    try{ return JSON.parse(localStorage.getItem(SKIP_KEY) || '[]') || []; }catch{ return []; }
+  }
+  _saveSkipArray(){
+    try{ localStorage.setItem(SKIP_KEY, JSON.stringify(Array.from(this._skipSet||[]))); }catch{}
   }
 
-  // 旧skipSet互換: 追加/削除
+  listKeys(){
+    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray());
+    return new Set(this._skipSet);
+  }
   addKey(k){
     if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray());
     if (!this._skipSet.has(k)) { this._skipSet.add(k); this._saveSkipArray(); this._emit(); }
@@ -41,25 +46,23 @@ export class RiaguService extends BaseService {
     if (this._skipSet.delete(k)) { this._saveSkipArray(); this._emit(); }
   }
 
-  // リアグ化（画像解除はUI側で実施 or 画像サービスに委譲）
+  // ---- mark/unmark ----
   async mark(item, meta){
-    const k = typeof item === 'string' ? item : this.keyOf(item.gacha, item.rarity, item.code);
+    const k = typeof item === 'string' ? item : this.keyOf(item.gachaId, item.rarity, item.code);
     this.setMeta(k, meta || {});
     this.addKey(k);
   }
-
-  // リアグ解除（メタ削除 + キー解除）
   unmark(item){
-    const k = typeof item === 'string' ? item : this.keyOf(item.gacha, item.rarity, item.code);
+    const k = typeof item === 'string' ? item : this.keyOf(item.gachaId, item.rarity, item.code);
     const next = { ...(this.meta||{}) }; delete next[k];
     this.meta = next; this.save();
     this.delKey(k);
     this._emit();
   }
 
-  // AppStateを使った勝者集計（UIの単純化用）
+  // ---- winners (AppState v2 版) ----
   winnersForKey(k, appState){
-    const [gacha, rarity, code] = k.split('::');
+    const [gachaId, rarity, code] = k.split('::');
     const winners = []; let total = 0;
 
     const counts = (appState?.getCounts && appState.getCounts()) || {};
@@ -68,36 +71,57 @@ export class RiaguService extends BaseService {
 
     if (hasCounts) {
       for (const [user, gobj] of Object.entries(counts)) {
-        const n = ((((gobj || {})[gacha] || {})[rarity] || {})[code] || 0) | 0;
+        const n = ((((gobj || {})[gachaId] || {})[rarity] || {})[code] || 0) | 0;
         if (n > 0) { winners.push({ user, count: n }); total += n; }
       }
     }
     for (const [user, uobj] of Object.entries(data || {})) {
-      const have = ((((uobj || {})[gacha] || {}).items || {})[rarity] || []).includes(code);
+      const have = ((((uobj || {})[gachaId] || {}).items || {})[rarity] || []).includes(code);
       if (!have) continue;
       if (winners.some(w => w.user === user)) continue;
-      const n = ((((counts || {})[user] || {})[gacha] || {})[rarity] || {})[code] | 0;
+      const n = ((((counts || {})[user] || {})[gachaId] || {})[rarity] || {})[code] | 0;
       const cnt = n > 0 ? n : 1;
       winners.push({ user, count: cnt }); total += cnt;
     }
     return { winners, total };
   }
 
-  // 内部: skip配列のload/save（localStorage）
-  _loadSkipArray(){
-    try{ return JSON.parse(localStorage.getItem('gacha_item_image_skip_v1')||'[]') || []; }catch{ return []; }
+  // ---- meta/skip の整合性を保つ掃除 ----
+  pruneByCatalog(catalogs){
+    const valid = new Set();
+    for (const [gachaId, cat] of Object.entries(catalogs || {})) {
+      const items = cat?.items || {};
+      for (const [rarity, codes] of Object.entries(items)) {
+        for (const code of (codes || [])) valid.add(`${gachaId}::${rarity}::${code}`);
+      }
+    }
+
+    let touched = false;
+    this.patch(meta=>{
+      for (const k of Object.keys(meta || {})) {
+        if (!valid.has(k)) { delete meta[k]; touched = true; }
+      }
+    });
+
+    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray() || []);
+    const next = new Set();
+    for (const v of this._skipSet) {
+      if (typeof v === 'string' && v.split('::').length >= 3) {
+        if (valid.has(v)) next.add(v);
+      } else {
+        next.add(v);
+      }
+    }
+    if (next.size !== this._skipSet.size) { this._skipSet = next; this._saveSkipArray(); touched = true; }
+
+    if (touched) this._emit?.();
+    return touched;
   }
-  _saveSkipArray(){
-    try{
-      const arr = Array.from(this._skipSet||[]);
-      localStorage.setItem('gacha_item_image_skip_v1', JSON.stringify(arr));
-    }catch{}
-  }
-  // リアグ関連キーのリネーム（meta + skipSet）
+
+  // ---- itemKey のリネーム（meta + skipSet）----
   renameKey(oldKey, newKey){
     if (!oldKey || !newKey || oldKey === newKey) return false;
 
-    // メタ移行
     this.patch(m=>{
       if (m && (oldKey in m)){
         m[newKey] = typeof structuredClone === "function" ? structuredClone(m[oldKey]) : JSON.parse(JSON.stringify(m[oldKey]));
@@ -105,52 +129,10 @@ export class RiaguService extends BaseService {
       }
     });
 
-    // skipSet も更新
-    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray?.() || []);
-    if (this._skipSet?.has(oldKey)){
-      this._skipSet.delete(oldKey);
-      this._skipSet.add(newKey);
-      this._saveSkipArray?.();
-    }
+    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray() || []);
+    if (this._skipSet.has(oldKey)){ this._skipSet.delete(oldKey); this._skipSet.add(newKey); this._saveSkipArray(); }
 
     this._emit?.();
     return true;
-  }
-  pruneByCatalog(catalogs){
-    const valid = new Set();
-    for (const [gacha, cat] of Object.entries(catalogs || {})) {
-      const items = cat?.items || {};
-      for (const [rarity, codes] of Object.entries(items)) {
-        for (const code of (codes || [])) {
-          valid.add(`${gacha}::${rarity}::${code}`);
-        }
-      }
-    }
-
-    let touched = false;
-
-    // meta
-    this.patch(meta=>{
-      for (const k of Object.keys(meta || {})) {
-        if (!valid.has(k)) { delete meta[k]; touched = true; }
-      }
-    });
-
-    // skip
-    if (!this._skipSet) this._skipSet = new Set(this._loadSkipArray?.() || []);
-    const next = new Set();
-    for (const v of this._skipSet) {
-      if (typeof v === 'string' && v.split('::').length >= 3) {
-        if (valid.has(v)) next.add(v);
-      } else {
-        next.add(v); // ガチャ単位などは維持
-      }
-    }
-    if (next.size !== this._skipSet.size) {
-      this._skipSet = next; this._saveSkipArray?.(); touched = true;
-    }
-
-    if (touched) this._emit?.();
-    return touched;
   }
 }
