@@ -5,7 +5,7 @@
 (function(){
   'use strict';
 
-  const GLOBAL_NS = 'gacha_global_setting_v1';
+  const GLOBAL_NS = 'gacha_global_setting_v2';
   let CURRENT_GACHA = null;  // ← gachaId を保持
 
   // ========== Storage ==========
@@ -60,6 +60,12 @@
   function getSelectedGacha(){
     // まずは pt-controls が最後に render した gachaId を信頼
     if (CURRENT_GACHA) return CURRENT_GACHA;
+
+    // 次に rarity_tab_selected（LS）を最優先で採用
+    try{
+      const fromLS = localStorage.getItem('rarity_tab_selected');
+      if (fromLS) return fromLS;
+    }catch(_){}
 
     // フォールバック：アプリ側が持つ選択状態 or グローバル
     const app = _getApp();
@@ -208,22 +214,31 @@
 
   // 描画・読み取り
   function render(gachaId){
-    if (!gachaId) return;
+    // rarity_tab_selected → 引数 → 既存選択 の優先度で gachaId を決定
+    let gid = gachaId;
+    if (!gid){
+      try{
+        const fromLS = localStorage.getItem('rarity_tab_selected');
+        if (fromLS) gid = fromLS;
+      }catch(_){}
+    }
+    if (!gid) gid = getSelectedGacha();
+    if (!gid) return;
 
     // ★ この表示フォームが紐づく gachaId を固定
-    CURRENT_GACHA = gachaId;
+    CURRENT_GACHA = gid;
 
     // 1) ロード（無ければデフォルトを用意）
-    let meta = loadFor(gachaId);
+    let meta = loadFor(gid);
     const existed =
-      !!(window.gacha_global_setting_v1 && gachaId in window.gacha_global_setting_v1) ||
+      !!(window.gacha_global_setting_v1 && gid in window.gacha_global_setting_v1) ||
       !!((_getApp()?.state?.gacha_global_setting_v1 || null) &&
-        (gachaId in _getApp().state.gacha_global_setting_v1)) ||
+        (gid in _getApp().state.gacha_global_setting_v1)) ||
       !!(localStorage.getItem('gacha_global_setting_v1') &&
         (function(){
             try{
               const o = JSON.parse(localStorage.getItem('gacha_global_setting_v1')||'{}');
-              return gachaId in o;
+              return gid in o;
             }catch(_){ return false; }
           })());
 
@@ -259,7 +274,7 @@
     // 6) 初回生成なら、今のフォーム状態を保存して “ある状態” にする
     if (!existed) {
       const now = readFromForm();
-      saveFor(gachaId, now);
+      saveFor(gid, now);
     }
   }
 
@@ -346,13 +361,42 @@
           setTimeout(autoSave, 0);
         }
       });
+
+      // 追加：レアリティタブ切替に追従（rarity_tab_selected を参照しつつ再描画）
+      document.addEventListener('rarity:tab:changed', (ev)=>{
+        try{
+          const id = (ev?.detail && ev.detail.gachaId) || localStorage.getItem('rarity_tab_selected') || null;
+          if (!id) return;
+          CURRENT_GACHA = id;
+          render(id);
+        }catch(_){}
+      });
+
+      // 追加：データ更新（JSON/TXT取込）後にも追従
+      document.addEventListener('gacha:data:updated', ()=>{
+        try{
+          const id = localStorage.getItem('rarity_tab_selected') || getSelectedGacha();
+          if (id) render(id);
+        }catch(_){}
+      });
     }
 
-    const g = getSelectedGacha();
+    // 初回描画：rarity_tab_selected → getSelectedGacha の順で
+    let g = null;
+    try{ g = localStorage.getItem('rarity_tab_selected'); }catch(_){}
+    if (!g) g = getSelectedGacha();
     if (g) render(g);
 
     return true;
   }
+  // NEW: rarity タブの現在選択を LS から読む
+  function loadSelectedFromLS(){
+    try{
+      const v = localStorage.getItem('rarity_tab_selected');
+      return v || null;
+    }catch(_){ return null; }
+  }
+
 
   // 公開API
   window.PTControls = {

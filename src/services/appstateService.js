@@ -2,7 +2,14 @@
 import { BaseService, loadLocalJSON, saveLocalJSON, json, debounce } from './core/base.js';
 
 const LS_KEY_DEFAULT = 'gacha_app_state_v2';
-const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : `g_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`);
+const ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+function newId(len = 10) {
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  let s = '';
+  for (const b of bytes) s += ALPHABET[b % ALPHABET.length];
+  return s; // 例: "a9Z1Q0fT2B"
+}
 
 export class AppStateService extends BaseService {
   constructor(key = LS_KEY_DEFAULT) {

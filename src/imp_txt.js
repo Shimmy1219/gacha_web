@@ -95,30 +95,19 @@ function buildCatalogs(ext, gachaName, fallbackData){
   const catalogs = {};
   const cat = (catalogs[gachaName] = { pulls: 0, items: {} });
 
-  // 第一候補: item_base（例: [ '0', 143150, 'N-A' ] ）
-  const base = Array.isArray(ext?.gacha_data?.item_base) ? ext.gacha_data.item_base : null;
-  if (base && base.length){
-    for (const row of base){
-      const code = String(row?.[2] ?? '').trim(); if (!code) continue;
-      const rarity = String(code.split('-')[0] || '').trim() || 'N';
-      const arr = (cat.items[rarity] ||= []);
-      if (!arr.includes(code)) arr.push(code);
-    }
-    Object.keys(cat.items).forEach(r => safeLocaleSort(cat.items[r]));
-    return catalogs;
+  // ▼ レアリティ定義は TXT→JSON の rarity_base を唯一のソースにする
+  //    例: [["N",8589],["R",300],["SR",500],["SSR",500],["UR",100],["LR",10],["SUR",1]]
+  const knownSet = new Set();
+  const rbase = Array.isArray(ext?.gacha_data?.rarity_base) ? ext.gacha_data.rarity_base : [];
+  for (const row of rbase){
+    const name = String(Array.isArray(row) ? row[0] : (row?.name ?? '')).trim();
+    if (name) knownSet.add(name);
   }
 
-  // 第二候補: history から復元
-  for (const user of Object.keys(fallbackData||{})){
-    const g = fallbackData[user]?.[gachaName]; if (!g) continue;
-    for (const [rarity, codes] of Object.entries(g.items||{})){
-      const arr = (cat.items[rarity] ||= []);
-      for (const c of codes) if (c && !arr.includes(c)) arr.push(c);
-    }
-  }
   Object.keys(cat.items).forEach(r => safeLocaleSort(cat.items[r]));
   return catalogs;
 }
+
 
 function applyExternalRarityBase(raritySvc, ext, gachaId){
   if (!raritySvc || !ext || !gachaId) return;
@@ -186,6 +175,14 @@ function ensureGachaIdByDisplayName(app, displayName){
   const hits = Object.entries(meta).filter(([id, m]) => (m?.displayName || '') === displayName);
   if (hits.length === 1) return hits[0][0];
   return app.createGacha(String(displayName || 'ガチャ'));
+}
+
+function ensureGlobalSettingV2(){
+ try{
+  const NS = 'gacha_global_setting_v2';
+  if (!localStorage.getItem(NS)) localStorage.setItem(NS, '{}');
+  if (!window[NS] || typeof window[NS] !== 'object') window[NS] = {};
+    }catch(e){ console.warn('init gacha_global_setting_v2 skipped:', e); }
 }
 
 /** data/counts の“ガチャ名キー”を “gachaIdキー”に変換（appへ upsertHit で投入） */
@@ -294,8 +291,32 @@ export class TxtImporter {
     // AppState へ投入（upsertHit で data/catalogs/counts を同時更新）
     applyToAppViaCounts(app, norm.data, norm.counts, gachaId);
 
+    // 追加: gacha_global_setting_v2 を空で初期化（なければ）
+    try {
+      ensureGlobalSettingV2();
+    } catch(e) {
+      console.warn('init gacha_global_setting_v2 skipped:', e);
+    }
+
+    // 既存UIをまず描画（タブ/画像など）
     refreshUI();
+
+    // ★追加: 取込直後にレアリティ設定テーブルを“即時”再構築
+    try {
+      // サービスを最新LSで再ロード（実装があれば）
+      const svc = (window.Services && (Services.rarity || Services.rarityService)) || raritySvc;
+      svc?.loadFromLocal?.();
+
+      // レアリティセクションを手動再描画（選択ガチャを優先して渡す）
+      window.refreshRarityUI?.(gachaId);
+
+      // 汎用トリガ（他UIが追従可能）
+      document.dispatchEvent(new CustomEvent('gacha:data:updated', { detail:{ source:'txt-import', gachaId } }));
+    } catch(e){
+      console.warn('rarity UI refresh skipped:', e);
+    }
   }
+
 
   async importFile(file){
     const raw = await file.text();

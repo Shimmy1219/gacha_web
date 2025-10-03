@@ -28,7 +28,7 @@ function isMobileLike(){
 let __pendingNextFocus = null; 
 // LSキーは既存の窓口を尊重
 const raritySvc = existing || (() => {
-  const key = (_W && _W.LS_KEY_RARITY) || 'gacha_rarity_config_v1';
+  const key = (_W && _W.LS_KEY_RARITY) || 'gacha_rarity_config_v2';
   const svc = new RarityService(key);
   svc.load();
   // 共有レジストリがなければ作る
@@ -37,6 +37,22 @@ const raritySvc = existing || (() => {
   _W.Services.rarity = svc;
   return svc;
 })();
+
+// NEW: LSから選択ガチャIDを読む
+function loadSelectedFromLS(){
+  try{
+    const v = localStorage.getItem('rarity_tab_selected');
+    return v || null;
+  }catch(_){ return null; }
+}
+// NEW: LSに選択ガチャIDを書き込む
+function saveSelectedToLS(gachaId){
+  try{
+    if (gachaId) localStorage.setItem('rarity_tab_selected', gachaId);
+  }catch(_){}
+}
+
+
 
 // 補助：並び順（強さ desc → 既定順 → 名前）
 function sortRarityNamesSvc(gachaId, names){
@@ -167,36 +183,64 @@ export function initRarityUI(){
 
   function renderTabs(){
     const ids = listGachaIds();
-    if (current == null) current = ids[0] || null;
 
+    // 1) LSの選択を優先（存在しているIDなら）
+    const fromLS = loadSelectedFromLS();
+    if (fromLS && ids.includes(fromLS)) current = fromLS;
+
+    // 2) まだ決まっていなければ先頭
+    if (current == null || !ids.includes(current)) current = ids[0] || null;
+
+    // 3) レアリティセクション内だけで選択表現（aria-selected + active）
     const html = ids.map(id => {
       const label = escapeHtml(dispName(id));
-      return `<button type="button" class="tab ${current===id?'active':''}" data-gacha-id="${id}">${label}</button>`;
+      const isSel = (current === id);
+      // ▼ 重要：CSSの赤ラインは .tab.active に依存 → active を付ける
+      const cls   = `tab${isSel ? ' active' : ''}`;
+      const aria  = isSel ? 'true' : 'false';
+      return `<button type="button" class="${cls}" data-rarity-tab data-gacha-id="${id}" aria-selected="${aria}">${label}</button>`;
     }).join('');
     tabs.innerHTML = html;
 
-    // pt-controls の紐付け（gachaId を渡す）
+    // 4) pt-controlsへ現在のgachaIdを連携
     try{
       if (window.PTControls?.attach) window.PTControls.attach(window.Services||{});
       if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
     }catch(_){}
+
+    // 5) 永続化（再描画のたびに確定値を保存しておく）
+    saveSelectedToLS(current);
   }
 
+
+
   tabs.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button.tab'); if(!btn) return;
+    // レアリティセクション内のタブだけを対象にする
+    const btn = e.target.closest('[data-rarity-tab]'); 
+    if(!btn || !tabs.contains(btn)) return;
+
     const id = btn.getAttribute('data-gacha-id');
+    if (!id || id === current) return;
+
     current = id;
+    // 永続化
+    saveSelectedToLS(current);
 
-    // 選択状態を AppState にも反映（任意）
-    try{ window.Services?.app?.selectGacha?.(current); }catch(_){}
-
+    // レアリティセクションだけを更新
     renderTabs();
     renderTable();
 
+    // pt-controlsへも反映
     try{
       if (window.PTControls?.renderPtControls) window.PTControls.renderPtControls(current);
     }catch(_){}
+
+    // 他UIが必要なら拾えるイベント
+    try{
+      document.dispatchEvent(new CustomEvent('rarity:tab:changed', { detail:{ gachaId: current }}));
+    }catch(_){}
   });
+
 
   panel.querySelector('#addRarityRow').addEventListener('click', ()=>{
     if (!current) return;
@@ -624,15 +668,45 @@ export function initRarityUI(){
       normalizeEmitViaService(gachaId);
     }
   }
+  // 手動再描画API：JSON/TXT取込直後など、いつでも呼べる
+  window.refreshRarityUI = function refreshRarityUI(nextGachaId){
+    try { raritySvc.load?.(); } catch(_){}
+
+    // nextGachaId が来ていればそれを優先
+    if (nextGachaId) {
+      current = nextGachaId;
+      saveSelectedToLS(current);
+    } else {
+      // 無ければ LS を参照（妥当性チェック付き）
+      const ids = listGachaIds();
+      const fromLS = loadSelectedFromLS();
+      if (fromLS && ids.includes(fromLS)) current = fromLS;
+      else if (!current || !ids.includes(current)) current = ids[0] || null;
+    }
+
+    renderTabs();
+    renderTable();
+  };
 
   const kickoff = ()=>{
     const ids = listGachaIds();
-    current = ids.length ? ids[0] : null;
-    // AppState の selected を尊重したい場合は下記を有効化：
-    try{
-      const sel = window.Services?.app?.getSelectedGacha?.();
-      if (sel && ids.includes(sel)) current = sel;
-    }catch(_){}
+
+    // 1) AppState の選択を最優先
+    let sel = null;
+    try{ sel = window.Services?.app?.getSelectedGacha?.() || null; }catch(_){}
+    if (sel && ids.includes(sel)) {
+      current = sel;
+    } else {
+      // 2) 次に LS の選択
+      const fromLS = loadSelectedFromLS();
+      if (fromLS && ids.includes(fromLS)) current = fromLS;
+      // 3) まだ無ければ先頭
+      if (!current || !ids.includes(current)) current = ids[0] || null;
+    }
+
+    // 4) 確定した選択を保存
+    saveSelectedToLS(current);
+
     renderTable();
   };
   if (document.readyState === 'loading') {
@@ -651,9 +725,26 @@ export function initRarityUI(){
     if (ae && wrap.contains(ae)) return;
 
     const ids = listGachaIds();
-    if (!ids.includes(current)) current = ids[0] || null;
 
+    // AppState or LS から現在値を補正
+    try{
+      const sel = window.Services?.app?.getSelectedGacha?.();
+      if (sel && ids.includes(sel)) current = sel;
+    }catch(_){}
+
+    if (!current || !ids.includes(current)) {
+      const fromLS = loadSelectedFromLS();
+      if (fromLS && ids.includes(fromLS)) current = fromLS;
+      else current = ids[0] || null;
+    }
+
+    saveSelectedToLS(current);
     renderTable();
+  });
+  // JSON/TXT取込側が発火する“共通トリガ”に追従
+  document.addEventListener('gacha:data:updated', () => {
+    try { raritySvc.load?.(); } catch(_){}
+    window.refreshRarityUI?.();
   });
 }
 
@@ -692,6 +783,7 @@ function getStateSafe(){
   };
 }
 function dispatchChanged(){
-  try{ document.dispatchEvent(new CustomEvent('rarityconfig:changed', { detail: { rarityConfigByGacha } })); }catch(_){}
-  try{ document.dispatchEvent(new Event('state:changed')); }catch(_){}
+  // どこからでも受けられる汎用イベントに簡素化（未定義参照を排除）
+  try { document.dispatchEvent(new Event('rarityconfig:changed')); } catch(_){}
+  try { document.dispatchEvent(new Event('state:changed')); } catch(_){}
 }

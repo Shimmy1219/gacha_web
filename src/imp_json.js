@@ -131,7 +131,33 @@ export class JsonImporter {
     // 本体投入（counts を信頼して upsertHit）
     applyCountsToApp(this.app, countsByName);
 
+    
+   // --- NEW: gacha_global_setting_v2 を空で初期化（なければ）
+   try {
+     const NS = 'gacha_global_setting_v2';
+     if (!localStorage.getItem(NS)) localStorage.setItem(NS, '{}');
+     // window グローバル側も空オブジェクトを用意（PTコントロールが参照）
+     if (!window[NS] || typeof window[NS] !== 'object') window[NS] = {};
+     // AppState の任意領域に載せておく（あれば）
+     const app = this.app;
+     if (app?.save) {
+       const st = app.get?.() || {};
+       st[NS] = st[NS] && typeof st[NS]==='object' ? st[NS] : {};
+       app.patch?.(s => Object.assign(s, st));
+     }
+    } catch (e) { 
+      console.warn('init gacha_global_setting_v2 skipped:', e); 
+    }
     refreshUI();
+     // --- レアリティUIを“即時”再構築する（初期化順の抜けを埋める）---
+    try {
+      // 1) サービスに「LSから読み直せ」を明示
+      const raritySvc = (window.Services && (Services.rarity || Services.rarityService));
+      raritySvc?.loadFromLocal?.();              // 実装済なら呼ばれるだけ
+      window.refreshRarityUI?.();
+      // 3) 汎用トリガ（将来の連携用）
+      document.dispatchEvent(new CustomEvent('gacha:data:updated', { detail:{ source:'json-import' }}));
+    } catch(e){ console.warn('rarity UI refresh skipped:', e); }
   }
 
   async importFile(file){

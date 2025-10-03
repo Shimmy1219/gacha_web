@@ -133,17 +133,24 @@ export function renderRiaguPanel(){
     return;
   }
 
-  // 旧式 "RARITY::CODE" を正規キーへ解決
+  // 旧式 "RARITY::CODE" を正規キーへ解決（3 パーツ以外は弾く）
   const keys = normalizeSkipKeys(rawKeys);
 
-  // ガチャごとにグループ化（gachaId）
+  // ガチャごとにグループ化（gachaId）— falsy な gachaId は除外
   const byGacha = new Map();
   for (const k of keys){
-    const [gachaId] = k.split('::');
+    const p = String(k).split('::');
+    const gachaId = p[0] || null;
+    if (!gachaId) continue; // ← ここで undefined/null を排除
     if (!byGacha.has(gachaId)) byGacha.set(gachaId, []);
     byGacha.get(gachaId).push(k);
   }
   const gachas = Array.from(byGacha.keys()).sort((a,b)=>a.localeCompare(b,'ja'));
+
+  if (!gachas.length){
+    box.innerHTML = '<div class="muted">リアグは未設定です。</div>';
+    return;
+  }
 
   if (!selectedRiaguGacha || !byGacha.has(selectedRiaguGacha)) {
     selectedRiaguGacha = gachas[0];
@@ -152,7 +159,7 @@ export function renderRiaguPanel(){
   // タブ（表示は displayName、属性は data-gacha-id）
   gachas.forEach(id => {
     const t = document.createElement('div');
-    const label = app?.getDisplayName?.(id) || id;
+    const label = app?.getDisplayName?.(id) || id || '(無名ガチャ)';
     t.className = 'tab' + (id === selectedRiaguGacha ? ' active' : '');
     t.textContent = label;
     t.dataset.gachaId = id;
@@ -218,7 +225,7 @@ export function renderRiaguPanel(){
   });
 
   const totalLabel = (() => {
-    const disp = app?.getDisplayName?.(selectedRiaguGacha) || selectedRiaguGacha;
+    const disp = app?.getDisplayName?.(selectedRiaguGacha) || selectedRiaguGacha || '(無名ガチャ)';
     return `${disp} 合計`;
   })();
 
@@ -231,7 +238,7 @@ export function renderRiaguPanel(){
     btn.addEventListener('click', ()=>{
       const k = btn.getAttribute('data-edit-riagu') || '';
       const [gachaId, rarity, code] = k.split('::');
-      openRiaguModal({ gachaId, rarity, code });
+      openRiaguModal({ gachaId, rarity, code });   // 正規引数で呼ぶ
     });
   });
 
@@ -256,30 +263,43 @@ export function renderRiaguPanel(){
   });
 }
 
+
 // --- モーダル制御 ---
 export function openRiaguModal(it){
-  // it: { gachaId, rarity, code }
-  currentRiaguTarget = it;
+  // 呼び出しの揺れを吸収：{ gachaId, ... } / { gacha, ... } 両対応
+  const gachaId = it?.gachaId ?? it?.gacha ?? null;
+  if (!gachaId) return; // gachaId 不明なら何もしない
+
+  // 正規化して保持（既存コード互換のため gacha も埋める）
+  currentRiaguTarget = {
+    gachaId,
+    gacha: gachaId,
+    rarity: it?.rarity ?? "",
+    code: it?.code ?? ""
+  };
+
   const keyOf = ensureKeyOf();
 
   const services = BRIDGE?.services || window?.Services || {};
   const riagu = services.riagu || services.riaguService || null;
   const app   = services.app || services.appStateService || null;
 
-  const k = keyOf(it.gachaId, it.rarity, it.code);
+  const k = keyOf(gachaId, currentRiaguTarget.rarity, currentRiaguTarget.code);
 
   // メタは Service から取得（フォールバックあり）
   let meta = {};
   if (riagu && typeof riagu.getMeta === 'function') meta = riagu.getMeta(k) || {};
   else meta = (get('riaguMeta') || {})[k] || {};
 
-  const disp = app?.getDisplayName?.(it.gachaId) || it.gachaId;
-  $('#riaguTarget').textContent = `${disp} / ${it.rarity} / ${it.code}`;
+  // gachaId → 表示名
+  const disp = app?.getDisplayName?.(gachaId) || gachaId;
+  $('#riaguTarget').textContent = `${disp} / ${currentRiaguTarget.rarity} / ${currentRiaguTarget.code}`;
   $('#riaguCost').value = String(meta.cost ?? '');
   $('#riaguType').value = String(meta.type ?? '');
 
   getModalOpen()($('#riaguModal'));
 }
+
 
 export function closeRiaguModal(){
   getModalClose()($('#riaguModal'));

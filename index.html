@@ -594,11 +594,11 @@ let gCatalogByGacha = {};           // { gacha: [{gacha,rarity,code}, ...]} ← 
 let gAllGachas=[], gItemsByGacha={}, selectedGacha=null, currentModalTarget=null;
 let gHitCounts = {};
 
-const LS_KEY_IMG="gacha_item_image_map_v1";
-const LS_KEY_SKIP="gacha_item_image_skip_v1";
-const LS_KEY_ORIG="gacha_item_original_v1";
-const LS_KEY_RIAGU_META = "gacha_riagu_meta_v1";
-const LS_KEY_RARITY = "gacha_rarity_config_v1";
+const LS_KEY_IMG="gacha_item_image_map_v2";
+const LS_KEY_SKIP="gacha_item_image_skip_v2";
+const LS_KEY_ORIG="gacha_item_original_v2";
+const LS_KEY_RIAGU_META = "gacha_riagu_meta_v2";
+const LS_KEY_RARITY = "gacha_rarity_config_v2";
 window.LS_KEY_RARITY = LS_KEY_RARITY;
 let riaguMeta = loadLocalJSON(LS_KEY_RIAGU_META, {});
 function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
@@ -669,7 +669,7 @@ function syncMobileTabs(){
 }
 
 // 自動保存関係
-const LS_KEY_APP = "gacha_app_state_v1";
+const LS_KEY_APP = "gacha_app_state_v2";
 function saveAppState(){
   // Service 側に委譲（内部でdebounce保存される）
   commitAppStateSnapshot();
@@ -1270,6 +1270,10 @@ function countUsersWithItem(gacha, rarity, code){
 }
 
 function openItemDeleteConfirm(it){
+  // gachaId / gacha の両対応を吸収（移行期の安全網）
+  const gid = it.gachaId || it.gacha; if (!gid) return;
+  it.gachaId = gid; it.gacha = gid;
+
   pendingDeleteItem = it;
   $("#idelTarget").textContent = `${it.gacha} / ${it.rarity}:${it.code}`;
   const warn = $("#idelWarn");
@@ -1335,11 +1339,20 @@ let tempPreviewURL = "";
 function _S(){ return window.Services || {}; }
 
 function openImageModal(it){
-  const gachaId = it.gachaId;
+  // ★ 呼び出しの揺れを吸収：{ gachaId, ... } / { gacha, ... } の両方に対応
+  const gachaId = it.gachaId || it.gacha;
+  if (!gachaId) return;
+
   const k = keyOf(gachaId, it.rarity, it.code);
   if (skipHas(k)) return;
 
-  currentModalTarget = it; // { gachaId, rarity, code }
+  // ★ currentModalTarget を正規化して保持（以降の処理は gachaId を前提）
+  currentModalTarget = {
+    gachaId,                // 正
+    gacha: gachaId,         // 既存コード互換
+    rarity: it.rarity,
+    code: it.code
+  };
 
   // 1) 見出し（補助）とプレビュー
   const cur = immediateSrcFor(k);
@@ -1365,6 +1378,10 @@ function openImageModal(it){
       const catalogs = services.app?.get?.()?.catalogs || {};
       rarities = Object.keys(((catalogs[gachaId] || {}).items) || {});
     }
+    // ★ 何も取れなかった場合でも現在レアリティだけは候補に出す
+    if (!Array.isArray(rarities) || rarities.length === 0) {
+      rarities = it.rarity ? [it.rarity] : [];
+    }
 
     sel.innerHTML = rarities.map(r => 
       `<option value="${escapeHtml(r)}"${r===it.rarity ? ' selected' : ''}>${escapeHtml(r)}</option>`
@@ -1377,6 +1394,7 @@ function openImageModal(it){
 
   open(imageModal);
 }
+
 
 function closeImageModal(){
   // 共通 close()
