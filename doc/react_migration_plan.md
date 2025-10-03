@@ -58,9 +58,9 @@
 ```ts
 // packages/domain/app-state/types.ts
 export type RarityId = string;        // 例: "UR"
-export type ItemCode = string;        // 例: "A-01"
 export type UserId = string;
 export type ItemId = string;          // 10 桁 ID（例: "1234567890"）
+export type GachaId = string;
 
 export interface GachaMeta {
   id: string;
@@ -70,24 +70,29 @@ export interface GachaMeta {
 
 export interface CatalogEntry {
   pulls: number;
-  items: Record<RarityId, ItemCode[]>;
+  items: Record<RarityId, ItemId[]>;
 }
 
 export interface UserInventory {
-  items: Record<RarityId, ItemCode[]>;
-  counts: Record<RarityId, Record<ItemCode, number>>;
+  inventoryId: string; // UUID v4。不変
+  userId: UserId;
+  gachaId: GachaId;
+  items: Record<RarityId, ItemId[]>;
+  counts: Record<RarityId, Record<ItemId, number>>;
+  createdAt: string; // ISO 文字列
+  updatedAt: string;
 }
 
 export interface AppSnapshot {
   meta: Record<string, GachaMeta>;
   catalogs: Record<string, CatalogEntry>;
-  users: Record<UserId, Record<string, UserInventory>>; // gachaId -> inventory
+  users: Record<UserId, Record<GachaId, UserInventory>>; // gachaId -> inventory
   selectedGachaId: string | null;
 }
 
 export interface ItemCardModel {
   itemId: ItemId;
-  itemKey: string; // gachaId::rarityId::itemCode
+  itemKey: string; // gachaId::rarityId::itemId
   gachaId: string;
   gachaDisplayName: string;
   rarityId: RarityId;
@@ -102,17 +107,19 @@ export interface ItemCardModel {
 }
 ```
 - `RarityConfig` は排出率・表示色・ソート順を持つ。
+- `UserInventory` は `inventoryId` とタイムスタンプを保持し、`items`/`counts` はすべて `ItemId` ベースで `CatalogStore` の `itemCards` へ整合。
 - 画像管理は `ImageAsset`（サムネ URL, Blob ハッシュ, skip フラグ）・`RiaguMeta`（リアグキーと説明、当選者リスト）に分割。
 - インポート処理は `ImporterJob` 型（入力種別、解析結果、エラー）を定義し、React で段階的に UI へ反映。
 
 ### 4.2 サービス分割
 - `AppStateStore`: React Hook (`useAppState`) が CRUD を行う reducer。旧 `AppStateService` の `createGacha` 等を Action 化。
 - `RarityStore`: ガチャごとのレアリティ一覧・順序制御。`ensureDefaultsForGacha` 等を非同期 Action として実装。
+- `UserInventoryStore`: `state.userInventories` を `[userId][gachaId]` で管理し、`syncInventory`・`addItem`・`removeItem`・`bulkReplaceItems`・`purgeItem` などユーザーパネル計画書と同等のアクションを提供。`useUserInventoryWithItems` や達成率セレクタで `ItemId` 参照を再利用する。
 - `AssetStore`: 画像/音声/動画の取得・保存。IndexedDB は `idb-keyval` でラップし、Service Worker との整合性を確保。
 - `RiaguStore`: リアグ対象と当選者計算。`winnersForKey` をメモ化 selector として提供。
 
 ## 5. 状態管理 & 同期
-- ルートに `AppProviders` を置き、`AppStateProvider`、`RarityProvider`、`AssetProvider`、`RiaguProvider` をネスト。
+- ルートに `AppProviders` を置き、`AppStateProvider`、`RarityProvider`、`UserInventoryProvider`、`AssetProvider`、`RiaguProvider` をネスト。
 - LocalStorage/IndexedDB 同期は `useEffect` + `React Query` mutation で行い、永続化のデバウンス（既存 120ms）を hook 内で再現する。【F:docs/site_spec.md†L31-L41】
 - `useToolbarState` としてユーザーフィルタ（はずれ/カウント/リアグ toggle、検索語）を Context に昇格させ、URL クエリまたは localStorage に保存する。【F:docs/site_spec.md†L23-L24】
 - PWA/サービスワーカーイベントは `useServiceWorker` Hook で検知し、更新トーストを表示。
@@ -141,7 +148,7 @@ export interface ItemCardModel {
 - Onboarding: `SplashIntro`, `StartWizard`（TXT/JSON/新規作成タイル、ファイルドロップ、ガイドモーダル）。【F:docs/site_spec.md†L21-L24】
 - Rarity: `RarityBoard`, `RarityRow`, `RarityForm`, `RarityEmitRateEditor`。
 - Items: `GachaTabs`, `ItemGrid`, `ImagePickerModal`, `BulkActionsBar`。
-- Users: `UserFilters`, `UserList`, `UserStats`, `HistoryTimeline`（貼り付け履歴を表示する余地）。
+- Users: `UserFilters`, `UserList`, `UserStats`, `HistoryTimeline`（貼り付け履歴を表示する余地）、`UserCard`（`ItemId` ベースで `UserInventoryStore` を購読）、`UserInventoryTable`、`ItemChip`。
 - Riagu: `RiaguSummary`, `RiaguWinners`, `RiaguActions`。
 - Gacha Management: `GachaList`, `GachaEditorDrawer`, `FloatingActionButton`。
 - Realtime Entry: `RealtimePastePanel`, `LiveBlockPreview`, `ResultDiffTable`。
@@ -159,7 +166,7 @@ export interface ItemCardModel {
 ## 7. API / データ永続戦略
 - `apiClient` モジュールで Fetch をラップし、`/api/blob/upload`, `/api/blob/csrf`, `/api/receive/token`, `/api/discord/me` を型安全に呼び出す。【F:docs/site_spec.md†L49-L57】
 - Blob アップロードは React Query mutation + プログレスイベントでトーストを表示。完了後は `issueReceiveShareUrl` 相当の Hook で共有リンクを生成。【F:docs/site_spec.md†L49-L76】
-- IndexedDB には `appState`・`imageAssets` を保存し、`service worker` の更新通知を受けてキャッシュをクリアするフローを実装。
+- IndexedDB には `appState`・`userInventories`・`imageAssets` を保存し、`UserInventory` マイグレーションで `ItemId` 不整合を検知・修復しつつ、`service worker` の更新通知を受けてキャッシュをクリアするフローを実装。
 
 ## 8. Tailwind コンポーネント設計指針
 - `@apply` を使って `card`, `panel`, `toolbar`, `btn`, `badge`, `chip` などを `.css` ではなく `tailwind.css` に定義。
@@ -175,7 +182,7 @@ export interface ItemCardModel {
 1. **設計固め**: 既存サービスのテストを追加し、TypeScript ドメインパッケージへ移植。ドメイン層は Node 互換 API を維持して単体テスト可能にする。
 2. **開発環境構築**: Vite + Tailwind + ESLint + Vitest をセットアップし、Storybook で UI コンポーネントの開発環境を整備。
 3. **App Shell 実装**: `AppProviders`, `AppShell`, `ToolbarPanel`, `MobileTabs` を構築し、空のページコンポーネントを配置。
-4. **ドメインストア統合**: App/Rarity/Asset/Riagu ストアと永続化 Hook を組み込み、初期ロードとデータ保存を確認。
+4. **ドメインストア統合**: App/Rarity/UserInventory/Asset/Riagu ストアと永続化 Hook を組み込み、初期ロードとデータ保存を確認。旧 `ItemCode` 形式から `ItemId` 形式へのマイグレーション（`inventoryId` 付与、`counts` の辞書変換）もここで実施。
 5. **主要ビュー移植**:
    - `rarity` ページ: レアリティ CRUD + 排出率調整。
    - `items` ページ: アイテムカードグリッド、画像モーダル。
