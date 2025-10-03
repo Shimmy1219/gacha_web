@@ -68,29 +68,56 @@ export function openFloatingPopover(wrapEl, btnEl, popEl) {
   return cleanup;
 }
 
-/** ガチャ/レア度共通のマルチセレクト・フィルタを生成 */
+/** ガチャ/レア度共通のマルチセレクト・フィルタを生成
+ *  文字列候補に加え、{ value, label, attrs } 形式も受け付ける。
+ *  - Rarity: 文字列のまま（value=label）
+ *  - Gacha : value=gachaId, label=displayName, attrs: {'data-gacha-id': gachaId}
+ */
 function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 1800 }) {
   let wrap, btn, pop;
-  let options = [];              // 表示候補 ['UR','SSR',...] or ['ガチャA','ガチャB',...]
-  let selected = '*';            // '*' or Set<string>
+  /** @type {{value:string,label:string,attrs?:Record<string,string>}[]} */
+  let options = [];
+  /** '*' or Set<value> */
+  let selected = '*';
   let autoCloseTimer = null;
   let detachFloating = null;
   let onChange = null;
+  /** value -> label の逆引き */
+  let labelMap = new Map();
 
   function $id(id){ return document.getElementById(id); }
 
+  function norm(o){
+    if (o == null) return null;
+    if (typeof o === 'string') return { value:o, label:o, attrs:{} };
+    const v = String(o.value ?? o.id ?? '');
+    const L = String(o.label ?? v);
+    const attrs = o.attrs && typeof o.attrs === 'object' ? { ...o.attrs } : {};
+    if (!v) return null;
+    return { value:v, label:L, attrs };
+  }
+
   function setOptions(list){
-    options = Array.from(new Set(list || []));
+    const next = [];
+    labelMap = new Map();
+    for (const raw of (list || [])){
+      const it = norm(raw);
+      if (!it) continue;
+      if (labelMap.has(it.value)) continue; // 重複排除 by value
+      next.push(it);
+      labelMap.set(it.value, it.label);
+    }
+    options = next;
+
     // 選択セットに存在しない値があればクリーンアップ
     if (selected !== '*') {
-      const next = new Set(Array.from(selected).filter(v => options.includes(v)));
-      selected = next.size === 0 ? '*' : next;
+      const keep = new Set(Array.from(selected).filter(v => labelMap.has(v)));
+      selected = keep.size === 0 ? '*' : keep;
     }
     updateButtonLabel();
+
     // まだヘッダ（「すべて」）が無い段階では描画しない（重複防止）
-    if (pop && pop.querySelector('.gf-all')) {
-      renderItems();
-    }
+    if (pop && pop.querySelector('.gf-all')) renderItems();
   }
 
   function getSelection(){ return selected === '*' ? '*' : new Set(selected); }
@@ -108,7 +135,12 @@ function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 18
     if (!btn) return;
     if (selected === '*'){ btn.textContent = 'すべて'; return; }
     const n = selected.size;
-    btn.textContent = (n === 1) ? Array.from(selected)[0] : `${n}項目`;
+    if (n === 1){
+      const only = Array.from(selected)[0];
+      btn.textContent = labelMap.get(only) ?? only;
+    } else {
+      btn.textContent = `${n}項目`;
+    }
   }
 
   function renderItems(){
@@ -116,17 +148,20 @@ function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 18
     // 先頭の「すべて」行と区切りを残して全削除
     while (pop.children.length > 2) pop.removeChild(pop.lastChild);
 
-    const selSet = (selected === '*') ? new Set(options) : new Set(selected);
+    const allValues = options.map(o => o.value);
+    const selSet = (selected === '*') ? new Set(allValues) : new Set(selected);
 
-    options.forEach(name => {
+    options.forEach(({ value, label, attrs }) => {
       const row = document.createElement('div');
       row.className = 'gf-item';
       row.setAttribute('role','option');
-      row.setAttribute('aria-selected', selSet.has(name) ? 'true' : 'false');
-      row.innerHTML = `<span class="gf-check">${selSet.has(name) ? '✓' : ''}</span><span class="gf-name" title="${name}">${name}</span>`;
+      row.setAttribute('aria-selected', selSet.has(value) ? 'true' : 'false');
+      // 任意の属性（例: data-gacha-id）を付与
+      if (attrs) for (const [k,v] of Object.entries(attrs)) row.setAttribute(k, String(v));
+      row.innerHTML = `<span class="gf-check">${selSet.has(value) ? '✓' : ''}</span><span class="gf-name" title="${label}">${label}</span>`;
       row.addEventListener('click', () => {
-        let s = (selected === '*') ? new Set(options) : new Set(selected);
-        if (s.has(name)) s.delete(name); else s.add(name);
+        let s = (selected === '*') ? new Set(allValues) : new Set(selected);
+        if (s.has(value)) s.delete(value); else s.add(value);
         selected = (s.size === 0) ? '*' : s;
         updateButtonLabel();
         renderItems();
@@ -228,6 +263,7 @@ function createMultiSelectFilter({ wrapId, buttonId, popoverId, autoCloseMs = 18
   };
 }
 
+
 // ---- 実体：ガチャ／レア度 ----
 export const GachaFilter = createMultiSelectFilter({
   wrapId: 'gachaFilterWrap',
@@ -255,27 +291,42 @@ export function syncFiltersFromApp(services = {}) {
   const raritySvc = services.rarityService || services.rarity || null;
   if (!app) return;
 
-  // --- ガチャ候補: catalogs のキー一覧 ---
-  const catalogs = app.get?.()?.catalogs || {};
-  const gachas = Object.keys(catalogs).sort((a,b)=>a.localeCompare(b,'ja'));
+  // --- ガチャ候補: catalogs のキー一覧（表示は displayName） ---
+  const state = app.get?.() || {};
+  const catalogs = state.catalogs || {};
+  const ids = Object.keys(catalogs);
+
+  // 表示名順で並べ替え
+  ids.sort((a,b)=>{
+    const na = app.getDisplayName?.(a) || a;
+    const nb = app.getDisplayName?.(b) || b;
+    const t = String(na).localeCompare(String(nb),'ja');
+    return t !== 0 ? t : a.localeCompare(b,'ja');
+  });
+
+  // GachaFilter は {value:id, label:displayName, attrs:{'data-gacha-id':id}} を受け取る
   if (typeof GachaFilter?.setOptions === 'function') {
+    const options = ids.map(id => ({
+      value: id,
+      label: app.getDisplayName?.(id) || id,
+      attrs: { 'data-gacha-id': id }
+    }));
     const prev = GachaFilter.getSelection();
-    GachaFilter.setOptions(gachas);
+    GachaFilter.setOptions(options);
     if (prev === '*') GachaFilter.setSelection('*');
     else if (prev && prev.size) {
-      const keep = new Set([...prev].filter(g=>gachas.includes(g)));
+      const keep = new Set([...prev].filter(g=>ids.includes(g)));
       GachaFilter.setSelection(keep.size ? keep : '*');
     } else {
       GachaFilter.setSelection('*');
     }
   }
 
-  // --- レアリティ候補: 基本順 → 追加分の順でユニオン ---
+  // --- レアリティ候補: 基本順 → 追加分の順でユニオン（従来通り文字列） ---
   const base = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
   const rset = new Set();
 
-  // rarityService があれば各ガチャの順序を尊重してユニオン
-  for (const g of gachas) {
+  for (const g of ids) {
     let list = Array.isArray(raritySvc?.listRarities?.(g))
       ? raritySvc.listRarities(g)
       : Object.keys(catalogs[g]?.items || {});
@@ -296,6 +347,7 @@ export function syncFiltersFromApp(services = {}) {
     }
   }
 }
+
 
 // === NEW: AppState の変更に追随して自動同期（購読） ===
 export function attachAppStateFilters(services = {}) {
