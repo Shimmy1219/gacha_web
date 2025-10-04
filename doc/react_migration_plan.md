@@ -131,6 +131,7 @@ export interface ItemCardModel {
 - `AppStateStore`: React Hook (`useAppState`) が CRUD を行う reducer。旧 `AppStateService` の `createGacha` 等を Action 化。
 - `RarityStore`: ガチャごとのレアリティ一覧・順序制御。`ensureDefaultsForGacha` 等を非同期 Action として実装。
 - `UserInventoryStore`: `state.userInventories` を `[userId][gachaId]` で管理し、`syncInventory`・`addItem`・`removeItem`・`bulkReplaceItems`・`purgeItem` などユーザーパネル計画書と同等のアクションを提供。`useUserInventoryWithItems` や達成率セレクタで `ItemId` 参照を再利用する。
+- `UserStore`: `Record<UserId, UserCardModel>` を保持し、`updateUser` で表示名やアバター色を更新する。`UserChip` は `userId` を渡すだけでストアから最新の表示データを引き直し、レアリティ設定の `emitChange()` と同様に購読者へ再描画を伝播させるが、役割はプロファイル辞書の更新に特化する。
 - `AssetStore`: 画像/音声/動画の取得・保存。IndexedDB は `idb-keyval` でラップし、Service Worker との整合性を確保。
 - `RiaguStore`: リアグ対象と当選者計算。`winnersForKey` をメモ化 selector として提供。
 
