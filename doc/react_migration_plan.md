@@ -60,6 +60,7 @@
 export type RarityId = string;        // 例: "UR"
 export type UserId = string;
 export type ItemId = string;          // 10 桁 ID（例: "1234567890"）
+export type ItemCode = string;        // 旧 UI の itemKey（gachaId::rarityId::itemId）
 export type GachaId = string;
 
 export interface GachaMeta {
@@ -70,7 +71,8 @@ export interface GachaMeta {
 
 export interface CatalogEntry {
   pulls: number;
-  items: Record<RarityId, ItemId[]>;
+  itemsByRarity: Record<RarityId, ItemId[]>;
+  legacyItemCodeIndex?: Record<ItemCode, ItemId>; // ItemCode → ItemId の逆引き
 }
 
 export interface UserInventory {
@@ -85,9 +87,10 @@ export interface UserInventory {
 
 export interface AppSnapshot {
   meta: Record<string, GachaMeta>;
-  catalogs: Record<string, CatalogEntry>;
+  catalogs: Record<GachaId, CatalogEntry>;
   users: Record<UserId, Record<GachaId, UserInventory>>; // gachaId -> inventory
   selectedGachaId: string | null;
+  legacyItemCodes?: Record<GachaId, Record<ItemCode, ItemId>>; // 永続化済み ItemCode を保持する場合に利用
 }
 
 export interface ItemCardModel {
@@ -106,6 +109,19 @@ export interface ItemCardModel {
   pickupTarget: boolean;
 }
 ```
+
+#### CatalogEntry 仕様と要件
+- `itemsByRarity` は常に `ItemId` のみを保持し、レアリティ別のアイテム参照を完全に ItemId ベースへ統一する。React でのフィルタや整列は ItemId をキーに実行する。
+- `legacyItemCodeIndex` は旧 UI 由来の `ItemCode`（`itemKey` と同義）を逆引きして `ItemId` を得るためのオプショナル辞書。React への移行後も TXT/JSON インポートや共有リンクに旧 `ItemCode` が含まれる場合、この辞書を使って `ItemId` にマッピングする。
+- マイグレーション実行時に `ItemCode` を `gachaId`・`rarityId`・`itemId` へ分解し、辞書へ格納する。React 側では辞書の存在をチェックし、欠損があれば `ItemId` を出力の正とした上で `ItemCode` を再生成する。
+- `pulls` は React の `CatalogStore` が排出回数の上限を UI へ渡すための数値であり、`ItemId` ベースのカタログ操作と併用する。
+
+#### AppSnapshot 仕様と要件
+- `meta`・`catalogs`・`users` のキー構造はそれぞれ `GachaId`・`GachaId`・`UserId`/`GachaId` を用い、内部の配列・辞書はすべて `ItemId` を唯一の参照として持つ。
+- `legacyItemCodes` はガチャ単位の `ItemCode` → `ItemId` 逆引きをまとめるオプショナルプロパティ。React 起動時に存在する場合は `CatalogEntry.legacyItemCodeIndex` と突き合わせ、欠けている `ItemCode` のみ生成し、スナップショット保存時は `ItemId` を正とした差分のみ保持する。
+- `hydrateAppSnapshot(snapshot: AppSnapshot)` では、`catalogs[gachaId].itemsByRarity` の `ItemId` を `UserInventory.items`・`counts` と照合して破損を検出し、必要であれば `legacyItemCodes` から補完するチェックを行う。
+- React 側での新規保存時は `CatalogEntry.itemsByRarity` と `UserInventory.items` から導出した `ItemCode` を `legacyItemCodeIndex` / `legacyItemCodes` に再生成し、旧クライアント向け API 互換を保つ。
+
 - `RarityConfig` は排出率・表示色・ソート順を持つ。
 - `UserInventory` は `inventoryId` とタイムスタンプを保持し、`items`/`counts` はすべて `ItemId` ベースで `CatalogStore` の `itemCards` へ整合。
 - 画像管理は `ImageAsset`（サムネ URL, Blob ハッシュ, skip フラグ）・`RiaguMeta`（リアグキーと説明、当選者リスト）に分割。
