@@ -20,6 +20,7 @@ interface RarityState {
 }
 ```
 - `RarityMeta` は `label`, `color`, `emitRate`, `rarityNum`, `sortOrder`, `updatedAt` を保持する。
+- `RarityMeta` 自体に `rarityId` フィールドは持たせず、`entities` のキーとして管理することで ID の重複保持と整合性チェックを省く。
 - rename 時は `entities` の `label` を更新し、`indexByName[gachaId]` も同期。`rarityId` 自体は不変。
 - emitRate 正規化は `updateEmitRate(gachaId, rarityId, rate)` アクション内で `normalizeEmitRates(gachaId)` を呼んで処理。
 
@@ -33,6 +34,7 @@ deleteRarity(rarityId)
 reorderRarities(gachaId, nextOrder: RarityId[])
 ```
 - すべてのアクションは `entities` を直接書き換えた後に `emitChange()` を実行し、登録リスナーへ通知する。
+- ここでいう「リスナー/購読者」は `listeners: Set<() => void>` に登録されたコールバック群であり、`useSyncExternalStore(WithSelector)` が登録・解除を担当する。
 - emitRate 更新時の正規化は `gachaId` 単位で実施し、最下位レアリティに余剰を割当する。`src/rarity.js` の `normalizeEmitViaService` を TypeScript 化して再利用する。【F:src/rarity.js†L58-L86】
 
 ## React での参照方法
@@ -50,7 +52,7 @@ reorderRarities(gachaId, nextOrder: RarityId[])
 - selector の戻り値は `memoize-one` 等で shallow equal 判定を行い、変更がない限り参照側コンポーネントを再レンダーさせない。
 - これにより Python のリスト参照と同様に、同じ `rarityId` を読む全コンポーネントが単一オブジェクトを共有しつつリアクティブに更新される。
 
-```ts
+-```ts
 export function useRarity(rarityId: RarityId) {
   return useRarityStore(
     React.useCallback((state) => state.entities[rarityId], [rarityId]),
@@ -58,7 +60,9 @@ export function useRarity(rarityId: RarityId) {
   );
 }
 ```
-- `shallowEqual` はラベル・色・排出率など主要フィールドが変わった場合のみ再描画を発生させる。
+- `useSyncExternalStoreWithSelector` は「外部ストアの現在値を取得→必要フィールドだけを selector で抽出→リスナー登録」という流れを React に保証するための公式フック。
+- `shallowEqual` は selector が返したオブジェクトを浅く比較し、ラベル・色・排出率など主要フィールドが変わった場合のみ再描画を発生させる。
+- `useRarity(rarityId)` は上記 2 つをラップしたフックで、`rarityId` ごとのメタデータ取得ロジックをコンポーネントから切り離しつつ、Python の参照共有に近い再利用性を提供する。
 
 - `ItemCard`: `const rarity = useRarity(model.rarityId);` → `rarity.label`/`rarity.color` を表示。【F:doc/item_component_plan.md†L38-L65】
 - `UserCard`: `useRarity(rarityId)` で列ヘッダーのバッジを生成し、`UserInventory` の `counts` は `rarityId` キーで保持する。【F:doc/user_component_plan.md†L6-L59】
