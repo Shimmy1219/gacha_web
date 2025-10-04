@@ -61,6 +61,7 @@ interface UserCardProps {
 - Chip 上のアクション（長押しで削除、クリックで詳細）は `UserInventoryStore` のアクションを dispatch。
 
 ## 5. データ同期
+- `hydrateAppSnapshot(snapshot: AppSnapshot)` で `snapshot.users[userId][gachaId]` をそのまま `UserInventoryStore` へ初期投入し、`CatalogEntry.itemsByRarity` と突合して `ItemId` の破損チェックを行う。破損している場合は `snapshot.legacyItemCodes?.[gachaId]` から `ItemCode` を逆引きして補完する。
 - `CatalogStore` → `UserInventoryStore` の一方向通知:
   1. ItemCard 作成: 対象ユーザーには即時影響なし。
   2. ItemCard 更新: `useItemCard` 経由の参照が変わり、UserCard が再レンダー。
@@ -70,7 +71,7 @@ interface UserCardProps {
 ## 6. 永続化
 - IndexedDB に `userInventories` テーブルを用意し、キーは `[userId, gachaId]`。値として `UserInventory` を保存。
 - 保存時に `items` 内の ItemId をバリデートし、存在しない ID はログに記録。自動修復ジョブが `CatalogStore` から再生成する。
-- 旧形式（ItemCode 直列）からのマイグレーションでは、`itemKey` を解析して `itemId` を逆引きし、存在しない場合は新規 ItemCardModel を生成してから `items` に差し込む。
+- スナップショット書き出し時は `AppSnapshot` の `users` と `catalogs` を再構築し、`CatalogEntry.itemsByRarity` / `UserInventory.items` を基準に `legacyItemCodes` と `CatalogEntry.legacyItemCodeIndex` を再生成する。旧形式からの直接読み込みは行わず、`AppSnapshot` 側で提供される逆引き辞書を利用して整合性を確保する。
 
 ## 7. テスト
 - 単体テスト: `addItem`・`removeItem` が ItemId 参照を正しく更新するか検証。
