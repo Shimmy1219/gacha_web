@@ -74,6 +74,8 @@ interface RiaguAssignmentModel {
 - `UserInventoryStore` または `HitCountStore` が更新されたら、`RiaguAssignment` セレクタが再評価され `RiaguCard` が再レンダーする。
 - `UserStore.updateUser` はユーザープロファイル辞書（`Record<UserId, UserCardModel>`）を直接更新するドメインアクションであり、更新後は `UserChip` が参照している `userId` → 表示名/テーマのマッピングが差し替わる。`RarityStore.emitChange()` のような購読者通知とは層が異なるが、両者とも UI 再描画のトリガーになることを想定する。
 - `RarityStore.onChange` を購読して `RiaguBoard` を再レンダー（Tailwind の色が即反映されるようにする）。
+- `RiaguBoard` 内の `useRarity(item.rarityId)` が `useRarityStore` を通じて `emitChange()` 通知を購読し、`setRarityColor` などで更新された Tailwind 色を即座に反映する。
+  - レアリティ編集アクションは `entities` を更新した直後に `emitChange()` を呼ぶため、追加の再描画トリガーは不要。
 
 ## 4. React コンポーネント設計
 ### 4.1 RiaguBoard
