@@ -71,7 +71,8 @@ interface RiaguAssignmentModel {
 ### 3.3 監視と同期
 - `ItemCardStore` が `toggleRiagu(itemId)` を発火した際に `RiaguStore` へ通知し、存在しない `RiaguCard` を初期化する。
 - `UserInventoryStore` または `HitCountStore` が更新されたら、`RiaguAssignment` セレクタが再評価され `RiaguCard` が再レンダーする。
-- `RarityStore.onChange` を購読して `RiaguBoard` を再レンダー（Tailwind の色が即反映されるようにする）。
+- `RiaguBoard` 内の `useRarity(item.rarityId)` が `useRarityStore` を通じて `emitChange()` 通知を購読し、`setRarityColor` などで更新された Tailwind 色を即座に反映する。
+  - レアリティ編集アクションは `entities` を更新した直後に `emitChange()` を呼ぶため、追加の再描画トリガーは不要。
 
 ## 4. React コンポーネント設計
 ### 4.1 RiaguBoard
