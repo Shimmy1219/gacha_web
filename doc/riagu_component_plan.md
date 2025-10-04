@@ -43,6 +43,7 @@ interface RiaguAssignmentModel {
 }
 ```
 - `RiaguAssignmentModel` は `RiaguCardModel` と `UserInventoryStore` の状態から導出し、ストアには保存しない。
+- `UserInventoryStore` は `[userId][gachaId][rarityId][itemId]` のネスト辞書で在庫数を保持し、`RiaguAssignment` は `inventory.byItemId[itemId]` 逆引きのキャッシュを併用して獲得者リストを構築する。
 
 ## 3. ストア設計
 ### 3.1 RiaguStore
@@ -71,6 +72,8 @@ interface RiaguAssignmentModel {
 ### 3.3 監視と同期
 - `ItemCardStore` が `toggleRiagu(itemId)` を発火した際に `RiaguStore` へ通知し、存在しない `RiaguCard` を初期化する。
 - `UserInventoryStore` または `HitCountStore` が更新されたら、`RiaguAssignment` セレクタが再評価され `RiaguCard` が再レンダーする。
+- `UserStore.updateUser` はユーザープロファイル辞書（`Record<UserId, UserCardModel>`）を直接更新するドメインアクションであり、更新後は `UserChip` が参照している `userId` → 表示名/テーマのマッピングが差し替わる。`RarityStore.emitChange()` のような購読者通知とは層が異なるが、両者とも UI 再描画のトリガーになることを想定する。
+- `RarityStore.onChange` を購読して `RiaguBoard` を再レンダー（Tailwind の色が即反映されるようにする）。
 - `RiaguBoard` 内の `useRarity(item.rarityId)` が `useRarityStore` を通じて `emitChange()` 通知を購読し、`setRarityColor` などで更新された Tailwind 色を即座に反映する。
   - レアリティ編集アクションは `entities` を更新した直後に `emitChange()` を呼ぶため、追加の再描画トリガーは不要。
 
@@ -114,8 +117,9 @@ interface RiaguCardProps {
 ## 5. データ同期フロー
 1. Item 編集で名称を変更 → `ItemCardStore.updateItemCard` → 参照している `RiaguCard` が `item.name` を再描画。
 2. UserCard でユーザー名変更 → `UserStore.updateUser` → `UserChip` が再計算され `RiaguCard` の獲得者表示が更新。
-3. 抽選結果のインポートで `HitCountStore` 更新 → `RiaguAssignment` セレクタが `totalCount` を再計算し、発注数と合計金額が自動更新。
-4. レアリティ設定変更 → `RarityStore` の `label`/`color` が更新 → `RiaguCard` のバッジ色が即時変更。
+3. ガチャ結果の追加やリアルタイム入力で `UserInventoryStore.incrementCount` 等が発火 → `[userId][gachaId][rarityId][itemId]` のカウントが更新され、次フレームで `RiaguAssignment` が再評価され `winners` / `totalCount` / `effectiveOrderQty` / `totalCost` が最新化される。
+4. 抽選結果のインポートで `HitCountStore` 更新 → `RiaguAssignment` セレクタが `totalCount` を再計算し、発注数と合計金額が自動更新。
+5. レアリティ設定変更 → `RarityStore` の `label`/`color` が更新 → `RiaguCard` のバッジ色が即時変更。
 
 ## 6. 永続化と移行
 - 旧 `riaguMeta` ローカルストレージを読み込み、`riaguKey` と `ItemCard.itemKey` を突き合わせて `RiaguCardModel` を作成。マッチしないキーはログへ出力し手動対応。
