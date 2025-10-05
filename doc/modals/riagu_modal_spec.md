@@ -22,7 +22,6 @@ interface RiaguConfigDialogProps {
   gachaId: GachaId;
   rarityId: RarityId;
   itemId: ItemId;
-  itemCode: string;
   defaultCost?: number;
   defaultType?: string;
   onSave(input: { cost: number; type: string }): Promise<void> | void;
@@ -30,8 +29,8 @@ interface RiaguConfigDialogProps {
   onDismiss(): void;
 }
 ```
-- `itemId` は `RiaguStore.indexByItemId` の参照キーとなる `itm-xxxxxxxxxx` 形式。`itemCode` は旧 CSV/JSON 互換のために渡す。
-- `useRiaguConfig(gachaId, rarityId, itemId, itemCode)` Hook が `cost`, `type`, `isSaving`, `error` を返し、`submit`/`unset` メソッドを提供する。
+- `itemId` は `RiaguStore.indexByItemId` の参照キーとなる `itm-xxxxxxxxxx` 形式。
+- `useRiaguConfig(gachaId, rarityId, itemId)` Hook が `cost`, `type`, `isSaving`, `error` を返し、`submit`/`unset` メソッドを提供する。
 
 ### 3.2 UI
 - Tailwind `max-w-lg` のモーダルパネルを使用し、フォームは `space-y-4` で配置。
@@ -39,7 +38,7 @@ interface RiaguConfigDialogProps {
 - フッターは `保存`（Primary）、`リアグ解除`（Ghost Danger）、`閉じる`（Ghost）ボタンを `flex justify-end gap-3` で配置。【F:index.html†L431-L435】
 
 ### 3.3 挙動
-- `onSave` は `riaguService.mark({ gachaId, rarityId, itemId, itemCode }, { cost, type })` を呼び、成功後に `ModalProvider.pop()`。
+- `onSave` は `riaguService.mark({ gachaId, rarityId, itemId }, { cost, type })` を呼び、成功後に `ModalProvider.pop()`。
 - `onUnset` は `riaguService.unmark`（`itemId` ベース）と `imageService.tryRemoveSkip` を呼び、景品設定モーダルへ制御を戻す。
 - 閉じる操作は単に `pop()` し、必要に応じて親モーダルへフォーカスを戻すため `onDismiss` で `focusReturnRef` を使用する。
 

@@ -6,19 +6,16 @@
 - レアリティ情報は `rarityId` を介して参照のみを保持し、RarityStore の変更が即時に反映されるようにする。
 
 ## 2. ドメインモデル
-### 2.1 ItemId と ItemKey
+### 2.1 ItemId
 - `ItemId`: `itm-xxxxxxxxxx`（接頭辞 3 文字 + 英数字 10 桁）の不変 ID。`index.html` におけるガチャ ID 生成と同じ Base62 乱数ロジック（`nanoid` カスタムアルファベット `A-Za-z0-9`, `size: 10`）で後半 10 桁を生成し、`itm-` を付与して払い出す。重複検査は CatalogStore で行い、衝突時は再発行する。
-- `itemKey`: 旧 UI 互換の複合キー `gachaId::rarityId::itemCode`。移行期間中の互換 API・データマイグレーションで利用する。
 
 ### 2.2 ItemCardModel
 ```ts
 interface ItemCardModel {
   itemId: ItemId;                // 内部参照用の不変キー
-  itemKey: string;               // 旧データとの互換識別子
   gachaId: GachaId;              // 所属ガチャの不変 ID
   gachaDisplayName: string;      // UI 用の表示名
   rarityId: RarityId;            // RarityStore 参照キー。label/color は保持しない
-  itemCode: string;              // 入力フォームで扱うコード値
   name: string;                  // 表示名
   imageAsset: {
     thumbnailUrl: string | null;
@@ -76,7 +73,6 @@ interface ItemCardProps {
 
 ### 4.2 ItemForm / Modal
 - 作成・編集フォームでは `rarityId` のセレクトを提供し、RarityStore の一覧を参照する。
-- 旧データ移行時は `itemKey` から `rarityId` を逆算し、ItemCardModel にマッピングするスクリプトを提供。
 
 ## 5. 同期・永続化
 - IndexedDB では `itemCards` テーブルに `itemId` 主キーで保存。`rarityId` は参照カラムとして保持。
