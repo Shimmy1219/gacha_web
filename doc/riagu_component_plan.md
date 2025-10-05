@@ -6,9 +6,8 @@
 - 旧 UI の `riaguMeta`（原価・種別）と `skipSet`（対象キー）を型安全なストアへ移行し、React で集計・編集できるようにする。
 
 ## 2. ドメインモデル
-### 2.1 ID とキー
+### 2.1 ID
 - `RiaguId`: 10 桁の数字を用いる不変 ID。リアグ設定の追加順に生成し、ItemCard と 1:1 で紐づく。
-- `riaguKey`: 旧 UI 互換の `gachaId::rarityId::itemCode` 形式。移行期間のデータ変換用に保持し、`ItemCard.itemKey` と一致させる。
 
 ### 2.2 RiaguCardModel
 ```ts
@@ -57,7 +56,7 @@ interface RiaguAssignmentModel {
     - `RiaguCard` を削除し、`indexByItemId` からも除外。
   - `pruneByCatalog(validItemIds: ItemId[])`
     - カタログから削除されたアイテムに紐づくリアグをまとめて除去。
-- 旧データ移行では `riaguKey` を `itemKey` にマッピングし、`indexByItemId` を初期化する。
+- 旧データ移行では既存の `itemId` 参照をもとに `indexByItemId` を初期化する。
 
 ### 3.2 セレクタ / 派生ストア
 - `useRiaguCard(riaguId)` → `RiaguCardModel` を返却し、`itemId` を元に `ItemCard` の状態を取得する。
@@ -122,7 +121,7 @@ interface RiaguCardProps {
 5. レアリティ設定変更 → `RarityStore` の `label`/`color` が更新 → `RiaguCard` のバッジ色が即時変更。
 
 ## 6. 永続化と移行
-- 旧 `riaguMeta` ローカルストレージを読み込み、`riaguKey` と `ItemCard.itemKey` を突き合わせて `RiaguCardModel` を作成。マッチしないキーはログへ出力し手動対応。
+- 旧 `riaguMeta` ローカルストレージを読み込み、保持されている `itemId` を用いて `RiaguCardModel` を作成。マッチしない ID はログへ出力し手動対応。
 - 永続化層（IndexedDB / JSON export）は `riaguCards` テーブルを新設し、`riaguId` を主キー、`itemId` を一意制約として保存。`orderHint` が null の場合は保存しない。
 - エクスポート/インポートでは `ItemCard` より前に `RiaguCard` を読み込むよう順序を定義。
 

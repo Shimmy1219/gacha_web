@@ -6,19 +6,16 @@
 - レアリティ情報は `rarityId` を介して参照のみを保持し、RarityStore の変更が即時に反映されるようにする。
 
 ## 2. ドメインモデル
-### 2.1 ItemId と ItemKey
-- `ItemId`: 10 桁の数字のみを使用する不変 ID。`nanoid` のカスタムアルファベット `0123456789` と `size: 10` で生成し、重複検査を通す。
-- `itemKey`: 旧 UI 互換の複合キー `gachaId::rarityId::itemCode`。移行期間中の互換 API・データマイグレーションで利用する。
+### 2.1 ItemId
+- `ItemId`: `itm-xxxxxxxxxx`（接頭辞 3 文字 + 英数字 10 桁）の不変 ID。`index.html` におけるガチャ ID 生成と同じ Base62 乱数ロジック（`nanoid` カスタムアルファベット `A-Za-z0-9`, `size: 10`）で後半 10 桁を生成し、`itm-` を付与して払い出す。重複検査は CatalogStore で行い、衝突時は再発行する。
 
 ### 2.2 ItemCardModel
 ```ts
 interface ItemCardModel {
   itemId: ItemId;                // 内部参照用の不変キー
-  itemKey: string;               // 旧データとの互換識別子
   gachaId: GachaId;              // 所属ガチャの不変 ID
   gachaDisplayName: string;      // UI 用の表示名
   rarityId: RarityId;            // RarityStore 参照キー。label/color は保持しない
-  itemCode: string;              // 入力フォームで扱うコード値
   name: string;                  // 表示名
   imageAsset: {
     thumbnailUrl: string | null;
@@ -76,7 +73,6 @@ interface ItemCardProps {
 
 ### 4.2 ItemForm / Modal
 - 作成・編集フォームでは `rarityId` のセレクトを提供し、RarityStore の一覧を参照する。
-- 旧データ移行時は `itemKey` から `rarityId` を逆算し、ItemCardModel にマッピングするスクリプトを提供。
 
 ## 5. 同期・永続化
 - IndexedDB では `itemCards` テーブルに `itemId` 主キーで保存。`rarityId` は参照カラムとして保持。
@@ -84,7 +80,7 @@ interface ItemCardProps {
 - `completeTarget` / `pickupTarget` の変更は ItemCardModel のみ更新し、UserInventory 側では `itemId` リストを読み替えるだけで UI が更新される。
 
 ## 6. テスト
-- `generateItemId()` が 10 桁の数字であることを Jest/Vitest で確認。
+- `generateItemId()` が `itm-` 接頭辞 + 英数字 10 桁（Base62）で構成されること、重複時に再発行されることを Jest/Vitest で確認。
 - `updateItemCard` のパッチが `updatedAt` を更新し、参照する UserInventory セレクタが再評価されることを単体テスト。
 - Storybook でリアグ・コンプリート・ピックアップの各状態を再現。
 - Playwright でトグル操作が UserCard サマリへ即時反映される E2E を作成。

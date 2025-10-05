@@ -85,7 +85,7 @@ interface ModalState {
 4. **LivePasteDialog** (`features/realtime/dialogs/LivePasteDialog.tsx`)
    - `liveText`, `onApply`。`textarea` とアクションボタンを `flex justify-end gap-3` に配置。【F:index.html†L360-L369】
 5. **PrizeSettingsDialog** (`features/items/dialogs/PrizeSettingsDialog.tsx`)
-   - Context: `usePrizeSettings(gachaId, rarityId, itemCode)` で景品名、レアリティ、プレビュー情報、トグル状態を取得する。
+   - Context: `usePrizeSettings(itemId)` で景品名、レアリティ、プレビュー情報、トグル状態を取得する。
    - レイアウト: `grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]` でプレビュー（左）とファイル選択（右）を分割し、フォームヘッダーに景品名・レアリティ入力を配置。プレビュー枠は `bg-surface-muted border border-border rounded-2xl p-4` で画像とメタ情報を表示し、右列に `FileDropZone`、`PickFromLibraryButton` を配置する。【F:index.html†L392-L411】
    - 「ピックアップ対象」「コンプリートガチャ対象」のトグルスイッチは `Switch` コンポーネントで実装し、状態を `usePrizeSettings` へバインドする。画像 URL フォームは廃止する。
    - フッターには `SaveButton`, `OpenRiaguDialogButton`, `CloseButton` を並べ、閉じるボタン押下時は確認アラート（「景品設定に戻る」「閉じる」）を表示する。確認アラートは `ModalProvider` の `push` を使い、変更が破棄される旨を明示する。
