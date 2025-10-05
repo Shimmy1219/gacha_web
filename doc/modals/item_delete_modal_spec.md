@@ -16,15 +16,16 @@
 ### 3.1 コンポーネント API
 ```ts
 interface ItemDeleteConfirmDialogProps {
-  gachaId: string;
-  rarityId: string;
-  itemCode: string;
+  gachaId: GachaId;
+  rarityId: RarityId;
+  itemId: ItemId;
   affectedUsers: number;
-  onConfirm(payload: { gachaId: string; rarityId: string; itemCode: string }): Promise<void> | void;
+  onConfirm(payload: { gachaId: GachaId; rarityId: RarityId; itemId: ItemId }): Promise<void> | void;
   onDismiss(): void;
 }
 ```
-- `useItemDeletion(it)` Hook が `affectedUsers`, `isDeleting`, `error` を返す。
+- `itemId` は CatalogStore の不変キー（`itm-xxxxxxxxxx` 形式）。
+- `useItemDeletion(itemId)` Hook が `affectedUsers`, `isDeleting`, `error` を返す。
 
 ### 3.2 UI
 - 警告メッセージを `Alert` コンポーネントとして表示し、`affectedUsers > 0` の場合は強調色（`bg-error/10`）。
@@ -34,8 +35,8 @@ interface ItemDeleteConfirmDialogProps {
 ### 3.3 挙動
 - `onConfirm` は以下の処理をまとめて行う:
   1. `imageService.clear` と `skipDel` 相当の処理で関連画像/リアグ状態をクリア。【F:index.html†L1302-L1314】
-  2. `catalogService.removeItem` でカタログから該当アイテムを削除。【F:index.html†L1296-L1300】
-  3. `userHistoryService.removeItem` で全ユーザーの履歴と獲得数から削除。【F:index.html†L1302-L1334】
+  2. `catalogService.removeItem` で `itemId`（`itm-xxxxxxxxxx` 形式）をキーにカタログから該当アイテムを削除する。【F:index.html†L1296-L1300】
+  3. `userHistoryService.removeItem` で全ユーザーの履歴と獲得数から削除する（主キーは `itemId`）。【F:index.html†L1302-L1334】
   4. AppState を保存 (`saveAppStateDebounced`) し、UI を再描画。【F:index.html†L1335-L1338】
 - 成功後に `ModalProvider.pop()`、`useToast` で削除完了通知。
 

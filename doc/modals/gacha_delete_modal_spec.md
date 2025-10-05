@@ -16,9 +16,9 @@
 ### 3.1 コンポーネント API
 ```ts
 interface GachaDeleteConfirmDialogProps {
-  gachaId: string;
+  gachaId: GachaId;
   gachaName: string;
-  onConfirm(gachaId: string): Promise<void> | void;
+  onConfirm(gachaId: GachaId): Promise<void> | void;
   onDismiss(): void;
 }
 ```
@@ -30,7 +30,7 @@ interface GachaDeleteConfirmDialogProps {
 - 削除時にスピナーを表示し、完了までボタンを無効化する。
 
 ### 3.3 挙動
-- `onConfirm` 実行時に `gachaService.delete(gachaId)` を呼び、以下の処理をまとめる:
+- `onConfirm` 実行時に `gachaService.delete(gachaId)`（`gch-xxxxxxxxxx` 形式）を呼び、以下の処理をまとめる:
   1. AppState のガチャデータ、ユーザー履歴、カタログを削除。【F:index.html†L1224-L1231】
   2. 画像サービスで該当キーの Blob を削除し、リアグサービス・レアリティサービスを同期。【F:index.html†L1233-L1247】
   3. UI の再描画 (`renderTabs`, `renderItemGrid`, `renderUsersList`, `renderRiaguPanel`) をトリガする。【F:index.html†L1249-L1256】

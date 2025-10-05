@@ -76,6 +76,8 @@
   ```
 - `logout` は `/api/auth/logout` を呼んだ後に `refetch` し、必要ならコールバックで通知する。
 - アバター URL の組み立ては現行ロジックと同じく `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=64` をユーティリティ化する。【F:index.html†L58-L67】
+- Discord ユーザー ID（`user.id`）は `/api/discord/me?soft=1` のレスポンスで常に受け取れるため、`useDiscordSession` での取得時に確実に保持し、
+  将来的なプロフィール機能や権限判定で利用できるようエクスポートする。React 化後も同じ ID を参照できることを仕様として保証する。
 
 ## 7. 実装ステップ
 1. 既存 JS を参照しつつ、React 版の UI・メニュー仕様を Storybook でモックする。

@@ -47,8 +47,8 @@ interface UserPanelFilterProps {
 }
 
 interface UserFilterState {
-  selectedGachaIds: '*' | string[];
-  selectedRarities: '*' | string[];
+  selectedGachaIds: '*' | GachaId[];   // GachaId は gch-xxxxxxxxxx 形式
+  selectedRarities: '*' | RarityId[];  // RarityId は rar-xxxxxxxxxx 形式
   hideMiss: boolean;
   showCounts: boolean;
   showSkipOnly: boolean;
@@ -66,17 +66,17 @@ interface UserFilterState {
 
 ### 4.2 `MultiSelectFilter`
 ```ts
-interface MultiSelectFilterProps {
+interface MultiSelectFilterProps<TValue extends string> {
   id: string;               // 例: 'gacha'
   label: string;            // 表示ラベル
-  options: MultiSelectOption[];
-  value: '*' | string[];
-  onChange(value: '*' | string[]): void;
+  options: MultiSelectOption<TValue>[];
+  value: '*' | TValue[];
+  onChange(value: '*' | TValue[]): void;
   autoCloseMs?: number;
 }
 
-interface MultiSelectOption {
-  value: string;
+interface MultiSelectOption<TValue extends string> {
+  value: TValue;
   label: string;
   dataAttrs?: Record<string, string>;
 }
