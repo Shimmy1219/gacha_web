@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "checkJs": false,          
+    "strict": false,          
+    "noImplicitAny": false,   
+    "strictNullChecks": false,
+    "skipLibCheck": false,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "exclude": ["node_modules", "dist", "build"]
+}

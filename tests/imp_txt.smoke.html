@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>imp_txt.js 単体テスト（ローカルストレージ検証）</title>
+<style>
+  body { font-family: system-ui, sans-serif; line-height: 1.5; margin: 24px; }
+  header { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  button, input[type="file"] { padding: 8px 12px; font-size: 14px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  pre { background: #111; color: #eee; padding: 12px; border-radius: 8px; overflow:auto; min-height: 200px; }
+  small { color: #666; }
+</style>
+<script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
+<header>
+  <input id="pickTxt" type="file" accept=".txt" />
+  <button id="resetLS">ローカルストレージ初期化</button>
+  <button id="reloadDump">ダンプ更新</button>
+  <small>保存先: <code>gacha_app_state_v1</code>, <code>gacha_rarity_config_v1</code></small>
+</header>
+
+<div class="row">
+  <section>
+    <h3>gacha_app_state_v1</h3>
+    <pre id="dumpApp">（未ロード）</pre>
+  </section>
+  <section>
+    <h3>gacha_rarity_config_v1</h3>
+    <pre id="dumpRarity">（未ロード）</pre>
+  </section>
+</div>
+
+<script type="module">
+  // imp_txt.js を実体から import（パスはあなたの配置に合わせて調整）
+  import { TxtImporter } from '../src/imp_txt.js';
+
+  // ====== ヘルパ ======
+  const LS_APP_KEY    = 'gacha_app_state_v1';
+  const LS_RARITY_KEY = 'gacha_rarity_config_v1';
+
+  const readJSON = (k, dflt) => {
+    try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : dflt; }
+    catch { return dflt; }
+  };
+  const writeJSON = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+  // ====== モック Services（ローカルストレージ直書き） ======
+  // AppStateService 代替：patch/mergeAll 相当を提供
+  const AppMock = {
+    load() {
+      const s = readJSON(LS_APP_KEY, null);
+      if (!s) {
+        writeJSON(LS_APP_KEY, { data:{}, catalogs:{}, counts:{}, selected:null });
+      }
+      return true;
+    },
+    _withState(mutator) {
+      const s = readJSON(LS_APP_KEY, { data:{}, catalogs:{}, counts:{}, selected:null });
+      mutator(s);
+      writeJSON(LS_APP_KEY, s);
+    },
+    patch(cb) { this._withState(cb); },  // 置換寄りのユーティリティ
+    // マージユーティリティ（pulls 加算, codes ユニーク, counts 加算）
+    mergeAll({ data = {}, catalogs = {}, counts = {}, selected = null } = {}) {
+      this._withState(s => {
+        // data
+        s.data ||= {};
+        for (const [user, gmap] of Object.entries(data)) {
+          const su = (s.data[user] ||= {});
+          for (const [gacha, info] of Object.entries(gmap || {})) {
+            const tgt = (su[gacha] ||= { pulls:0, items:{} });
+            tgt.pulls = (tgt.pulls||0) + (+info?.pulls || 0);
+            for (const [rarity, codes] of Object.entries(info?.items || {})) {
+              const arr = (tgt.items[rarity] ||= []);
+              for (const c of (codes || [])) if (c && !arr.includes(c)) arr.push(c);
+              arr.sort((a,b)=>a.localeCompare(b,'ja'));
+            }
+          }
+        }
+        // catalogs
+        s.catalogs ||= {};
+        for (const [gacha, cg] of Object.entries(catalogs)) {
+          const tgt = (s.catalogs[gacha] ||= { pulls:0, items:{} });
+          tgt.pulls = (tgt.pulls||0) + (+cg?.pulls || 0);
+          for (const [rarity, codes] of Object.entries(cg?.items || {})) {
+            const arr = (tgt.items[rarity] ||= []);
+            for (const c of (codes || [])) if (c && !arr.includes(c)) arr.push(c);
+            arr.sort((a,b)=>a.localeCompare(b,'ja'));
+          }
+        }
+        // counts
+        s.counts ||= {};
+        for (const [user, gmap] of Object.entries(counts)) {
+          const su = (s.counts[user] ||= {});
+          for (const [gacha, rmap] of Object.entries(gmap || {})) {
+            const sg = (su[gacha] ||= {});
+            for (const [rarity, cmap] of Object.entries(rmap || {})) {
+              const sr = (sg[rarity] ||= {});
+              for (const [code, n] of Object.entries(cmap || {})) {
+                sr[code] = (sr[code] || 0) + (+n || 0);
+              }
+            }
+          }
+        }
+        if (selected) s.selected = selected;
+        else if (!s.selected) {
+          const names = new Set();
+          Object.values(s.data).forEach(gm=>Object.keys(gm||{}).forEach(n=>names.add(n)));
+          Object.keys(s.catalogs||{}).forEach(n=>names.add(n));
+          const arr=[...names]; arr.sort((a,b)=>a.localeCompare(b,'ja'));
+          s.selected = arr[0] || null;
+        }
+      });
+    },
+    reset() {
+      writeJSON(LS_APP_KEY, { data:{}, catalogs:{}, counts:{}, selected:null });
+    }
+  };
+
+  // RarityService 代替：flatな辞書で管理（"ガチャ::レア" -> {color, rarityNum, emitRate}）
+  const RarityMock = {
+    _k(gacha, rarity){ return `${gacha}::${rarity}`; },
+    load() { if (!readJSON(LS_RARITY_KEY, null)) writeJSON(LS_RARITY_KEY, {}); },
+    listRarities(gacha){
+      const flat = readJSON(LS_RARITY_KEY, {});
+      const pre = `${gacha}::`;
+      return Object.keys(flat).filter(k=>k.startsWith(pre)).map(k=>k.slice(pre.length));
+    },
+    getMeta(gacha, rarity){
+      const flat = readJSON(LS_RARITY_KEY, {}); 
+      return flat[this._k(gacha, rarity)] || null;
+    },
+    upsert(gacha, rarity, meta){
+      const flat = readJSON(LS_RARITY_KEY, {});
+      flat[this._k(gacha, rarity)] = { ...(flat[this._k(gacha, rarity)]||{}), ...meta };
+      writeJSON(LS_RARITY_KEY, flat);
+    },
+    reset(){ writeJSON(LS_RARITY_KEY, {}); }
+  };
+
+  // window.Services にモックを注入（TxtImporter が参照する）
+  window.Services = { app: AppMock, appStateService: AppMock, rarity: RarityMock, rarityService: RarityMock };
+  AppMock.load(); RarityMock.load();
+
+  // ====== UI 配線 ======
+  const pickTxt   = document.getElementById('pickTxt');
+  const resetBtn  = document.getElementById('resetLS');
+  const reloadBtn = document.getElementById('reloadDump');
+  const dumpApp   = document.getElementById('dumpApp');
+  const dumpRr    = document.getElementById('dumpRarity');
+
+  const importer = new TxtImporter(window.Services);
+
+  async function refreshDump(){
+    dumpApp.textContent = JSON.stringify(readJSON(LS_APP_KEY, null), null, 2);
+    dumpRr.textContent  = JSON.stringify(readJSON(LS_RARITY_KEY, null), null, 2);
+  }
+
+  pickTxt.addEventListener('change', async (e)=>{
+    const f = e.target.files?.[0];
+    if (!f) return;
+    await importer.importFile(f);   // ← imp_txt.js の本体処理を使用
+    e.target.value = '';
+    await refreshDump();
+    alert('TXTの取り込みが完了しました（LSへ保存）。');
+  });
+
+  resetBtn.addEventListener('click', async ()=>{
+    AppMock.reset();
+    RarityMock.reset();
+    await refreshDump();
+    alert('ローカルストレージを初期化しました。');
+  });
+
+  reloadBtn.addEventListener('click', refreshDump);
+
+  // 初期ダンプ
+  refreshDump();
+</script>
+

@@ -1,0 +1,53 @@
+# === Node 基本 ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+# ロックファイルは通常はコミット推奨（再現性のため）
+# アプリなら残す、ライブラリなら無視することも
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# === ビルド/出力 ===
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+
+# === ツールのキャッシュ ===
+.eslintcache
+.parcel-cache/
+.turbo/
+.vite/
+vite.config.ts.timestamp-*  # たまに出る一時ファイル
+
+# === VSCode ===
+.vscode/              # ← まるごと無視したいならこれでOK
+# ↓共有したい場合は上の1行を消して、代わりに選択的に許可する
+# .vscode/*
+# !.vscode/extensions.json
+# !.vscode/settings.json
+# !.vscode/launch.json
+# !.vscode/tasks.json
+
+# === 環境変数/秘密情報 ===
+.env
+.env.*.local
+.env.local
+
+# === OS/エディタごみ ===
+.DS_Store
+Thumbs.db
+.idea/
+.history/
+*.swp
+*.swo
+
+# === よくあるフレームワークの出力 ===
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/

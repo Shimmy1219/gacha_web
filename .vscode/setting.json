@@ -1,0 +1,26 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit",
+    "source.organizeImports": "explicit"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "js/ts.implicitProjectConfig.checkJs": true,
+  "javascript.suggest.completeFunctionCalls": true,
+  "editor.tabSize": 2,
+  "editor.rulers": [100],
+  "editor.wordWrap": "on",
+  "editor.guides.bracketPairs": true,
+  "editor.stickyScroll.enabled": true,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  "livePreview.defaultPreviewPath": "/index.html"
+  "javascript.validate.enable": false,
+  "js/ts.implicitProjectConfig.checkJs": false
+}
