@@ -55,16 +55,23 @@
 
 ## 4. ドメインモデル再設計
 ### 4.1 型定義（TypeScript）
+
+#### ID ポリシー
+- `RarityId`・`ItemId`・`UserId`・`GachaId`・`InventoryId` はすべて `xxx-xxxxxxxxxx`（接頭辞 3 文字 + 英数字 10 文字）で統一する。
+- 接頭辞は `RarityId: rar` / `ItemId: itm` / `UserId: usr` / `GachaId: gch` / `InventoryId: inv` とし、`xxxxxxxxxx` 部分は `AppStateService` が用いる Base62 乱数 ID 生成（`index.html` におけるガチャ ID 生成と同一手法）で発行する。
+- 例: `RarityId = "rar-A92Swid9sl"`、`ItemId = "itm-fi92dvk29s"`、`UserId = "usr-0s1X2mNpQr"`、`GachaId = "gch-z8P1LmQwEr"`、`InventoryId = "inv-H7s9LmQ2Wx"`。
+
 ```ts
 // packages/domain/app-state/types.ts
-export type RarityId = string;        // 例: "UR"
-export type UserId = string;
-export type ItemId = string;          // 10 桁 ID（例: "1234567890"）
+export type RarityId = `rar-${string}`; // 例: "rar-A92Swid9sl"（英数字 10 桁の接尾辞）
+export type UserId = `usr-${string}`;   // 例: "usr-0s1X2mNpQr"
+export type ItemId = `itm-${string}`;   // 例: "itm-fi92dvk29s"
 export type ItemCode = string;        // 旧 UI の itemKey（gachaId::rarityId::itemId）
-export type GachaId = string;
+export type GachaId = `gch-${string}`;  // 例: "gch-z8P1LmQwEr"
+export type InventoryId = `inv-${string}`; // 例: "inv-H7s9LmQ2Wx"
 
 export interface GachaMeta {
-  id: string;
+  id: GachaId;
   displayName: string;
   createdAt: number;
 }
@@ -76,7 +83,7 @@ export interface CatalogEntry {
 }
 
 export interface UserInventory {
-  inventoryId: string; // UUID v4。不変
+  inventoryId: InventoryId; // inv-xxxxxxxxxx 形式で発行し不変
   userId: UserId;
   gachaId: GachaId;
   items: Record<RarityId, ItemId[]>;
@@ -86,17 +93,17 @@ export interface UserInventory {
 }
 
 export interface AppSnapshot {
-  meta: Record<string, GachaMeta>;
+  meta: Record<GachaId, GachaMeta>;
   catalogs: Record<GachaId, CatalogEntry>;
   users: Record<UserId, Record<GachaId, UserInventory>>; // gachaId -> inventory
-  selectedGachaId: string | null;
+  selectedGachaId: GachaId | null;
   legacyItemCodes?: Record<GachaId, Record<ItemCode, ItemId>>; // 永続化済み ItemCode を保持する場合に利用
 }
 
 export interface ItemCardModel {
   itemId: ItemId;
   itemKey: string; // gachaId::rarityId::itemId
-  gachaId: string;
+  gachaId: GachaId;
   gachaDisplayName: string;
   rarityId: RarityId;
   imageAsset: {
@@ -155,7 +162,7 @@ export interface ItemCardModel {
 - `Badge`, `Tag`, `ToggleButton`, `Tabs`, `Dialog`, `Stepper`, `ProgressBar`, `FileDropZone`, `Avatar` 等を共通化。
 
 #### ItemCard 仕様詳細（要望対応の検証）
-- **固有 ID (`itemId`)**: 各カードに 10 桁の `ItemId` を付与する。既存の `gachaId` 生成ロジックを TypeScript 化し、`nanoid` の custom alphabet（0-9）で固定長 ID を生成することで同等の可搬性と衝突回避が可能。
+- **固有 ID (`itemId`)**: 各カードに `itm-xxxxxxxxxx` 形式の `ItemId` を付与する。接尾 10 桁の英数字は現行 `index.html` がガチャ ID を生成するのと同じ Base62 乱数ロジックを TypeScript 化して利用する。
 - **レアリティ参照のリアクティブ化**: `ItemCard` には `rarityId` のみを渡し、`useRarity(rarityId)` で `RarityStore` から `label`・`color` 等を selector 経由で取得する。ラベル/カラーは Context の状態なので、参照側で再取得するだけで更新が自動反映される。
 - **ItemCardProps の構造**: `ItemCardModel` を props とし、`itemId`、`itemKey`、`gachaId`、`imageAsset`、`isRiagu` をまとめて渡す。完了対象 (`completeTarget`)・ピックアップ対象 (`pickupTarget`) の boolean を追加し、UI 上でバッジやトグルを表示できるようにする。
 - **操作ハンドラ**: `onToggleCompleteTarget` や `onTogglePickupTarget` を追加し、`AppStateStore` で該当フラグを更新。リアクティブ参照によりビューへ即時反映される。

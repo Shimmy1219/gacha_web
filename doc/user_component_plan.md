@@ -7,8 +7,10 @@
 
 ## 2. UserInventory データモデル
 ```ts
+type InventoryId = `inv-${string}`;
+
 interface UserInventory {
-  inventoryId: string; // UUID v4。不変
+  inventoryId: InventoryId; // inv-xxxxxxxxxx 形式で発行し不変
   userId: UserId;
   gachaId: GachaId;
   items: Record<RarityId, ItemId[]>;                     // レアリティ別の ItemId リスト
@@ -17,6 +19,7 @@ interface UserInventory {
   updatedAt: string;
 }
 ```
+- `inventoryId` は `AppStateService` の Base62 乱数生成ロジックを再利用し、`inv-` 接頭辞 + 英数字 10 桁で払い出す。ガチャ ID と同様にクライアント側で生成し、永続的なキーとする。
 - `items` の ItemId は必ず CatalogStore の `itemCards` に存在する。不整合時はクレンジングジョブで補修。
 - `counts` の辞書キーも ItemId を用い、集計時に ItemCardModel の name / flags を参照してバッジを表示。
 - `RarityId` は RarityStore の immutable key。RarityRow の追加・削除・名称変更があっても key は変わらない。
