@@ -31,7 +31,7 @@ type PtBundle = { id: string; pt: number; pulls: number; };
 type PtGuarantee = { id: string; minPulls: number; minRarity: string; };
 
 export interface PtSetting {
-  gachaId: string;
+  gachaId: GachaId;
   perPull: number;
   complete: number;
   bundles: PtBundle[];
@@ -45,19 +45,19 @@ export interface PtSetting {
 ### 4.2 ストア構造
 ```ts
 interface PtControlsState {
-  byGachaId: Record<string, PtSetting>;
-  selectedGachaId: string | null;
+  byGachaId: Record<GachaId, PtSetting>;
+  selectedGachaId: GachaId | null;
   status: 'idle' | 'saving' | 'error';
   error: string | null;
 }
 ```
-- `selectedGachaId` は RarityStore と同期し、LS (`rarity_tab_selected`) をソースオブトゥルースとする。
+- `selectedGachaId` は RarityStore と同期し、LS (`rarity_tab_selected`) をソースオブトゥルースとする。値は `gch-xxxxxxxxxx` 形式の `GachaId` を保持する。
 - 永続化は `PtControlsService`（下記）経由で行い、副作用は hook 内で封じ込める。
 
 ## 5. サービス抽象化
 - `packages/domain/pt-controls/service.ts`
-  - `loadAll(): Promise<Record<string, PtSetting>>` — window/AppState/localStorage からの統合読み込み。
-  - `saveAll(map: Record<string, PtSetting>): Promise<void>` — 3 箇所へ書き戻し。
+  - `loadAll(): Promise<Record<GachaId, PtSetting>>` — window/AppState/localStorage からの統合読み込み。
+  - `saveAll(map: Record<GachaId, PtSetting>): Promise<void>` — 3 箇所へ書き戻し。
   - `loadFor(gachaId)` / `saveFor(gachaId, data)` — 既存 API と同名で提供。
   - `listRarities(gachaId)` — RarityService を注入し、React 側では hook 経由で利用する。
 - React から直接 DOM を参照しないよう、ストレージ書き込みはサービスレイヤに閉じる。

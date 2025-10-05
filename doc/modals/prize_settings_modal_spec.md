@@ -20,7 +20,7 @@
 ### 3.1 コンポーネント API
 ```ts
 interface PrizeSettingsDialogProps {
-  itemId: ItemId; // 10 桁不変 ID
+  itemId: ItemId; // itm-xxxxxxxxxx 形式の不変 ID
   initial: PrizeSettingsInitialState;
   onSave(itemId: ItemId, input: PrizeSettingsInput): Promise<void> | void;
   onOpenRiagu(itemId: ItemId): void;
@@ -29,8 +29,8 @@ interface PrizeSettingsDialogProps {
 
 interface PrizeSettingsInitialState {
   name: string;
-  rarityId: string;
-  gachaId: string;
+  rarityId: RarityId;
+  gachaId: GachaId;
   gachaDisplayName: string;
   itemKey: string; // 旧 UI 互換キー（gachaId::rarityId::itemCode）
   previewUrl?: string;
@@ -40,7 +40,7 @@ interface PrizeSettingsInitialState {
 
 interface PrizeSettingsInput {
   name: string;
-  rarityId: string;
+  rarityId: RarityId;
   file?: File;
   pickup: boolean;
   completeTarget: boolean;
@@ -71,13 +71,13 @@ interface PrizeSettingsInput {
 ## 4. 状態管理
 - `PrizeSettingsState`:
   ```ts
-  interface PrizeSettingsState {
-    name: string;
-    rarityId: string;
-    pickup: boolean;
-    completeTarget: boolean;
-    file?: File;
-    previewUrl?: string;
+interface PrizeSettingsState {
+  name: string;
+  rarityId: RarityId;
+  pickup: boolean;
+  completeTarget: boolean;
+  file?: File;
+  previewUrl?: string;
     itemKey: string;
     isDirty: boolean;
     isSaving: boolean;

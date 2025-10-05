@@ -7,7 +7,7 @@
 
 ## 2. ドメインモデル
 ### 2.1 ItemId と ItemKey
-- `ItemId`: 10 桁の数字のみを使用する不変 ID。`nanoid` のカスタムアルファベット `0123456789` と `size: 10` で生成し、重複検査を通す。
+- `ItemId`: `itm-xxxxxxxxxx`（接頭辞 3 文字 + 英数字 10 桁）の不変 ID。`index.html` におけるガチャ ID 生成と同じ Base62 乱数ロジック（`nanoid` カスタムアルファベット `A-Za-z0-9`, `size: 10`）で後半 10 桁を生成し、`itm-` を付与して払い出す。重複検査は CatalogStore で行い、衝突時は再発行する。
 - `itemKey`: 旧 UI 互換の複合キー `gachaId::rarityId::itemCode`。移行期間中の互換 API・データマイグレーションで利用する。
 
 ### 2.2 ItemCardModel
@@ -84,7 +84,7 @@ interface ItemCardProps {
 - `completeTarget` / `pickupTarget` の変更は ItemCardModel のみ更新し、UserInventory 側では `itemId` リストを読み替えるだけで UI が更新される。
 
 ## 6. テスト
-- `generateItemId()` が 10 桁の数字であることを Jest/Vitest で確認。
+- `generateItemId()` が `itm-` 接頭辞 + 英数字 10 桁（Base62）で構成されること、重複時に再発行されることを Jest/Vitest で確認。
 - `updateItemCard` のパッチが `updatedAt` を更新し、参照する UserInventory セレクタが再評価されることを単体テスト。
 - Storybook でリアグ・コンプリート・ピックアップの各状態を再現。
 - Playwright でトグル操作が UserCard サマリへ即時反映される E2E を作成。
