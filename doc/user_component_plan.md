@@ -7,8 +7,10 @@
 
 ## 2. UserInventory データモデル
 ```ts
+type InventoryId = `inv-${string}`;
+
 interface UserInventory {
-  inventoryId: string; // UUID v4。不変
+  inventoryId: InventoryId; // inv-xxxxxxxxxx 形式で発行し不変
   userId: UserId;
   gachaId: GachaId;
   items: Record<RarityId, ItemId[]>;                     // レアリティ別の ItemId リスト
@@ -17,6 +19,7 @@ interface UserInventory {
   updatedAt: string;
 }
 ```
+- `inventoryId` は `AppStateService` の Base62 乱数生成ロジックを再利用し、`inv-` 接頭辞 + 英数字 10 桁で払い出す。ガチャ ID と同様にクライアント側で生成し、永続的なキーとする。
 - `items` の ItemId は必ず CatalogStore の `itemCards` に存在する。不整合時はクレンジングジョブで補修。
 - `counts` の辞書キーも ItemId を用い、集計時に ItemCardModel の name / flags を参照してバッジを表示。
 - `RarityId` は RarityStore の immutable key。RarityRow の追加・削除・名称変更があっても key は変わらない。
@@ -61,7 +64,7 @@ interface UserCardProps {
 - Chip 上のアクション（長押しで削除、クリックで詳細）は `UserInventoryStore` のアクションを dispatch。
 
 ## 5. データ同期
-- `hydrateAppSnapshot(snapshot: AppSnapshot)` で `snapshot.users[userId][gachaId]` をそのまま `UserInventoryStore` へ初期投入し、`CatalogEntry.itemsByRarity` と突合して `ItemId` の破損チェックを行う。破損している場合は `snapshot.legacyItemCodes?.[gachaId]` から `ItemCode` を逆引きして補完する。
+- `hydrateAppSnapshot(snapshot: AppSnapshot)` で `snapshot.users[userId][gachaId]` をそのまま `UserInventoryStore` へ初期投入し、`CatalogEntry.itemsByRarity` と突合して `ItemId` の破損チェックを行う。破損している場合はログへ記録し、必要に応じて管理者が手動で補正する。
 - `CatalogStore` → `UserInventoryStore` の一方向通知:
   1. ItemCard 作成: 対象ユーザーには即時影響なし。
   2. ItemCard 更新: `useItemCard` 経由の参照が変わり、UserCard が再レンダー。
@@ -71,7 +74,7 @@ interface UserCardProps {
 ## 6. 永続化
 - IndexedDB に `userInventories` テーブルを用意し、キーは `[userId, gachaId]`。値として `UserInventory` を保存。
 - 保存時に `items` 内の ItemId をバリデートし、存在しない ID はログに記録。自動修復ジョブが `CatalogStore` から再生成する。
-- スナップショット書き出し時は `AppSnapshot` の `users` と `catalogs` を再構築し、`CatalogEntry.itemsByRarity` / `UserInventory.items` を基準に `legacyItemCodes` と `CatalogEntry.legacyItemCodeIndex` を再生成する。旧形式からの直接読み込みは行わず、`AppSnapshot` 側で提供される逆引き辞書を利用して整合性を確保する。
+- スナップショット書き出し時は `AppSnapshot` の `users` と `catalogs` を再構築し、`CatalogEntry.itemsByRarity` / `UserInventory.items` を基準に ItemId の整合性を再検証する。旧形式からの直接読み込みは行わず、破損があれば出力前に検出できるようにする。
 
 ## 7. テスト
 - 単体テスト: `addItem`・`removeItem` が ItemId 参照を正しく更新するか検証。
