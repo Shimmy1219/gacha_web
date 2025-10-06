@@ -67,6 +67,7 @@ interface SaveOptionsModalState {
 ```
 - `lastResult` は最新の Blob アップロード結果。React ルートの `useEffect` で localStorage (`last-upload:<userId>`) と同期する。
 - `open` / `close` は `openSaveOptionsModal` / `closeSaveOptionsModal` 経由で公開する。
+# 保存オプションモーダル (SaveOptionsDialog) 仕様書
 
 ## 8. コンポーネント API
 ```ts
