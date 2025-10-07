@@ -41,7 +41,7 @@
 ## 5. 成功時 UI
 - ローカル保存成功: グローバルトーストで完了を通知する。モーダル内の状態は変えない。
 - Blob アップロード成功:
-  - `SaveOptionsModalStore.setResult({ kind: 'upload', url, expiresAt })` を呼び出す。
+  - `SaveOptionsModalStore.setResult({ kind: 'upload', key, shareUrl, expiresAt, pathname, downloadUrl })` を呼び出す。
   - モーダル内に共有 URL カードを表示し、`コピー` ボタンでクリップボードへ複製できる。
   - メッセージセクションの Info バナーを「共有リンクを作成しました」に差し替える。
 
@@ -57,8 +57,11 @@ interface SaveOptionsModalState {
   targetUserId: string | null;
   lastResult?: {
     kind: 'upload';
-    url: string;
-    expiresAt: number;
+    key: string;
+    shareUrl: string;
+    expiresAt: string; // Edge Function が返す ISO-8601
+    pathname: string;
+    downloadUrl?: string; // localStorage には保持しない（共有用リンクのみ保存）
   } | null;
   open: (userId: string) => void;
   close: () => void;
@@ -66,6 +69,7 @@ interface SaveOptionsModalState {
 }
 ```
 - `lastResult` は最新の Blob アップロード結果。React ルートの `useEffect` で localStorage (`last-upload:<userId>`) と同期する。
+  - 保存フォーマットは `doc/blob_upload_react_spec.md` §5 で定義される `{ key, shareUrl, expiresAt, pathname }`。
 - `open` / `close` は `openSaveOptionsModal` / `closeSaveOptionsModal` 経由で公開する。
 # 保存オプションモーダル (SaveOptionsDialog) 仕様書
 
