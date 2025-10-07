@@ -187,6 +187,7 @@ src/receive/
   - `GET /api/receive/edge-resolve?key=XXXXXXXXXX`
   - 成功レスポンス: `{ ok:true, blobName:string, downloadUrl:string, displayName:string, expiresAt:string, message?:string, theme?:object }`
   - 404/410 時は `{ ok:false, code:'NOT_FOUND'|'EXPIRED' }`。
+- 上記フィールド構成は `doc/blob_upload_react_spec.md` の `POST /api/receive/edge-resolve`（アップロード完了時に 10 桁キーと `expiresAt` を返却）と対になる契約であり、共有 URL 生成と受け取りページ解決の双方で `key` / `expiresAt` を同一フォーマット（10 桁英数字 + ISO-8601）として扱う。
 - 既存の `/api/receive/resolve` は互換性のため残し、React ページでは新 API を優先。旧トークン `t` を受け取った際は既存 API をフォールバックで呼ぶ。
 
 ### 6.2 `metadata.json` 仕様案
