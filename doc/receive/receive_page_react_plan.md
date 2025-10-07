@@ -189,7 +189,8 @@ src/receive/
   - 404/410 時は `{ ok:false, code:'NOT_FOUND'|'EXPIRED' }`。
 - 既存の `/api/receive/resolve` は互換性のため残し、React ページでは新 API を優先。旧トークン `t` を受け取った際は既存 API をフォールバックで呼ぶ。
 
-### 6.2 `metadata.json` 仕様案
+### 6.2 `metadata.json` 仕様
+`blob-upload` React 版で生成される `meta/metadata.json`（詳しくは `doc/blob_upload_react_spec.md` §4 を参照）を受け取り側で解釈する。
 ```json
 {
   "version": 1,
@@ -216,7 +217,9 @@ src/receive/
   "defaultMessage": "○○、ガチャを引いてくれてありがとう。景品大切にしてね"
 }
 ```
-- `useZipEntries` は ZIP 内から `metadata.json` を優先的に読み込み、存在しない場合はファイル名順でフォールバック。
+- `useZipEntries` は `meta/metadata.json` を優先的に読み込み、存在しない場合はファイル名順でフォールバックする。ファイル自体が欠落している、もしくは JSON パースに失敗した場合は警告ログを残し、全アイテムを `rarity: 'UNKNOWN'`, `effects: { type: 'standard' }` で生成する。
+- 個々のアイテムについて `rarity` または `effects` が欠落している場合は、`rarity` は `'UNKNOWN'`、`effects.type` は `'standard'` を与え、演出強度を最小構成に落とす。
+- `defaultMessage` が欠落している場合は Edge Resolve API が返却するメッセージ（`resolveResult.message`）を利用する。
 - `effects.type` が `rare` の場合は暗転演出、`super-rare` で特殊アニメーション、`standard` で通常表示などをマッピング。
 - `effects.animationPreset` を追加予定（`"animejs-timeline"`, `"particles-explosion"` など）で、アニメーションテンプレートと紐付ける。
 
