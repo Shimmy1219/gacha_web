@@ -22,6 +22,7 @@ app/
 
 ### エクスポート
 - `useZipBuilder()` … `buildUserZip(userId, options)` を返す。Promise で `{ blob, fileName, fileCount, totalBytes }` を解決。
+  - `archiveStore` から `users`, `UserBundle`, `gachaById`, `pullsById`, `assetsById` を読み込み、レア度や演出（`effects`）の定義は `gachaById[gachaId].effects` と `UserBundle.itemSummary` を組み合わせて決定する。
 - `useBlobUpload()` … `uploadZip({ file, fileName, userId })` を返す。内部で CSRF 取得と `/api/blob/upload` 呼び出しを隠蔽。
 - `useSaveOptionsActions()` … モーダル内のボタンが呼び出すハンドラを提供。`doc/modals/save_options_modal_spec.md` に準拠。
 
@@ -116,6 +117,14 @@ interface AssetEntity {
      }
      ```
    - メタの JSON は `compression: 'DEFLATE', level: 6`。
+   - 受け取りページ向けの `meta/metadata.json` を書き出す。
+     - フォーマットは `doc/receive/receive_page_react_plan.md` が定義する **レア度演出用メタデータ仕様** を厳守する。
+     - 必須フィールド: `version`, `items[]`（各 `filename`, `rarity`, `effects`、可能であれば `displayName`, `description`, `order`）、`defaultMessage`。
+     - `rarity` と `effects` は React 化後の正規化ストアから構築する。
+       - `rarity`: `pullsById[pullId].items` と `assetsById[assetId]` を突き合わせ、`itemSummary`（`UserBundle.itemSummary`）を優先して決定。
+       - `effects`: ガチャ側の演出設定テーブル（`gachaById[gachaId].effects` 仮称）と `UserBundle` のレア度マッピングを組み合わせ、`type`／`animationPreset`／`palette`／`audio` を解決する。未定義時は `type: 'standard'`。
+     - JSON の格納パスとファイル名は常に `meta/metadata.json` とし、ZIP 内で一意にする（既存ファイルがあれば上書き）。
+     - 欠落した optional フィールド（`displayName`, `description`, `effects.palette` など）は省略するが、空文字列は出力しない。
 
 5. **結果**
    - ZIP blob を `await zip.generateAsync({ type: 'blob', compression: 'STORE' })` で生成。
