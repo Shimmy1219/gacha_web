@@ -160,7 +160,7 @@ interface UploadZipResult {
 ### エラーハンドリング
 - `upload` / `resolveEdgeReceive` どちらか失敗時に `BlobUploadError` を投げる。
 - ネットワークキャンセル（`AbortError` 等）はモーダルが握りつぶす。
-- 成功時は `SaveOptionsModalStore.setResult({ kind: 'upload', key, shareUrl, expiresAt })`。
+- 成功時は `SaveOptionsModalStore.setResult({ kind: 'upload', key, shareUrl, expiresAt, pathname, downloadUrl })`。
 
 #### 処理シーケンス
 
