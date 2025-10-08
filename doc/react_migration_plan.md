@@ -18,34 +18,136 @@
 - データ取得: React Query で API 呼び出し（Discord プロフィール、Blob アップロード等）を管理。
 - UI ライブラリ: Tailwind CSS + Headless UI（モーダル、リストボックス）、Radix UI Icons など軽量なアクセシビリティ対応コンポーネント。
 
-### 3.2 想定ディレクトリ構成
+### 3.2 想定ディレクトリ構成（完全版）
 ```
 / (project root)
-├── apps/web/                # Vite プロジェクト
-│   ├── src/
-│   │   ├── app/            # ルーティング・providers
-│   │   ├── components/     # 再利用 UI（カード、ボタンなど）
-│   │   ├── features/
-│   │   │   ├── onboarding/ # Splash & 開始モーダル
-│   │   │   ├── gacha/      # ガチャ編集・FAB
-│   │   │   ├── rarity/     # レアリティ設定
-│   │   │   ├── items/      # アイテム画像管理
-│   │   │   ├── users/      # ユーザー集計
-│   │   │   ├── riagu/      # リアグビュー
-│   │   │   ├── realtime/   # リアルタイム貼り付け
-│   │   │   └── importers/  # TXT/JSON/ZIP
-│   │   ├── hooks/
-│   │   ├── lib/            # フロント専用ユーティリティ
-│   │   ├── providers/      # Context 定義
-│   │   └── styles/
-│   ├── public/             # manifest, icons, sw (React 用に調整)
-│   └── index.html          # Vite entry
-├── packages/domain/        # サービス層（ロジックを TypeScript 化）
-│   ├── app-state/
-│   ├── rarity/
-│   ├── images/
-│   └── riagu/
-└── doc/                    # ドキュメント（本書を含む）
+├── apps/
+│   └── web/
+│       ├── src/
+│       │   ├── app/
+│       │   │   ├── main.tsx                          // 参照: doc/react_migration_plan.md, doc/pwa_migration_plan.md
+│       │   │   ├── App.tsx                           // 参照: doc/react_migration_plan.md, docs/site_spec.md
+│       │   │   ├── AppProviders.tsx                  // 参照: doc/react_migration_plan.md, doc/modal_component_plan.md
+│       │   │   └── routes/AppRoutes.tsx              // 参照: doc/react_migration_plan.md, doc/section_component_plan.md
+│       │   ├── components/
+│       │   │   ├── app-shell/AppHeaderShell.tsx      // 参照: doc/header_component_plan.md, docs/site_spec.md
+│       │   │   ├── app-shell/ToolbarFilters.tsx      // 参照: doc/header_component_plan.md, doc/user_panel_filter_component_plan.md
+│       │   │   ├── layout/SectionContainer.tsx       // 参照: doc/section_component_plan.md
+│       │   │   ├── cards/ItemCard.tsx                // 参照: doc/item_component_plan.md
+│       │   │   ├── cards/UserCard.tsx                // 参照: doc/user_component_plan.md
+│       │   │   ├── cards/RiaguItem.tsx               // 参照: doc/riagu_component_plan.md
+│       │   │   ├── rarity/RarityBadge.tsx            // 参照: doc/rarity_component_plan.md
+│       │   │   ├── rarity/RarityColorPicker.tsx      // 参照: doc/rarity_color_picker_plan.md
+│       │   │   ├── modals/ModalFrame.tsx             // 参照: doc/modal_component_plan.md
+│       │   │   ├── modals/PWAUpdatePrompt.tsx        // 参照: doc/pwa_migration_plan.md
+│       │   │   ├── auth/DiscordLoginButton.tsx       // 参照: doc/discord_login_button_react_spec.md
+│       │   │   └── primitives/Button.tsx ほか        // 参照: doc/react_migration_plan.md, docs/site_spec.md
+│       │   ├── features/
+│       │   │   ├── onboarding/
+│       │   │   │   ├── SplashIntro.tsx               // 参照: docs/site_spec.md, doc/react_migration_plan.md
+│       │   │   │   ├── StartWizardDialog.tsx         // 参照: doc/modals/start_modal_spec.md, doc/import_txt_json_plan.md
+│       │   │   │   └── GuideInfoDialog.tsx           // 参照: doc/modals/guide_modal_spec.md
+│       │   │   ├── gacha/
+│       │   │   │   ├── GachaList.tsx                 // 参照: doc/section_component_plan.md, doc/app_state_store_register_gacha_spec.md
+│       │   │   │   ├── GachaEditorDrawer.tsx         // 参照: doc/section_component_plan.md, doc/app_state_store_register_gacha_spec.md
+│       │   │   │   ├── FloatingActionButton.tsx      // 参照: doc/section_component_plan.md
+│       │   │   │   ├── hooks/useGachaRegistration.ts // 参照: doc/app_state_store_register_gacha_spec.md, doc/import_txt_json_plan.md
+│       │   │   │   └── dialogs/GachaDeleteConfirmDialog.tsx // 参照: doc/modals/gacha_delete_modal_spec.md
+│       │   │   ├── rarity/
+│       │   │   │   ├── RarityBoard.tsx               // 参照: doc/rarity_component_plan.md
+│       │   │   │   ├── RarityEmitRateEditor.tsx      // 参照: doc/rarity_component_plan.md, doc/rarity_react_sync_spec.md
+│       │   │   │   ├── PtControlsPanel.tsx           // 参照: doc/pt_control_component_plan.md
+│       │   │   │   └── store/useRarityStore.ts       // 参照: doc/rarity_react_sync_spec.md
+│       │   │   ├── items/
+│       │   │   │   ├── ItemGrid.tsx                  // 参照: doc/item_component_plan.md
+│       │   │   │   ├── ImageAssetPickerDialog.tsx    // 参照: doc/section_component_plan.md, doc/item_component_plan.md
+│       │   │   │   ├── ItemDeleteConfirmDialog.tsx   // 参照: doc/modals/item_delete_modal_spec.md
+│       │   │   │   └── toolbar/ItemCatalogToolbar.tsx// 参照: doc/item_component_plan.md, doc/section_component_plan.md
+│       │   │   ├── users/
+│       │   │   │   ├── UserPanel.tsx                 // 参照: doc/user_component_plan.md, docs/site_spec.md
+│       │   │   │   ├── toolbar/UserPanelFilter.tsx   // 参照: doc/user_panel_filter_component_plan.md, doc/header_component_plan.md
+│       │   │   │   ├── dialogs/SaveOptionsModal.tsx  // 参照: doc/modals/save_options_modal_spec.md, doc/blob_upload_react_spec.md
+│       │   │   │   └── dialogs/PrizeSettingsDialog.tsx // 参照: doc/modals/prize_settings_modal_spec.md
+│       │   │   ├── riagu/
+│       │   │   │   ├── RiaguBoard.tsx                // 参照: doc/riagu_component_plan.md, doc/riagu_react_sync_spec.md
+│       │   │   │   ├── dialogs/RiaguWinnersDialog.tsx// 参照: doc/modals/riagu_modal_spec.md
+│       │   │   │   └── hooks/useRiaguStore.ts        // 参照: doc/riagu_react_sync_spec.md
+│       │   │   ├── realtime/
+│       │   │   │   ├── LivePastePanel.tsx            // 参照: doc/modals/live_paste_modal_spec.md, docs/site_spec.md
+│       │   │   │   └── dialogs/LivePasteDialog.tsx   // 参照: doc/modals/live_paste_modal_spec.md
+│       │   │   ├── importers/
+│       │   │   │   ├── hooks/useImporters.ts         // 参照: doc/import_txt_json_plan.md
+│       │   │   │   ├── components/ImportJobList.tsx  // 参照: doc/import_txt_json_plan.md
+│       │   │   │   └── services/ImportJobRunner.ts   // 参照: doc/import_txt_json_plan.md, doc/app_state_store_register_gacha_spec.md
+│       │   │   └── share/
+│       │   │       ├── hooks/useZipBuilder.ts        // 参照: doc/blob_upload_react_spec.md
+│       │   │       └── hooks/useBlobUpload.ts        // 参照: doc/blob_upload_react_spec.md, doc/modals/save_options_modal_spec.md
+│       │   ├── hooks/
+│       │   │   ├── useModal.ts                       // 参照: doc/modal_component_plan.md
+│       │   │   ├── pwa/useServiceWorker.ts           // 参照: doc/pwa_migration_plan.md
+│       │   │   ├── pwa/usePWADisplayMode.ts          // 参照: doc/pwa_migration_plan.md
+│       │   │   ├── routing/useSectionTabs.ts         // 参照: doc/section_component_plan.md
+│       │   │   └── discord/useDiscordSession.ts      // 参照: doc/discord_login_button_react_spec.md
+│       │   ├── providers/
+│       │   │   ├── ModalProvider.tsx                 // 参照: doc/modal_component_plan.md
+│       │   │   ├── AppStateProvider.tsx              // 参照: doc/react_migration_plan.md, doc/app_state_store_register_gacha_spec.md
+│       │   │   ├── RarityProvider.tsx                // 参照: doc/rarity_react_sync_spec.md
+│       │   │   ├── UserInventoryProvider.tsx         // 参照: doc/user_component_plan.md
+│       │   │   ├── AssetProvider.tsx                 // 参照: doc/item_component_plan.md, doc/blob_upload_react_spec.md
+│       │   │   ├── RiaguProvider.tsx                 // 参照: doc/riagu_react_sync_spec.md
+│       │   │   └── PWAProvider.tsx                   // 参照: doc/pwa_migration_plan.md
+│       │   ├── lib/
+│       │   │   ├── api/blobClient.ts                 // 参照: doc/blob_upload_react_spec.md
+│       │   │   ├── api/discordClient.ts              // 参照: doc/discord_login_button_react_spec.md
+│       │   │   ├── api/receiveClient.ts              // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       │   │   ├── importers/normalizers.ts          // 参照: doc/import_txt_json_plan.md
+│       │   │   └── telemetry/appInsights.ts          // 参照: doc/react_migration_plan.md, doc/import_txt_json_plan.md
+│       │   ├── styles/
+│       │   │   ├── tailwind.css                      // 参照: doc/react_migration_plan.md, doc/header_component_plan.md
+│       │   │   └── tokens.css                        // 参照: doc/react_migration_plan.md, doc/rarity_color_picker_plan.md
+│       │   └── pages/receive/
+│       │       ├── App.tsx                           // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── providers/ReceiveProvider.tsx     // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── state/reducer.ts                  // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── features/IntroOverlay.tsx         // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── features/ReceiveDashboard.tsx     // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       │       └── hooks/useDownloadZip.ts           // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       ├── public/
+│       │   ├── manifest.webmanifest                  // 参照: doc/pwa_migration_plan.md, docs/site_spec.md
+│       │   └── sw.js                                 // 参照: doc/pwa_migration_plan.md
+│       └── index.html                                // 参照: docs/site_spec.md
+├── packages/
+│   └── domain/
+│       ├── app-state/
+│       │   ├── registerGacha.ts                      // 参照: doc/app_state_store_register_gacha_spec.md
+│       │   ├── types.ts                              // 参照: doc/react_migration_plan.md, doc/import_txt_json_plan.md
+│       │   └── snapshot.ts                           // 参照: doc/import_txt_json_plan.md, doc/user_component_plan.md
+│       ├── rarity/
+│       │   ├── store.ts                              // 参照: doc/rarity_react_sync_spec.md
+│       │   ├── color.ts                              // 参照: doc/rarity_color_picker_plan.md
+│       │   └── emitRate.ts                           // 参照: doc/rarity_component_plan.md
+│       ├── catalog/
+│       │   ├── itemStore.ts                          // 参照: doc/item_component_plan.md
+│       │   └── assetService.ts                       // 参照: doc/item_component_plan.md, doc/blob_upload_react_spec.md
+│       ├── users/
+│       │   ├── inventoryStore.ts                     // 参照: doc/user_component_plan.md
+│       │   └── filters.ts                            // 参照: doc/user_panel_filter_component_plan.md
+│       ├── importers/
+│       │   ├── txt.ts                                // 参照: doc/import_txt_json_plan.md
+│       │   ├── json.ts                               // 参照: doc/import_txt_json_plan.md
+│       │   └── legacy.ts                             // 参照: doc/import_txt_json_plan.md
+│       ├── riagu/
+│       │   ├── store.ts                              // 参照: doc/riagu_react_sync_spec.md
+│       │   └── effects.ts                            // 参照: doc/riagu_component_plan.md, doc/receive/receive_page_react_plan.md
+│       ├── pt-controls/
+│       │   ├── reducer.ts                            // 参照: doc/pt_control_component_plan.md
+│       │   └── service.ts                            // 参照: doc/pt_control_component_plan.md
+│       ├── receive/
+│       │   └── metadata.ts                           // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       └── share/
+│           ├── zipBuilder.ts                         // 参照: doc/blob_upload_react_spec.md
+│           └── uploadClient.ts                       // 参照: doc/blob_upload_react_spec.md
+└── ※ Catalog モーダルは React 版で新設しない（doc/modals/catalog_modal_spec.md による撤去方針）。
 ```
 
 ### 3.3 Tailwind 設定
