@@ -10,6 +10,10 @@
     "eamodio.gitlens",
     "humao.rest-client",
     "streetsidesoftware.code-spell-checker",
-    "streetsidesoftware.code-spell-checker-japanese"
+    "streetsidesoftware.code-spell-checker-japanese",
+
+    "bradlc.vscode-tailwindcss",
+    "formulahendry.auto-rename-tag",
+    "dsznajder.es7-react-js-snippets"
   ]
 }
