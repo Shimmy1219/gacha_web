@@ -108,10 +108,30 @@
 │       │   └── pages/receive/
 │       │       ├── App.tsx                           // 参照: doc/receive/receive_page_react_plan.md
 │       │       ├── providers/ReceiveProvider.tsx     // 参照: doc/receive/receive_page_react_plan.md
-│       │       ├── state/reducer.ts                  // 参照: doc/receive/receive_page_react_plan.md
-│       │       ├── features/IntroOverlay.tsx         // 参照: doc/receive/receive_page_react_plan.md
-│       │       ├── features/ReceiveDashboard.tsx     // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
-│       │       └── hooks/useDownloadZip.ts           // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       │       ├── state/
+│       │       │   ├── actions.ts                    // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── reducer.ts                    // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   └── selectors.ts                  // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── features/
+│       │       │   ├── landing/LandingForm.tsx       // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── resolve/ResolveGate.tsx       // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── intro/IntroOverlay.tsx        // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── dashboard/ReceiveDashboard.tsx// 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       │       │   ├── reveal/RevealTimeline.tsx     // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   └── errors/ErrorScreens.tsx       // 参照: doc/receive/receive_page_react_plan.md
+│       │       ├── components/
+│       │       │   ├── ReceiveCard.tsx               // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── ProgressBar.tsx               // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── ItemRevealCard.tsx            // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── RareItemDialog.tsx            // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── MessagePanel.tsx              // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   ├── TransitionCanvas.tsx          // 参照: doc/receive/receive_page_react_plan.md
+│       │       │   └── GlowButton.tsx                // 参照: doc/receive/receive_page_react_plan.md
+│       │       └── hooks/
+│       │           ├── useReceiveKey.ts              // 参照: doc/receive/receive_page_react_plan.md
+│       │           ├── useEdgeResolve.ts             // 参照: doc/receive/receive_page_react_plan.md
+│       │           ├── useDownloadZip.ts             // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
+│       │           └── useZipEntries.ts              // 参照: doc/receive/receive_page_react_plan.md, doc/blob_upload_react_spec.md
 │       ├── public/
 │       │   ├── manifest.webmanifest                  // 参照: doc/pwa_migration_plan.md, docs/site_spec.md
 │       │   └── sw.js                                 // 参照: doc/pwa_migration_plan.md
