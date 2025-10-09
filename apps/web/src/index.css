@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  background-color: theme('colors.surface.DEFAULT');
+  color: theme('colors.surface.foreground');
+  font-family: theme('fontFamily.sans');
+}
+
+a {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid theme('colors.accent.DEFAULT');
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-transparent px-4 py-2 text-sm font-medium transition-colors duration-150;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-accent-foreground hover:bg-accent/90;
+  }
+
+  .btn-muted {
+    @apply btn bg-muted text-muted-foreground hover:bg-muted/80;
+  }
+
+  .tag {
+    @apply inline-flex items-center rounded-full bg-muted/70 px-3 py-1 text-xs font-medium text-muted-foreground;
+  }
+}
