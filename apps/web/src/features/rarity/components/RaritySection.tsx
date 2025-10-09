@@ -13,6 +13,30 @@ const SAMPLE_RARITIES = [
   { code: 'N', color: '#a7f3d0', rate: 50 }
 ];
 
+const RARITY_BADGE_THEMES: Record<string, { background: string; shadow: string }> = {
+  SSR: {
+    background: 'linear-gradient(135deg, #ff3568 0%, #ff5f8f 45%, #ff9fc2 100%)',
+    shadow: '0 10px 24px rgba(255, 95, 143, 0.35)'
+  },
+  SR: {
+    background: 'linear-gradient(135deg, #ff2e57 0%, #ff4f89 45%, #ff7aa8 100%)',
+    shadow: '0 10px 22px rgba(255, 79, 137, 0.32)'
+  },
+  R: {
+    background: 'linear-gradient(135deg, #762bff 0%, #a855f7 50%, #c084fc 100%)',
+    shadow: '0 10px 24px rgba(118, 43, 255, 0.32)'
+  },
+  N: {
+    background: 'linear-gradient(135deg, #3149ff 0%, #4d6bff 50%, #7a94ff 100%)',
+    shadow: '0 10px 22px rgba(77, 107, 255, 0.3)'
+  }
+};
+
+const DEFAULT_BADGE_THEME = {
+  background: 'linear-gradient(135deg, #3f3f46 0%, #52525b 50%, #71717a 100%)',
+  shadow: '0 10px 22px rgba(82, 82, 91, 0.35)'
+};
+
 export function RaritySection(): JSX.Element {
   const totalRate = SAMPLE_RARITIES.reduce((sum, rarity) => sum + rarity.rate, 0);
 
@@ -123,40 +147,52 @@ export function RaritySection(): JSX.Element {
         <table className="min-w-full divide-y divide-border/60 text-left">
           <thead className="bg-[#0a0a12] text-xs uppercase tracking-[0.3em] text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-semibold">レアリティ</th>
-              <th className="px-4 py-3 font-semibold">カラー</th>
-              <th className="px-4 py-3 font-semibold">排出率</th>
-              <th className="px-4 py-3" />
+              <th className="px-3 py-2.5 font-semibold">レアリティ</th>
+              <th className="px-3 py-2.5 font-semibold">カラー</th>
+              <th className="px-3 py-2.5 font-semibold">排出率</th>
+              <th className="px-3 py-2.5" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40 bg-surface/60">
             {SAMPLE_RARITIES.map((rarity) => (
               <tr key={rarity.code} className="text-sm text-surface-foreground">
-                <td className="px-4 py-3">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-xs font-bold uppercase tracking-[0.24em]">
-                    {rarity.code}
-                  </span>
+                <td className="px-3 py-2">
+                  {(() => {
+                    const theme = RARITY_BADGE_THEMES[rarity.code] ?? DEFAULT_BADGE_THEME;
+
+                    return (
+                      <span
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
+                        style={{
+                          background: theme.background,
+                          boxShadow: theme.shadow
+                        }}
+                      >
+                        {rarity.code}
+                      </span>
+                    );
+                  })()}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <RarityColorChip
                     value={rarity.color}
                     ariaLabel={`${rarity.code} のカラー`}
                     onClick={() => console.info('カラーピッカーは未実装です')}
                   />
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex max-w-[9rem] items-center gap-2">
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       min={0}
                       max={100}
                       defaultValue={rarity.rate}
-                      className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                      className="min-w-[8ch] rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                     />
                     <span className="text-xs text-muted-foreground">%</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-3 py-2 text-right">
                   <button
                     type="button"
                     className="chip"
