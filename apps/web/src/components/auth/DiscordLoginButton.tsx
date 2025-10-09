@@ -1,7 +1,12 @@
 import { Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { ArrowPathIcon, ChevronDownIcon } from '@heroicons/react/20/solid';
-import { ArrowRightOnRectangleIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowRightOnRectangleIcon,
+  Cog6ToothIcon,
+  ShieldCheckIcon,
+  XMarkIcon
+} from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
@@ -13,13 +18,23 @@ function getAvatarUrl(id: string, avatar?: string): string | undefined {
   return `https://cdn.discordapp.com/avatars/${id}/${avatar}.png?size=64`;
 }
 
-export function DiscordLoginButton(): JSX.Element {
+interface DiscordLoginButtonProps {
+  placement?: 'toolbar' | 'splash' | string;
+  onOpenPageSettings?: () => void;
+  className?: string;
+}
+
+export function DiscordLoginButton({
+  placement = 'toolbar',
+  onOpenPageSettings,
+  className
+}: DiscordLoginButtonProps): JSX.Element {
   const { data, isLoading, isError, login, logout, refetch } = useDiscordSession();
   const user = data?.user;
 
   if (isLoading) {
     return (
-      <div className="h-10 w-40 animate-pulse rounded-lg bg-muted/60" aria-hidden />
+      <div className={clsx('h-10 w-40 animate-pulse rounded-lg bg-muted/60', className)} aria-hidden />
     );
   }
 
@@ -28,7 +43,12 @@ export function DiscordLoginButton(): JSX.Element {
       <button
         type="button"
         onClick={login}
-        className="inline-flex h-10 items-center gap-2 rounded-lg bg-discord-primary px-4 text-sm font-semibold text-white shadow-lg shadow-discord-primary/40 transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        data-placement={placement}
+        className={clsx(
+          'inline-flex h-10 items-center gap-2 rounded-lg bg-discord-primary px-4 text-sm font-semibold text-white shadow-lg shadow-discord-primary/40 transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+          className
+        )}
+        aria-label="Discordでログイン"
       >
         <ShieldCheckIcon className="h-5 w-5" />
         Discordでログイン
@@ -39,9 +59,20 @@ export function DiscordLoginButton(): JSX.Element {
   const avatarUrl = getAvatarUrl(user.id, user.avatar);
   const displayName = user.name ?? 'Discord ユーザー';
 
+  const handleOpenPageSettings = () => {
+    if (onOpenPageSettings) {
+      onOpenPageSettings();
+    } else {
+      console.info('ページ設定ダイアログは未実装です');
+    }
+  };
+
   return (
-    <Menu as="div" className="relative inline-flex text-left">
-      <Menu.Button className="inline-flex h-10 items-center gap-3 rounded-lg bg-discord-primary px-4 text-sm font-semibold text-white shadow-lg shadow-discord-primary/40 transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+    <Menu as="div" className={clsx('relative inline-flex text-left', className)} data-placement={placement}>
+      <Menu.Button
+        className="inline-flex h-10 items-center gap-3 rounded-lg bg-discord-primary px-4 text-sm font-semibold text-white shadow-lg shadow-discord-primary/40 transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        aria-label={`${displayName} のメニューを開く`}
+      >
         <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
           {avatarUrl ? (
             <img src={avatarUrl} alt="Discord avatar" className="h-full w-full object-cover" />
@@ -75,6 +106,21 @@ export function DiscordLoginButton(): JSX.Element {
             {({ active }) => (
               <button
                 type="button"
+                onClick={handleOpenPageSettings}
+                className={clsx(
+                  'flex w-full items-center gap-3 px-4 py-2 text-sm text-surface-foreground transition',
+                  active ? 'bg-muted/60' : undefined
+                )}
+              >
+                <Cog6ToothIcon className="h-4 w-4" />
+                ページ設定
+              </button>
+            )}
+          </Menu.Item>
+          <Menu.Item>
+            {({ active }) => (
+              <button
+                type="button"
                 onClick={async () => {
                   await refetch();
                 }}
@@ -102,6 +148,21 @@ export function DiscordLoginButton(): JSX.Element {
               >
                 <ArrowRightOnRectangleIcon className="h-4 w-4" />
                 ログアウト
+              </button>
+            )}
+          </Menu.Item>
+          <div className="border-t border-border/60" />
+          <Menu.Item>
+            {({ active }) => (
+              <button
+                type="button"
+                className={clsx(
+                  'flex w-full items-center gap-3 px-4 py-2 text-sm text-surface-foreground transition',
+                  active ? 'bg-muted/60' : undefined
+                )}
+              >
+                <XMarkIcon className="h-4 w-4" />
+                閉じる
               </button>
             )}
           </Menu.Item>

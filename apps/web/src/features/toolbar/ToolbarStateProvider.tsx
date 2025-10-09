@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer } from 'react
 const STORAGE_KEY = 'user_subcontrols_collapsed_v1';
 
 interface ToolbarState {
-  collapsed: boolean;
+  subcontrolsCollapsed: boolean;
   hideMiss: boolean;
   showCounts: boolean;
   showSkipOnly: boolean;
@@ -12,8 +12,8 @@ interface ToolbarState {
 }
 
 type ToolbarAction =
-  | { type: 'toggleCollapsed' }
-  | { type: 'setCollapsed'; payload: boolean }
+  | { type: 'toggleSubcontrols' }
+  | { type: 'setSubcontrolsCollapsed'; payload: boolean }
   | { type: 'toggleHideMiss' }
   | { type: 'toggleShowCounts' }
   | { type: 'toggleShowSkipOnly' }
@@ -21,7 +21,7 @@ type ToolbarAction =
   | { type: 'resetFilters' };
 
 const initialState: ToolbarState = {
-  collapsed: false,
+  subcontrolsCollapsed: false,
   hideMiss: false,
   showCounts: true,
   showSkipOnly: false,
@@ -30,10 +30,10 @@ const initialState: ToolbarState = {
 
 function reducer(state: ToolbarState, action: ToolbarAction): ToolbarState {
   switch (action.type) {
-    case 'toggleCollapsed':
-      return { ...state, collapsed: !state.collapsed };
-    case 'setCollapsed':
-      return { ...state, collapsed: action.payload };
+    case 'toggleSubcontrols':
+      return { ...state, subcontrolsCollapsed: !state.subcontrolsCollapsed };
+    case 'setSubcontrolsCollapsed':
+      return { ...state, subcontrolsCollapsed: action.payload };
     case 'toggleHideMiss':
       return { ...state, hideMiss: !state.hideMiss };
     case 'toggleShowCounts':
@@ -52,7 +52,7 @@ function reducer(state: ToolbarState, action: ToolbarAction): ToolbarState {
 interface ToolbarContextValue {
   state: ToolbarState;
   actions: {
-    toggleCollapsed(): void;
+    toggleSubcontrols(): void;
     toggleHideMiss(): void;
     toggleShowCounts(): void;
     toggleShowSkipOnly(): void;
@@ -70,7 +70,10 @@ export function ToolbarStateProvider({ children }: PropsWithChildren): JSX.Eleme
     }
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored != null) {
-      return { ...baseState, collapsed: stored === '1' || stored === 'true' };
+      return {
+        ...baseState,
+        subcontrolsCollapsed: stored === '1' || stored === 'true'
+      };
     }
     return baseState;
   });
@@ -79,12 +82,15 @@ export function ToolbarStateProvider({ children }: PropsWithChildren): JSX.Eleme
     if (typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(STORAGE_KEY, state.collapsed ? '1' : '0');
-  }, [state.collapsed]);
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      state.subcontrolsCollapsed ? '1' : '0'
+    );
+  }, [state.subcontrolsCollapsed]);
 
   const actions = useMemo(
     () => ({
-      toggleCollapsed: () => dispatch({ type: 'toggleCollapsed' }),
+      toggleSubcontrols: () => dispatch({ type: 'toggleSubcontrols' }),
       toggleHideMiss: () => dispatch({ type: 'toggleHideMiss' }),
       toggleShowCounts: () => dispatch({ type: 'toggleShowCounts' }),
       toggleShowSkipOnly: () => dispatch({ type: 'toggleShowSkipOnly' }),

@@ -1,29 +1,84 @@
 import { clsx } from 'clsx';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
-
-const buttonBase =
-  'inline-flex items-center gap-2 rounded-lg border border-border/40 bg-panel px-4 py-2 text-sm font-medium text-surface-foreground shadow-sm transition hover:border-border hover:bg-panel/80';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { useId, useRef } from 'react';
 
 interface ToolbarActionsProps {
-  variant?: 'desktop' | 'mobile';
+  mode?: 'desktop' | 'mobile';
+  onOpenRealtime?: () => void;
+  onExportAll?: () => void;
+  onImportAll?: (files: FileList) => void;
+  importBusy?: boolean;
 }
 
-export function ToolbarActions({ variant = 'desktop' }: ToolbarActionsProps): JSX.Element {
+export function ToolbarActions({
+  mode = 'desktop',
+  onOpenRealtime,
+  onExportAll,
+  onImportAll,
+  importBusy
+}: ToolbarActionsProps): JSX.Element {
+  const inputId = useId();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const containerClass =
+    mode === 'desktop'
+      ? 'hidden items-center gap-3 lg:flex'
+      : 'flex w-full flex-col gap-3 lg:hidden';
+
+  const handleImportClick = () => {
+    if (importBusy) {
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
   return (
-    <div
-      className={clsx(
-        'flex items-center gap-3',
-        variant === 'desktop' ? 'hidden lg:flex' : 'lg:hidden flex-col'
-      )}
-    >
-      <a className={buttonBase} href="#import" role="button">
-        <ArrowDownTrayIcon className="h-4 w-4" />
-        インポート
-      </a>
-      <a className={buttonBase} href="#export" role="button">
+    <div className={clsx(containerClass)}>
+      <button
+        type="button"
+        onClick={() => onOpenRealtime?.()}
+        className="btn-primary inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-md shadow-accent/40 lg:w-auto"
+      >
+        <PlayIcon className="h-4 w-4" />
+        リアルタイム入力
+      </button>
+      <button
+        type="button"
+        onClick={() => onExportAll?.()}
+        className="btn-muted inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-panel px-4 py-2 text-sm font-semibold text-surface-foreground shadow-sm transition hover:border-border hover:bg-panel/80 lg:w-auto"
+      >
         <ArrowUpTrayIcon className="h-4 w-4" />
-        エクスポート
-      </a>
+        全体エクスポート
+      </button>
+      <div className={clsx('relative flex w-full lg:w-auto')}>
+        <input
+          id={inputId}
+          ref={fileInputRef}
+          type="file"
+          accept=".shimmy,application/x-shimmy"
+          className="sr-only"
+          onChange={(event) => {
+            const files = event.currentTarget.files;
+            if (files && files.length > 0) {
+              onImportAll?.(files);
+              event.currentTarget.value = '';
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleImportClick}
+          disabled={importBusy}
+          aria-busy={importBusy}
+          className={clsx(
+            'inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-transparent px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-accent hover:text-accent lg:w-auto',
+            importBusy && 'cursor-not-allowed opacity-60'
+          )}
+        >
+          <ArrowDownTrayIcon className="h-4 w-4" />
+          全体インポート
+        </button>
+      </div>
     </div>
   );
 }

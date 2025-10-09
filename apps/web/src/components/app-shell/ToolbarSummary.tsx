@@ -1,30 +1,43 @@
 import { clsx } from 'clsx';
 
-import { useToolbarState } from '../../features/toolbar/ToolbarStateProvider';
-
 interface ToolbarSummaryProps {
-  variant?: 'desktop' | 'mobile';
+  label: string;
+  variant?: 'default' | 'warning' | 'success';
+  description?: string;
+  mode?: 'desktop' | 'mobile';
+  className?: string;
 }
 
-export function ToolbarSummary({ variant = 'desktop' }: ToolbarSummaryProps): JSX.Element {
-  const {
-    state: { hideMiss, showCounts, showSkipOnly, keyword }
-  } = useToolbarState();
+export function ToolbarSummary({
+  label,
+  variant = 'default',
+  description,
+  mode = 'desktop',
+  className
+}: ToolbarSummaryProps): JSX.Element {
+  const layoutClass =
+    mode === 'desktop'
+      ? 'hidden min-w-[12rem] lg:flex'
+      : 'flex lg:hidden';
 
   return (
-    <div
-      className={clsx(
-        'flex flex-col text-xs text-muted-foreground',
-        variant === 'desktop' ? 'hidden min-w-[16rem] lg:flex' : 'lg:hidden'
-      )}
-    >
-      <span className="font-medium text-surface-foreground">ユーザーフィルタ状態</span>
-      <div className="mt-1 flex flex-wrap gap-1">
-        <span className="tag">はずれ{hideMiss ? '非表示' : '表示'}</span>
-        <span className="tag">獲得数{showCounts ? '表示' : '非表示'}</span>
-        <span className="tag">リアグ{showSkipOnly ? 'のみ' : '含む'}</span>
-        {keyword ? <span className="tag">検索: {keyword}</span> : null}
-      </div>
+    <div className={clsx('flex flex-col gap-1 text-xs', layoutClass, className)}>
+      <span
+        data-variant={variant}
+        className={clsx(
+          'inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
+          variant === 'warning'
+            ? 'border-amber-400/70 bg-amber-400/10 text-amber-200'
+            : variant === 'success'
+              ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-200'
+              : 'border-muted/70 bg-muted/40 text-muted-foreground'
+        )}
+      >
+        {label}
+      </span>
+      {description ? (
+        <span className="text-[11px] text-muted-foreground/80">{description}</span>
+      ) : null}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { useToolbarState } from '../../features/toolbar/ToolbarStateProvider';
 
 export function ToolbarFilters(): JSX.Element {
   const {
-    state: { collapsed, hideMiss, showCounts, showSkipOnly, keyword },
+    state: { subcontrolsCollapsed, hideMiss, showCounts, showSkipOnly, keyword },
     actions
   } = useToolbarState();
 
@@ -14,18 +14,20 @@ export function ToolbarFilters(): JSX.Element {
       <button
         type="button"
         className="flex w-full items-center justify-between text-sm font-semibold text-surface-foreground"
-        onClick={actions.toggleCollapsed}
-        aria-expanded={!collapsed}
+        onClick={actions.toggleSubcontrols}
+        aria-expanded={!subcontrolsCollapsed}
       >
         <span>ユーザーフィルタ</span>
         <ChevronDownIcon
-          className={clsx('h-4 w-4 transition-transform', !collapsed && 'rotate-180')}
+          className={clsx('h-4 w-4 transition-transform', !subcontrolsCollapsed && 'rotate-180')}
         />
       </button>
       <div
         className={clsx(
           'grid grid-cols-1 gap-4 pt-4 transition-all duration-200 ease-out sm:grid-cols-2',
-          collapsed ? 'pointer-events-none max-h-0 overflow-hidden opacity-0' : 'max-h-[640px] opacity-100'
+          subcontrolsCollapsed
+            ? 'pointer-events-none max-h-0 overflow-hidden opacity-0'
+            : 'max-h-[640px] opacity-100'
         )}
       >
         <label className="flex items-center justify-between gap-4 rounded-xl border border-border/40 bg-surface/40 px-4 py-3">
