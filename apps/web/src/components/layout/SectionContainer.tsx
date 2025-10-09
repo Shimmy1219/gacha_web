@@ -36,14 +36,14 @@ export function SectionContainer({
     >
       <div className="relative z-[1] flex flex-col gap-6">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
+          <div className="space-y-2 sm:w-full">
             {accentLabel ? (
               <span className="badge">{accentLabel}</span>
             ) : null}
-            <div className="space-y-1">
+            <div className="space-y-1 sm:max-w-none">
               <h2 className="text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
               {description ? (
-                <p className="text-xs text-muted-foreground">{description}</p>
+                <p className="text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
             </div>
           </div>
