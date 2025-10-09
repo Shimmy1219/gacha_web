@@ -107,6 +107,7 @@
 │       │   │   ├── rarity/
 │       │   │   │   ├── components/RarityBoard.tsx   // 参照: doc/rarity_component_plan.md
 │       │   │   │   ├── components/RarityEmitRateEditor.tsx // 参照: doc/rarity_component_plan.md
+│       │   │   │   ├── components/RaritySection.tsx  // 参照: doc/rarity_component_plan.md, doc/pt_control_component_plan.md
 │       │   │   │   ├── components/PTControlsPanel.tsx // 参照: doc/pt_control_component_plan.md
 │       │   │   │   ├── hooks/useRarityNormalizer.ts // 参照: doc/rarity_component_plan.md
 │       │   │   │   └── store/useRarityStore.ts      // 参照: doc/rarity_react_sync_spec.md
