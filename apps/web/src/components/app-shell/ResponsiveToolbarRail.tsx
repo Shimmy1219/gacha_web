@@ -52,7 +52,7 @@ export function ResponsiveToolbarRail({
     <div className="lg:hidden" aria-hidden={!open}>
       {open ? (
         <>
-          <div className="fixed inset-0 z-40 bg-[rgba(5,4,10,0.76)] backdrop-blur-sm" onClick={onClose} />
+        <div className="fixed inset-0 z-40 bg-[rgba(5,4,10,0.76)]" onClick={onClose} />
           <aside
             id={id}
             role="dialog"

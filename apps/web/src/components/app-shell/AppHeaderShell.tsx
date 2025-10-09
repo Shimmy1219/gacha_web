@@ -40,7 +40,7 @@ export function AppHeaderShell({
   const handleClose = useCallback(() => setOpen(false), []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-4 sm:px-6 lg:grid lg:grid-cols-[auto,1fr,auto,auto] lg:items-center">
         <HeaderBrand title={title} tagline={tagline} />
         <ToolbarSummary
