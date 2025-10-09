@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface PtBundleRowState {
@@ -144,6 +144,8 @@ export function PtControlsPanel(): JSX.Element {
   const [complete, setComplete] = useState('1000');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([createBundleRow(0)]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([createGuaranteeRow(0)]);
+  const nextBundleId = useRef(1);
+  const nextGuaranteeId = useRef(1);
 
   const bundlesTotalLabel = useMemo(() => `${bundles.length}件のバンドル`, [bundles.length]);
   const guaranteesTotalLabel = useMemo(
@@ -169,7 +171,17 @@ export function PtControlsPanel(): JSX.Element {
 
       <ControlsRow
         label="お得バンドル（n ptで m 連）"
-        action={<AddButton onClick={() => setBundles((prev) => [...prev, createBundleRow(prev.length + 1)])} />}
+        action={
+          <AddButton
+            onClick={() =>
+              setBundles((prev) => {
+                const id = nextBundleId.current;
+                nextBundleId.current += 1;
+                return [...prev, createBundleRow(id)];
+              })
+            }
+          />
+        }
       >
         <span className="text-xs text-muted-foreground">{bundlesTotalLabel}</span>
       </ControlsRow>
@@ -218,9 +230,13 @@ export function PtControlsPanel(): JSX.Element {
         label="保証（n連以上で ○○ 以上確定）"
         action={
           <AddButton
-            onClick={() =>
-              setGuarantees((prev) => [...prev, createGuaranteeRow(prev.length + 1)])
-            }
+              onClick={() =>
+                setGuarantees((prev) => {
+                  const id = nextGuaranteeId.current;
+                  nextGuaranteeId.current += 1;
+                  return [...prev, createGuaranteeRow(id)];
+                })
+              }
           />
         }
       >
