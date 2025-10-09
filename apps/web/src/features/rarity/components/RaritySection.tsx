@@ -39,25 +39,11 @@ const DEFAULT_BADGE_THEME = {
 };
 
 export function RaritySection(): JSX.Element {
-  const totalRate = SAMPLE_RARITIES.reduce((sum, rarity) => sum + rarity.rate, 0);
-
   return (
     <SectionContainer
       id="rarity"
       title="レアリティ設定"
       description="排出率・カラー・順序を編集し、RarityStoreと同期します。"
-      accentLabel="Rarity Sync"
-      actions={
-        <button
-          type="button"
-          className="chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('レアリティ追加のモーダルは未実装です')}
-        >
-          <PlusCircleIcon className="h-4 w-4" />
-          レアリティを追加
-        </button>
-      }
-      footer="AppStateStoreとRarityStoreの正規化ルールに従い、保存時に排出率合計が100%になるよう調整します。"
     >
       <div className="flex flex-wrap items-center gap-2">
         {SAMPLE_GACHAS.map((gacha, index) => (
@@ -148,17 +134,6 @@ export function RaritySection(): JSX.Element {
             ))}
           </tbody>
         </table>
-      </div>
-
-      <div className="flex items-center justify-between rounded-2xl border border-accent/30 bg-accent/10 px-4 py-3 text-xs text-accent">
-        <span>合計排出率 {totalRate}%</span>
-        <button
-          type="button"
-          className="chip border-transparent bg-accent text-accent-foreground"
-          onClick={() => console.info('排出率の正規化は未実装です')}
-        >
-          正規化する
-        </button>
       </div>
 
       <div className="flex justify-end">
