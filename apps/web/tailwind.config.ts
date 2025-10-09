@@ -13,7 +13,7 @@ const config: Config = {
       '2xl': '0.75rem',
       '3xl': '1rem',
       '4xl': '1.5rem',
-      full: '1.5rem'
+      full: '9999px'
     },
     extend: {
       colors: {
