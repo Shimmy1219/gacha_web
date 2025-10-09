@@ -37,6 +37,16 @@
     outline: 2px solid theme('colors.accent.DEFAULT');
     outline-offset: 2px;
   }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
 @layer components {
@@ -57,7 +67,7 @@
   }
 
   .chip {
-    @apply inline-flex items-center gap-2 rounded-full border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground;
+    @apply inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground;
   }
 
   .tab-pill {
