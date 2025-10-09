@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface PtBundleRowState {
@@ -40,12 +40,14 @@ function ControlsRow({
   label,
   children,
   action,
-  alignTop = false
+  alignTop = false,
+  labelAction
 }: {
   label: string;
   children?: ReactNode;
   action?: ReactNode;
   alignTop?: boolean;
+  labelAction?: ReactNode;
 }): JSX.Element {
   return (
     <div
@@ -57,7 +59,10 @@ function ControlsRow({
         alignTop ? 'items-start' : 'items-center'
       )}
     >
-      <p className="text-sm font-semibold text-muted-foreground">{label}</p>
+      <div className={clsx('flex gap-3', alignTop ? 'items-start' : 'items-center')}>
+        <p className="text-sm font-semibold text-muted-foreground">{label}</p>
+        {labelAction ?? null}
+      </div>
       <div className={clsx('flex flex-wrap gap-3', alignTop ? 'items-start' : 'items-center')}>
         {children}
       </div>
@@ -144,6 +149,8 @@ export function PtControlsPanel(): JSX.Element {
   const [complete, setComplete] = useState('1000');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([createBundleRow(0)]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([createGuaranteeRow(0)]);
+  const nextBundleId = useRef(1);
+  const nextGuaranteeId = useRef(1);
 
   const bundlesTotalLabel = useMemo(() => `${bundles.length}件のバンドル`, [bundles.length]);
   const guaranteesTotalLabel = useMemo(
@@ -169,7 +176,17 @@ export function PtControlsPanel(): JSX.Element {
 
       <ControlsRow
         label="お得バンドル（n ptで m 連）"
-        action={<AddButton onClick={() => setBundles((prev) => [...prev, createBundleRow(prev.length + 1)])} />}
+        labelAction={
+          <AddButton
+            onClick={() =>
+              setBundles((prev) => {
+                const id = nextBundleId.current;
+                nextBundleId.current += 1;
+                return [...prev, createBundleRow(id)];
+              })
+            }
+          />
+        }
       >
         <span className="text-xs text-muted-foreground">{bundlesTotalLabel}</span>
       </ControlsRow>
@@ -178,48 +195,52 @@ export function PtControlsPanel(): JSX.Element {
         {bundles.map((bundle) => (
           <div
             key={bundle.id}
-            className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-3 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="flex items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2 text-xs text-muted-foreground"
           >
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <InlineNumberField
-                value={bundle.pt}
-                onChange={(value) =>
-                  setBundles((prev) =>
-                    prev.map((row) => (row.id === bundle.id ? { ...row, pt: value } : row))
-                  )
-                }
-                placeholder="60"
-              />
-              <span>ptで</span>
-              <InlineNumberField
-                value={bundle.pulls}
-                onChange={(value) =>
-                  setBundles((prev) =>
-                    prev.map((row) => (row.id === bundle.id ? { ...row, pulls: value } : row))
-                  )
-                }
-                placeholder="10"
-                min={1}
-              />
-              <span>連</span>
-            </div>
-            <RemoveButton
-              onClick={() =>
+            <InlineNumberField
+              value={bundle.pt}
+              onChange={(value) =>
                 setBundles((prev) =>
-                  ensureBundleExists(prev.filter((row) => row.id !== bundle.id))
+                  prev.map((row) => (row.id === bundle.id ? { ...row, pt: value } : row))
                 )
               }
+              placeholder="60"
             />
+            <span>ptで</span>
+            <InlineNumberField
+              value={bundle.pulls}
+              onChange={(value) =>
+                setBundles((prev) =>
+                  prev.map((row) => (row.id === bundle.id ? { ...row, pulls: value } : row))
+                )
+              }
+              placeholder="10"
+              min={1}
+            />
+            <span>連</span>
+            <div className="ml-auto flex">
+              <RemoveButton
+                onClick={() =>
+                  setBundles((prev) =>
+                    ensureBundleExists(prev.filter((row) => row.id !== bundle.id))
+                  )
+                }
+              />
+            </div>
           </div>
         ))}
       </div>
 
       <ControlsRow
         label="保証（n連以上で ○○ 以上確定）"
-        action={
+        labelAction={
           <AddButton
             onClick={() =>
-              setGuarantees((prev) => [...prev, createGuaranteeRow(prev.length + 1)])
+              setGuarantees((prev) => {
+                const id = nextGuaranteeId.current;
+                nextGuaranteeId.current += 1;
+                return [...prev, createGuaranteeRow(id)];
+              })
             }
           />
         }
@@ -231,42 +252,42 @@ export function PtControlsPanel(): JSX.Element {
         {guarantees.map((guarantee) => (
           <div
             key={guarantee.id}
-            className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-3 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="flex items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2 text-xs text-muted-foreground"
           >
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <InlineNumberField
-                value={guarantee.minPulls}
-                onChange={(value) =>
-                  setGuarantees((prev) =>
-                    prev.map((row) =>
-                      row.id === guarantee.id ? { ...row, minPulls: value } : row
-                    )
-                  )
-                }
-                placeholder="30"
-                min={1}
-              />
-              <span>連以上で</span>
-              <InlineSelectField
-                value={guarantee.minRarity}
-                onChange={(rarity) =>
-                  setGuarantees((prev) =>
-                    prev.map((row) =>
-                      row.id === guarantee.id ? { ...row, minRarity: rarity } : row
-                    )
-                  )
-                }
-                options={RARITY_OPTIONS}
-              />
-              <span>以上確定</span>
-            </div>
-            <RemoveButton
-              onClick={() =>
+            <InlineNumberField
+              value={guarantee.minPulls}
+              onChange={(value) =>
                 setGuarantees((prev) =>
-                  ensureGuaranteeExists(prev.filter((row) => row.id !== guarantee.id))
+                  prev.map((row) =>
+                    row.id === guarantee.id ? { ...row, minPulls: value } : row
+                  )
                 )
               }
+              placeholder="30"
+              min={1}
             />
+            <span>連以上で</span>
+            <InlineSelectField
+              value={guarantee.minRarity}
+              onChange={(rarity) =>
+                setGuarantees((prev) =>
+                  prev.map((row) =>
+                    row.id === guarantee.id ? { ...row, minRarity: rarity } : row
+                  )
+                )
+              }
+              options={RARITY_OPTIONS}
+            />
+            <span>以上確定</span>
+            <div className="ml-auto flex">
+              <RemoveButton
+                onClick={() =>
+                  setGuarantees((prev) =>
+                    ensureGuaranteeExists(prev.filter((row) => row.id !== guarantee.id))
+                  )
+                }
+              />
+            </div>
           </div>
         ))}
       </div>
