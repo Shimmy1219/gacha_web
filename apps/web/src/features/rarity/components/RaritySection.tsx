@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { RarityColorChip } from './RarityColorChip';
+import { PtControlsPanel } from './PtControlsPanel';
 
 const SAMPLE_GACHAS = ['リワグガチャ', '闇ガチャ'];
 
@@ -69,65 +70,7 @@ export function RaritySection(): JSX.Element {
         </button>
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-border/60 bg-surface/60 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">1回の消費pt</span>
-            <input
-              type="number"
-              min={0}
-              defaultValue={0}
-              className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">コンプpt</span>
-            <input
-              type="number"
-              min={0}
-              defaultValue={0}
-              className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">お得バンドル（n ptで m 連）</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                placeholder="n"
-                className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              />
-              <span className="text-xs text-muted-foreground">ptで</span>
-              <input
-                type="number"
-                min={0}
-                placeholder="m"
-                className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              />
-              <span className="text-xs text-muted-foreground">連</span>
-            </div>
-          </label>
-          <label className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">保証（n連以上で ○○ 以上確定）</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                placeholder="n"
-                className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              />
-              <span className="text-xs text-muted-foreground">連以上で</span>
-              <input
-                type="text"
-                placeholder="SSR"
-                className="w-full rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              />
-              <span className="text-xs text-muted-foreground">以上確定</span>
-            </div>
-          </label>
-        </div>
-      </div>
+      <PtControlsPanel />
 
       <div className="overflow-hidden rounded-2xl border border-border/60">
         <table className="min-w-full divide-y divide-border/60 text-left">
