@@ -15,22 +15,22 @@ export function ToolbarSummary({
   mode = 'desktop',
   className
 }: ToolbarSummaryProps): JSX.Element {
-  const layoutClass =
-    mode === 'desktop'
-      ? 'hidden min-w-[12rem] lg:flex'
-      : 'flex lg:hidden';
+  const layoutClass = mode === 'desktop' ? 'hidden min-w-[12rem] lg:flex' : 'flex lg:hidden';
+
+  const variantClass =
+    variant === 'warning'
+      ? 'border-[#f97316]/70 bg-[#f97316]/10 text-[#fda769]'
+      : variant === 'success'
+        ? 'border-[#22c55e]/70 bg-[#22c55e]/10 text-[#86efac]'
+        : 'border-border/70 bg-surface/40 text-muted-foreground';
 
   return (
     <div className={clsx('flex flex-col gap-1 text-xs', layoutClass, className)}>
       <span
         data-variant={variant}
         className={clsx(
-          'inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm font-semibold tracking-wide',
-          variant === 'warning'
-            ? 'border-amber-400/70 bg-amber-400/10 text-amber-200'
-            : variant === 'success'
-              ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-200'
-              : 'border-muted/70 bg-muted/40 text-muted-foreground'
+          'inline-flex w-fit items-center rounded-full px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.24em]',
+          variantClass
         )}
       >
         {label}

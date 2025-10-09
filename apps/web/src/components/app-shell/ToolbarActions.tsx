@@ -37,7 +37,7 @@ export function ToolbarActions({
       <button
         type="button"
         onClick={() => onOpenRealtime?.()}
-        className="btn-primary inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-md shadow-accent/40 lg:w-auto"
+        className="btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
       >
         <PlayIcon className="h-4 w-4" />
         リアルタイム入力
@@ -45,7 +45,7 @@ export function ToolbarActions({
       <button
         type="button"
         onClick={() => onExportAll?.()}
-        className="btn-muted inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-panel px-4 py-2 text-sm font-semibold text-surface-foreground shadow-sm transition hover:border-border hover:bg-panel/80 lg:w-auto"
+        className="btn-muted inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-surface-foreground lg:w-auto"
       >
         <ArrowUpTrayIcon className="h-4 w-4" />
         全体エクスポート
@@ -71,7 +71,7 @@ export function ToolbarActions({
           disabled={importBusy}
           aria-busy={importBusy}
           className={clsx(
-            'inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg border border-border/60 bg-transparent px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-accent hover:text-accent lg:w-auto',
+            'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-transparent px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground lg:w-auto',
             importBusy && 'cursor-not-allowed opacity-60'
           )}
         >

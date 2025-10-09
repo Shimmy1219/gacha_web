@@ -40,8 +40,8 @@ export function AppHeaderShell({
   const handleClose = useCallback(() => setOpen(false), []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border/60 bg-surface/75 backdrop-blur shadow-header">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-4 lg:grid lg:grid-cols-[auto,1fr,auto,auto] lg:items-center">
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header backdrop-blur-xl">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-4 sm:px-6 lg:grid lg:grid-cols-[auto,1fr,auto,auto] lg:items-center">
         <HeaderBrand title={title} tagline={tagline} />
         <ToolbarSummary
           mode="desktop"
@@ -66,7 +66,7 @@ export function AppHeaderShell({
           controlsId={drawerId}
         />
       </div>
-      <div className="mx-auto hidden w-full max-w-6xl px-4 pb-4 lg:block">
+      <div className="mx-auto hidden w-full max-w-6xl px-4 pb-5 sm:px-6 lg:block">
         <ToolbarFilters />
       </div>
       <ResponsiveToolbarRail
@@ -76,7 +76,7 @@ export function AppHeaderShell({
         labelledBy={drawerTitleId}
       >
         <div className="flex items-center justify-between">
-          <h2 id={drawerTitleId} className="text-sm font-semibold text-muted-foreground">
+          <h2 id={drawerTitleId} className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
             ツールバー
           </h2>
           <button

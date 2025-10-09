@@ -6,18 +6,18 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: 'hsl(222 45% 8%)',
-          foreground: 'hsl(0 0% 100%)'
+          DEFAULT: '#05040a',
+          foreground: '#f7f7fb'
         },
-        border: 'hsl(220 13% 18%)',
-        panel: 'hsl(223 34% 14%)',
+        border: '#241c31',
+        panel: '#0f0f18',
         accent: {
-          DEFAULT: 'hsl(268 89% 68%)',
-          foreground: '#0b0612'
+          DEFAULT: '#ff2f5d',
+          foreground: '#19040a'
         },
         muted: {
-          DEFAULT: 'hsl(223 24% 22%)',
-          foreground: 'hsl(220 15% 65%)'
+          DEFAULT: '#171425',
+          foreground: '#9f9ab6'
         },
         discord: {
           primary: '#5865F2',
@@ -26,10 +26,14 @@ const config: Config = {
         }
       },
       boxShadow: {
-        header: '0 1px 0 rgba(15, 23, 42, 0.4)'
+        header: '0 16px 48px rgba(0, 0, 0, 0.35)',
+        panel: '0 24px 72px rgba(0, 0, 0, 0.55)'
       },
       fontFamily: {
         sans: ['"Noto Sans JP"', 'system-ui', 'sans-serif']
+      },
+      backgroundImage: {
+        'panel-overlay': 'linear-gradient(135deg, rgba(255,47,93,0.18), transparent 55%)'
       }
     }
   },

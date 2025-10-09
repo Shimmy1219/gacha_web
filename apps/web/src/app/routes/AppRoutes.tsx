@@ -1,22 +1,46 @@
 import { Navigate, useRoutes } from 'react-router-dom';
 
-function DashboardPlaceholder(): JSX.Element {
-  return (
-    <section className="rounded-2xl border border-border bg-panel/80 p-6 shadow-lg shadow-black/20">
-      <h1 className="text-2xl font-semibold">React マイグレーション進行中</h1>
-      <p className="mt-4 text-sm text-muted-foreground">
-        ドキュメント /doc/react_migration_plan.md のディレクトリ構成に従い、各セクションの React 実装を段階的に追加予定です。
-      </p>
-      <p className="mt-3 text-sm text-muted-foreground">
-        現在はヘッダーシェルと Discord ログインボタン、ツールバー状態管理の土台を構築しています。
-      </p>
-    </section>
-  );
+import { ControlsPanel } from '../../components/dashboard/ControlsPanel';
+import { DashboardShell } from '../../components/dashboard/DashboardShell';
+import { ItemsSection } from '../../features/items/components/ItemsSection';
+import { RaritySection } from '../../features/rarity/components/RaritySection';
+import { RiaguSection } from '../../features/riagu/components/RiaguSection';
+import { UsersSection } from '../../features/users/components/UsersSection';
+
+function DashboardPage(): JSX.Element {
+  const sections = [
+    {
+      id: 'rarity',
+      label: 'レアリティ',
+      description: '排出率とカラーの管理',
+      node: <RaritySection />
+    },
+    {
+      id: 'items',
+      label: 'アイテム',
+      description: 'アイテム画像とリアグ同期',
+      node: <ItemsSection />
+    },
+    {
+      id: 'users',
+      label: 'ユーザー',
+      description: '獲得内訳とフィルタ',
+      node: <UsersSection />
+    },
+    {
+      id: 'riagu',
+      label: 'リアグ',
+      description: 'リアルグッズ管理',
+      node: <RiaguSection />
+    }
+  ];
+
+  return <DashboardShell controlsSlot={<ControlsPanel />} sections={sections} />;
 }
 
 export function AppRoutes(): JSX.Element | null {
   return useRoutes([
-    { path: '/', element: <DashboardPlaceholder /> },
+    { path: '/', element: <DashboardPage /> },
     { path: '*', element: <Navigate to="/" replace /> }
   ]);
 }

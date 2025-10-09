@@ -15,18 +15,18 @@ export function App(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-surface-foreground">
+    <div className="min-h-screen bg-transparent text-surface-foreground">
       <AppHeaderShell
         title="四遊楽ガチャツール"
-        tagline="設定・ガチャ・アップロード・配布まで全て完結"
-        summaryLabel="未読込"
+        tagline="SETTING · GACHA · UPLOAD · SHARE"
+        summaryLabel="TXT/JSON未読込"
         summaryVariant="warning"
-        summaryDescription="TXT/JSONを読み込んで集計を開始"
+        summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
         onImportAll={handleImportAll}
       />
-      <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6">
+      <main className="px-4 pb-24 pt-8 sm:px-6">
         <AppRoutes />
       </main>
     </div>

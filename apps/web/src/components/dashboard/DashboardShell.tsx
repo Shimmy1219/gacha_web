@@ -1,0 +1,84 @@
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { clsx } from 'clsx';
+
+import { DashboardDesktopGrid } from './DashboardDesktopGrid';
+import { DashboardMobileTabs } from './DashboardMobileTabs';
+import { useResponsiveDashboard } from './useResponsiveDashboard';
+
+export interface DashboardSectionConfig {
+  id: string;
+  label: string;
+  description?: string;
+  node: ReactNode;
+}
+
+interface DashboardShellProps {
+  sections: DashboardSectionConfig[];
+  controlsSlot?: ReactNode;
+}
+
+interface DashboardContextValue {
+  isMobile: boolean;
+  activeView: string;
+  setActiveView: Dispatch<SetStateAction<string>>;
+}
+
+const DashboardContext = createContext<DashboardContextValue | undefined>(undefined);
+
+export function useDashboardShell(): DashboardContextValue {
+  const context = useContext(DashboardContext);
+  if (!context) {
+    throw new Error('useDashboardShell must be used within DashboardShell');
+  }
+  return context;
+}
+
+export function DashboardShell({ sections, controlsSlot }: DashboardShellProps): JSX.Element {
+  const { isMobile } = useResponsiveDashboard();
+  const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
+
+  useEffect(() => {
+    if (sections.length === 0) {
+      return;
+    }
+    if (!sections.some((section) => section.id === activeView)) {
+      setActiveView(sections[0].id);
+    }
+  }, [sections, activeView]);
+
+  const value = useMemo(
+    () => ({ isMobile, activeView, setActiveView }),
+    [isMobile, activeView]
+  );
+
+  return (
+    <DashboardContext.Provider value={value}>
+      <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 pb-[5.5rem] lg:pb-16">
+        {controlsSlot ? (
+          <aside className="rounded-[1.75rem] border border-border/70 bg-[#0b0b13]/90 p-6 shadow-panel ring-1 ring-inset ring-white/5">
+            {controlsSlot}
+          </aside>
+        ) : null}
+
+        <div className="hidden lg:block">
+          <DashboardDesktopGrid sections={sections} />
+        </div>
+
+        <div className="space-y-6 lg:hidden">
+          {sections.map((section) => (
+            <div
+              key={section.id}
+              data-view={section.id}
+              className={clsx(activeView !== section.id && 'hidden')}
+            >
+              {section.node}
+            </div>
+          ))}
+        </div>
+
+        <DashboardMobileTabs sections={sections} />
+      </div>
+    </DashboardContext.Provider>
+  );
+}
