@@ -1,23 +1,148 @@
-import { AdjustmentsHorizontalIcon, PhotoIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
+import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 
-const SAMPLE_ITEMS = [
-  { code: 'itm-000001', name: '煌めく星屑ブレスレット', rarity: 'SSR', hasImage: true, riagu: true },
-  { code: 'itm-000002', name: '漆黒のオーブ', rarity: 'SR', hasImage: true, riagu: false },
-  { code: 'itm-000003', name: '幸運のメダル', rarity: 'SR', hasImage: false, riagu: false },
-  { code: 'itm-000004', name: 'スチールギア', rarity: 'R', hasImage: false, riagu: false },
-  { code: 'itm-000005', name: '薄紅のカードケース', rarity: 'R', hasImage: true, riagu: false },
-  { code: 'itm-000006', name: 'メモリアルチケット', rarity: 'N', hasImage: false, riagu: false }
-];
-
-const RARITY_COLORS: Record<string, string> = {
-  SSR: '#ff8ab2',
-  SR: '#ff4f89',
-  R: '#c438ff',
-  N: '#4d6bff'
+const RARITY_META: Record<string, RarityMeta> = {
+  SSR: { rarityId: 'rar-ssr', label: 'SSR', color: '#ff8ab2' },
+  SR: { rarityId: 'rar-sr', label: 'SR', color: '#ff4f89' },
+  R: { rarityId: 'rar-r', label: 'R', color: '#c438ff' },
+  N: { rarityId: 'rar-n', label: 'N', color: '#4d6bff' }
 };
+
+const SAMPLE_TIMESTAMP = '2024-01-01T00:00:00.000Z';
+
+const SAMPLE_ITEMS: Array<{ model: ItemCardModel; rarity: RarityMeta }> = [
+  {
+    model: {
+      itemId: 'itm-000001',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.SSR.rarityId,
+      name: '煌めく星屑ブレスレット',
+      imageAsset: {
+        thumbnailUrl:
+          'https://images.unsplash.com/photo-1521579971123-1192931a1452?auto=format&fit=crop&w=400&q=80',
+        assetHash: null,
+        hasImage: true
+      },
+      isRiagu: true,
+      completeTarget: true,
+      pickupTarget: true,
+      order: 1,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.SSR
+  },
+  {
+    model: {
+      itemId: 'itm-000002',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.SR.rarityId,
+      name: '漆黒のオーブ',
+      imageAsset: {
+        thumbnailUrl: null,
+        assetHash: null,
+        hasImage: true
+      },
+      isRiagu: false,
+      completeTarget: false,
+      pickupTarget: true,
+      order: 2,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.SR
+  },
+  {
+    model: {
+      itemId: 'itm-000003',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.SR.rarityId,
+      name: '幸運のメダル',
+      imageAsset: {
+        thumbnailUrl: null,
+        assetHash: null,
+        hasImage: false
+      },
+      isRiagu: false,
+      completeTarget: false,
+      pickupTarget: false,
+      order: 3,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.SR
+  },
+  {
+    model: {
+      itemId: 'itm-000004',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.R.rarityId,
+      name: 'スチールギア',
+      imageAsset: {
+        thumbnailUrl: null,
+        assetHash: null,
+        hasImage: false
+      },
+      isRiagu: false,
+      completeTarget: false,
+      pickupTarget: false,
+      order: 4,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.R
+  },
+  {
+    model: {
+      itemId: 'itm-000005',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.R.rarityId,
+      name: '薄紅のカードケース',
+      imageAsset: {
+        thumbnailUrl:
+          'https://images.unsplash.com/photo-1521310192545-4ac7951413f0?auto=format&fit=crop&w=400&q=80',
+        assetHash: null,
+        hasImage: true
+      },
+      isRiagu: false,
+      completeTarget: false,
+      pickupTarget: false,
+      order: 5,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.R
+  },
+  {
+    model: {
+      itemId: 'itm-000006',
+      gachaId: 'gch-main',
+      gachaDisplayName: 'スターブライト',
+      rarityId: RARITY_META.N.rarityId,
+      name: 'メモリアルチケット',
+      imageAsset: {
+        thumbnailUrl: null,
+        assetHash: null,
+        hasImage: false
+      },
+      isRiagu: false,
+      completeTarget: false,
+      pickupTarget: false,
+      order: 6,
+      createdAt: SAMPLE_TIMESTAMP,
+      updatedAt: SAMPLE_TIMESTAMP
+    },
+    rarity: RARITY_META.N
+  }
+];
 
 export function ItemsSection(): JSX.Element {
   return (
@@ -54,76 +179,18 @@ export function ItemsSection(): JSX.Element {
         ))}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {SAMPLE_ITEMS.map((item) => {
-          const color = RARITY_COLORS[item.rarity] ?? '#ffffff';
-          return (
-            <article
-              key={item.code}
-              data-riagu={item.riagu}
-              className={clsx(
-                'relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
-                item.riagu && 'ring-1 ring-inset ring-accent/60'
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className="badge" style={{ color }}>{item.rarity}</span>
-                {item.riagu ? (
-                  <span className="chip border-accent/40 bg-accent/10 text-accent">
-                    <SparklesIcon className="h-4 w-4" />
-                    リアグ
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-4 space-y-3">
-                <div
-                  className={clsx(
-                    'flex aspect-video items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
-                    item.hasImage && 'border-transparent'
-                  )}
-                  style={
-                    item.hasImage
-                      ? {
-                          backgroundImage:
-                            'linear-gradient(135deg, rgba(255,47,93,0.55), rgba(12,12,20,0.9)), url(https://images.unsplash.com/photo-1521579971123-1192931a1452?auto=format&fit=crop&w=400&q=80)',
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center'
-                        }
-                      : undefined
-                  }
-                >
-                  {!item.hasImage ? <PhotoIcon className="h-10 w-10" /> : null}
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-surface-foreground">{item.name}</h3>
-                  <p className="text-xs text-muted-foreground">{item.code}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => console.info('画像設定モーダルは未実装です')}
-                  >
-                    画像を設定
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => console.info('リアグ設定ダイアログは未実装です')}
-                  >
-                    リアグを設定
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => console.info('アイテム削除確認は未実装です')}
-                  >
-                    削除
-                  </button>
-                </div>
-              </div>
-            </article>
-          );
-        })}
+        {SAMPLE_ITEMS.map(({ model, rarity }) => (
+          <ItemCard
+            key={model.itemId}
+            model={model}
+            rarity={rarity}
+            onEditImage={(itemId) => console.info('画像設定モーダルは未実装です', itemId)}
+            onToggleRiagu={(itemId) => console.info('リアグ設定ダイアログは未実装です', itemId)}
+            onRequestDelete={(itemId) => console.info('アイテム削除確認は未実装です', itemId)}
+            onToggleCompleteTarget={(itemId) => console.info('コンプリ対象トグルは未実装です', itemId)}
+            onTogglePickupTarget={(itemId) => console.info('ピックアップ対象トグルは未実装です', itemId)}
+          />
+        ))}
       </div>
     </SectionContainer>
   );
