@@ -186,9 +186,6 @@ export function ItemsSection(): JSX.Element {
             rarity={rarity}
             onEditImage={(itemId) => console.info('画像設定モーダルは未実装です', itemId)}
             onToggleRiagu={(itemId) => console.info('リアグ設定ダイアログは未実装です', itemId)}
-            onRequestDelete={(itemId) => console.info('アイテム削除確認は未実装です', itemId)}
-            onToggleCompleteTarget={(itemId) => console.info('コンプリ対象トグルは未実装です', itemId)}
-            onTogglePickupTarget={(itemId) => console.info('ピックアップ対象トグルは未実装です', itemId)}
           />
         ))}
       </div>
