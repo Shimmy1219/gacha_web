@@ -54,51 +54,52 @@ export function UserCard({
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
         <article className="space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
-          <Disclosure.Button className="w-full text-left">
-            <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <Disclosure.Button
+              type="button"
+              className="flex w-full items-start gap-2 text-left"
+            >
+              <ChevronRightIcon
+                className={clsx(
+                  'h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                  open && 'rotate-90 text-accent'
+                )}
+              />
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <ChevronRightIcon
-                    className={clsx(
-                      'h-5 w-5 shrink-0 text-muted-foreground transition-transform',
-                      open && 'rotate-90 text-accent'
-                    )}
-                  />
-                  <h3 className="text-base font-semibold text-surface-foreground">{userName}</h3>
-                </div>
-                <p className="pl-7 text-xs text-muted-foreground">
+                <h3 className="text-base font-semibold text-surface-foreground">{userName}</h3>
+                <p className="text-xs text-muted-foreground">
                   {totalSummary}
                   {memo ? ` / ${memo}` : ''}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() => onOpenProfile?.(userId)}
-                >
-                  <UserCircleIcon className="h-4 w-4" />
-                  プロフィール
-                </button>
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() => onCopyCounts?.(userId)}
-                >
-                  <ClipboardDocumentIcon className="h-4 w-4" />
-                  カウントをコピー
-                </button>
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() => onExport?.(userId)}
-                >
-                  <FolderArrowDownIcon className="h-4 w-4" />
-                  個別ZIP
-                </button>
-              </div>
-            </header>
-          </Disclosure.Button>
+            </Disclosure.Button>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                className="chip"
+                onClick={() => onOpenProfile?.(userId)}
+              >
+                <UserCircleIcon className="h-4 w-4" />
+                プロフィール
+              </button>
+              <button
+                type="button"
+                className="chip"
+                onClick={() => onCopyCounts?.(userId)}
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" />
+                カウントをコピー
+              </button>
+              <button
+                type="button"
+                className="chip"
+                onClick={() => onExport?.(userId)}
+              >
+                <FolderArrowDownIcon className="h-4 w-4" />
+                個別ZIP
+              </button>
+            </div>
+          </header>
           <Disclosure.Panel className="space-y-4">
             {inventories.map((inventory) => (
               <section
