@@ -25,7 +25,6 @@ export function ItemsSection(): JSX.Element {
       id="items"
       title="アイテム画像の設定"
       description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
-      accentLabel="Catalog Sync"
       actions={
         <button
           type="button"
