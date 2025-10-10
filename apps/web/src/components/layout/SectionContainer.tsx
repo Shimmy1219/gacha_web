@@ -34,8 +34,8 @@ export function SectionContainer({
         className
       )}
     >
-      <div className="relative z-[1] flex flex-col gap-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
+      <div className="relative z-[1] flex h-full flex-col gap-6">
+        <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div className="space-y-2 sm:w-full">
             {accentLabel ? (
               <span className="badge">{accentLabel}</span>
@@ -49,7 +49,9 @@ export function SectionContainer({
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
-        <div className={clsx('flex-1 space-y-4', contentClassName)}>{children}</div>
+        <div className="flex-1 overflow-hidden">
+          <div className={clsx('section-scroll h-full space-y-4', contentClassName)}>{children}</div>
+        </div>
         {footer ? (
           <footer className="border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
         ) : null}
