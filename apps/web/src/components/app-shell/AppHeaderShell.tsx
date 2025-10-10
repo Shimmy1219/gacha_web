@@ -41,32 +41,35 @@ export function AppHeaderShell({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-4 sm:px-6 lg:grid lg:grid-cols-[auto,1fr,auto,auto] lg:items-center">
-        <HeaderBrand title={title} tagline={tagline} />
-        <ToolbarSummary
-          mode="desktop"
-          label={summaryLabel}
-          variant={summaryVariant}
-          description={summaryDescription}
-          className="justify-self-end"
-        />
-        <ToolbarActions
-          mode="desktop"
-          onOpenRealtime={onOpenRealtime}
-          onExportAll={onExportAll}
-          onImportAll={onImportAll}
-          importBusy={importBusy}
-        />
-        <div className="hidden lg:block">
-          <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+      <div className="flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
+        <div className="flex flex-1 flex-wrap items-center gap-4">
+          <HeaderBrand title={title} tagline={tagline} />
+          <ToolbarSummary
+            mode="desktop"
+            label={summaryLabel}
+            variant={summaryVariant}
+            description={summaryDescription}
+          />
         </div>
-        <MobileMenuButton
-          open={open}
-          onToggle={() => setOpen((prev) => !prev)}
-          controlsId={drawerId}
-        />
+        <div className="flex flex-shrink-0 items-center gap-3">
+          <ToolbarActions
+            mode="desktop"
+            onOpenRealtime={onOpenRealtime}
+            onExportAll={onExportAll}
+            onImportAll={onImportAll}
+            importBusy={importBusy}
+          />
+          <div className="hidden lg:block">
+            <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+          </div>
+          <MobileMenuButton
+            open={open}
+            onToggle={() => setOpen((prev) => !prev)}
+            controlsId={drawerId}
+          />
+        </div>
       </div>
-      <div className="mx-auto hidden w-full max-w-6xl px-4 pb-5 sm:px-6 lg:block">
+      <div className="hidden w-full px-4 pb-5 sm:px-6 lg:block">
         <ToolbarFilters />
       </div>
       <ResponsiveToolbarRail
