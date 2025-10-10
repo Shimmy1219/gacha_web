@@ -58,38 +58,36 @@ export function ItemCard({
 
   return (
     <article
+      data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="badge" style={{ color: rarity.color }}>
-            {rarity.label}
+      <button
+        type="button"
+        aria-label="アイテムを削除"
+        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[11px] text-muted-foreground opacity-0 shadow transition focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover:opacity-100"
+        onClick={() => onRequestDelete?.(model.itemId)}
+      >
+        <TrashIcon className="h-3.5 w-3.5" />
+        削除
+      </button>
+      <div className="flex justify-end gap-2">
+        {model.completeTarget ? <span className="chip border-emerald-400/40 bg-emerald-400/10 text-emerald-200">完走対象</span> : null}
+        {model.pickupTarget ? <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-200">ピックアップ</span> : null}
+        {model.isRiagu ? (
+          <span className="chip border-accent/40 bg-accent/10 text-accent">
+            <SparklesIcon className="h-4 w-4" />
+            リアグ
           </span>
-          {model.gachaDisplayName ? (
-            <span className="chip border-border/60 text-[11px] text-muted-foreground">
-              {model.gachaDisplayName}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          {model.completeTarget ? <span className="chip border-emerald-400/40 bg-emerald-400/10 text-emerald-200">完走対象</span> : null}
-          {model.pickupTarget ? <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-200">ピックアップ</span> : null}
-          {model.isRiagu ? (
-            <span className="chip border-accent/40 bg-accent/10 text-accent">
-              <SparklesIcon className="h-4 w-4" />
-              リアグ
-            </span>
-          ) : null}
-        </div>
+        ) : null}
       </div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-3">
         <div
           className={clsx(
-            'flex aspect-video items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
+            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
             hasImage && 'border-transparent'
           )}
           style={
@@ -106,7 +104,9 @@ export function ItemCard({
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-          <p className="text-xs text-muted-foreground">{model.itemId}</p>
+          <span className="text-[11px] font-medium" style={{ color: rarity.color }}>
+            {rarity.label}
+          </span>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <button
@@ -124,14 +124,6 @@ export function ItemCard({
           >
             <SparklesIcon className="h-4 w-4" />
             リアグを設定
-          </button>
-          <button
-            type="button"
-            className="chip"
-            onClick={() => onRequestDelete?.(model.itemId)}
-          >
-            <TrashIcon className="h-4 w-4" />
-            削除
           </button>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
