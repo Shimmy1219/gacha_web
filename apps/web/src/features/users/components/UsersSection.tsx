@@ -1,7 +1,8 @@
-import { CloudArrowDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { CloudArrowDownIcon } from '@heroicons/react/24/outline';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { UserFilterPanel } from './UserFilterPanel';
 
 const RARITY_META = {
   SSR: { rarityId: 'rar-ssr', label: 'SSR', color: '#ff8ab2' },
@@ -75,7 +76,6 @@ export function UsersSection(): JSX.Element {
       id="users"
       title="ユーザーごとの獲得内訳"
       description="フィルタやZIP出力でユーザー別の集計を操作します。"
-      accentLabel="User Inventory"
       actions={
         <button
           type="button"
@@ -88,22 +88,7 @@ export function UsersSection(): JSX.Element {
       }
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
-      <div className="grid gap-3 rounded-2xl border border-white/5 bg-surface/20 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.45)] md:grid-cols-2">
-        <label className="flex items-center gap-3 rounded-xl border border-border/60 bg-[#11111a] px-4 py-3 text-xs text-muted-foreground">
-          <MagnifyingGlassIcon className="h-4 w-4" />
-          <input
-            type="search"
-            placeholder="ユーザー名・メモを検索"
-            className="w-full bg-transparent text-sm text-surface-foreground placeholder:text-muted-foreground focus:outline-none"
-          />
-        </label>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="chip">SSRのみ</span>
-          <span className="chip">リアグ対象</span>
-          <span className="chip">ZIP共有済み</span>
-          <span className="chip">未受け取り</span>
-        </div>
-      </div>
+      <UserFilterPanel />
       <div className="space-y-3">
         {SAMPLE_USERS.map((user) => (
           <UserCard
