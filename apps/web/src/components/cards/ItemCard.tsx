@@ -1,4 +1,4 @@
-import { PhotoIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 export type ItemId = string;
@@ -55,19 +55,14 @@ export function ItemCard({
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'item-card group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >
       <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
-        {model.completeTarget ? <span className="chip border-emerald-400/40 bg-emerald-400/10 text-emerald-200">完走対象</span> : null}
-        {model.pickupTarget ? <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-200">ピックアップ</span> : null}
-        {model.isRiagu ? (
-          <span className="chip border-accent/40 bg-accent/10 text-accent">
-            <SparklesIcon className="h-4 w-4" />
-            リアグ
-          </span>
-        ) : null}
+        {model.completeTarget ? <span className="badge badge--status badge--status-complete">完走対象</span> : null}
+        {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
+        {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
       <div className="mt-3 space-y-3">
         <div
@@ -96,18 +91,17 @@ export function ItemCard({
         <div className="flex flex-wrap gap-2 text-xs">
           <button
             type="button"
-            className="chip"
+            className="badge badge--action"
             onClick={() => onEditImage?.(model.itemId)}
           >
             画像を設定
           </button>
           <button
             type="button"
-            className={clsx('chip', model.isRiagu && 'border-accent/40 bg-accent/10 text-accent')}
+            className={clsx('badge badge--action', model.isRiagu && 'badge--action-active')}
             data-active={model.isRiagu}
             onClick={() => onToggleRiagu?.(model.itemId)}
           >
-            <SparklesIcon className="h-4 w-4" />
             リアグを設定
           </button>
         </div>
