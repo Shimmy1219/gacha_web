@@ -97,6 +97,38 @@
     @apply inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground;
   }
 
+  .item-card .badge {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border/70 bg-surface text-xs font-medium text-muted-foreground transition hover:text-surface-foreground;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+    padding-top: 0.15rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .item-card .badge--status {
+    @apply border-transparent text-[11px] font-semibold;
+  }
+
+  .item-card .badge--status-complete {
+    @apply bg-emerald-400 text-emerald-950;
+  }
+
+  .item-card .badge--status-pickup {
+    @apply bg-amber-400 text-amber-950;
+  }
+
+  .item-card .badge--status-riagu {
+    @apply bg-accent text-white;
+  }
+
+  .item-card .badge--action {
+    @apply cursor-pointer hover:border-accent/60;
+  }
+
+  .item-card .badge--action-active {
+    @apply border-transparent bg-accent text-white;
+  }
+
   .tab-pill {
     @apply inline-flex items-center gap-2 rounded-full border border-transparent bg-surface/40 px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:text-surface-foreground;
   }
