@@ -1,4 +1,4 @@
-import { CheckCircleIcon, PhotoIcon, SparklesIcon, StarIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 export type ItemId = string;
@@ -37,21 +37,15 @@ export interface ItemCardModel {
 export interface ItemCardProps {
   model: ItemCardModel;
   rarity: RarityMeta;
-  onToggleCompleteTarget?: (itemId: ItemId) => void;
-  onTogglePickupTarget?: (itemId: ItemId) => void;
   onToggleRiagu?: (itemId: ItemId) => void;
   onEditImage?: (itemId: ItemId) => void;
-  onRequestDelete?: (itemId: ItemId) => void;
 }
 
 export function ItemCard({
   model,
   rarity,
-  onToggleCompleteTarget,
-  onTogglePickupTarget,
   onToggleRiagu,
-  onEditImage,
-  onRequestDelete
+  onEditImage
 }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
   const hasImage = Boolean(imageAsset?.hasImage && imageAsset?.thumbnailUrl);
@@ -61,30 +55,16 @@ export function ItemCard({
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'item-card group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >
-      <button
-        type="button"
-        aria-label="アイテムを削除"
-        className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[11px] text-muted-foreground opacity-0 shadow transition focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover:opacity-100"
-        onClick={() => onRequestDelete?.(model.itemId)}
-      >
-        <TrashIcon className="h-3.5 w-3.5" />
-        削除
-      </button>
-      <div className="flex justify-end gap-2">
-        {model.completeTarget ? <span className="chip border-emerald-400/40 bg-emerald-400/10 text-emerald-200">完走対象</span> : null}
-        {model.pickupTarget ? <span className="chip border-amber-400/40 bg-amber-400/10 text-amber-200">ピックアップ</span> : null}
-        {model.isRiagu ? (
-          <span className="chip border-accent/40 bg-accent/10 text-accent">
-            <SparklesIcon className="h-4 w-4" />
-            リアグ
-          </span>
-        ) : null}
+      <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
+        {model.completeTarget ? <span className="badge badge--status badge--status-complete">完走対象</span> : null}
+        {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
+        {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
-      <div className="mt-3 space-y-3">
+      <div className="space-y-3">
         <div
           className={clsx(
             'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
@@ -111,39 +91,18 @@ export function ItemCard({
         <div className="flex flex-wrap gap-2 text-xs">
           <button
             type="button"
-            className="chip"
+            className="badge badge--action"
             onClick={() => onEditImage?.(model.itemId)}
           >
             画像を設定
           </button>
           <button
             type="button"
-            className={clsx('chip', model.isRiagu && 'border-accent/40 bg-accent/10 text-accent')}
+            className={clsx('badge badge--action', model.isRiagu && 'badge--action-active')}
             data-active={model.isRiagu}
             onClick={() => onToggleRiagu?.(model.itemId)}
           >
-            <SparklesIcon className="h-4 w-4" />
             リアグを設定
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <button
-            type="button"
-            className={clsx('chip', model.completeTarget && 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200')}
-            data-active={model.completeTarget}
-            onClick={() => onToggleCompleteTarget?.(model.itemId)}
-          >
-            <CheckCircleIcon className="h-4 w-4" />
-            コンプリ対象
-          </button>
-          <button
-            type="button"
-            className={clsx('chip', model.pickupTarget && 'border-amber-400/40 bg-amber-400/10 text-amber-200')}
-            data-active={model.pickupTarget}
-            onClick={() => onTogglePickupTarget?.(model.itemId)}
-          >
-            <StarIcon className="h-4 w-4" />
-            ピックアップ対象
           </button>
         </div>
       </div>
