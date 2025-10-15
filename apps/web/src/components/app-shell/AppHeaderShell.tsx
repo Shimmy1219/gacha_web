@@ -5,7 +5,6 @@ import { HeaderBrand } from './HeaderBrand';
 import { MobileMenuButton } from './MobileMenuButton';
 import { ResponsiveToolbarRail } from './ResponsiveToolbarRail';
 import { ToolbarActions } from './ToolbarActions';
-import { ToolbarFilters } from './ToolbarFilters';
 import { ToolbarSummary } from './ToolbarSummary';
 
 export interface AppHeaderShellProps {
@@ -69,9 +68,6 @@ export function AppHeaderShell({
           />
         </div>
       </div>
-      <div className="hidden w-full px-4 pb-5 sm:px-6 lg:block">
-        <ToolbarFilters />
-      </div>
       <ResponsiveToolbarRail
         open={open}
         onClose={handleClose}
@@ -106,7 +102,6 @@ export function AppHeaderShell({
         <div className="lg:hidden">
           <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
         </div>
-        <ToolbarFilters />
       </ResponsiveToolbarRail>
     </header>
   );

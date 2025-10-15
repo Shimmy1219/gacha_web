@@ -64,7 +64,7 @@ export function ItemCard({
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
-      <div className="mt-3 space-y-3">
+      <div className="space-y-3">
         <div
           className={clsx(
             'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
