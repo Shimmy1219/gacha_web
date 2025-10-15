@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface PtBundleRowState {
@@ -70,12 +70,14 @@ function InlineNumberField({
   value,
   onChange,
   placeholder,
-  min = 0
+  min = 0,
+  className
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   min?: number;
+  className?: string;
 }): JSX.Element {
   return (
     <input
@@ -84,7 +86,10 @@ function InlineNumberField({
       value={value}
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 min-w-[6ch] rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none"
+      className={clsx(
+        'h-9 min-w-[6ch] rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        className
+      )}
     />
   );
 }
@@ -147,12 +152,6 @@ export function PtControlsPanel(): JSX.Element {
   const nextBundleId = useRef(1);
   const nextGuaranteeId = useRef(1);
 
-  const bundlesTotalLabel = useMemo(() => `${bundles.length}件のバンドル`, [bundles.length]);
-  const guaranteesTotalLabel = useMemo(
-    () => `${guarantees.length}件の保証`,
-    [guarantees.length]
-  );
-
   const ensureBundleExists = (next: PtBundleRowState[]): PtBundleRowState[] =>
     next.length === 0 ? [createBundleRow(Date.now())] : next;
 
@@ -183,7 +182,6 @@ export function PtControlsPanel(): JSX.Element {
           />
         }
       >
-        <span className="text-xs text-muted-foreground">{bundlesTotalLabel}</span>
       </ControlsRow>
 
       <div className="space-y-2 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-4 py-3">
@@ -192,7 +190,7 @@ export function PtControlsPanel(): JSX.Element {
             key={bundle.id}
             className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-3 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
           >
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={bundle.pt}
                 onChange={(value) =>
@@ -201,6 +199,7 @@ export function PtControlsPanel(): JSX.Element {
                   )
                 }
                 placeholder="60"
+                className="w-[7ch]"
               />
               <span>ptで</span>
               <InlineNumberField
@@ -212,6 +211,7 @@ export function PtControlsPanel(): JSX.Element {
                 }
                 placeholder="10"
                 min={1}
+                className="w-[7ch]"
               />
               <span>連</span>
             </div>
@@ -230,17 +230,16 @@ export function PtControlsPanel(): JSX.Element {
         label="保証（n連以上で ○○ 以上確定）"
         action={
           <AddButton
-              onClick={() =>
-                setGuarantees((prev) => {
-                  const id = nextGuaranteeId.current;
-                  nextGuaranteeId.current += 1;
-                  return [...prev, createGuaranteeRow(id)];
-                })
-              }
+            onClick={() =>
+              setGuarantees((prev) => {
+                const id = nextGuaranteeId.current;
+                nextGuaranteeId.current += 1;
+                return [...prev, createGuaranteeRow(id)];
+              })
+            }
           />
         }
       >
-        <span className="text-xs text-muted-foreground">{guaranteesTotalLabel}</span>
       </ControlsRow>
 
       <div className="space-y-2 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-4 py-3">
@@ -249,7 +248,7 @@ export function PtControlsPanel(): JSX.Element {
             key={guarantee.id}
             className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-3 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
           >
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={guarantee.minPulls}
                 onChange={(value) =>
@@ -261,6 +260,7 @@ export function PtControlsPanel(): JSX.Element {
                 }
                 placeholder="30"
                 min={1}
+                className="w-[7ch]"
               />
               <span>連以上で</span>
               <InlineSelectField
