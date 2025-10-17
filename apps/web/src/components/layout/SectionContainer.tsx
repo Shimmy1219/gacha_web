@@ -28,32 +28,32 @@ export function SectionContainer({
     <section
       id={id}
       className={clsx(
-        'group relative flex h-full flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#0b0b13]/90 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
+        'section-container group relative flex h-full flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#0b0b13]/90 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
         'after:pointer-events-none after:absolute after:-inset-x-px after:-inset-y-px after:bg-panel-overlay after:opacity-0 after:transition-opacity after:duration-300 group-hover:after:opacity-100',
         className
       )}
     >
-      <div className="relative z-[1] flex h-full flex-col gap-6">
-        <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2 sm:w-full">
+      <div className="section-container__body relative z-[1] flex h-full flex-col gap-6">
+        <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
+          <div className="section-container__header-main space-y-2 sm:w-full">
             {accentLabel ? (
-              <span className="badge">{accentLabel}</span>
+              <span className="section-container__accent badge">{accentLabel}</span>
             ) : null}
-            <div className="space-y-1 sm:max-w-none">
-              <h2 className="text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+            <div className="section-container__title-block space-y-1 sm:max-w-none">
+              <h2 className="section-container__title text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
               {description ? (
-                <p className="text-xs text-muted-foreground sm:w-full">{description}</p>
+                <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
             </div>
           </div>
-          {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
-        <div className="flex-1 overflow-hidden">
-          <div className={clsx('section-scroll h-full space-y-4', contentClassName)}>{children}</div>
+        <div className="section-container__content-wrapper flex-1 overflow-hidden">
+          <div className={clsx('section-container__content section-scroll h-full space-y-4', contentClassName)}>{children}</div>
         </div>
         {footer ? (
-          <footer className="border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
+          <footer className="section-container__footer border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
         ) : null}
       </div>
     </section>

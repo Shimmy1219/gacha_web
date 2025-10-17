@@ -25,7 +25,7 @@ export function ToolbarSummary({
         : 'border-border/70 bg-surface/40 text-muted-foreground';
 
   return (
-    <div className={clsx('flex flex-col gap-1 text-xs', layoutClass, className)}>
+    <div className={clsx('toolbar-summary flex flex-col gap-1 text-xs', layoutClass, className)}>
       <span
         data-variant={variant}
         className={clsx(

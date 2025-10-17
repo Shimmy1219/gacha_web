@@ -49,20 +49,23 @@ export function ResponsiveToolbarRail({
   }, [open]);
 
   return (
-    <div className="lg:hidden" aria-hidden={!open}>
+    <div className="responsive-toolbar-rail lg:hidden" aria-hidden={!open}>
       {open ? (
         <>
-        <div className="fixed inset-0 z-40 bg-[rgba(5,4,10,0.76)]" onClick={onClose} />
+          <div
+            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgba(5,4,10,0.76)]"
+            onClick={onClose}
+          />
           <aside
             id={id}
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
-            className="fixed inset-y-0 right-0 z-50 w-full max-w-sm overflow-y-auto border-l border-border/60 bg-[#05040a]/98 px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 shadow-[0_20px_60px_rgba(0,0,0,0.65)]"
+            className="responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-full max-w-sm overflow-y-auto border-l border-border/60 bg-[#05040a]/98 px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 shadow-[0_20px_60px_rgba(0,0,0,0.65)]"
             ref={panelRef}
             tabIndex={-1}
           >
-            <div className="space-y-6">
+            <div className="responsive-toolbar-rail__content space-y-6">
               {children}
             </div>
           </aside>

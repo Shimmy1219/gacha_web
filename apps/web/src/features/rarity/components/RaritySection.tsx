@@ -45,13 +45,13 @@ export function RaritySection(): JSX.Element {
       title="レアリティ設定"
       description="排出率・カラー・順序を編集し、RarityStoreと同期します。"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="rarity-section__gacha-tabs flex flex-wrap items-center gap-2">
         {SAMPLE_GACHAS.map((gacha, index) => (
           <button
             key={gacha}
             type="button"
             className={clsx(
-              'tab-pill rounded-full border px-4 py-1.5',
+              'rarity-section__gacha-tab tab-pill rounded-full border px-4 py-1.5',
               index === 0
                 ? 'border-accent/80 bg-accent text-accent-foreground'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
@@ -62,7 +62,7 @@ export function RaritySection(): JSX.Element {
         ))}
         <button
           type="button"
-          className="chip"
+          className="rarity-section__add-gacha chip"
           onClick={() => console.info('ガチャ登録のモーダルは未実装です')}
         >
           <PlusCircleIcon className="h-4 w-4" />
@@ -72,26 +72,26 @@ export function RaritySection(): JSX.Element {
 
       <PtControlsPanel />
 
-      <div className="overflow-hidden rounded-2xl border border-border/60">
-        <table className="min-w-full divide-y divide-border/60 text-left">
-          <thead className="bg-[#0a0a12] text-xs uppercase tracking-[0.3em] text-muted-foreground">
+      <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
+        <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
+          <thead className="rarity-section__table-head bg-[#0a0a12] text-xs uppercase tracking-[0.3em] text-muted-foreground">
             <tr>
-              <th className="px-3 py-2.5 font-semibold">レアリティ</th>
-              <th className="px-3 py-2.5 font-semibold">カラー</th>
-              <th className="px-3 py-2.5 font-semibold">排出率</th>
-              <th className="px-3 py-2.5" />
+              <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
+              <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
+              <th className="rarity-section__column px-3 py-2.5 font-semibold">排出率</th>
+              <th className="rarity-section__column px-3 py-2.5" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40 bg-surface/60">
+          <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
             {SAMPLE_RARITIES.map((rarity) => (
-              <tr key={rarity.code} className="text-sm text-surface-foreground">
-                <td className="px-3 py-2">
+              <tr key={rarity.code} className="rarity-section__row text-sm text-surface-foreground">
+                <td className="rarity-section__cell px-3 py-2">
                   {(() => {
                     const theme = RARITY_BADGE_THEMES[rarity.code] ?? DEFAULT_BADGE_THEME;
 
                     return (
                       <span
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
+                        className="rarity-section__rarity-badge inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
                         style={{
                           background: theme.background,
                           boxShadow: theme.shadow
@@ -102,29 +102,29 @@ export function RaritySection(): JSX.Element {
                     );
                   })()}
                 </td>
-                <td className="px-3 py-2">
+                <td className="rarity-section__cell px-3 py-2">
                   <RarityColorChip
                     value={rarity.color}
                     ariaLabel={`${rarity.code} のカラー`}
                     onClick={() => console.info('カラーピッカーは未実装です')}
                   />
                 </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-1.5">
+                <td className="rarity-section__cell px-3 py-2">
+                  <div className="rarity-section__rate-control flex items-center gap-1.5">
                     <input
                       type="number"
                       min={0}
                       max={100}
                       defaultValue={rarity.rate}
-                      className="min-w-[8ch] rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                      className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                     />
-                    <span className="text-xs text-muted-foreground">%</span>
+                    <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="rarity-section__cell px-3 py-2 text-right">
                   <button
                     type="button"
-                    className="chip"
+                    className="rarity-section__delete-button chip"
                     onClick={() => console.info('レアリティ削除は未実装です')}
                   >
                     削除
@@ -136,10 +136,10 @@ export function RaritySection(): JSX.Element {
         </table>
       </div>
 
-      <div className="flex justify-end">
+      <div className="rarity-section__footer flex justify-end">
         <button
           type="button"
-          className="chip border-accent/40 bg-accent/10 text-accent"
+          className="rarity-section__add-rarity chip border-accent/40 bg-accent/10 text-accent"
           onClick={() => console.info('レアリティ追加のモーダルは未実装です')}
         >
           <PlusCircleIcon className="h-4 w-4" />

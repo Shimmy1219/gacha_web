@@ -15,7 +15,7 @@ export function App(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-transparent text-surface-foreground">
+    <div className="app min-h-screen bg-transparent text-surface-foreground">
       <AppHeaderShell
         title="四遊楽ガチャツール"
         tagline="SETTING · GACHA · UPLOAD · SHARE"
@@ -26,7 +26,7 @@ export function App(): JSX.Element {
         onExportAll={handleExportAll}
         onImportAll={handleImportAll}
       />
-      <main className="px-4 pb-24 pt-8 sm:px-6">
+      <main className="app__main px-4 pb-24 pt-8 sm:px-6">
         <AppRoutes />
       </main>
     </div>

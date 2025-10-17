@@ -34,7 +34,10 @@ export function DiscordLoginButton({
 
   if (isLoading) {
     return (
-      <div className={clsx('h-11 w-44 animate-pulse rounded-xl bg-surface/40', className)} aria-hidden />
+      <div
+        className={clsx('discord-login-button h-11 w-44 animate-pulse rounded-xl bg-surface/40', className)}
+        aria-hidden
+      />
     );
   }
 
@@ -45,7 +48,7 @@ export function DiscordLoginButton({
         onClick={login}
         data-placement={placement}
         className={clsx(
-          'inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70',
+          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70',
           className
         )}
         aria-label="Discordでログイン"
@@ -68,9 +71,13 @@ export function DiscordLoginButton({
   };
 
   return (
-    <Menu as="div" className={clsx('relative inline-flex text-left', className)} data-placement={placement}>
+    <Menu
+      as="div"
+      className={clsx('discord-login-button relative inline-flex text-left', className)}
+      data-placement={placement}
+    >
       <Menu.Button
-        className="inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        className="discord-login-button__trigger inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
         aria-label={`${displayName} のメニューを開く`}
       >
         <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
@@ -95,11 +102,11 @@ export function DiscordLoginButton({
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
       >
-        <Menu.Items className="absolute right-0 z-20 mt-2 w-60 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#0f0f18]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
-          <div className="p-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-60 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#0f0f18]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
+          <div className="discord-login-button__menu-header p-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
             Discord セッション操作
             {isError ? (
-              <span className="ml-2 text-[#f87171]">同期失敗</span>
+              <span className="discord-login-button__menu-status ml-2 text-[#f87171]">同期失敗</span>
             ) : null}
           </div>
           <Menu.Item>
@@ -108,7 +115,7 @@ export function DiscordLoginButton({
                 type="button"
                 onClick={handleOpenPageSettings}
                 className={clsx(
-                  'flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >
@@ -125,7 +132,7 @@ export function DiscordLoginButton({
                   await refetch();
                 }}
                 className={clsx(
-                  'flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >
@@ -142,7 +149,7 @@ export function DiscordLoginButton({
                   await logout();
                 }}
                 className={clsx(
-                  'flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >
@@ -151,13 +158,13 @@ export function DiscordLoginButton({
               </button>
             )}
           </Menu.Item>
-          <div className="border-t border-border/60" />
+          <div className="discord-login-button__menu-divider border-t border-border/60" />
           <Menu.Item>
             {({ active }) => (
               <button
                 type="button"
                 className={clsx(
-                  'flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >

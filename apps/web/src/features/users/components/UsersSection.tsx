@@ -79,7 +79,7 @@ export function UsersSection(): JSX.Element {
       actions={
         <button
           type="button"
-          className="chip border-accent/40 bg-accent/10 text-accent"
+          className="users-section__export-button chip border-accent/40 bg-accent/10 text-accent"
           onClick={() => console.info('保存オプションモーダルは未実装です')}
         >
           <CloudArrowDownIcon className="h-4 w-4" />
@@ -89,7 +89,7 @@ export function UsersSection(): JSX.Element {
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
       <UserFilterPanel />
-      <div className="space-y-3">
+      <div className="users-section__list space-y-3">
         {SAMPLE_USERS.map((user) => (
           <UserCard
             key={user.userId}

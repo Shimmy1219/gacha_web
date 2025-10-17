@@ -41,12 +41,12 @@ export const RarityColorChip = forwardRef<HTMLButtonElement, RarityColorChipProp
       <button
         ref={ref}
         type="button"
-        className="group inline-grid h-9 w-16 place-items-center rounded-lg border border-border/70 bg-transparent text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+        className="rarity-color-chip group inline-grid h-9 w-16 place-items-center rounded-lg border border-border/70 bg-transparent text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
         aria-label={ariaLabel ?? `${displayValue} を選択`}
         onClick={onClick}
       >
         <span
-          className={`h-5 w-10 rounded-md border border-border/60 transition group-hover:border-accent/60 ${chipClass}`.trim()}
+          className={`rarity-color-chip__swatch h-5 w-10 rounded-md border border-border/60 transition group-hover:border-accent/60 ${chipClass}`.trim()}
           style={chipClass ? undefined : { backgroundColor: value }}
         />
       </button>

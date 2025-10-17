@@ -153,7 +153,7 @@ export function ItemsSection(): JSX.Element {
       actions={
         <button
           type="button"
-          className="chip border-accent/40 bg-accent/10 text-accent"
+          className="items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
           onClick={() => console.info('フィルタモーダルは未実装です')}
         >
           <AdjustmentsHorizontalIcon className="h-4 w-4" />
@@ -162,13 +162,13 @@ export function ItemsSection(): JSX.Element {
       }
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="items-section__tabs flex flex-wrap gap-2">
         {['最新', 'おすすめ', 'リアグ対象', '未設定'].map((tab, index) => (
           <button
             key={tab}
             type="button"
             className={clsx(
-              'tab-pill rounded-full border px-4 py-1.5',
+              'items-section__tab tab-pill rounded-full border px-4 py-1.5',
               index === 0
                 ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(255,47,93,0.45)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
@@ -178,7 +178,7 @@ export function ItemsSection(): JSX.Element {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {SAMPLE_ITEMS.map(({ model, rarity }) => (
           <ItemCard
             key={model.itemId}
