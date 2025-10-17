@@ -1,4 +1,4 @@
-import { Dialog, DialogBackdrop } from '@headlessui/react';
+import { Dialog } from '@headlessui/react';
 import { clsx } from 'clsx';
 import {
   forwardRef,
@@ -10,20 +10,20 @@ import {
 import { type ModalSize } from './ModalTypes';
 
 const SIZE_CLASS_MAP: Record<ModalSize, string> = {
-  sm: 'max-w-md',
-  md: 'max-w-2xl',
-  lg: 'max-w-4xl',
-  xl: 'max-w-5xl'
+  sm: 'max-w-lg',
+  md: 'max-w-xl',
+  lg: 'max-w-[55rem]',
+  xl: 'max-w-[64rem]'
 };
 
-interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof DialogBackdrop> {}
+interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof Dialog.Backdrop> {}
 
 export const ModalOverlay = forwardRef<
-  ElementRef<typeof DialogBackdrop>,
+  ElementRef<typeof Dialog.Backdrop>,
   ModalOverlayProps
 >(function ModalOverlay({ className, ...props }, ref) {
   return (
-    <DialogBackdrop
+    <Dialog.Backdrop
       {...props}
       ref={ref}
       className={clsx(

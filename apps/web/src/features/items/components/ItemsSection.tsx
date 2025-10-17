@@ -169,7 +169,7 @@ export function ItemsSection(): JSX.Element {
         id: `prize-settings-${model.itemId}`,
         title: '景品画像を設定',
         description: 'プレビュー・レアリティ・リアグ設定をまとめて更新します。',
-        size: 'xl',
+        size: 'lg',
         payload: {
           itemId: model.itemId,
           itemName: model.name,

@@ -86,18 +86,20 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
         </div>
       </ModalBody>
       <ModalFooter>
-        <button type="button" className="btn btn-muted" onClick={close}>
-          閉じる
-        </button>
-        <button
-          type="button"
-          className="btn border border-border/60 bg-transparent text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-          onClick={handleRemove}
-        >
-          リアグ解除
-        </button>
         <button type="button" className="btn btn-primary" onClick={handleSave}>
           保存する
+        </button>
+        {payload?.onRemove ? (
+          <button
+            type="button"
+            className="btn border border-border/60 bg-transparent text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+            onClick={handleRemove}
+          >
+            リアグ解除
+          </button>
+        ) : null}
+        <button type="button" className="btn btn-muted" onClick={close}>
+          閉じる
         </button>
       </ModalFooter>
     </>
