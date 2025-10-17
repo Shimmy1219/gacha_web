@@ -50,7 +50,7 @@ function ControlsRow({
   return (
     <div
       className={clsx(
-        'pt-controls-panel__row grid gap-2 rounded-2xl px-3 py-2 shadow-panel',
+        'pt-controls-panel__row grid gap-2 rounded-2xl px-1 py-1 shadow-panel',
         action
           ? 'grid-cols-[auto,minmax(0,1fr),auto]'
           : 'grid-cols-[auto,minmax(0,1fr)]',
@@ -189,7 +189,7 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl px-3 py-2">
+      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl px-1 py-1">
         {bundles.map((bundle) => (
           <div
             key={bundle.id}
@@ -247,7 +247,7 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl px-3 py-2">
+      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl px-1 py-1">
         {guarantees.map((guarantee) => (
           <div
             key={guarantee.id}
