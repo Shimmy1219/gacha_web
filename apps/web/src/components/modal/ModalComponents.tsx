@@ -34,7 +34,7 @@ export function ModalPanel({ size = 'md', className, ...props }: ModalPanelProps
     <Dialog.Panel
       {...props}
       className={clsx(
-        'modal-panel flex w-full transform flex-col overflow-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground shadow-panel backdrop-blur',
+        'modal-panel relative z-10 flex w-full transform flex-col overflow-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground shadow-panel backdrop-blur',
         SIZE_CLASS_MAP[size],
         'p-6',
         className
