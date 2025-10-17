@@ -46,6 +46,10 @@ export function App(): JSX.Element {
     console.info('リアルタイム入力パネルを開く処理は未実装です');
   };
 
+  const handleOpenTxtJsonImport = () => {
+    console.info('TXT/JSONインポートの起動は未実装です');
+  };
+
   const handleExportAll = () => {
     console.info('全体エクスポート処理は未実装です');
   };
@@ -62,6 +66,7 @@ export function App(): JSX.Element {
         summaryLabel="TXT/JSON未読込"
         summaryVariant="warning"
         summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
+        onOpenTxtJsonImport={handleOpenTxtJsonImport}
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
         onImportAll={handleImportAll}

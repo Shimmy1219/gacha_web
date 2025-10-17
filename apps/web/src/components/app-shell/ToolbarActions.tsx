@@ -4,6 +4,7 @@ import { useId, useRef } from 'react';
 
 interface ToolbarActionsProps {
   mode?: 'desktop' | 'mobile';
+  onOpenTxtJsonImport?: () => void;
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
   onImportAll?: (files: FileList) => void;
@@ -12,6 +13,7 @@ interface ToolbarActionsProps {
 
 export function ToolbarActions({
   mode = 'desktop',
+  onOpenTxtJsonImport,
   onOpenRealtime,
   onExportAll,
   onImportAll,
@@ -34,6 +36,14 @@ export function ToolbarActions({
 
   return (
     <div className={clsx('toolbar-actions', containerClass)}>
+      <button
+        type="button"
+        onClick={() => onOpenTxtJsonImport?.()}
+        className="toolbar-actions__txt-json-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
+      >
+        <ArrowDownTrayIcon className="h-4 w-4" />
+        TXT/JSONを読み込む
+      </button>
       <button
         type="button"
         onClick={() => onOpenRealtime?.()}
