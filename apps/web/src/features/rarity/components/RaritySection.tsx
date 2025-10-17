@@ -60,14 +60,6 @@ export function RaritySection(): JSX.Element {
             {gacha}
           </button>
         ))}
-        <button
-          type="button"
-          className="rarity-section__add-gacha chip"
-          onClick={() => console.info('ガチャ登録のモーダルは未実装です')}
-        >
-          <PlusCircleIcon className="h-4 w-4" />
-          ガチャを登録
-        </button>
       </div>
 
       <PtControlsPanel />

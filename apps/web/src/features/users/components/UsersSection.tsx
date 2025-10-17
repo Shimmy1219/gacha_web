@@ -1,9 +1,11 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { useModal } from '../../../components/modal';
+import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
 import { UserFilterPanel } from './UserFilterPanel';
 
 const RARITY_META = {
@@ -74,6 +76,38 @@ const SAMPLE_USERS: SampleUser[] = [
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const { push } = useModal();
+
+  const handleOpenSaveOptions = useCallback(
+    (userId: string) => {
+      push(SaveOptionsDialog, {
+        id: `save-options-${userId}`,
+        title: '保存オプション',
+        description: 'ZIP保存・アップロード・共有リンクの各オプションを選択できます。',
+        size: 'lg',
+        payload: {
+          uploadResult: {
+            url: 'https://shimmy3.com/download/sample-zip',
+            label: 'https://shimmy3.com/download/sample-zip',
+            expiresAt: '2024-12-31 23:59'
+          },
+          onSaveToDevice: () => {
+            console.info('デバイス保存処理は未接続です', userId);
+          },
+          onUploadToService: () => {
+            console.info('ZIPアップロード処理は未接続です', userId);
+          },
+          onShareToDiscord: () => {
+            console.info('Discord共有処理は未接続です', userId);
+          },
+          onCopyUrl: (url) => {
+            console.info('共有URLをコピー（ダミー）', { userId, url });
+          }
+        }
+      });
+    },
+    [push]
+  );
 
   return (
     <SectionContainer
@@ -120,7 +154,7 @@ export function UsersSection(): JSX.Element {
           <UserCard
             key={user.userId}
             {...user}
-            onExport={(userId) => console.info('ZIP保存処理は未実装です', userId)}
+            onExport={handleOpenSaveOptions}
           />
         ))}
       </div>
