@@ -170,7 +170,7 @@ export function PtControlsPanel(): JSX.Element {
           value={perPull}
           onChange={setPerPull}
           placeholder="10"
-          className="ml-auto w-[8ch]"
+          className="ml-auto w-[12ch]"
         />
       </ControlsRow>
 
@@ -179,7 +179,7 @@ export function PtControlsPanel(): JSX.Element {
           value={complete}
           onChange={setComplete}
           placeholder="1000"
-          className="ml-auto w-[8ch]"
+          className="ml-auto w-[12ch]"
         />
       </ControlsRow>
 
