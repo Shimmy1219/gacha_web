@@ -92,6 +92,10 @@
     scroll-padding-right: 0.75rem;
   }
 
+  .section-scroll.section-scroll--no-scrollbar {
+    padding-right: 0;
+  }
+
   .section-scroll::-webkit-scrollbar {
     width: 0.6rem;
   }
