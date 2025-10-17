@@ -170,7 +170,7 @@ export function ItemsSection(): JSX.Element {
             className={clsx(
               'items-section__tab tab-pill rounded-full border px-4 py-1.5',
               index === 0
-                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(255,47,93,0.45)]'
+                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.45)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
             )}
           >

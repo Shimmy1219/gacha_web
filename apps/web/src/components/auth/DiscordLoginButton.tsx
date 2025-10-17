@@ -102,7 +102,7 @@ export function DiscordLoginButton({
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
       >
-        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-60 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#0f0f18]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
+        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-60 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
           <div className="discord-login-button__menu-header p-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
             Discord セッション操作
             {isError ? (

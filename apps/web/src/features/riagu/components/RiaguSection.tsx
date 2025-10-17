@@ -53,7 +53,7 @@ export function RiaguSection(): JSX.Element {
             type="button"
             className={`tab-pill rounded-full border px-4 py-1.5 ${
               index === 0
-                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(255,47,93,0.45)]'
+                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.45)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
             }`}
           >
@@ -96,7 +96,7 @@ export function RiaguSection(): JSX.Element {
               {entry.winners.map((winner) => (
                 <div
                   key={`${entry.id}-${winner.name}`}
-                  className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#11111a] px-4 py-3 text-sm text-surface-foreground"
+                  className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
                 >
                   <span>{winner.name}</span>
                   <span className="riagu-card__winner-count chip">×{winner.count}</span>

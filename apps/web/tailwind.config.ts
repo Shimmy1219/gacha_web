@@ -18,18 +18,19 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#05040a',
-          foreground: '#f7f7fb'
+          DEFAULT: '#0b0b0f',
+          foreground: '#f5f5f6'
         },
-        border: '#241c31',
-        panel: '#0f0f18',
+        border: '#2a2a36',
+        panel: '#15151b',
         accent: {
-          DEFAULT: '#ff2f5d',
-          foreground: '#19040a'
+          DEFAULT: '#e11d48',
+          dark: '#9f1239',
+          foreground: '#ffffff'
         },
         muted: {
-          DEFAULT: '#171425',
-          foreground: '#9f9ab6'
+          DEFAULT: '#23232b',
+          foreground: '#b3b3bd'
         },
         discord: {
           primary: '#5865F2',
@@ -38,14 +39,14 @@ const config: Config = {
         }
       },
       boxShadow: {
-        header: '0 16px 48px rgba(0, 0, 0, 0.35)',
-        panel: '0 24px 72px rgba(0, 0, 0, 0.55)'
+        header: '0 10px 32px rgba(0, 0, 0, 0.45)',
+        panel: '0 6px 24px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.5)'
       },
       fontFamily: {
         sans: ['"Noto Sans JP"', 'system-ui', 'sans-serif']
       },
       backgroundImage: {
-        'panel-overlay': 'linear-gradient(135deg, rgba(255,47,93,0.18), transparent 55%)'
+        'panel-overlay': 'linear-gradient(135deg, rgba(225,29,72,0.12), transparent 55%)'
       }
     }
   },

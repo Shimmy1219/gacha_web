@@ -157,7 +157,7 @@ function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element
   }, [inventory.pulls]);
 
   return (
-    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[#11111a] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
+    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[#15151b] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
         <div className="user-card__inventory-meta space-y-1">
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
@@ -188,7 +188,7 @@ function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element
               {group.items.map((item) => (
                 <span
                   key={`${inventory.inventoryId}-${item.itemId}`}
-                  className="user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-black/40 px-3 py-1 text-xs text-surface-foreground"
+                  className="user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-[#23232b] px-3 py-1 text-xs text-surface-foreground"
                 >
                   <span>{item.itemName}</span>
                   {item.count > 1 ? (
