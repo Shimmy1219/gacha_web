@@ -1,4 +1,4 @@
-import { Disclosure, Transition } from '@headlessui/react';
+import { Disclosure } from '@headlessui/react';
 import { ChevronRightIcon, FolderArrowDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
@@ -71,32 +71,29 @@ export function UserCard({
               </button>
             </div>
           </header>
-          <Transition
-            show={open}
-            enter="transition-opacity duration-300 ease-linear"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="transition-opacity duration-300 ease-linear"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-            as="div"
-            unmount={false}
+          <div
+            data-state={open ? 'open' : 'closed'}
+            className={clsx(
+              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'data-[state=open]:grid-rows-[1fr]',
+              'data-[state=closed]:grid-rows-[0fr]'
+            )}
           >
-            <div
+            <Disclosure.Panel
+              static
               className={clsx(
-                'grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
-                open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                'overflow-hidden transition-opacity duration-300 ease-linear',
+                'group-data-[state=open]:opacity-100',
+                'group-data-[state=closed]:opacity-0'
               )}
             >
-              <Disclosure.Panel static className="overflow-hidden">
-                <div className="user-card__inventories space-y-4">
-                  {inventories.map((inventory) => (
-                    <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
-                  ))}
-                </div>
-              </Disclosure.Panel>
-            </div>
-          </Transition>
+              <div className="user-card__inventories space-y-4">
+                {inventories.map((inventory) => (
+                  <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
+                ))}
+              </div>
+            </Disclosure.Panel>
+          </div>
         </article>
       )}
     </Disclosure>
