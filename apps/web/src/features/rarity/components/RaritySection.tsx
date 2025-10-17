@@ -74,7 +74,7 @@ export function RaritySection(): JSX.Element {
 
       <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
         <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
-          <thead className="rarity-section__table-head bg-[#0a0a12] text-xs uppercase tracking-[0.3em] text-muted-foreground">
+          <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
             <tr>
               <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
               <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
@@ -116,7 +116,7 @@ export function RaritySection(): JSX.Element {
                       min={0}
                       max={100}
                       defaultValue={rarity.rate}
-                      className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                      className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                     />
                     <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                   </div>

@@ -67,13 +67,13 @@ export function ItemCard({
       <div className="space-y-3">
         <div
           className={clsx(
-            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#11111a] text-muted-foreground',
+            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground',
             hasImage && 'border-transparent'
           )}
           style={
             hasImage
               ? {
-                  backgroundImage: `linear-gradient(135deg, rgba(255,47,93,0.55), rgba(12,12,20,0.9)), url(${imageAsset.thumbnailUrl})`,
+                  backgroundImage: `linear-gradient(135deg, rgba(225,29,72,0.55), rgba(12,12,20,0.9)), url(${imageAsset.thumbnailUrl})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }
