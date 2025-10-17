@@ -1,8 +1,12 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
+import { useCallback } from 'react';
 
 import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { useModal } from '../../../components/modal';
+import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
+import { RiaguConfigDialog } from '../../riagu/dialogs/RiaguConfigDialog';
 
 const RARITY_META: Record<string, RarityMeta> = {
   SSR: { rarityId: 'rar-ssr', label: 'SSR', color: '#ff8ab2' },
@@ -10,6 +14,11 @@ const RARITY_META: Record<string, RarityMeta> = {
   R: { rarityId: 'rar-r', label: 'R', color: '#c438ff' },
   N: { rarityId: 'rar-n', label: 'N', color: '#4d6bff' }
 };
+
+const RARITY_OPTIONS = Object.values(RARITY_META).map((rarity) => ({
+  id: rarity.rarityId,
+  label: rarity.label
+}));
 
 const SAMPLE_TIMESTAMP = '2024-01-01T00:00:00.000Z';
 
@@ -145,6 +154,75 @@ const SAMPLE_ITEMS: Array<{ model: ItemCardModel; rarity: RarityMeta }> = [
 ];
 
 export function ItemsSection(): JSX.Element {
+  const { push } = useModal();
+
+  const handleEditImage = useCallback(
+    (itemId: string) => {
+      const target = SAMPLE_ITEMS.find((entry) => entry.model.itemId === itemId);
+      if (!target) {
+        return;
+      }
+
+      const { model, rarity } = target;
+
+      push(PrizeSettingsDialog, {
+        id: `prize-settings-${model.itemId}`,
+        title: '景品画像を設定',
+        description: 'プレビュー・レアリティ・リアグ設定をまとめて更新します。',
+        size: 'lg',
+        payload: {
+          itemId: model.itemId,
+          itemName: model.name,
+          gachaName: model.gachaDisplayName,
+          rarityId: model.rarityId,
+          rarityLabel: rarity.label,
+          rarityOptions: RARITY_OPTIONS,
+          pickupTarget: model.pickupTarget,
+          completeTarget: model.completeTarget,
+          isRiagu: model.isRiagu,
+          thumbnailUrl: model.imageAsset.thumbnailUrl,
+          rarityColor: rarity.color,
+          riaguPrice: model.isRiagu ? 300 : undefined,
+          riaguType: model.isRiagu ? 'アクリルスタンド' : undefined,
+          onSave: (data) => {
+            console.info('景品設定ダイアログから保存（サンプル）', data);
+          }
+        }
+      });
+    },
+    [push]
+  );
+
+  const handleToggleRiagu = useCallback(
+    (itemId: string) => {
+      const target = SAMPLE_ITEMS.find((entry) => entry.model.itemId === itemId);
+      if (!target) {
+        return;
+      }
+
+      const { model } = target;
+
+      push(RiaguConfigDialog, {
+        id: `riagu-config-${model.itemId}`,
+        title: 'リアルグッズ設定',
+        size: 'sm',
+        payload: {
+          itemId: model.itemId,
+          itemName: model.name,
+          defaultPrice: model.isRiagu ? 300 : undefined,
+          defaultType: model.isRiagu ? 'アクリルスタンド' : '',
+          onSave: (data) => {
+            console.info('リアグ設定ダイアログから保存（サンプル）', data);
+          },
+          onRemove: (id) => {
+            console.info('リアグ設定の解除（サンプル）', id);
+          }
+        }
+      });
+    },
+    [push]
+  );
+
   return (
     <SectionContainer
       id="items"
@@ -184,8 +262,8 @@ export function ItemsSection(): JSX.Element {
             key={model.itemId}
             model={model}
             rarity={rarity}
-            onEditImage={(itemId) => console.info('画像設定モーダルは未実装です', itemId)}
-            onToggleRiagu={(itemId) => console.info('リアグ設定ダイアログは未実装です', itemId)}
+            onEditImage={handleEditImage}
+            onToggleRiagu={handleToggleRiagu}
           />
         ))}
       </div>
