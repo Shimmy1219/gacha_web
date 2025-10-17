@@ -1,10 +1,5 @@
 import { Disclosure } from '@headlessui/react';
-import {
-  ChevronRightIcon,
-  ClipboardDocumentIcon,
-  FolderArrowDownIcon,
-  UserCircleIcon
-} from '@heroicons/react/24/outline';
+import { ChevronRightIcon, FolderArrowDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { useMemo } from 'react';
@@ -36,21 +31,15 @@ export interface UserCardProps {
   memo?: string;
   inventories: UserInventoryEntry[];
   expandedByDefault?: boolean;
-  onCopyCounts?: (userId: UserId) => void;
   onExport?: (userId: UserId) => void;
-  onOpenProfile?: (userId: UserId) => void;
 }
 
 export function UserCard({
   userId,
   userName,
-  totalSummary,
-  memo,
   inventories,
   expandedByDefault,
-  onCopyCounts,
-  onExport,
-  onOpenProfile
+  onExport
 }: UserCardProps): JSX.Element {
   return (
     <Disclosure defaultOpen={expandedByDefault}>
@@ -69,36 +58,16 @@ export function UserCard({
               />
               <div className="user-card__summary space-y-1">
                 <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
-                <p className="user-card__meta text-xs text-muted-foreground">
-                  {totalSummary}
-                  {memo ? ` / ${memo}` : ''}
-                </p>
               </div>
             </Disclosure.Button>
             <div className="user-card__actions flex flex-wrap items-center gap-2 text-xs">
-              <button
-                type="button"
-                className="user-card__profile-button chip"
-                onClick={() => onOpenProfile?.(userId)}
-              >
-                <UserCircleIcon className="h-4 w-4" />
-                プロフィール
-              </button>
-              <button
-                type="button"
-                className="user-card__copy-button chip"
-                onClick={() => onCopyCounts?.(userId)}
-              >
-                <ClipboardDocumentIcon className="h-4 w-4" />
-                カウントをコピー
-              </button>
               <button
                 type="button"
                 className="user-card__export-button chip"
                 onClick={() => onExport?.(userId)}
               >
                 <FolderArrowDownIcon className="h-4 w-4" />
-                個別ZIP
+                保存
               </button>
             </div>
           </header>

@@ -12,7 +12,7 @@ const RARITY_META = {
   N: { rarityId: 'rar-n', label: 'N', color: '#4d6bff' }
 } satisfies Record<string, UserCardProps['inventories'][number]['pulls'][number]['rarity']>;
 
-type SampleUser = Omit<UserCardProps, 'onCopyCounts' | 'onExport' | 'onOpenProfile'>;
+type SampleUser = Omit<UserCardProps, 'onExport'>;
 
 const SAMPLE_USERS: SampleUser[] = [
   {
@@ -100,9 +100,7 @@ export function UsersSection(): JSX.Element {
           <UserCard
             key={user.userId}
             {...user}
-            onCopyCounts={(userId) => console.info('リアルタイムカウントは未実装です', userId)}
             onExport={(userId) => console.info('ZIP保存処理は未実装です', userId)}
-            onOpenProfile={(userId) => console.info('プロフィール表示は未実装です', userId)}
           />
         ))}
       </div>
