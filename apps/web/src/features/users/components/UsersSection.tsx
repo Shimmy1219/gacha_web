@@ -1,4 +1,5 @@
-import { CloudArrowDownIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
@@ -71,24 +72,29 @@ const SAMPLE_USERS: SampleUser[] = [
 ];
 
 export function UsersSection(): JSX.Element {
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
   return (
     <SectionContainer
       id="users"
       title="ユーザーごとの獲得内訳"
       description="フィルタやZIP出力でユーザー別の集計を操作します。"
-      actions={
+      filterButton={
         <button
           type="button"
-          className="users-section__export-button chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('保存オプションモーダルは未実装です')}
+          className="users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
+          onClick={() => setFiltersOpen((open) => !open)}
+          aria-pressed={filtersOpen}
+          aria-expanded={filtersOpen}
+          aria-controls="users-filter-panel"
         >
-          <CloudArrowDownIcon className="h-4 w-4" />
-          ZIPを保存
+          <AdjustmentsHorizontalIcon className="h-4 w-4" />
+          フィルタ
         </button>
       }
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
-      <UserFilterPanel />
+      <UserFilterPanel id="users-filter-panel" hidden={!filtersOpen} />
       <div className="users-section__list space-y-3">
         {SAMPLE_USERS.map((user) => (
           <UserCard
