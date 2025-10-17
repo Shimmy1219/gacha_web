@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 
+import { ModalProvider } from '../components/modal';
 import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
@@ -22,7 +23,9 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <ToolbarStateProvider>{children}</ToolbarStateProvider>
+        <ModalProvider>
+          <ToolbarStateProvider>{children}</ToolbarStateProvider>
+        </ModalProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );
