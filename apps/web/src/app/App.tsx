@@ -66,7 +66,7 @@ export function App(): JSX.Element {
         onExportAll={handleExportAll}
         onImportAll={handleImportAll}
       />
-      <main ref={mainRef} className="app__main px-4 pb-0 pt-8 sm:px-6">
+      <main ref={mainRef} className="app__main px-4 pb-[5px] pt-8 sm:px-6">
         <AppRoutes />
       </main>
     </div>
