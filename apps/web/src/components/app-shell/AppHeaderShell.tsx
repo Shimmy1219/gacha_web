@@ -39,9 +39,9 @@ export function AppHeaderShell({
   const handleClose = useCallback(() => setOpen(false), []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header">
-      <div className="flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
-        <div className="flex flex-1 flex-wrap items-center gap-4">
+    <header className="app-header-shell sticky top-0 z-40 border-b border-border/60 bg-[#05040a]/90 shadow-header">
+      <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
+        <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
           <HeaderBrand title={title} tagline={tagline} />
           <ToolbarSummary
             mode="desktop"
@@ -50,7 +50,7 @@ export function AppHeaderShell({
             description={summaryDescription}
           />
         </div>
-        <div className="flex flex-shrink-0 items-center gap-3">
+        <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
           <ToolbarActions
             mode="desktop"
             onOpenRealtime={onOpenRealtime}
@@ -74,7 +74,7 @@ export function AppHeaderShell({
         id={drawerId}
         labelledBy={drawerTitleId}
       >
-        <div className="flex items-center justify-between">
+        <div className="app-header-shell__mobile-header flex items-center justify-between">
           <h2 id={drawerTitleId} className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
             ツールバー
           </h2>
@@ -99,7 +99,7 @@ export function AppHeaderShell({
           onImportAll={onImportAll}
           importBusy={importBusy}
         />
-        <div className="lg:hidden">
+        <div className="app-header-shell__mobile-login lg:hidden">
           <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
         </div>
       </ResponsiveToolbarRail>

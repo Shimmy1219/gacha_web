@@ -54,23 +54,23 @@ export function DashboardShell({ sections, controlsSlot }: DashboardShellProps):
 
   return (
     <DashboardContext.Provider value={value}>
-      <div className="relative flex w-full max-w-6xl flex-col gap-4 pb-[5.5rem] lg:pb-16">
+      <div className="dashboard-shell relative flex w-full max-w-6xl flex-col gap-4 pb-[5.5rem] lg:pb-16">
         {controlsSlot ? (
-          <aside className="rounded-[1.5rem] border border-border/70 bg-[#0b0b13]/90 p-6 shadow-panel ring-1 ring-inset ring-white/5">
+          <aside className="dashboard-shell__controls rounded-[1.5rem] border border-border/70 bg-[#0b0b13]/90 p-6 shadow-panel ring-1 ring-inset ring-white/5">
             {controlsSlot}
           </aside>
         ) : null}
 
-        <div className="hidden lg:block">
+        <div className="dashboard-shell__desktop hidden lg:block">
           <DashboardDesktopGrid sections={sections} />
         </div>
 
-        <div className="space-y-4 lg:hidden">
+        <div className="dashboard-shell__mobile space-y-4 lg:hidden">
           {sections.map((section) => (
             <div
               key={section.id}
               data-view={section.id}
-              className={clsx(activeView !== section.id && 'hidden')}
+              className={clsx('dashboard-shell__mobile-section', activeView !== section.id && 'hidden')}
             >
               {section.node}
             </div>

@@ -37,7 +37,7 @@ export function RiaguSection(): JSX.Element {
       actions={
         <button
           type="button"
-          className="chip border-accent/40 bg-accent/10 text-accent"
+          className="riagu-section__settings-button chip border-accent/40 bg-accent/10 text-accent"
           onClick={() => console.info('リアグ設定モーダルは未実装です')}
         >
           <Cog8ToothIcon className="h-4 w-4" />
@@ -46,7 +46,7 @@ export function RiaguSection(): JSX.Element {
       }
       footer="RiaguStoreのマーク/解除とAppStateStore.saveDebounced()を連携予定です。"
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="riagu-section__tabs flex flex-wrap gap-2">
         {['全て', '優先', '発送待ち'].map((tab, index) => (
           <button
             key={tab}
@@ -61,22 +61,22 @@ export function RiaguSection(): JSX.Element {
           </button>
         ))}
       </div>
-      <div className="space-y-3">
+      <div className="riagu-section__list space-y-3">
         {SAMPLE_RIAGU.map((entry) => (
           <article
             key={entry.id}
-            className="space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+            className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
           >
-            <header className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <span className="badge text-[#ff8ab2]">{entry.rarity}</span>
-                <h3 className="text-base font-semibold text-surface-foreground">{entry.item}</h3>
-                <p className="text-xs text-muted-foreground">コスト {entry.cost} / ステータス {entry.status}</p>
+            <header className="riagu-card__header flex items-start justify-between gap-3">
+              <div className="riagu-card__meta space-y-1">
+                <span className="riagu-card__rarity badge text-[#ff8ab2]">{entry.rarity}</span>
+                <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.item}</h3>
+                <p className="riagu-card__status text-xs text-muted-foreground">コスト {entry.cost} / ステータス {entry.status}</p>
               </div>
-              <div className="flex flex-wrap gap-2 text-xs">
+              <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
                 <button
                   type="button"
-                  className="chip"
+                  className="riagu-card__detail-button chip"
                   onClick={() => console.info('リアグ詳細モーダルは未実装です')}
                 >
                   <GiftIcon className="h-4 w-4" />
@@ -84,7 +84,7 @@ export function RiaguSection(): JSX.Element {
                 </button>
                 <button
                   type="button"
-                  className="chip"
+                  className="riagu-card__share-button chip"
                   onClick={() => console.info('共有リンク生成は未実装です')}
                 >
                   <GlobeAltIcon className="h-4 w-4" />
@@ -92,14 +92,14 @@ export function RiaguSection(): JSX.Element {
                 </button>
               </div>
             </header>
-            <div className="space-y-2">
+            <div className="riagu-card__winners space-y-2">
               {entry.winners.map((winner) => (
                 <div
                   key={`${entry.id}-${winner.name}`}
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-[#11111a] px-4 py-3 text-sm text-surface-foreground"
+                  className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#11111a] px-4 py-3 text-sm text-surface-foreground"
                 >
                   <span>{winner.name}</span>
-                  <span className="chip">×{winner.count}</span>
+                  <span className="riagu-card__winner-count chip">×{winner.count}</span>
                 </div>
               ))}
             </div>

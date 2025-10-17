@@ -50,7 +50,7 @@ function ControlsRow({
   return (
     <div
       className={clsx(
-        'grid gap-2 rounded-2xl border border-border/60 bg-panel/70 px-3 py-2 shadow-panel',
+        'pt-controls-panel__row grid gap-2 rounded-2xl border border-border/60 bg-panel/70 px-3 py-2 shadow-panel',
         action
           ? 'grid-cols-[auto,minmax(0,1fr),auto]'
           : 'grid-cols-[auto,minmax(0,1fr)]',
@@ -60,13 +60,13 @@ function ControlsRow({
       <p className="text-xs font-semibold text-muted-foreground">{label}</p>
       <div
         className={clsx(
-          'flex flex-nowrap gap-2 whitespace-nowrap text-xs text-muted-foreground',
+          'pt-controls-panel__row-fields flex flex-nowrap gap-2 whitespace-nowrap text-xs text-muted-foreground',
           alignTop ? 'items-start' : 'items-center'
         )}
       >
         {children}
       </div>
-      {action ? <div className="flex justify-end">{action}</div> : null}
+      {action ? <div className="pt-controls-panel__row-action flex justify-end">{action}</div> : null}
     </div>
   );
 }
@@ -92,7 +92,7 @@ function InlineNumberField({
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
       className={clsx(
-        'h-9 min-w-[6ch] rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
         className
       )}
     />
@@ -110,7 +110,7 @@ function InlineSelectField({
 }): JSX.Element {
   return (
     <select
-      className="h-9 rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none"
+      className="pt-controls-panel__select h-9 rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none"
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -128,7 +128,7 @@ function AddButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold leading-none text-accent-foreground shadow-[0_10px_24px_rgba(255,47,93,0.45)] transition hover:brightness-110"
+      className="pt-controls-panel__add-button inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold leading-none text-accent-foreground shadow-[0_10px_24px_rgba(255,47,93,0.45)] transition hover:brightness-110"
       aria-label="行を追加"
     >
       ＋
@@ -141,7 +141,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-surface/70 text-sm font-bold leading-none text-muted-foreground shadow-inner transition hover:border-accent/70 hover:text-surface-foreground"
+      className="pt-controls-panel__remove-button inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-surface/70 text-sm font-bold leading-none text-muted-foreground shadow-inner transition hover:border-accent/70 hover:text-surface-foreground"
       aria-label="行を削除"
     >
       －
@@ -164,7 +164,7 @@ export function PtControlsPanel(): JSX.Element {
     next.length === 0 ? [createGuaranteeRow(Date.now())] : next;
 
   return (
-    <section className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel/70 p-3 shadow-panel">
+    <section className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel/70 p-3 shadow-panel">
       <ControlsRow label="1回の消費pt">
         <InlineNumberField value={perPull} onChange={setPerPull} placeholder="10" />
       </ControlsRow>
@@ -189,13 +189,13 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
+      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
         {bundles.map((bundle) => (
           <div
             key={bundle.id}
-            className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
           >
-            <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={bundle.pt}
                 onChange={(value) =>
@@ -247,13 +247,13 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
+      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
         {guarantees.map((guarantee) => (
           <div
             key={guarantee.id}
-            className="grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
           >
-            <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <div className="pt-controls-panel__guarantee-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={guarantee.minPulls}
                 onChange={(value) =>

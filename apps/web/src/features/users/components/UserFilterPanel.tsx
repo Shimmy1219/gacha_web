@@ -90,14 +90,19 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
   };
 
   return (
-    <div className="grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center" ref={containerRef}>
-      <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">{label}</span>
-      <div className="relative">
+    <div
+      className="user-filter-panel__multi-select grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center"
+      ref={containerRef}
+    >
+      <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="user-filter-panel__select-wrapper relative">
         <button
           id={id}
           type="button"
           className={clsx(
-            'inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#11111a] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#11111a] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
             open ? 'border-accent text-accent' : 'hover:border-accent/70'
           )}
           aria-haspopup="listbox"
@@ -105,23 +110,28 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
           onClick={() => setOpen((prev) => !prev)}
         >
           <span>{buttonLabel}</span>
-          <ChevronDownIcon className={clsx('h-4 w-4 transition-transform', open && 'rotate-180')} />
+          <ChevronDownIcon className={clsx('user-filter-panel__select-icon h-4 w-4 transition-transform', open && 'rotate-180')} />
         </button>
         {open ? (
           <div
             role="listbox"
             aria-multiselectable
-            className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#08070f]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur"
+            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#08070f]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur"
           >
             <button
               type="button"
-              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5"
+              className="user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5"
               onClick={toggleAll}
             >
               <span>すべて</span>
-              <CheckIcon className={clsx('h-4 w-4', selectedSet.size === allValues.length ? 'opacity-100' : 'opacity-0')} />
+              <CheckIcon
+                className={clsx(
+                  'user-filter-panel__option-check h-4 w-4',
+                  selectedSet.size === allValues.length ? 'opacity-100' : 'opacity-0'
+                )}
+              />
             </button>
-            <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+            <div className="user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
             {options.map((option) => {
               const active = selectedSet.has(option.value);
               return (
@@ -131,7 +141,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
                   role="option"
                   aria-selected={active}
                   className={clsx(
-                    'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
+                    'user-filter-panel__option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
                     active ? 'bg-accent/10 text-surface-foreground' : 'text-muted-foreground hover:bg-white/5'
                   )}
                   onClick={() => toggleValue(option.value)}
@@ -139,10 +149,17 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
                   <span className="flex flex-col">
                     <span>{option.label}</span>
                     {option.description ? (
-                      <span className="text-[10px] text-muted-foreground/80">{option.description}</span>
+                      <span className="user-filter-panel__option-description text-[10px] text-muted-foreground/80">
+                        {option.description}
+                      </span>
                     ) : null}
                   </span>
-                  <CheckIcon className={clsx('h-4 w-4 transition', active ? 'opacity-100 text-accent' : 'opacity-0')} />
+                  <CheckIcon
+                    className={clsx(
+                      'user-filter-panel__option-check h-4 w-4 transition',
+                      active ? 'opacity-100 text-accent' : 'opacity-0'
+                    )}
+                  />
                 </button>
               );
             })}
@@ -164,22 +181,24 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
   const toggle = (): void => onChange((prev) => !prev);
 
   return (
-    <div className="grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-3">
-        {helperText ? <span className="text-[11px] text-muted-foreground/80">{helperText}</span> : null}
+    <div className="user-filter-panel__toggle-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
+      <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="user-filter-panel__toggle-controls flex items-center gap-3">
+        {helperText ? <span className="user-filter-panel__toggle-helper text-[11px] text-muted-foreground/80">{helperText}</span> : null}
         <button
           type="button"
           onClick={toggle}
           className={clsx(
-            'relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-[#11111a] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b13]',
+            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-[#11111a] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b13]',
             value && 'border-accent bg-accent/30'
           )}
           aria-pressed={value}
         >
           <span
             className={clsx(
-              'inline-block h-4 w-4 rounded-full bg-white shadow transition-all',
+              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white shadow transition-all',
               value ? 'translate-x-[22px]' : 'translate-x-[6px]'
             )}
           />
@@ -207,8 +226,8 @@ export function UserFilterPanel(): JSX.Element {
   };
 
   return (
-    <section className="user-panel-filter space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
-      <div className="grid gap-5">
+    <section className="user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+      <div className="user-filter-panel__controls grid gap-5">
         <MultiSelectFilter
           id="user-filter-gacha"
           label="ガチャ絞り込み"
@@ -236,25 +255,27 @@ export function UserFilterPanel(): JSX.Element {
         <ToggleRow label="はずれを隠す" value={hideMiss} onChange={setHideMiss} />
         <ToggleRow label="獲得数を表示" value={showCounts} onChange={setShowCounts} />
         <ToggleRow label="リアグのみを表示" value={showSkipOnly} onChange={setShowSkipOnly} />
-        <div className="grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">ユーザー検索</span>
-          <label className="flex items-center gap-3 rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-muted-foreground">
+        <div className="user-filter-panel__search-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
+          <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            ユーザー検索
+          </span>
+          <label className="user-filter-panel__search-input flex items-center gap-3 rounded-xl border border-border/60 bg-[#11111a] px-3 py-2 text-sm text-muted-foreground">
             <MagnifyingGlassIcon className="h-4 w-4" />
             <input
               type="search"
               placeholder="名前で検索"
               value={keyword}
               onChange={(event) => setKeyword(event.currentTarget.value)}
-              className="w-full bg-transparent text-sm text-surface-foreground placeholder:text-muted-foreground focus:outline-none"
+              className="user-filter-panel__search-field w-full bg-transparent text-sm text-surface-foreground placeholder:text-muted-foreground focus:outline-none"
             />
           </label>
         </div>
       </div>
-      <div className="flex justify-end">
+      <div className="user-filter-panel__footer flex justify-end">
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center rounded-xl border border-border/60 bg-[#11111a] px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+          className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-[#11111a] px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
         >
           フィルタをリセット
         </button>
