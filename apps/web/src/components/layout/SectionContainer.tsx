@@ -30,13 +30,13 @@ export function SectionContainer({
     <section
       id={id}
       className={clsx(
-        'section-container group relative flex h-full flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#15151b]/95 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
+        'section-container group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#15151b]/95 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
         'after:pointer-events-none after:absolute after:-inset-x-px after:-inset-y-px after:bg-panel-overlay after:opacity-0 after:transition-opacity after:duration-300 group-hover:after:opacity-100',
         className
       )}
     >
-      <div className="section-container__body relative z-[1] flex h-full flex-col gap-6">
+      <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-6">
         <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
           <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
             {accentLabel ? (
@@ -58,8 +58,8 @@ export function SectionContainer({
           </div>
           {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
-        <div className="section-container__content-wrapper flex-1 overflow-hidden">
-          <div className={clsx('section-container__content section-scroll h-full space-y-4', contentClassName)}>{children}</div>
+        <div className="section-container__content-wrapper flex-1 min-h-0 overflow-hidden">
+          <div className={clsx('section-container__content section-scroll h-full min-h-0 space-y-4', contentClassName)}>{children}</div>
         </div>
         {footer ? (
           <footer className="section-container__footer border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
