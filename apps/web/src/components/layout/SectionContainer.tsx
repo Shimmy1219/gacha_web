@@ -38,15 +38,21 @@ export function SectionContainer({
     >
       <div className="section-container__body relative z-[1] flex h-full flex-col gap-6">
         <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
-          <div
-            className={clsx(
-              'section-container__header-primary flex items-start gap-3 sm:w-full',
-              filterButton && 'sm:flex-col sm:items-start sm:gap-2'
-            )}
-          >
-            <div className="section-container__header-main space-y-2 sm:w-full">
-              {accentLabel ? (
-                <span className="section-container__accent badge">{accentLabel}</span>
+          <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
+            {accentLabel ? (
+              <span className="section-container__accent badge">{accentLabel}</span>
+            ) : null}
+            <div className="section-container__title-block space-y-1 sm:max-w-none">
+              <div className="section-container__title-row flex items-center gap-3">
+                <h2 className="section-container__title flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+                {filterButton ? (
+                  <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
+                    {filterButton}
+                  </div>
+                ) : null}
+              </div>
+              {description ? (
+                <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
               <div className="section-container__title-block space-y-1 sm:max-w-none">
                 <h2 className="section-container__title text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>

@@ -1,4 +1,4 @@
-import { AdjustmentsHorizontalIcon, CloudArrowDownIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
@@ -90,16 +90,6 @@ export function UsersSection(): JSX.Element {
         >
           <AdjustmentsHorizontalIcon className="h-4 w-4" />
           フィルタ
-        </button>
-      }
-      actions={
-        <button
-          type="button"
-          className="users-section__export-button chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('保存オプションモーダルは未実装です')}
-        >
-          <CloudArrowDownIcon className="h-4 w-4" />
-          ZIPを保存
         </button>
       }
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
