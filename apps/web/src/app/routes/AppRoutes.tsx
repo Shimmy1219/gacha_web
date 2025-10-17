@@ -1,6 +1,5 @@
 import { Navigate, useRoutes } from 'react-router-dom';
 
-import { ControlsPanel } from '../../components/dashboard/ControlsPanel';
 import { DashboardShell } from '../../components/dashboard/DashboardShell';
 import { ItemsSection } from '../../features/items/components/ItemsSection';
 import { RaritySection } from '../../features/rarity/components/RaritySection';
@@ -35,7 +34,7 @@ function DashboardPage(): JSX.Element {
     }
   ];
 
-  return <DashboardShell controlsSlot={<ControlsPanel />} sections={sections} />;
+  return <DashboardShell sections={sections} />;
 }
 
 export function AppRoutes(): JSX.Element | null {
