@@ -1,4 +1,5 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { clsx } from 'clsx';
 import { useCallback, useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
@@ -116,19 +117,38 @@ export function UsersSection(): JSX.Element {
       filterButton={
         <button
           type="button"
-          className="users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
+          className={clsx(
+            'users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent transition-all duration-300 ease-linear',
+            filtersOpen
+              ? 'border-accent/70 bg-accent/20 text-accent shadow-[0_18px_42px_rgba(225,29,72,0.2)]'
+              : 'hover:border-accent/60 hover:bg-accent/15'
+          )}
           onClick={() => setFiltersOpen((open) => !open)}
           aria-pressed={filtersOpen}
           aria-expanded={filtersOpen}
           aria-controls="users-filter-panel"
         >
-          <AdjustmentsHorizontalIcon className="h-4 w-4" />
+          <AdjustmentsHorizontalIcon
+            className={clsx(
+              'h-4 w-4 transition-transform duration-300 ease-linear',
+              filtersOpen ? 'rotate-90 text-accent' : 'text-muted-foreground'
+            )}
+          />
           フィルタ
         </button>
       }
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
-      <UserFilterPanel id="users-filter-panel" hidden={!filtersOpen} />
+      <div
+        className={clsx(
+          'users-section__filters grid transition-[grid-template-rows] duration-300 ease-linear',
+          filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        )}
+      >
+        <div className={clsx('overflow-hidden transition-opacity duration-300 ease-linear', filtersOpen ? 'opacity-100' : 'opacity-0')}>
+          <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
+        </div>
+      </div>
       <div className="users-section__list space-y-3">
         {SAMPLE_USERS.map((user) => (
           <UserCard

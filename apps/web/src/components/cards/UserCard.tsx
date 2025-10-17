@@ -48,11 +48,11 @@ export function UserCard({
           <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <Disclosure.Button
               type="button"
-              className="user-card__toggle flex w-full items-start gap-2 text-left"
+              className="user-card__toggle flex w-full items-start gap-2 text-left transition-colors duration-200 ease-linear"
             >
               <ChevronRightIcon
                 className={clsx(
-                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ease-linear',
                   open && 'rotate-90 text-accent'
                 )}
               />
@@ -71,11 +71,29 @@ export function UserCard({
               </button>
             </div>
           </header>
-          <Disclosure.Panel className="user-card__inventories space-y-4">
-            {inventories.map((inventory) => (
-              <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
-            ))}
-          </Disclosure.Panel>
+          <div
+            data-state={open ? 'open' : 'closed'}
+            className={clsx(
+              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'data-[state=open]:grid-rows-[1fr]',
+              'data-[state=closed]:grid-rows-[0fr]'
+            )}
+          >
+            <Disclosure.Panel
+              static
+              className={clsx(
+                'overflow-hidden transition-opacity duration-300 ease-linear',
+                'group-data-[state=open]:opacity-100',
+                'group-data-[state=closed]:opacity-0'
+              )}
+            >
+              <div className="user-card__inventories space-y-4">
+                {inventories.map((inventory) => (
+                  <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
+                ))}
+              </div>
+            </Disclosure.Panel>
+          </div>
         </article>
       )}
     </Disclosure>
