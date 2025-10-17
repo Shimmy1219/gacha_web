@@ -60,13 +60,13 @@ export function UserCard({
                 <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
               </div>
             </Disclosure.Button>
-            <div className="user-card__actions flex flex-wrap items-center gap-2 text-xs">
+            <div className="user-card__actions flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 rounded-lg border border-accent/70 bg-gradient-to-b from-[#e11d48] to-[#9f1239] px-3 py-1 text-xs font-semibold text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-[#f31f55] hover:to-[#b3123f]"
+                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-[#e11d48] to-[#9f1239] px-3 py-1 text-base font-semibold text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-[#f31f55] hover:to-[#b3123f]"
                 onClick={() => onExport?.(userId)}
               >
-                <FolderArrowDownIcon className="h-4 w-4" />
+                <FolderArrowDownIcon className="h-5 w-5" />
                 保存
               </button>
             </div>
