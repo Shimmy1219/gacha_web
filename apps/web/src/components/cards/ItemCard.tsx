@@ -55,11 +55,14 @@ export function ItemCard({
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'item-card group relative overflow-hidden rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >
-      <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
+      <div
+        className="absolute flex flex-col items-end gap-2"
+        style={{ top: '-0.3rem', right: '-0.3rem' }}
+      >
         {model.completeTarget ? <span className="badge badge--status badge--status-complete">完走対象</span> : null}
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
