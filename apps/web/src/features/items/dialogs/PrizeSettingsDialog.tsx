@@ -198,10 +198,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             </select>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          ガチャ: <span className="font-medium text-surface-foreground">{payload?.gachaName ?? '-'}</span>
-        </p>
-
         <div className="grid gap-6 lg:grid-cols-[240px,minmax(0,1fr)]">
           <div className="space-y-5">
             <div className="rounded-2xl border border-border/50 bg-surface/30 p-4">
@@ -227,21 +223,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                 </div>
               </div>
             </div>
-            <div className="space-y-3 rounded-2xl border border-border/50 bg-surface/30 p-4">
-              <SwitchField
-                label="ピックアップ対象"
-                description="ピックアップ一覧に表示します"
-                checked={pickupTarget}
-                onChange={setPickupTarget}
-                name="pickupTarget"
-              />
-              <SwitchField
-                label="コンプリート対象"
-                description="コンプリート判定に含めます"
-                checked={completeTarget}
-                onChange={setCompleteTarget}
-                name="completeTarget"
-              />
+            <div className="rounded-2xl border border-border/50 bg-surface/20 p-4 text-xs text-muted-foreground">
+              画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
             </div>
           </div>
 
@@ -270,8 +253,23 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                 <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
               ) : null}
             </div>
-            <div className="rounded-2xl border border-border/50 bg-surface/20 p-4 text-xs text-muted-foreground">
-              画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
+            <div className="rounded-2xl border border-border/50 bg-surface/30 p-4">
+              <div className="grid grid-cols-2 gap-3">
+                <SwitchField
+                  label="ピックアップ対象"
+                  description="ピックアップ一覧に表示します"
+                  checked={pickupTarget}
+                  onChange={setPickupTarget}
+                  name="pickupTarget"
+                />
+                <SwitchField
+                  label="コンプリート対象"
+                  description="コンプリート判定に含めます"
+                  checked={completeTarget}
+                  onChange={setCompleteTarget}
+                  name="completeTarget"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -285,7 +283,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           className="btn border border-accent/60 bg-accent/10 text-accent transition hover:border-accent hover:bg-accent/20"
           onClick={handleOpenRiaguDialog}
         >
-          リアグ設定を開く
+          リアグとして設定
         </button>
         <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
           閉じる
