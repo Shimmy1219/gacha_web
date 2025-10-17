@@ -1,6 +1,11 @@
 import { Dialog } from '@headlessui/react';
 import { clsx } from 'clsx';
-import { type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ElementRef,
+  type ReactNode
+} from 'react';
 
 import { type ModalSize } from './ModalTypes';
 
@@ -11,28 +16,36 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   xl: 'max-w-5xl'
 };
 
-interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof Dialog.Overlay> {}
+interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof Dialog.Backdrop> {}
 
-export function ModalOverlay({ className, ...props }: ModalOverlayProps): JSX.Element {
+export const ModalOverlay = forwardRef<
+  ElementRef<typeof Dialog.Backdrop>,
+  ModalOverlayProps
+>(function ModalOverlay({ className, ...props }, ref) {
   return (
-    <Dialog.Overlay
+    <Dialog.Backdrop
       {...props}
+      ref={ref}
       className={clsx(
         'modal-overlay fixed inset-0 bg-black/65 backdrop-blur-sm transition-opacity duration-200',
         className
       )}
     />
   );
-}
+});
 
 interface ModalPanelProps extends ComponentPropsWithoutRef<typeof Dialog.Panel> {
   size?: ModalSize;
 }
 
-export function ModalPanel({ size = 'md', className, ...props }: ModalPanelProps): JSX.Element {
+export const ModalPanel = forwardRef<
+  ElementRef<typeof Dialog.Panel>,
+  ModalPanelProps
+>(function ModalPanel({ size = 'md', className, ...props }, ref) {
   return (
     <Dialog.Panel
       {...props}
+      ref={ref}
       className={clsx(
         'modal-panel relative z-10 flex w-full transform flex-col overflow-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground shadow-panel backdrop-blur',
         SIZE_CLASS_MAP[size],
@@ -41,7 +54,7 @@ export function ModalPanel({ size = 'md', className, ...props }: ModalPanelProps
       )}
     />
   );
-}
+});
 
 interface ModalHeaderProps {
   title: ReactNode;
