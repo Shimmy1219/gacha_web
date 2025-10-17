@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface SectionContainerProps {
@@ -26,6 +26,47 @@ export function SectionContainer({
   className,
   contentClassName
 }: SectionContainerProps): JSX.Element {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasScrollbar, setHasScrollbar] = useState(false);
+
+  const updateScrollbarState = useCallback(() => {
+    const element = contentRef.current;
+    if (!element) {
+      return;
+    }
+
+    const scrollableHeight = element.scrollHeight - element.clientHeight;
+    setHasScrollbar(scrollableHeight > 1);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    updateScrollbarState();
+    window.addEventListener('resize', updateScrollbarState);
+
+    let resizeObserver: ResizeObserver | undefined;
+    const element = contentRef.current;
+
+    if (element && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        updateScrollbarState();
+      });
+      resizeObserver.observe(element);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateScrollbarState);
+      resizeObserver?.disconnect();
+    };
+  }, [updateScrollbarState]);
+
+  useEffect(() => {
+    updateScrollbarState();
+  }, [children, updateScrollbarState]);
+
   return (
     <section
       id={id}
@@ -59,7 +100,16 @@ export function SectionContainer({
           {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
         <div className="section-container__content-wrapper flex-1 min-h-0 overflow-hidden">
-          <div className={clsx('section-container__content section-scroll h-full min-h-0 space-y-4', contentClassName)}>{children}</div>
+          <div
+            ref={contentRef}
+            className={clsx(
+              'section-container__content section-scroll h-full min-h-0 space-y-4',
+              !hasScrollbar && 'section-scroll--no-scrollbar',
+              contentClassName
+            )}
+          >
+            {children}
+          </div>
         </div>
         {footer ? (
           <footer className="section-container__footer border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
