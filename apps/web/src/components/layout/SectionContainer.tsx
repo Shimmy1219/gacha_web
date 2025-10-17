@@ -54,12 +54,6 @@ export function SectionContainer({
               {description ? (
                 <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
-              <div className="section-container__title-block space-y-1 sm:max-w-none">
-                <h2 className="section-container__title text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
-                {description ? (
-                  <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
-                ) : null}
-              </div>
             </div>
             {filterButton ? (
               <div className="section-container__filter-button-wrapper flex shrink-0 items-center sm:w-full sm:justify-start">
