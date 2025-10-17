@@ -55,11 +55,6 @@ export function SectionContainer({
                 <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
             </div>
-            {filterButton ? (
-              <div className="section-container__filter-button-wrapper flex shrink-0 items-center sm:w-full sm:justify-start">
-                {filterButton}
-              </div>
-            ) : null}
           </div>
           {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
