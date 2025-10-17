@@ -41,12 +41,7 @@ export interface ItemCardProps {
   onEditImage?: (itemId: ItemId) => void;
 }
 
-export function ItemCard({
-  model,
-  rarity,
-  onToggleRiagu,
-  onEditImage
-}: ItemCardProps): JSX.Element {
+export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
   const hasImage = Boolean(imageAsset?.hasImage && imageAsset?.thumbnailUrl);
 
@@ -98,14 +93,6 @@ export function ItemCard({
             onClick={() => onEditImage?.(model.itemId)}
           >
             画像を設定
-          </button>
-          <button
-            type="button"
-            className={clsx('badge badge--action', model.isRiagu && 'badge--action-active')}
-            data-active={model.isRiagu}
-            onClick={() => onToggleRiagu?.(model.itemId)}
-          >
-            リアグを設定
           </button>
         </div>
       </div>

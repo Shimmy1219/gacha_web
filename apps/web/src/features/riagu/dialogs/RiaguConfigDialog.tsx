@@ -53,7 +53,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
 
   return (
     <>
-      <ModalBody className="space-y-5">
+      <ModalBody className="rounded-2xl bg-surface/20 p-6">
         <p className="text-sm text-muted-foreground">
           対象アイテム: <span className="font-medium text-surface-foreground">{payload?.itemName ?? '-'}</span>
         </p>
@@ -80,11 +80,11 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="アクリルスタンド / 缶バッジ など"
             />
           </label>
-          <p className="text-xs text-muted-foreground">
-            リアグ情報はガチャの保存オプションに含まれ、共有ZIPにも出力されます。
-          </p>
         </div>
       </ModalBody>
+      <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
+        リアグ情報はガチャの保存オプションに含まれ、共有ZIPにも出力されます。
+      </p>
       <ModalFooter>
         <button type="button" className="btn btn-primary" onClick={handleSave}>
           保存する
