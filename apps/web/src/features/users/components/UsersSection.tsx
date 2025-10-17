@@ -1,4 +1,6 @@
+import { Transition } from '@headlessui/react';
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { clsx } from 'clsx';
 import { useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
@@ -82,19 +84,42 @@ export function UsersSection(): JSX.Element {
       filterButton={
         <button
           type="button"
-          className="users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
+          className={clsx(
+            'users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent transition-all duration-300 ease-out',
+            filtersOpen
+              ? 'border-accent/70 bg-accent/20 text-accent shadow-[0_18px_42px_rgba(225,29,72,0.2)]'
+              : 'hover:border-accent/60 hover:bg-accent/15'
+          )}
           onClick={() => setFiltersOpen((open) => !open)}
           aria-pressed={filtersOpen}
           aria-expanded={filtersOpen}
           aria-controls="users-filter-panel"
         >
-          <AdjustmentsHorizontalIcon className="h-4 w-4" />
+          <AdjustmentsHorizontalIcon
+            className={clsx(
+              'h-4 w-4 transition-transform duration-300',
+              filtersOpen ? 'rotate-90 text-accent' : 'text-muted-foreground'
+            )}
+          />
           フィルタ
         </button>
       }
       footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
-      <UserFilterPanel id="users-filter-panel" hidden={!filtersOpen} />
+      <Transition
+        show={filtersOpen}
+        unmount={false}
+        appear
+        enter="transition duration-300 ease-out"
+        enterFrom="opacity-0 -translate-y-2"
+        enterTo="opacity-100 translate-y-0"
+        leave="transition duration-200 ease-in"
+        leaveFrom="opacity-100 translate-y-0"
+        leaveTo="opacity-0 -translate-y-2"
+        as="div"
+      >
+        <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
+      </Transition>
       <div className="users-section__list space-y-3">
         {SAMPLE_USERS.map((user) => (
           <UserCard

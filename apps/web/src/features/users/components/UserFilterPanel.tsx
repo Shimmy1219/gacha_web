@@ -210,11 +210,11 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
 
 interface UserFilterPanelProps {
   id?: string;
-  hidden?: boolean;
+  open?: boolean;
 }
 
 export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
-  const { id, hidden = false } = props ?? {};
+  const { id, open = true } = props ?? {};
   const [selectedGachas, setSelectedGachas] = useState<'*' | string[]>('*');
   const [selectedRarities, setSelectedRarities] = useState<'*' | string[]>('*');
   const [hideMiss, setHideMiss] = useState(false);
@@ -234,8 +234,13 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
   return (
     <section
       id={id}
-      hidden={hidden}
-      className="user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+      aria-hidden={!open}
+      data-state={open ? 'open' : 'closed'}
+      className={clsx(
+        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)] transition-all duration-300 ease-out',
+        'data-[state=open]:opacity-100 data-[state=open]:translate-y-0 data-[state=open]:scale-100',
+        'data-[state=closed]:pointer-events-none data-[state=closed]:select-none data-[state=closed]:opacity-0 data-[state=closed]:-translate-y-2 data-[state=closed]:scale-[0.98]'
+      )}
     >
       <div className="user-filter-panel__controls grid gap-5">
         <MultiSelectFilter

@@ -1,4 +1,4 @@
-import { Disclosure } from '@headlessui/react';
+import { Disclosure, Transition } from '@headlessui/react';
 import { ChevronRightIcon, FolderArrowDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
@@ -44,15 +44,23 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <article
+          className={clsx(
+            'user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out',
+            open
+              ? 'border-accent/60 shadow-[0_24px_48px_rgba(225,29,72,0.25)]'
+              : 'hover:border-accent/40 hover:shadow-[0_20px_40px_rgba(0,0,0,0.45)]'
+          )}
+          data-state={open ? 'open' : 'closed'}
+        >
           <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <Disclosure.Button
               type="button"
-              className="user-card__toggle flex w-full items-start gap-2 text-left"
+              className="user-card__toggle flex w-full items-start gap-2 text-left transition-colors duration-300 ease-out"
             >
               <ChevronRightIcon
                 className={clsx(
-                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out',
                   open && 'rotate-90 text-accent'
                 )}
               />
@@ -71,11 +79,23 @@ export function UserCard({
               </button>
             </div>
           </header>
-          <Disclosure.Panel className="user-card__inventories space-y-4">
-            {inventories.map((inventory) => (
-              <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
-            ))}
-          </Disclosure.Panel>
+          <Transition
+            show={open}
+            enter="transition duration-300 ease-out"
+            enterFrom="opacity-0 -translate-y-2"
+            enterTo="opacity-100 translate-y-0"
+            leave="transition duration-200 ease-in"
+            leaveFrom="opacity-100 translate-y-0"
+            leaveTo="opacity-0 -translate-y-2"
+            as="div"
+            unmount={false}
+          >
+            <Disclosure.Panel static className="user-card__inventories space-y-4">
+              {inventories.map((inventory) => (
+                <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
+              ))}
+            </Disclosure.Panel>
+          </Transition>
         </article>
       )}
     </Disclosure>
