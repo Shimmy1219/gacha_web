@@ -13,6 +13,7 @@ export interface AppHeaderShellProps {
   summaryLabel: string;
   summaryVariant?: 'default' | 'warning' | 'success';
   summaryDescription?: string;
+  onRegisterGacha?: () => void;
   onOpenTxtJsonImport?: () => void;
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
@@ -27,6 +28,7 @@ export function AppHeaderShell({
   summaryLabel,
   summaryVariant = 'default',
   summaryDescription,
+  onRegisterGacha,
   onOpenTxtJsonImport,
   onOpenRealtime,
   onExportAll,
@@ -93,6 +95,7 @@ export function AppHeaderShell({
         <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
           <ToolbarActions
             mode="desktop"
+            onRegisterGacha={onRegisterGacha}
             onOpenTxtJsonImport={onOpenTxtJsonImport}
             onOpenRealtime={onOpenRealtime}
             onExportAll={onExportAll}
@@ -135,6 +138,7 @@ export function AppHeaderShell({
         />
         <ToolbarActions
           mode="mobile"
+          onRegisterGacha={onRegisterGacha}
           onOpenTxtJsonImport={onOpenTxtJsonImport}
           onOpenRealtime={onOpenRealtime}
           onExportAll={onExportAll}
