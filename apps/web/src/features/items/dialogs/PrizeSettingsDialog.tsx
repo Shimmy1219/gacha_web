@@ -171,7 +171,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
   return (
     <>
-      <ModalBody className="rounded-2xl border border-border/60 bg-[#1d1d1d] p-6">
+      <ModalBody className="rounded-2xl p-2">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <label className="flex-1 space-y-2">
             <span className="block text-sm font-medium text-surface-foreground">対象アイテム</span>
@@ -198,10 +198,10 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             </select>
           </div>
         </div>
-        <div className="grid gap-6 lg:grid-cols-[240px,minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
           <div className="space-y-5">
-            <div className="rounded-2xl p-4">
-              <p className="text-xs font-medium text-muted-foreground">プレビュー</p>
+            <div className="rounded-2xl p-3">
+              <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
               <div className="mt-3 grid gap-4 lg:grid-cols-1">
                 <div className="flex flex-col items-center gap-3">
                   <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl">
@@ -225,8 +225,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             </div>
           </div>
 
-          <div className="space-y-5">
-            <div className="rounded-2xl p-5">
+          <div className="space-y-1">
+            <div className="rounded-2xl p-3">
               <p className="text-sm font-medium text-surface-foreground">画像ファイルを選択</p>
               <p className="mt-2 text-xs text-muted-foreground">透過PNG / JPG / WEBP に対応。880px以上の正方形を推奨します。</p>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -250,7 +250,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                 <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
               ) : null}
             </div>
-            <div className="rounded-2xl p-4">
+            <div className="rounded-2xl p-2">
               <div className="grid grid-cols-2 gap-3">
                 <SwitchField
                   label="ピックアップ対象"

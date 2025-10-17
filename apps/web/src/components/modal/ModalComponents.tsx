@@ -70,7 +70,7 @@ interface ModalHeaderProps {
 
 export function ModalHeader({ title, description, actions, className }: ModalHeaderProps): JSX.Element {
   return (
-    <div className={clsx('modal-header flex flex-wrap items-start justify-between gap-4', className)}>
+    <div className={clsx('modal-header flex flex-wrap items-start justify-between gap-4 border-b border-white/5 pb-4', className)}>
       <div className="space-y-2">
         <DialogTitle className="text-lg font-semibold text-surface-foreground">{title}</DialogTitle>
         {description ? (
@@ -87,7 +87,7 @@ export function ModalHeader({ title, description, actions, className }: ModalHea
 interface ModalBodyProps extends ComponentPropsWithoutRef<'div'> {}
 
 export function ModalBody({ className, ...props }: ModalBodyProps): JSX.Element {
-  return <div {...props} className={clsx('modal-body mt-6 space-y-6 text-sm', className)} />;
+  return <div {...props} className={clsx('modal-body mt-2 space-y-2 text-sm', className)} />;
 }
 
 interface ModalFooterProps extends ComponentPropsWithoutRef<'div'> {}
