@@ -63,10 +63,10 @@ export function UserCard({
             <div className="user-card__actions flex flex-wrap items-center gap-2 text-xs">
               <button
                 type="button"
-                className="user-card__export-button chip"
+                className="user-card__export-button inline-flex items-center gap-2 rounded-full border border-transparent bg-gradient-to-r from-accent to-[#ff6e96] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(255,47,93,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-[#ff335d] hover:to-[#ff7ba5]"
                 onClick={() => onExport?.(userId)}
               >
-                <FolderArrowDownIcon className="h-4 w-4" />
+                <FolderArrowDownIcon className="h-5 w-5" />
                 保存
               </button>
             </div>
