@@ -1,0 +1,21 @@
+{
+  "routes": [
+    {
+      "src": "^/manifest\\.webmanifest$",
+      "dest": "/manifest.webmanifest",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "content-type": "application/manifest+json; charset=utf-8"
+      }
+    },
+    {
+      "src": "^/sw\\.js$",
+      "dest": "/sw.js",
+      "headers": {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "service-worker-allowed": "/",
+        "content-type": "text/javascript; charset=utf-8"
+      }
+    }
+  ]
+}
