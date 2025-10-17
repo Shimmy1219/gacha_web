@@ -1,4 +1,9 @@
-import { Dialog } from '@headlessui/react';
+import {
+  DialogBackdrop,
+  DialogDescription,
+  DialogPanel,
+  DialogTitle
+} from '@headlessui/react';
 import { clsx } from 'clsx';
 import {
   forwardRef,
@@ -16,14 +21,14 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   xl: 'max-w-[64rem]'
 };
 
-interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof Dialog.Backdrop> {}
+interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof DialogBackdrop> {}
 
 export const ModalOverlay = forwardRef<
-  ElementRef<typeof Dialog.Backdrop>,
+  ElementRef<typeof DialogBackdrop>,
   ModalOverlayProps
 >(function ModalOverlay({ className, ...props }, ref) {
   return (
-    <Dialog.Backdrop
+    <DialogBackdrop
       {...props}
       ref={ref}
       className={clsx(
@@ -34,16 +39,16 @@ export const ModalOverlay = forwardRef<
   );
 });
 
-interface ModalPanelProps extends ComponentPropsWithoutRef<typeof Dialog.Panel> {
+interface ModalPanelProps extends ComponentPropsWithoutRef<typeof DialogPanel> {
   size?: ModalSize;
 }
 
 export const ModalPanel = forwardRef<
-  ElementRef<typeof Dialog.Panel>,
+  ElementRef<typeof DialogPanel>,
   ModalPanelProps
 >(function ModalPanel({ size = 'md', className, ...props }, ref) {
   return (
-    <Dialog.Panel
+    <DialogPanel
       {...props}
       ref={ref}
       className={clsx(
@@ -67,11 +72,11 @@ export function ModalHeader({ title, description, actions, className }: ModalHea
   return (
     <div className={clsx('modal-header flex flex-wrap items-start justify-between gap-4', className)}>
       <div className="space-y-2">
-        <Dialog.Title className="text-lg font-semibold text-surface-foreground">{title}</Dialog.Title>
+        <DialogTitle className="text-lg font-semibold text-surface-foreground">{title}</DialogTitle>
         {description ? (
-          <Dialog.Description className="text-sm leading-relaxed text-muted-foreground">
+          <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
             {description}
-          </Dialog.Description>
+          </DialogDescription>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
