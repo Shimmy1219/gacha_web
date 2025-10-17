@@ -53,7 +53,7 @@ export function ResponsiveToolbarRail({
       {open ? (
         <>
           <div
-            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgba(5,4,10,0.76)]"
+            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgba(11,11,15,0.78)]"
             onClick={onClose}
           />
           <aside
@@ -61,7 +61,7 @@ export function ResponsiveToolbarRail({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
-            className="responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-full max-w-sm overflow-y-auto border-l border-border/60 bg-[#05040a]/98 px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 shadow-[0_20px_60px_rgba(0,0,0,0.65)]"
+            className="responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-full max-w-sm overflow-y-auto border-l border-border/60 bg-[#0b0b0f]/98 px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 shadow-[0_20px_60px_rgba(0,0,0,0.65)]"
             ref={panelRef}
             tabIndex={-1}
           >

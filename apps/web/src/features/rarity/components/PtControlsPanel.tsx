@@ -128,7 +128,7 @@ function AddButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="pt-controls-panel__add-button inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold leading-none text-accent-foreground shadow-[0_10px_24px_rgba(255,47,93,0.45)] transition hover:brightness-110"
+      className="pt-controls-panel__add-button inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-sm font-bold leading-none text-accent-foreground shadow-[0_10px_24px_rgba(225,29,72,0.45)] transition hover:brightness-110"
       aria-label="行を追加"
     >
       ＋

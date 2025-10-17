@@ -30,7 +30,7 @@ export function SectionContainer({
     <section
       id={id}
       className={clsx(
-        'section-container group relative flex h-full flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#0b0b13]/90 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
+        'section-container group relative flex h-full flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[#15151b]/95 p-4 text-sm shadow-panel ring-1 ring-inset ring-white/5',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
         'after:pointer-events-none after:absolute after:-inset-x-px after:-inset-y-px after:bg-panel-overlay after:opacity-0 after:transition-opacity after:duration-300 group-hover:after:opacity-100',
         className
@@ -54,7 +54,18 @@ export function SectionContainer({
               {description ? (
                 <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
               ) : null}
+              <div className="section-container__title-block space-y-1 sm:max-w-none">
+                <h2 className="section-container__title text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+                {description ? (
+                  <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
+                ) : null}
+              </div>
             </div>
+            {filterButton ? (
+              <div className="section-container__filter-button-wrapper flex shrink-0 items-center sm:w-full sm:justify-start">
+                {filterButton}
+              </div>
+            ) : null}
           </div>
           {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
