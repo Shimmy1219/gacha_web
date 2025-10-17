@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react';
 
 import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
+import { useModal } from '../components/modal';
+import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
+import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
+import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
 import { AppRoutes } from './routes/AppRoutes';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
+  const { push } = useModal();
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -42,12 +47,60 @@ export function App(): JSX.Element {
     };
   }, []);
 
+  const handleOpenGuide = () => {
+    push(GuideInfoDialog, {
+      id: 'guide-info',
+      title: '次のステップ',
+      size: 'sm',
+      payload: {
+        message: 'ガチャ結果は画面上部の「リアルタイム入力」ボタンを押してペーストしてください。',
+        confirmLabel: '分かった'
+      }
+    });
+  };
+
+  const handleOpenStartWizard = (autoPick?: 'txt' | 'json' | 'new') => {
+    push(StartWizardDialog, {
+      id: 'start-wizard',
+      title: 'ガチャを登録',
+      description: 'TXT/JSONの読み込みや新規ガチャのセットアップを選択できます。',
+      size: 'lg',
+      payload: {
+        autoPick,
+        onPickTxt: (file) => {
+          console.info('TXTインポート処理は未接続です', file);
+        },
+        onPickJson: (file) => {
+          console.info('JSONインポート処理は未接続です', file);
+        },
+        onCreateNew: () => {
+          console.info('新規ガチャ作成フローは未接続です');
+        },
+        onOpenGuide: handleOpenGuide
+      }
+    });
+  };
+
   const handleOpenRealtime = () => {
-    console.info('リアルタイム入力パネルを開く処理は未実装です');
+    push(LivePasteDialog, {
+      id: 'live-paste',
+      title: 'リアルタイム結果を貼り付け',
+      description: 'リアルタイムの結果テキストを貼り付けて解析・同期します。',
+      size: 'lg',
+      payload: {
+        onApply: (value) => {
+          console.info('リアルタイム結果の反映処理は未接続です', value);
+        }
+      }
+    });
   };
 
   const handleOpenTxtJsonImport = () => {
-    console.info('TXT/JSONインポートの起動は未実装です');
+    handleOpenStartWizard('json');
+  };
+
+  const handleRegisterGacha = () => {
+    handleOpenStartWizard();
   };
 
   const handleExportAll = () => {
@@ -66,6 +119,7 @@ export function App(): JSX.Element {
         summaryLabel="TXT/JSON未読込"
         summaryVariant="warning"
         summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
+        onRegisterGacha={handleRegisterGacha}
         onOpenTxtJsonImport={handleOpenTxtJsonImport}
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}

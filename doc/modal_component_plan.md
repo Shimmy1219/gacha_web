@@ -74,9 +74,9 @@ interface ModalState {
 
 ### 5.2 機能別モーダル
 1. **StartWizardDialog** (`features/onboarding/dialogs/StartWizardDialog.tsx`)
-   - Props: `onPickTxt`, `onPickJson`, `onCreateNew`, `onDismiss`。
-   - `StartTile` サブコンポーネントでカード UI を再現し、`grid grid-cols-1 sm:grid-cols-3 gap-4` を採用。【F:index.html†L297-L315】
-   - ファイル入力は `HiddenFileField` コンポーネントへ抽象化する。
+   - Props: `onPickTxt`, `onPickJson`, `onCreateNew`, `onDismiss`。React 実装では加えて `autoPick`、`onOpenGuide` を payload として受け取れるようにした。
+   - `StartTile` サブコンポーネントでカード UI を再現し、現在は `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` でレイアウトしている。【F:index.html†L297-L315】
+   - ファイル入力は `HiddenFileField` ではなく `useRef` + `<input type="file" className="sr-only">` を直接扱うアプローチで実装済み。必要なら共通化を検討する。
 2. **CatalogImportDialog**（削除対象）
    - 旧カタログ貼り付けモーダルの React 実装は作成せず、ガチャ一括登録は別のインポート UI（`features/importers/pages/CatalogUploadPage` など）へ統合する。
    - 既存の `parseCatalogModal` 関連ハンドラは廃止し、React 移行時に `CatalogImportDialog` へのルーティングを削除する。【F:index.html†L328-L344】【F:index.html†L842-L854】
@@ -97,8 +97,20 @@ interface ModalState {
 8. **ItemDeleteConfirmDialog** (`features/items/dialogs/ItemDeleteConfirmDialog.tsx`)
    - 警告表示を `text-error` と `bg-error/10 border-error/30` のアラートボックスに変換。【F:index.html†L452-L466】
 9. **SaveOptionsDialog** (`features/users/dialogs/SaveOptionsDialog.tsx`)
-   - 3 カードを `grid sm:grid-cols-3 gap-4` で表示（デバイス保存、shimmy3.com アップロード、Discord 直接送信）。Discord カードは shimmy3.com へ ZIP をアップロードし、そのリンクを Discord リスナーへ転送するフローを説明する。
-   - アップロード結果セクションは `grid grid-cols-[minmax(0,1fr),auto]` でリンクとコピーを整列し、各カードに `CTAButton` を配置する。【F:index.html†L479-L515】
+   - 3 カードを `grid gap-4 lg:grid-cols-3` で表示（デバイス保存、shimmy3.com アップロード、Discord 直接送信）。Discord カードは shimmy3.com へ ZIP をアップロードし、そのリンクを Discord リスナーへ転送するフローを説明する。
+   - アップロード結果セクションは `grid gap-3 sm:grid-cols-[minmax(0,1fr),auto]` でリンクとコピーを整列し、コピー後 2 秒間はボタン文言を「コピーしました」に切り替える実装になっている。【F:index.html†L479-L515】
+
+### 5.3 2025-10-17 時点の React 実装状況メモ
+- `StartWizardDialog`／`GuideInfoDialog`／`LivePasteDialog` は `App.tsx` のヘッダー操作から `useModal().push` で呼び出し済み。TXT/JSON 読み込み・新規作成・リアルタイム貼り付けはいずれも `console.info` でダミー処理を差し込んでおり、実処理の接続が未完了。【F:apps/web/src/app/App.tsx†L6-L102】
+- `PrizeSettingsDialog` は `ItemsSection` のサンプルカードから `push` できるが、保存・ピックアップ指定などもダミーの `console.info` のまま。`usePrizeSettings` 相当のデータフローは未導入で、今後の hook 実装が必要。【F:apps/web/src/features/items/components/ItemsSection.tsx†L8-L198】【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L13-L247】
+- `SaveOptionsDialog` は `UsersSection` 内の「エクスポート」ボタンから開ける。`uploadResult` はダミー値、保存／アップロード／Discord 送信はすべて `console.info` のスタブ。AppStateStore 連携と実サービス呼び出しを後続タスクに残している。【F:apps/web/src/features/users/components/UsersSection.tsx†L82-L139】【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
+- `GachaDeleteConfirmDialog`／`ItemDeleteConfirmDialog` はコンポーネント実装のみ完了し、UI からの導線がまだ存在しない。ガチャ・景品一覧の削除アクションを React 化するタイミングで `push` を接続する必要がある。【F:apps/web/src/features/gacha/dialogs/GachaDeleteConfirmDialog.tsx†L1-L66】【F:apps/web/src/features/items/dialogs/ItemDeleteConfirmDialog.tsx†L1-L84】
+
+#### TODO（導線・仕様差分）
+- ヘッダーメニューの TXT/JSON 読込・新規作成・リアルタイム貼り付け操作から実際の import/export ロジックを接続する。特に TXT/JSON 読込は `onPickTxt`／`onPickJson` で受け取った `File` をパーサーへ渡す実装が未着手。【F:apps/web/src/app/App.tsx†L44-L80】
+- アイテムカードおよびガチャ一覧に削除ボタンを配置し、`ItemDeleteConfirmDialog`／`GachaDeleteConfirmDialog` を開く導線を作る。削除確定時に AppStateStore を更新する reducer も必要。【F:apps/web/src/features/items/dialogs/ItemDeleteConfirmDialog.tsx†L1-L84】【F:apps/web/src/features/gacha/dialogs/GachaDeleteConfirmDialog.tsx†L1-L66】
+- `PrizeSettingsDialog` からの保存・リアグ設定起動を本番ストアへ接続し、変更破棄時の確認モーダルを仕様通り `push` する。現在は `console.info` のスタブのみで確認モーダルも未実装。【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L112-L223】
+- `SaveOptionsDialog` の ZIP 生成・アップロード・Discord 送信処理を `useSaveJob`（仮）などの専用 Hook にまとめ、アップロード結果の永続化とエラー表示を追加する。【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
 
 ## 6. Tailwind デザイン指針
 - カラートークンは `tailwind.config.ts` の `extend.colors` に `surface`, `surface-muted`, `border`, `accent`, `accent-dark`, `muted` を登録し、既存 CSS 変数と一致させる。【F:index.css†L2-L45】

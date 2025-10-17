@@ -1,9 +1,10 @@
 import { clsx } from 'clsx';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlayIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlayIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
 import { useId, useRef } from 'react';
 
 interface ToolbarActionsProps {
   mode?: 'desktop' | 'mobile';
+  onRegisterGacha?: () => void;
   onOpenTxtJsonImport?: () => void;
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
@@ -13,6 +14,7 @@ interface ToolbarActionsProps {
 
 export function ToolbarActions({
   mode = 'desktop',
+  onRegisterGacha,
   onOpenTxtJsonImport,
   onOpenRealtime,
   onExportAll,
@@ -36,6 +38,14 @@ export function ToolbarActions({
 
   return (
     <div className={clsx('toolbar-actions', containerClass)}>
+      <button
+        type="button"
+        onClick={() => onRegisterGacha?.()}
+        className="toolbar-actions__register-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
+      >
+        <PlusCircleIcon className="h-4 w-4" />
+        ガチャを登録
+      </button>
       <button
         type="button"
         onClick={() => onOpenTxtJsonImport?.()}
