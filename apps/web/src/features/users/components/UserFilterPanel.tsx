@@ -208,7 +208,13 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
   );
 }
 
-export function UserFilterPanel(): JSX.Element {
+interface UserFilterPanelProps {
+  id?: string;
+  hidden?: boolean;
+}
+
+export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
+  const { id, hidden = false } = props ?? {};
   const [selectedGachas, setSelectedGachas] = useState<'*' | string[]>('*');
   const [selectedRarities, setSelectedRarities] = useState<'*' | string[]>('*');
   const [hideMiss, setHideMiss] = useState(false);
@@ -226,7 +232,11 @@ export function UserFilterPanel(): JSX.Element {
   };
 
   return (
-    <section className="user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+    <section
+      id={id}
+      hidden={hidden}
+      className="user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+    >
       <div className="user-filter-panel__controls grid gap-5">
         <MultiSelectFilter
           id="user-filter-gacha"
