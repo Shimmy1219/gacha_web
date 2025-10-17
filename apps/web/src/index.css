@@ -4,6 +4,8 @@
 
 :root {
   color-scheme: dark;
+  --app-header-height: 0px;
+  --app-main-vertical-padding: 0px;
 }
 
 @layer base {
@@ -49,6 +51,16 @@
 }
 
 @layer components {
+  .section-container {
+    max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
+  }
+
+  .section-container__body,
+  .section-container__content-wrapper,
+  .section-container__content {
+    max-height: inherit;
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold tracking-wide transition duration-150 ease-out;
     min-height: 42px;
@@ -74,6 +86,7 @@
 
   .section-scroll {
     @apply h-full overflow-y-auto pr-3;
+    max-height: inherit;
     scrollbar-width: thin;
     scrollbar-color: theme('colors.accent.DEFAULT') transparent;
     scroll-padding-right: 0.75rem;
