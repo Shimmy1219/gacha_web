@@ -1,0 +1,22 @@
+{
+  "scripts": {
+    "web:dev": "npm --prefix apps/web run dev",
+    "web:build": "npm --prefix apps/web run build",
+    "web:lint": "npm --prefix apps/web run lint"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.28.4",
+    "@vercel/blob": "^0.25.1",
+    "cookie": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/estree": "^1.0.8",
+    "@types/json-schema": "^7.0.15",
+    "@types/json5": "^0.0.30",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.6.14"
+  }
+}
