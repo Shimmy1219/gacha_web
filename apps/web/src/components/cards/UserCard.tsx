@@ -44,23 +44,15 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article
-          className={clsx(
-            'user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out',
-            open
-              ? 'border-accent/60 shadow-[0_24px_48px_rgba(225,29,72,0.25)]'
-              : 'hover:border-accent/40 hover:shadow-[0_20px_40px_rgba(0,0,0,0.45)]'
-          )}
-          data-state={open ? 'open' : 'closed'}
-        >
+        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
           <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <Disclosure.Button
               type="button"
-              className="user-card__toggle flex w-full items-start gap-2 text-left transition-colors duration-300 ease-out"
+              className="user-card__toggle flex w-full items-start gap-2 text-left transition-colors duration-200 ease-linear"
             >
               <ChevronRightIcon
                 className={clsx(
-                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ease-out',
+                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ease-linear',
                   open && 'rotate-90 text-accent'
                 )}
               />
@@ -81,20 +73,29 @@ export function UserCard({
           </header>
           <Transition
             show={open}
-            enter="transition duration-300 ease-out"
-            enterFrom="opacity-0 -translate-y-2"
-            enterTo="opacity-100 translate-y-0"
-            leave="transition duration-200 ease-in"
-            leaveFrom="opacity-100 translate-y-0"
-            leaveTo="opacity-0 -translate-y-2"
+            enter="transition-opacity duration-300 ease-linear"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="transition-opacity duration-300 ease-linear"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
             as="div"
             unmount={false}
           >
-            <Disclosure.Panel static className="user-card__inventories space-y-4">
-              {inventories.map((inventory) => (
-                <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
-              ))}
-            </Disclosure.Panel>
+            <div
+              className={clsx(
+                'grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+                open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              )}
+            >
+              <Disclosure.Panel static className="overflow-hidden">
+                <div className="user-card__inventories space-y-4">
+                  {inventories.map((inventory) => (
+                    <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
+                  ))}
+                </div>
+              </Disclosure.Panel>
+            </div>
           </Transition>
         </article>
       )}
