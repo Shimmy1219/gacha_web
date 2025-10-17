@@ -166,11 +166,21 @@ export function PtControlsPanel(): JSX.Element {
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl p-3 shadow-panel">
       <ControlsRow label="1回の消費pt">
-        <InlineNumberField value={perPull} onChange={setPerPull} placeholder="10" />
+        <InlineNumberField
+          value={perPull}
+          onChange={setPerPull}
+          placeholder="10"
+          className="ml-auto w-[8ch]"
+        />
       </ControlsRow>
 
       <ControlsRow label="コンプpt">
-        <InlineNumberField value={complete} onChange={setComplete} placeholder="1000" />
+        <InlineNumberField
+          value={complete}
+          onChange={setComplete}
+          placeholder="1000"
+          className="ml-auto w-[8ch]"
+        />
       </ControlsRow>
 
       <ControlsRow
