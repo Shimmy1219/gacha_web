@@ -50,7 +50,7 @@ function ControlsRow({
   return (
     <div
       className={clsx(
-        'pt-controls-panel__row grid gap-2 rounded-2xl border border-border/60 bg-panel/70 px-3 py-2 shadow-panel',
+        'pt-controls-panel__row grid gap-2 rounded-2xl px-1 py-1 shadow-panel',
         action
           ? 'grid-cols-[auto,minmax(0,1fr),auto]'
           : 'grid-cols-[auto,minmax(0,1fr)]',
@@ -164,13 +164,23 @@ export function PtControlsPanel(): JSX.Element {
     next.length === 0 ? [createGuaranteeRow(Date.now())] : next;
 
   return (
-    <section className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel/70 p-3 shadow-panel">
+    <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl p-3 shadow-panel">
       <ControlsRow label="1回の消費pt">
-        <InlineNumberField value={perPull} onChange={setPerPull} placeholder="10" />
+        <InlineNumberField
+          value={perPull}
+          onChange={setPerPull}
+          placeholder="10"
+          className="ml-auto w-[12ch]"
+        />
       </ControlsRow>
 
       <ControlsRow label="コンプpt">
-        <InlineNumberField value={complete} onChange={setComplete} placeholder="1000" />
+        <InlineNumberField
+          value={complete}
+          onChange={setComplete}
+          placeholder="1000"
+          className="ml-auto w-[12ch]"
+        />
       </ControlsRow>
 
       <ControlsRow
@@ -189,7 +199,7 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
+      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl px-1 py-1">
         {bundles.map((bundle) => (
           <div
             key={bundle.id}
@@ -247,7 +257,7 @@ export function PtControlsPanel(): JSX.Element {
       >
       </ControlsRow>
 
-      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl border border-dashed border-accent/30 bg-surface/50 px-3 py-2">
+      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl px-1 py-1">
         {guarantees.map((guarantee) => (
           <div
             key={guarantee.id}
@@ -291,6 +301,6 @@ export function PtControlsPanel(): JSX.Element {
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
