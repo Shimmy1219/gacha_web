@@ -19,6 +19,7 @@ type GachaTab = { id: string; label: string };
 export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
+  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -56,8 +57,6 @@ export function ItemsSection(): JSX.Element {
   }, [data?.appState, data?.catalogState]);
 
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
-
-  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
