@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   GACHA_STORAGE_UPDATED_EVENT,
   type GachaLocalStorageSnapshot
-} from '../../../../../packages/domain/app-persistence';
+} from '@domain/app-persistence';
 import { useAppPersistence } from './AppPersistenceProvider';
 
 interface HookState {

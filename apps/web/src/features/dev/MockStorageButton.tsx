@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { type GachaLocalStorageSnapshot } from '../../../../../packages/domain/app-persistence';
+import { type GachaLocalStorageSnapshot } from '@domain/app-persistence';
 import { useAppPersistence } from '../storage/AppPersistenceProvider';
 
 type GachaSeed = {
