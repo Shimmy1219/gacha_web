@@ -1,11 +1,13 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
-const packagesDir = path.resolve(workspaceRoot, 'packages').replace(/\\/g, '/');
-const domainDir = `${packagesDir}/domain`;
+const toPosixPath = (value: string) => value.replace(/\\/g, '/');
+
+const projectRoot = fs.realpathSync(path.dirname(fileURLToPath(import.meta.url)));
+const domainDir = toPosixPath(path.join(projectRoot, 'src/domain'));
 
 export default defineConfig({
   plugins: [react()],
@@ -14,7 +16,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     fs: {
-      allow: [fileURLToPath(new URL('.', import.meta.url)), packagesDir]
+      allow: [toPosixPath(projectRoot), domainDir]
     }
   },
   preview: {
@@ -24,7 +26,10 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@domain\/?$/, replacement: domainDir },
-      { find: /^@domain\/app-persistence$/, replacement: `${domainDir}/app-persistence/index.ts` },
+      {
+        find: /^@domain\/app-persistence$/,
+        replacement: `${domainDir}/app-persistence/index.ts`
+      },
       { find: /^@domain\/(.*)$/, replacement: `${domainDir}/$1` }
     ]
   },

@@ -18,9 +18,9 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@domain": ["../../packages/domain/index.ts"],
-      "@domain/app-persistence": ["../../packages/domain/app-persistence/index.ts"],
-      "@domain/*": ["../../packages/domain/*"]
+      "@domain": ["src/domain/index.ts"],
+      "@domain/app-persistence": ["src/domain/app-persistence/index.ts"],
+      "@domain/*": ["src/domain/*"]
     }
   },
   "include": ["src"],
