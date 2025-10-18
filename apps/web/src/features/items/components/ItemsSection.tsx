@@ -8,6 +8,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
+import { useAppPersistence } from '../../storage/AppPersistenceProvider';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -17,6 +18,7 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
+  const appPersistence = useAppPersistence();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -167,6 +169,7 @@ export function ItemsSection(): JSX.Element {
         description: 'プレビュー・レアリティ・リアグ設定をまとめて更新します。',
         size: 'lg',
         payload: {
+          gachaId: model.gachaId,
           itemId: model.itemId,
           itemName: model.name,
           gachaName: model.gachaDisplayName,
@@ -181,12 +184,25 @@ export function ItemsSection(): JSX.Element {
           riaguPrice: model.isRiagu ? 300 : undefined,
           riaguType: model.isRiagu ? 'リアグ景品' : undefined,
           onSave: (payload) => {
-            console.info('景品設定ダイアログから保存（サンプル）', payload);
+            try {
+              appPersistence.updateCatalogItem({
+                gachaId: model.gachaId,
+                itemId: model.itemId,
+                patch: {
+                  name: payload.name,
+                  rarityId: payload.rarityId,
+                  pickupTarget: payload.pickupTarget,
+                  completeTarget: payload.completeTarget
+                }
+              });
+            } catch (error) {
+              console.error('景品設定の保存に失敗しました', error);
+            }
           }
         }
       });
     },
-    [flatItems, push, rarityOptionsByGacha]
+    [appPersistence, flatItems, push, rarityOptionsByGacha]
   );
 
   return (

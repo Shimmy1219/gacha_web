@@ -15,7 +15,13 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@domain": ["../../packages/domain/index.ts"],
+      "@domain/app-persistence": ["../../packages/domain/app-persistence/index.ts"],
+      "@domain/*": ["../../packages/domain/*"]
+    }
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

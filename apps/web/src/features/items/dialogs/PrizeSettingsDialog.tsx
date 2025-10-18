@@ -11,6 +11,7 @@ interface RarityOption {
 }
 
 export interface PrizeSettingsDialogPayload {
+  gachaId: string;
   itemId: string;
   itemName: string;
   gachaName: string;
@@ -108,15 +109,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       pickupTarget,
       completeTarget,
       file: selectedFile
-    });
-
-    console.info('景品設定の保存（ダミー）', {
-      itemId: payload.itemId,
-      name,
-      rarityId,
-      pickupTarget,
-      completeTarget,
-      file: selectedFile?.name ?? null
     });
 
     close();
