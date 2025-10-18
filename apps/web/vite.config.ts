@@ -6,45 +6,8 @@ import react from '@vitejs/plugin-react';
 
 const toPosixPath = (value: string) => value.replace(/\\/g, '/');
 
-const findWorkspaceRoot = (startDir: string): string | null => {
-  let currentDir = startDir;
-
-  while (true) {
-    const packagesPath = path.join(currentDir, 'packages');
-    if (fs.existsSync(packagesPath) && fs.statSync(packagesPath).isDirectory()) {
-      return currentDir;
-    }
-
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir) {
-      return null;
-    }
-
-    currentDir = parentDir;
-  }
-};
-
-const resolveWorkspaceRoot = (): string => {
-  const candidateDirs = Array.from(
-    new Set([
-      fs.realpathSync(path.dirname(fileURLToPath(import.meta.url))),
-      fs.realpathSync(process.cwd())
-    ])
-  );
-
-  for (const candidate of candidateDirs) {
-    const result = findWorkspaceRoot(candidate);
-    if (result) {
-      return result;
-    }
-  }
-
-  throw new Error('Failed to locate workspace root containing packages directory.');
-};
-
-const workspaceRoot = resolveWorkspaceRoot();
-const packagesDir = toPosixPath(path.join(workspaceRoot, 'packages'));
-const domainDir = `${packagesDir}/domain`;
+const projectRoot = fs.realpathSync(path.dirname(fileURLToPath(import.meta.url)));
+const domainDir = toPosixPath(path.join(projectRoot, 'src/domain'));
 
 export default defineConfig({
   plugins: [react()],
@@ -53,7 +16,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     fs: {
-      allow: [toPosixPath(workspaceRoot), packagesDir]
+      allow: [toPosixPath(projectRoot), domainDir]
     }
   },
   preview: {
@@ -63,7 +26,10 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@domain\/?$/, replacement: domainDir },
-      { find: /^@domain\/app-persistence$/, replacement: `${domainDir}/app-persistence/index.ts` },
+      {
+        find: /^@domain\/app-persistence$/,
+        replacement: `${domainDir}/app-persistence/index.ts`
+      },
       { find: /^@domain\/(.*)$/, replacement: `${domainDir}/$1` }
     ]
   },
