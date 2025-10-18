@@ -1,6 +1,11 @@
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
+const packagesDir = path.resolve(workspaceRoot, 'packages').replace(/\\/g, '/');
+const domainDir = `${packagesDir}/domain`;
 
 export default defineConfig({
   plugins: [react()],
@@ -9,10 +14,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     fs: {
-      allow: [
-        fileURLToPath(new URL('.', import.meta.url)),
-        fileURLToPath(new URL('../../packages', import.meta.url))
-      ]
+      allow: [fileURLToPath(new URL('.', import.meta.url)), packagesDir]
     }
   },
   preview: {
@@ -20,9 +22,11 @@ export default defineConfig({
     host: true
   },
   resolve: {
-    alias: {
-      '@domain': fileURLToPath(new URL('../../packages/domain', import.meta.url))
-    }
+    alias: [
+      { find: /^@domain\/?$/, replacement: domainDir },
+      { find: /^@domain\/app-persistence$/, replacement: `${domainDir}/app-persistence/index.ts` },
+      { find: /^@domain\/(.*)$/, replacement: `${domainDir}/$1` }
+    ]
   },
   build: {
     outDir: 'dist',     // 明示（デフォルトと同じだが、Vercel側の設定と揃える意味で）
