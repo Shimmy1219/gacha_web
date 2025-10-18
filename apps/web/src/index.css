@@ -61,6 +61,18 @@
     max-height: inherit;
   }
 
+  .section-container__content-wrapper {
+    position: relative;
+    overflow: visible;
+    --section-scrollbar-width: 0.75rem;
+    --section-scrollbar-gap: 0.5rem;
+    padding-right: var(--section-scrollbar-gap);
+  }
+
+  .section-container__content-wrapper--scrollable {
+    padding-right: calc(var(--section-scrollbar-width) + var(--section-scrollbar-gap));
+  }
+
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold tracking-wide transition duration-150 ease-out;
     min-height: 42px;
@@ -84,20 +96,39 @@
     background-image: none;
   }
 
+  .section-container__content-wrapper--scrollable .section-scroll {
+    margin-right: calc(var(--section-scrollbar-width) * -1);
+  }
+
   .section-scroll {
     @apply h-full overflow-y-auto;
     max-height: inherit;
-    padding-right: 0;
+    padding-right: var(--section-scrollbar-gap);
     margin-right: 0;
     scrollbar-width: thin;
     scrollbar-color: theme('colors.accent.DEFAULT') transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .section-scroll--no-scrollbar {
+    scrollbar-gutter: stable;
   }
 
   .section-scroll::-webkit-scrollbar {
-    width: 0.6rem;
+    width: var(--section-scrollbar-width);
   }
 
   .section-scroll::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .section-scroll::-webkit-scrollbar-button:single-button,
+  .section-scroll::-webkit-scrollbar-button:start:decrement,
+  .section-scroll::-webkit-scrollbar-button:end:increment,
+  .section-scroll::-webkit-scrollbar-button:vertical:increment,
+  .section-scroll::-webkit-scrollbar-button:vertical:decrement {
     display: none;
     width: 0;
     height: 0;
