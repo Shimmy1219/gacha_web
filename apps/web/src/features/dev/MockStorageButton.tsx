@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 
+import { GACHA_STORAGE_UPDATED_EVENT } from '../storage/useGachaLocalStorage';
+
 type StorageEntry = {
   key: string;
   value: unknown;
@@ -567,6 +569,7 @@ export function MockStorageButton(): JSX.Element {
       entries.forEach(({ key, value }) => {
         window.localStorage.setItem(key, JSON.stringify(value));
       });
+      window.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
       setStatus('success');
       setErrorMessage('');
       console.info('ローカルストレージに仮データを保存しました', entries.map((entry) => entry.key));

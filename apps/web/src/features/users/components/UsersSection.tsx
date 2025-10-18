@@ -1,96 +1,145 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useModal } from '../../../components/modal';
 import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
+import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
 
-const RARITY_META = {
-  SSR: { rarityId: 'rar-ssr', label: 'SSR', color: '#ff8ab2' },
-  SR: { rarityId: 'rar-sr', label: 'SR', color: '#ff4f89' },
-  R: { rarityId: 'rar-r', label: 'R', color: '#c438ff' },
-  N: { rarityId: 'rar-n', label: 'N', color: '#4d6bff' }
-} satisfies Record<string, UserCardProps['inventories'][number]['pulls'][number]['rarity']>;
+const FALLBACK_RARITY_COLOR = '#a1a1aa';
 
-type SampleUser = Omit<UserCardProps, 'onExport'>;
+type DerivedUser = Omit<UserCardProps, 'onExport'>;
 
-const SAMPLE_USERS: SampleUser[] = [
-  {
-    userId: 'usr-0001',
-    userName: '如月 朱音',
-    totalSummary: '12回',
-    memo: '常連 / VIP対応',
-    expandedByDefault: true,
-    inventories: [
-      {
-        inventoryId: 'inv-usr-0001-main',
-        gachaId: 'gch-main',
-        gachaName: 'スターブライト',
-        pulls: [
-          { itemId: 'itm-000001', itemName: '煌めく星屑ブレスレット', rarity: RARITY_META.SSR, count: 1 },
-          { itemId: 'itm-000005', itemName: '薄紅のカードケース', rarity: RARITY_META.R, count: 2 },
-          { itemId: 'itm-000006', itemName: 'メモリアルチケット', rarity: RARITY_META.R, count: 3 }
-        ]
-      }
-    ]
-  },
-  {
-    userId: 'usr-0002',
-    userName: '蒼井 リツ',
-    totalSummary: '8回',
-    memo: 'ZIP共有済み',
-    inventories: [
-      {
-        inventoryId: 'inv-usr-0002-main',
-        gachaId: 'gch-main',
-        gachaName: 'スターブライト',
-        pulls: [
-          { itemId: 'itm-000002', itemName: '漆黒のオーブ', rarity: RARITY_META.SR, count: 1 },
-          { itemId: 'itm-000004', itemName: 'スチールギア', rarity: RARITY_META.R, count: 2 },
-          { itemId: 'itm-000006', itemName: 'メモリアルチケット', rarity: RARITY_META.N, count: 2 }
-        ]
-      }
-    ]
-  },
-  {
-    userId: 'usr-0003',
-    userName: '七海 ましろ',
-    totalSummary: '4回',
-    memo: '初参加 / Discord連携',
-    inventories: [
-      {
-        inventoryId: 'inv-usr-0003-main',
-        gachaId: 'gch-main',
-        gachaName: 'スターブライト',
-        pulls: [
-          { itemId: 'itm-000003', itemName: '幸運のメダル', rarity: RARITY_META.SR, count: 1 },
-          { itemId: 'itm-000006', itemName: 'メモリアルチケット', rarity: RARITY_META.N, count: 1 }
-        ]
-      }
-    ]
+function formatExpiresAt(value?: string): string | undefined {
+  if (!value) {
+    return undefined;
   }
-];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const { push } = useModal();
+  const { status, data } = useGachaLocalStorage();
+
+  const users = useMemo<DerivedUser[]>(() => {
+    if (!data?.userProfiles || !data?.userInventories) {
+      return [];
+    }
+
+    const results: DerivedUser[] = [];
+    const profiles = data.userProfiles.users ?? {};
+
+    Object.values(profiles).forEach((profile) => {
+      const userId = profile.id;
+      const inventoriesByGacha = data.userInventories?.inventories?.[userId] ?? {};
+      const inventories = Object.values(inventoriesByGacha)
+        .map((inventory) => {
+          const gachaMeta = data.appState?.meta?.[inventory.gachaId];
+          const gachaName = gachaMeta?.displayName ?? inventory.gachaId;
+          const pulls = (inventory.items ?? [])
+            .map((item) => {
+              const catalogItem = data.catalogState?.byGacha?.[inventory.gachaId]?.items?.[item.itemId];
+              const rarityEntity = data.rarityState?.entities?.[item.rarityId];
+              return {
+                itemId: item.itemId,
+                itemName: catalogItem?.name ?? item.itemId,
+                rarity: {
+                  rarityId: item.rarityId,
+                  label: rarityEntity?.label ?? item.rarityId,
+                  color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR
+                },
+                count: item.count ?? 0
+              };
+            })
+            .filter((entry) => entry.count > 0);
+
+          if (pulls.length === 0) {
+            return null;
+          }
+
+          return {
+            inventoryId: inventory.inventoryId,
+            gachaId: inventory.gachaId,
+            gachaName,
+            pulls
+          } satisfies UserCardProps['inventories'][number];
+        })
+        .filter(Boolean) as UserCardProps['inventories'];
+
+      if (inventories.length === 0) {
+        return;
+      }
+
+      const totalPulls = inventories.reduce(
+        (total, inventory) => total + inventory.pulls.reduce((sum, item) => sum + item.count, 0),
+        0
+      );
+
+      results.push({
+        userId,
+        userName: profile.displayName,
+        totalSummary: `${totalPulls}連`,
+        memo: [profile.team, profile.role].filter(Boolean).join(' / ') || undefined,
+        inventories,
+        expandedByDefault: results.length === 0
+      });
+    });
+
+    return results;
+  }, [data]);
+
+  const gachaFilterOptions = useMemo(() => {
+    if (!data?.appState) {
+      return [] as Array<{ value: string; label: string; description?: string }>;
+    }
+
+    return (data.appState.order ?? []).map((gachaId) => ({
+      value: gachaId,
+      label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId,
+      description: gachaId
+    }));
+  }, [data?.appState]);
+
+  const rarityFilterOptions = useMemo(() => {
+    if (!data?.rarityState) {
+      return [] as Array<{ value: string; label: string }>;
+    }
+
+    return Object.values(data.rarityState.entities ?? {}).map((entity) => ({
+      value: entity.id,
+      label: entity.label
+    }));
+  }, [data?.rarityState]);
 
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
+      const saved = data?.saveOptions?.[userId];
+      const url = saved?.shareUrl ?? saved?.downloadUrl;
+
       push(SaveOptionsDialog, {
         id: `save-options-${userId}`,
         title: '保存オプション',
         description: 'ZIP保存・アップロード・共有リンクの各オプションを選択できます。',
         size: 'lg',
         payload: {
-          uploadResult: {
-            url: 'https://shimmy3.com/download/sample-zip',
-            label: 'https://shimmy3.com/download/sample-zip',
-            expiresAt: '2024-12-31 23:59'
-          },
+          uploadResult: url
+            ? {
+                url,
+                label: saved?.shareUrl ?? url,
+                expiresAt: formatExpiresAt(saved?.expiresAt)
+              }
+            : undefined,
           onSaveToDevice: () => {
             console.info('デバイス保存処理は未接続です', userId);
           },
@@ -100,13 +149,13 @@ export function UsersSection(): JSX.Element {
           onShareToDiscord: () => {
             console.info('Discord共有処理は未接続です', userId);
           },
-          onCopyUrl: (url) => {
-            console.info('共有URLをコピー（ダミー）', { userId, url });
+          onCopyUrl: (copyUrl) => {
+            console.info('共有URLをコピー（ダミー）', { userId, url: copyUrl });
           }
         }
       });
     },
-    [push]
+    [data?.saveOptions, push]
   );
 
   return (
@@ -146,18 +195,24 @@ export function UsersSection(): JSX.Element {
         )}
       >
         <div className={clsx('overflow-hidden transition-opacity duration-300 ease-linear', filtersOpen ? 'opacity-100' : 'opacity-0')}>
-          <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
+          <UserFilterPanel id="users-filter-panel" open={filtersOpen} gachaOptions={gachaFilterOptions} rarityOptions={rarityFilterOptions} />
         </div>
       </div>
-      <div className="users-section__list space-y-3">
-        {SAMPLE_USERS.map((user) => (
-          <UserCard
-            key={user.userId}
-            {...user}
-            onExport={handleOpenSaveOptions}
-          />
-        ))}
-      </div>
+
+      {status !== 'ready' ? (
+        <p className="text-sm text-muted-foreground">ローカルストレージからユーザーデータを読み込み中です…</p>
+      ) : null}
+      {status === 'ready' && users.length === 0 ? (
+        <p className="text-sm text-muted-foreground">表示できるユーザーがいません。仮データを投入してから再度開いてください。</p>
+      ) : null}
+
+      {users.length > 0 ? (
+        <div className="users-section__list space-y-3">
+          {users.map((user) => (
+            <UserCard key={user.userId} {...user} onExport={handleOpenSaveOptions} />
+          ))}
+        </div>
+      ) : null}
     </SectionContainer>
   );
 }

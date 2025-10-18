@@ -211,10 +211,12 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
 interface UserFilterPanelProps {
   id?: string;
   open?: boolean;
+  gachaOptions?: MultiSelectOption[];
+  rarityOptions?: MultiSelectOption[];
 }
 
 export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
-  const { id, open = true } = props ?? {};
+  const { id, open = true, gachaOptions = [], rarityOptions = [] } = props ?? {};
   const [selectedGachas, setSelectedGachas] = useState<'*' | string[]>('*');
   const [selectedRarities, setSelectedRarities] = useState<'*' | string[]>('*');
   const [hideMiss, setHideMiss] = useState(false);
@@ -246,24 +248,14 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
         <MultiSelectFilter
           id="user-filter-gacha"
           label="ガチャ絞り込み"
-          options={[
-            { value: 'gch-main', label: 'スターブライト', description: 'メインキャンペーン' },
-            { value: 'gch-riagu', label: 'リアグガチャ', description: 'リアグ対象のみ' },
-            { value: 'gch-dark', label: '闇ガチャ', description: '闇属性キャラクター' }
-          ]}
+          options={gachaOptions}
           value={selectedGachas}
           onChange={setSelectedGachas}
         />
         <MultiSelectFilter
           id="user-filter-rarity"
           label="レア度"
-          options={[
-            { value: 'rar-ssr', label: 'SSR' },
-            { value: 'rar-sr', label: 'SR' },
-            { value: 'rar-r', label: 'R' },
-            { value: 'rar-n', label: 'N' },
-            { value: 'rar-miss', label: 'はずれ' }
-          ]}
+          options={rarityOptions}
           value={selectedRarities}
           onChange={setSelectedRarities}
         />

@@ -1,9 +1,9 @@
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 interface PtBundleRowState {
   id: string;
-  pt: string;
+  price: string;
   pulls: string;
 }
 
@@ -13,26 +13,36 @@ interface PtGuaranteeRowState {
   minRarity: string;
 }
 
-const RARITY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'SSR', label: 'SSR' },
-  { value: 'SR', label: 'SR' },
-  { value: 'R', label: 'R' },
-  { value: 'N', label: 'N' }
-];
+interface PtControlsPanelProps {
+  settings?: {
+    perPull?: {
+      price: number;
+      pulls: number;
+    };
+    complete?: {
+      price: number;
+    };
+    bundles?: Array<{ id: string; price: number; pulls: number }>;
+    guarantees?: Array<{ id: string; rarityId: string; threshold: number }>;
+  };
+  rarityOptions: Array<{ value: string; label: string }>;
+}
 
-function createBundleRow(seed: number): PtBundleRowState {
+function createBundleRow(seed: number | string, overrides?: Partial<PtBundleRowState>): PtBundleRowState {
+  const id = typeof seed === 'number' ? `bundle-${seed}` : seed;
   return {
-    id: `bundle-${seed}`,
-    pt: '0',
-    pulls: '10'
+    id,
+    price: overrides?.price ?? '',
+    pulls: overrides?.pulls ?? ''
   };
 }
 
-function createGuaranteeRow(seed: number): PtGuaranteeRowState {
+function createGuaranteeRow(seed: number | string, overrides?: Partial<PtGuaranteeRowState>): PtGuaranteeRowState {
+  const id = typeof seed === 'number' ? `guarantee-${seed}` : seed;
   return {
-    id: `guarantee-${seed}`,
-    minPulls: '30',
-    minRarity: 'SSR'
+    id,
+    minPulls: overrides?.minPulls ?? '',
+    minRarity: overrides?.minRarity ?? ''
   };
 }
 
@@ -149,13 +159,48 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
   );
 }
 
-export function PtControlsPanel(): JSX.Element {
-  const [perPull, setPerPull] = useState('10');
-  const [complete, setComplete] = useState('1000');
+export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProps): JSX.Element {
+  const [perPull, setPerPull] = useState('');
+  const [complete, setComplete] = useState('');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([createBundleRow(0)]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([createGuaranteeRow(0)]);
   const nextBundleId = useRef(1);
   const nextGuaranteeId = useRef(1);
+
+  useEffect(() => {
+    setPerPull(settings?.perPull?.price != null ? String(settings.perPull.price) : '');
+    setComplete(settings?.complete?.price != null ? String(settings.complete.price) : '');
+
+    if (settings?.bundles && settings.bundles.length > 0) {
+      setBundles(
+        settings.bundles.map((bundle) =>
+          createBundleRow(bundle.id, {
+            price: String(bundle.price),
+            pulls: String(bundle.pulls)
+          })
+        )
+      );
+      nextBundleId.current = settings.bundles.length + 1;
+    } else {
+      setBundles([createBundleRow(0)]);
+      nextBundleId.current = 1;
+    }
+
+    if (settings?.guarantees && settings.guarantees.length > 0) {
+      setGuarantees(
+        settings.guarantees.map((guarantee) =>
+          createGuaranteeRow(guarantee.id, {
+            minPulls: String(guarantee.threshold),
+            minRarity: guarantee.rarityId
+          })
+        )
+      );
+      nextGuaranteeId.current = settings.guarantees.length + 1;
+    } else {
+      setGuarantees([createGuaranteeRow(0)]);
+      nextGuaranteeId.current = 1;
+    }
+  }, [settings]);
 
   const ensureBundleExists = (next: PtBundleRowState[]): PtBundleRowState[] =>
     next.length === 0 ? [createBundleRow(Date.now())] : next;
@@ -197,52 +242,48 @@ export function PtControlsPanel(): JSX.Element {
           />
         }
       >
-      </ControlsRow>
-
-      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl px-1 py-1">
-        {bundles.map((bundle) => (
-          <div
-            key={bundle.id}
-            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
-          >
-            <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+        <div className="flex flex-col gap-2">
+          {bundles.map((bundle, index) => (
+            <div key={bundle.id} className="flex items-center gap-2">
               <InlineNumberField
-                value={bundle.pt}
+                value={bundle.price}
                 onChange={(value) =>
-                  setBundles((prev) =>
-                    prev.map((row) => (row.id === bundle.id ? { ...row, pt: value } : row))
-                  )
+                  setBundles((prev) => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], price: value };
+                    return ensureBundleExists(next);
+                  })
                 }
-                placeholder="60"
-                className="w-[7ch]"
+                placeholder="3000"
+                className="w-[10ch]"
               />
-              <span className="leading-none">ptで</span>
+              <span className="text-xs text-muted-foreground">pt</span>
               <InlineNumberField
                 value={bundle.pulls}
                 onChange={(value) =>
-                  setBundles((prev) =>
-                    prev.map((row) => (row.id === bundle.id ? { ...row, pulls: value } : row))
-                  )
+                  setBundles((prev) => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], pulls: value };
+                    return ensureBundleExists(next);
+                  })
                 }
                 placeholder="10"
-                min={1}
-                className="w-[7ch]"
+                className="w-[8ch]"
               />
-              <span className="leading-none">連</span>
+              <span className="text-xs text-muted-foreground">連</span>
+              <RemoveButton
+                onClick={() =>
+                  setBundles((prev) => ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id)))
+                }
+              />
             </div>
-            <RemoveButton
-              onClick={() =>
-                setBundles((prev) =>
-                  ensureBundleExists(prev.filter((row) => row.id !== bundle.id))
-                )
-              }
-            />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </ControlsRow>
 
       <ControlsRow
-        label="保証（n連以上で ○○ 以上確定）"
+        label="天井保証"
+        alignTop
         action={
           <AddButton
             onClick={() =>
@@ -255,52 +296,45 @@ export function PtControlsPanel(): JSX.Element {
           />
         }
       >
-      </ControlsRow>
-
-      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl px-1 py-1">
-        {guarantees.map((guarantee) => (
-          <div
-            key={guarantee.id}
-            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
-          >
-            <div className="pt-controls-panel__guarantee-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+        <div className="flex flex-col gap-2">
+          {guarantees.map((guarantee, index) => (
+            <div key={guarantee.id} className="flex items-center gap-2">
               <InlineNumberField
                 value={guarantee.minPulls}
                 onChange={(value) =>
-                  setGuarantees((prev) =>
-                    prev.map((row) =>
-                      row.id === guarantee.id ? { ...row, minPulls: value } : row
-                    )
-                  )
+                  setGuarantees((prev) => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], minPulls: value };
+                    return ensureGuaranteeExists(next);
+                  })
                 }
                 placeholder="30"
-                min={1}
-                className="w-[7ch]"
+                className="w-[8ch]"
               />
-              <span className="leading-none">連以上で</span>
+              <span className="text-xs text-muted-foreground">連以内で</span>
               <InlineSelectField
-                value={guarantee.minRarity}
-                onChange={(rarity) =>
+                value={guarantee.minRarity || (rarityOptions[0]?.value ?? '')}
+                onChange={(value) =>
+                  setGuarantees((prev) => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], minRarity: value };
+                    return ensureGuaranteeExists(next);
+                  })
+                }
+                options={rarityOptions}
+              />
+              <span className="text-xs text-muted-foreground">保証</span>
+              <RemoveButton
+                onClick={() =>
                   setGuarantees((prev) =>
-                    prev.map((row) =>
-                      row.id === guarantee.id ? { ...row, minRarity: rarity } : row
-                    )
+                    ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id))
                   )
                 }
-                options={RARITY_OPTIONS}
               />
-              <span className="leading-none">以上確定</span>
             </div>
-            <RemoveButton
-              onClick={() =>
-                setGuarantees((prev) =>
-                  ensureGuaranteeExists(prev.filter((row) => row.id !== guarantee.id))
-                )
-              }
-            />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </ControlsRow>
     </div>
   );
 }
