@@ -85,19 +85,22 @@
   }
 
   .section-scroll {
-    @apply h-full overflow-y-auto pr-3;
+    @apply h-full overflow-y-auto;
     max-height: inherit;
+    padding-right: 0;
+    margin-right: 0;
     scrollbar-width: thin;
     scrollbar-color: theme('colors.accent.DEFAULT') transparent;
-    scroll-padding-right: 0.75rem;
-  }
-
-  .section-scroll.section-scroll--no-scrollbar {
-    padding-right: 0;
   }
 
   .section-scroll::-webkit-scrollbar {
     width: 0.6rem;
+  }
+
+  .section-scroll::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .section-scroll::-webkit-scrollbar-track {
