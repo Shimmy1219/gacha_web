@@ -7,11 +7,14 @@ type StorageEntry = {
   value: unknown;
 };
 
-type GachaDefinition = {
-  id: string;
+type GachaSeed = {
+  slug: string;
   displayName: string;
   iconAssetId: string;
-  altNames: string[];
+};
+
+type GachaDefinition = GachaSeed & {
+  id: string;
 };
 
 type ItemSeed = {
@@ -31,6 +34,14 @@ type ItemDefinition = {
   imageAssetId: string;
   riagu: boolean;
   series: string;
+};
+
+type GachaMetaSnapshot = {
+  id: string;
+  displayName: string;
+  iconAssetId: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type CatalogItemSnapshot = {
@@ -57,102 +68,6 @@ type UserSeed = {
   team: string;
 };
 
-const GACHA_DEFINITIONS: GachaDefinition[] = [
-  {
-    id: 'gch-aurora-arc',
-    displayName: 'オーロラアーク',
-    iconAssetId: 'asset-aurora',
-    altNames: ['オーロラ', '極光アーク']
-  },
-  {
-    id: 'gch-cosmos-diva',
-    displayName: 'コスモスディーヴァ',
-    iconAssetId: 'asset-cosmos',
-    altNames: ['コスモス', '星歌ディーヴァ']
-  },
-  {
-    id: 'gch-echo-tide',
-    displayName: 'エコータイド',
-    iconAssetId: 'asset-echo',
-    altNames: ['エコー', '潮騒タイド']
-  },
-  {
-    id: 'gch-mistral-note',
-    displayName: 'ミストラルノート',
-    iconAssetId: 'asset-mistral',
-    altNames: ['ミストラル', '風詠ノート']
-  }
-];
-
-const RARITY_TEMPLATES = [
-  { code: 'legend', label: 'レジェンド', color: '#facc15', emitRate: 0.02, shortName: 'LEG' },
-  { code: 'premium', label: 'プレミア', color: '#a855f7', emitRate: 0.18, shortName: 'PRE' },
-  { code: 'standard', label: 'スタンダード', color: '#38bdf8', emitRate: 0.8, shortName: 'STD' }
-] as const;
-
-const ITEM_SETS: Record<string, ItemSeed[]> = {
-  'gch-aurora-arc': [
-    {
-      name: '極光のティアラ',
-      series: 'AURORA JEWELRY',
-      riagu: true
-    },
-    {
-      name: '氷晶の羽飾り',
-      series: 'AURORA ACCESSORY'
-    },
-    {
-      name: '夜明けの手紙',
-      series: 'AURORA POST'
-    }
-  ],
-  'gch-cosmos-diva': [
-    {
-      name: '星雲ステージパス',
-      series: 'COSMOS LIVE',
-      riagu: true
-    },
-    {
-      name: '流星のピアス',
-      series: 'COSMOS JEWELRY'
-    },
-    {
-      name: '銀河レコード',
-      series: 'COSMOS RECORDS'
-    }
-  ],
-  'gch-echo-tide': [
-    {
-      name: '潮騒サウンドボックス',
-      series: 'ECHO MUSIC'
-    },
-    {
-      name: '泡沫のミニキーホルダー',
-      series: 'ECHO GOODS',
-      riagu: true
-    },
-    {
-      name: '浜辺のポラロイド',
-      series: 'ECHO PHOTO'
-    }
-  ],
-  'gch-mistral-note': [
-    {
-      name: '風歌マイクロフォン',
-      series: 'MISTRAL AUDIO'
-    },
-    {
-      name: '空渡りのブレスレット',
-      series: 'MISTRAL ACCESSORY',
-      riagu: true
-    },
-    {
-      name: '木漏れ日のスコア',
-      series: 'MISTRAL SCORE'
-    }
-  ]
-};
-
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
 function makeDeterministicId(prefix: string, seed: string, length = 10): string {
@@ -171,6 +86,103 @@ function makeDeterministicId(prefix: string, seed: string, length = 10): string 
 
   return `${prefix}${suffix}`;
 }
+
+const GACHA_SEEDS: GachaSeed[] = [
+  {
+    slug: 'aurora-arc',
+    displayName: 'オーロラアーク',
+    iconAssetId: 'asset-aurora'
+  },
+  {
+    slug: 'cosmos-diva',
+    displayName: 'コスモスディーヴァ',
+    iconAssetId: 'asset-cosmos'
+  },
+  {
+    slug: 'echo-tide',
+    displayName: 'エコータイド',
+    iconAssetId: 'asset-echo'
+  },
+  {
+    slug: 'mistral-note',
+    displayName: 'ミストラルノート',
+    iconAssetId: 'asset-mistral'
+  }
+];
+
+const GACHA_DEFINITIONS: GachaDefinition[] = GACHA_SEEDS.map((seed) => ({
+  ...seed,
+  id: makeDeterministicId('gch-', seed.slug)
+}));
+
+const RARITY_TEMPLATES = [
+  { code: 'legend', label: 'レジェンド', color: '#facc15', emitRate: 0.02, shortName: 'LEG' },
+  { code: 'premium', label: 'プレミア', color: '#a855f7', emitRate: 0.18, shortName: 'PRE' },
+  { code: 'standard', label: 'スタンダード', color: '#38bdf8', emitRate: 0.8, shortName: 'STD' }
+] as const;
+
+const ITEM_SETS: Record<string, ItemSeed[]> = {
+  'aurora-arc': [
+    {
+      name: '極光のティアラ',
+      series: 'AURORA JEWELRY',
+      riagu: true
+    },
+    {
+      name: '氷晶の羽飾り',
+      series: 'AURORA ACCESSORY'
+    },
+    {
+      name: '夜明けの手紙',
+      series: 'AURORA POST'
+    }
+  ],
+  'cosmos-diva': [
+    {
+      name: '星雲ステージパス',
+      series: 'COSMOS LIVE',
+      riagu: true
+    },
+    {
+      name: '流星のピアス',
+      series: 'COSMOS JEWELRY'
+    },
+    {
+      name: '銀河レコード',
+      series: 'COSMOS RECORDS'
+    }
+  ],
+  'echo-tide': [
+    {
+      name: '潮騒サウンドボックス',
+      series: 'ECHO MUSIC'
+    },
+    {
+      name: '泡沫のミニキーホルダー',
+      series: 'ECHO GOODS',
+      riagu: true
+    },
+    {
+      name: '浜辺のポラロイド',
+      series: 'ECHO PHOTO'
+    }
+  ],
+  'mistral-note': [
+    {
+      name: '風歌マイクロフォン',
+      series: 'MISTRAL AUDIO'
+    },
+    {
+      name: '空渡りのブレスレット',
+      series: 'MISTRAL ACCESSORY',
+      riagu: true
+    },
+    {
+      name: '木漏れ日のスコア',
+      series: 'MISTRAL SCORE'
+    }
+  ]
+};
 
 const USER_SEEDS: UserSeed[] = [
   { displayName: '綾瀬 ひかり', handle: 'ayase', team: '北ブロック' },
@@ -192,18 +204,10 @@ function createMockEntries(): StorageEntry[] {
 
   const gachaOrder = GACHA_DEFINITIONS.map((gacha) => gacha.id);
 
-  const aliasByName = GACHA_DEFINITIONS.reduce<Record<string, string>>((acc, gacha) => {
-    acc[gacha.displayName] = gacha.id;
-    gacha.altNames.forEach((alt) => {
-      acc[alt] = gacha.id;
-    });
-    return acc;
-  }, {});
-
   const appState = {
     version: 3,
     updatedAt: nowIso,
-    meta: GACHA_DEFINITIONS.reduce<Record<string, Record<string, unknown>>>((acc, gacha) => {
+    meta: GACHA_DEFINITIONS.reduce<Record<string, GachaMetaSnapshot>>((acc, gacha) => {
       acc[gacha.id] = {
         id: gacha.id,
         displayName: gacha.displayName,
@@ -214,7 +218,6 @@ function createMockEntries(): StorageEntry[] {
       return acc;
     }, {}),
     order: gachaOrder,
-    aliasByName,
     selectedGachaId: gachaOrder[0] ?? null
   };
 
@@ -256,7 +259,7 @@ function createMockEntries(): StorageEntry[] {
   };
 
   const itemDefinitions: ItemDefinition[] = GACHA_DEFINITIONS.flatMap((gacha) => {
-    const seeds = ITEM_SETS[gacha.id] ?? [];
+    const seeds = ITEM_SETS[gacha.slug] ?? [];
     return seeds.map((seed, index) => {
       const rarityIds = rarityByGacha[gacha.id];
       const rarityId = rarityIds[Math.min(index, rarityIds.length - 1)];

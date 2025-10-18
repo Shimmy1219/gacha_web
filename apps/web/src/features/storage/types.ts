@@ -12,7 +12,6 @@ export interface GachaAppStateV3 {
     }
   >;
   order: string[];
-  aliasByName?: Record<string, string>;
   selectedGachaId: string | null;
 }
 
