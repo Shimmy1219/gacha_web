@@ -1,6 +1,6 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
@@ -12,6 +12,8 @@ const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta };
+type ItemsByGacha = Record<string, ItemEntry[]>;
+type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
@@ -34,20 +36,37 @@ export function ItemsSection(): JSX.Element {
     );
   }, [data?.rarityState]);
 
-  const items = useMemo(() => {
-    if (!data?.appState || !data?.catalogState || !data?.rarityState) {
-      return [] as ItemEntry[];
+  const gachaTabs = useMemo<GachaTab[]>(() => {
+    if (!data?.appState || !data?.catalogState) {
+      return [];
     }
 
-    const results: ItemEntry[] = [];
-    const order = data.appState.order ?? Object.keys(data.catalogState.byGacha ?? {});
+    const catalogByGacha = data.catalogState.byGacha ?? {};
+    const ordered = data.appState.order ?? Object.keys(catalogByGacha);
 
-    order.forEach((gachaId) => {
+    const knownGachaIds = ordered.filter((gachaId) => catalogByGacha[gachaId]);
+    const rest = Object.keys(catalogByGacha).filter((gachaId) => !knownGachaIds.includes(gachaId));
+    const finalOrder = [...knownGachaIds, ...rest];
+
+    return finalOrder.map((gachaId) => ({
+      id: gachaId,
+      label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId
+    }));
+  }, [data?.appState, data?.catalogState]);
+
+  const { itemsByGacha, flatItems } = useMemo(() => {
+    if (!data?.appState || !data?.catalogState || !data?.rarityState) {
+      return { itemsByGacha: {} as ItemsByGacha, flatItems: [] as ItemEntry[] };
+    }
+
+    const catalogByGacha = data.catalogState.byGacha ?? {};
+    const entries: ItemsByGacha = {};
+    const flat: ItemEntry[] = [];
+
+    Object.keys(catalogByGacha).forEach((gachaId) => {
       const gachaMeta = data.appState?.meta?.[gachaId];
-      const catalog = data.catalogState?.byGacha?.[gachaId];
-      if (!catalog) {
-        return;
-      }
+      const catalog = catalogByGacha[gachaId];
+      const results: ItemEntry[] = [];
 
       catalog.order.forEach((itemId) => {
         const snapshot = catalog.items[itemId];
@@ -85,16 +104,44 @@ export function ItemsSection(): JSX.Element {
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
         };
 
-        results.push({ model, rarity });
+        const entry = { model, rarity };
+        results.push(entry);
+        flat.push(entry);
       });
+
+      entries[gachaId] = results;
     });
 
-    return results;
+    return { itemsByGacha: entries, flatItems: flat };
   }, [data]);
+
+  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!gachaTabs.length) {
+      setActiveGachaId(null);
+      return;
+    }
+
+    setActiveGachaId((current) => {
+      if (current && gachaTabs.some((tab) => tab.id === current)) {
+        return current;
+      }
+
+      const preferred = data?.appState?.selectedGachaId;
+      if (preferred && gachaTabs.some((tab) => tab.id === preferred)) {
+        return preferred;
+      }
+
+      return gachaTabs[0].id;
+    });
+  }, [data?.appState?.selectedGachaId, gachaTabs]);
+
+  const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
 
   const handleEditImage = useCallback(
     (itemId: string) => {
-      const target = items.find((entry) => entry.model.itemId === itemId);
+      const target = flatItems.find((entry) => entry.model.itemId === itemId);
       if (!target) {
         return;
       }
@@ -130,7 +177,7 @@ export function ItemsSection(): JSX.Element {
         }
       });
     },
-    [items, push, rarityOptionsByGacha]
+    [flatItems, push, rarityOptionsByGacha]
   );
 
   return (
@@ -151,28 +198,31 @@ export function ItemsSection(): JSX.Element {
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
     >
       <div className="items-section__tabs flex flex-wrap gap-2">
-        {['最新', 'おすすめ', 'リアグ対象', '未設定'].map((tab, index) => (
+        {gachaTabs.map((tab) => (
           <button
-            key={tab}
+            key={tab.id}
             type="button"
             className={clsx(
-              'items-section__tab tab-pill rounded-full border px-4 py-1.5',
-              index === 0
-                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.45)]'
+              'items-section__tab tab-pill rounded-full border px-4 py-1.5 transition',
+              tab.id === activeGachaId
+                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.25)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
             )}
-            onClick={() => console.info('タブ切り替えは未実装です', tab)}
+            onClick={() => setActiveGachaId(tab.id)}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
+        {gachaTabs.length === 0 ? (
+          <span className="text-sm text-muted-foreground">表示できるガチャがありません。</span>
+        ) : null}
       </div>
 
       {status !== 'ready' ? (
         <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
       ) : null}
       {status === 'ready' && items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">表示できるアイテムがありません。仮データ投入後にご確認ください。</p>
+        <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
       ) : null}
 
       {items.length > 0 ? (

@@ -71,7 +71,7 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
           style={
             hasImage
               ? {
-                  backgroundImage: `linear-gradient(135deg, rgba(225,29,72,0.55), rgba(12,12,20,0.9)), url(${imageAsset.thumbnailUrl})`,
+                  backgroundImage: `url(${imageAsset.thumbnailUrl})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }
