@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
@@ -18,6 +19,7 @@ type GachaTab = { id: string; label: string };
 export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
+  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -53,6 +55,15 @@ export function ItemsSection(): JSX.Element {
       label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId
     }));
   }, [data?.appState, data?.catalogState]);
+
+  const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
+
+  const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
+  const panelAnimationClass = clsx(
+    'tab-panel-content',
+    panelMotion === 'forward' && 'animate-tab-slide-from-right',
+    panelMotion === 'backward' && 'animate-tab-slide-from-left'
+  );
 
   const { itemsByGacha, flatItems } = useMemo(() => {
     if (!data?.appState || !data?.catalogState || !data?.rarityState) {
@@ -114,8 +125,6 @@ export function ItemsSection(): JSX.Element {
 
     return { itemsByGacha: entries, flatItems: flat };
   }, [data]);
-
-  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!gachaTabs.length) {
@@ -197,13 +206,13 @@ export function ItemsSection(): JSX.Element {
       }
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
     >
-      <div className="items-section__tabs flex flex-wrap gap-2">
+      <div className="items-section__tabs tab-scroll-area">
         {gachaTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
             className={clsx(
-              'items-section__tab tab-pill rounded-full border px-4 py-1.5 transition',
+              'items-section__tab tab-pill shrink-0 rounded-full border px-4 py-1.5 transition',
               tab.id === activeGachaId
                 ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.25)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
@@ -213,25 +222,33 @@ export function ItemsSection(): JSX.Element {
             {tab.label}
           </button>
         ))}
-        {gachaTabs.length === 0 ? (
-          <span className="text-sm text-muted-foreground">表示できるガチャがありません。</span>
-        ) : null}
       </div>
 
-      {status !== 'ready' ? (
-        <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
-      ) : null}
-      {status === 'ready' && items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+      {gachaTabs.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">表示できるガチャがありません。</p>
       ) : null}
 
-      {items.length > 0 ? (
-        <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {items.map(({ model, rarity }) => (
-            <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
-          ))}
+      <div className="tab-panel-viewport">
+        <div
+          key={activeGachaId ?? 'items-empty'}
+          className={panelAnimationClass}
+        >
+          {status !== 'ready' ? (
+            <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
+          ) : null}
+          {status === 'ready' && activeGachaId && items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+          ) : null}
+
+          {items.length > 0 ? (
+            <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {items.map(({ model, rarity }) => (
+                <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
+              ))}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </SectionContainer>
   );
 }

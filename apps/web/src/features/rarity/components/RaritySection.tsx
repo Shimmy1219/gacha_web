@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorChip } from './RarityColorChip';
@@ -62,6 +63,14 @@ export function RaritySection(): JSX.Element {
     }));
   }, [data?.appState]);
 
+  const gachaTabIds = useMemo(() => gachaTabs.map((gacha) => gacha.id), [gachaTabs]);
+  const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
+  const panelAnimationClass = clsx(
+    'tab-panel-content',
+    panelMotion === 'forward' && 'animate-tab-slide-from-right',
+    panelMotion === 'backward' && 'animate-tab-slide-from-left'
+  );
+
   const rarityRows = useMemo(() => {
     if (!data?.rarityState || !activeGachaId) {
       return [] as RarityRow[];
@@ -97,13 +106,13 @@ export function RaritySection(): JSX.Element {
       title="レアリティ設定"
       description="排出率・カラー・順序を編集し、RarityStoreと同期します。"
     >
-      <div className="rarity-section__gacha-tabs flex flex-wrap items-center gap-2">
+      <div className="rarity-section__gacha-tabs tab-scroll-area">
         {gachaTabs.map((gacha) => (
           <button
             key={gacha.id}
             type="button"
             className={clsx(
-              'rarity-section__gacha-tab tab-pill rounded-full border px-4 py-1.5',
+              'rarity-section__gacha-tab tab-pill shrink-0 rounded-full border px-4 py-1.5',
               gacha.id === activeGachaId
                 ? 'border-accent/80 bg-accent text-accent-foreground'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
@@ -115,87 +124,94 @@ export function RaritySection(): JSX.Element {
         ))}
       </div>
 
-      <PtControlsPanel
-        settings={ptSettings}
-        rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
-      />
-
-      {status !== 'ready' ? (
-        <p className="text-sm text-muted-foreground">ローカルストレージからレアリティ情報を読み込み中です…</p>
-      ) : null}
-      {status === 'ready' && rarityRows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">選択中のガチャにレアリティが登録されていません。</p>
-      ) : null}
-
-      {rarityRows.length > 0 ? (
-        <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
-          <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
-            <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              <tr>
-                <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
-                <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
-                <th className="rarity-section__column px-3 py-2.5 font-semibold">排出率</th>
-                <th className="rarity-section__column px-3 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
-              {rarityRows.map((rarity) => {
-                const badgeStyle = createBadgeStyle(rarity.color);
-                return (
-                  <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                    <td className="rarity-section__cell px-3 py-2">
-                      <span
-                        className="rarity-section__rarity-badge inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
-                        style={badgeStyle}
-                      >
-                        {rarity.label.slice(0, 3).toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="rarity-section__cell px-3 py-2">
-                      <RarityColorChip
-                        value={rarity.color}
-                        ariaLabel={`${rarity.label} のカラー`}
-                        onClick={() => console.info('カラーピッカーは未実装です', rarity.id)}
-                      />
-                    </td>
-                    <td className="rarity-section__cell px-3 py-2">
-                      <div className="rarity-section__rate-control flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          defaultValue={formatRate(rarity.emitRate)}
-                          className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-                        />
-                        <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
-                      </div>
-                    </td>
-                    <td className="rarity-section__cell px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        className="rarity-section__delete-button chip"
-                        onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
-                      >
-                        削除
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      <div className="rarity-section__footer flex justify-end">
-        <button
-          type="button"
-          className="rarity-section__add-rarity chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('レアリティ追加のモーダルは未実装です')}
+      <div className="tab-panel-viewport">
+        <div
+          key={activeGachaId ?? 'rarity-empty'}
+          className={panelAnimationClass}
         >
-          <PlusCircleIcon className="h-4 w-4" />
-          レアリティを追加
-        </button>
+          <PtControlsPanel
+            settings={ptSettings}
+            rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
+          />
+
+          {status !== 'ready' ? (
+            <p className="text-sm text-muted-foreground">ローカルストレージからレアリティ情報を読み込み中です…</p>
+          ) : null}
+          {status === 'ready' && activeGachaId && rarityRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">選択中のガチャにレアリティが登録されていません。</p>
+          ) : null}
+
+          {rarityRows.length > 0 ? (
+            <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
+              <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
+                <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                  <tr>
+                    <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
+                    <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
+                    <th className="rarity-section__column px-3 py-2.5 font-semibold">排出率</th>
+                    <th className="rarity-section__column px-3 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
+                  {rarityRows.map((rarity) => {
+                    const badgeStyle = createBadgeStyle(rarity.color);
+                    return (
+                      <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
+                        <td className="rarity-section__cell px-3 py-2">
+                          <span
+                            className="rarity-section__rarity-badge inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
+                            style={badgeStyle}
+                          >
+                            {rarity.label.slice(0, 3).toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="rarity-section__cell px-3 py-2">
+                          <RarityColorChip
+                            value={rarity.color}
+                            ariaLabel={`${rarity.label} のカラー`}
+                            onClick={() => console.info('カラーピッカーは未実装です', rarity.id)}
+                          />
+                        </td>
+                        <td className="rarity-section__cell px-3 py-2">
+                          <div className="rarity-section__rate-control flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              defaultValue={formatRate(rarity.emitRate)}
+                              className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                            />
+                            <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
+                          </div>
+                        </td>
+                        <td className="rarity-section__cell px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            className="rarity-section__delete-button chip"
+                            onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                          >
+                            削除
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <div className="rarity-section__footer flex justify-end">
+            <button
+              type="button"
+              className="rarity-section__add-rarity chip border-accent/40 bg-accent/10 text-accent"
+              onClick={() => console.info('レアリティ追加のモーダルは未実装です')}
+            >
+              <PlusCircleIcon className="h-4 w-4" />
+              レアリティを追加
+            </button>
+          </div>
+        </div>
       </div>
     </SectionContainer>
   );
