@@ -31,7 +31,7 @@
 - テストは高速で、常に同じ結果を返すように
 - カバレッジは指標であり、質の高いテストを重視
 
-## Test & Checks
+## テスト方針（以下のテストのいずれかを必要に応じて必ず実行してください）
 - Unit tests: `pnpm vitest run --reporter=dot`
 - Coverage: `pnpm vitest run --coverage`
 - Lint: `pnpm eslint .`
