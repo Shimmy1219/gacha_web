@@ -361,13 +361,29 @@ function createMockEntries(): StorageEntry[] {
       });
 
       const totalCount = selections.reduce((sum, entry) => sum + entry.count, 0);
+      const itemsMap: Record<string, string[]> = {};
+      const countsMap: Record<string, Record<string, number>> = {};
+
+      selections.forEach((entry) => {
+        if (!itemsMap[entry.rarityId]) {
+          itemsMap[entry.rarityId] = [];
+        }
+        itemsMap[entry.rarityId].push(entry.itemId);
+
+        if (!countsMap[entry.rarityId]) {
+          countsMap[entry.rarityId] = {};
+        }
+        countsMap[entry.rarityId][entry.itemId] = entry.count;
+      });
 
       gachaInventories[gacha.id] = {
         inventoryId: makeDeterministicId('inv-', `${userId}-${gacha.id}`),
         gachaId: gacha.id,
+        createdAt: nowIso,
         updatedAt: nowIso,
         totalCount,
-        items: selections,
+        items: itemsMap,
+        counts: countsMap,
         notes: `${gacha.displayName}のサンプル在庫`
       };
 

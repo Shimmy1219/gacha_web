@@ -2,7 +2,7 @@ import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useCallback, useMemo, useState } from 'react';
 
-import { UserCard, type UserCardProps } from '../../../components/cards/UserCard';
+import { UserCard, type UserCardProps, type UserInventoryEntryItem } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useModal } from '../../../components/modal';
 import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
@@ -47,22 +47,30 @@ export function UsersSection(): JSX.Element {
         .map((inventory) => {
           const gachaMeta = data.appState?.meta?.[inventory.gachaId];
           const gachaName = gachaMeta?.displayName ?? inventory.gachaId;
-          const pulls = (inventory.items ?? [])
-            .map((item) => {
-              const catalogItem = data.catalogState?.byGacha?.[inventory.gachaId]?.items?.[item.itemId];
-              const rarityEntity = data.rarityState?.entities?.[item.rarityId];
-              return {
-                itemId: item.itemId,
-                itemName: catalogItem?.name ?? item.itemId,
+          const itemsByRarity = inventory.items ?? {};
+          const countsByRarity = inventory.counts ?? {};
+          const pulls: UserInventoryEntryItem[] = [];
+
+          Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
+            itemIds.forEach((itemId) => {
+              const count = countsByRarity[rarityId]?.[itemId] ?? 0;
+              if (count <= 0) {
+                return;
+              }
+              const catalogItem = data.catalogState?.byGacha?.[inventory.gachaId]?.items?.[itemId];
+              const rarityEntity = data.rarityState?.entities?.[rarityId];
+              pulls.push({
+                itemId,
+                itemName: catalogItem?.name ?? itemId,
                 rarity: {
-                  rarityId: item.rarityId,
-                  label: rarityEntity?.label ?? item.rarityId,
+                  rarityId,
+                  label: rarityEntity?.label ?? rarityId,
                   color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR
                 },
-                count: item.count ?? 0
-              };
-            })
-            .filter((entry) => entry.count > 0);
+                count
+              });
+            });
+          });
 
           if (pulls.length === 0) {
             return null;

@@ -74,18 +74,14 @@ export interface UserProfilesStateV3 {
   users: Record<string, UserProfileCardV3>;
 }
 
-export interface UserInventoryItemV3 {
-  itemId: string;
-  rarityId: string;
-  count: number;
-}
-
 export interface UserInventorySnapshotV3 {
   inventoryId: string;
   gachaId: string;
+  createdAt?: string;
   updatedAt?: string;
   totalCount?: number;
-  items: UserInventoryItemV3[];
+  items: Record<string, string[]>;
+  counts: Record<string, Record<string, number>>;
   notes?: string;
 }
 
