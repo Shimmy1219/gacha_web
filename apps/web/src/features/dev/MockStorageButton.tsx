@@ -8,15 +8,45 @@ type StorageEntry = {
 type GachaDefinition = {
   id: string;
   displayName: string;
-  summaryTag: string;
   iconAssetId: string;
-  theme: string;
+  altNames: string[];
 };
 
 type ItemSeed = {
   name: string;
-  description: string;
   series: string;
+  riagu?: boolean;
+};
+
+type ItemDefinition = {
+  itemId: string;
+  gachaId: string;
+  rarityId: string;
+  order: number;
+  name: string;
+  completeTarget: boolean;
+  pickupTarget: boolean;
+  imageAssetId: string;
+  riagu: boolean;
+  series: string;
+};
+
+type CatalogItemSnapshot = {
+  itemId: string;
+  rarityId: string;
+  name: string;
+  order: number;
+  pickupTarget: boolean;
+  completeTarget: boolean;
+  imageAssetId: string;
+  riagu: boolean;
+  series: string;
+  updatedAt: string;
+};
+
+type CatalogGachaSnapshot = {
+  order: string[];
+  items: Record<string, CatalogItemSnapshot>;
 };
 
 type UserSeed = {
@@ -29,30 +59,26 @@ const GACHA_DEFINITIONS: GachaDefinition[] = [
   {
     id: 'gch-aurora-arc',
     displayName: 'オーロラアーク',
-    summaryTag: 'AURORA',
     iconAssetId: 'asset-aurora',
-    theme: '極光航路'
+    altNames: ['オーロラ', '極光アーク']
   },
   {
     id: 'gch-cosmos-diva',
     displayName: 'コスモスディーヴァ',
-    summaryTag: 'COSMOS',
     iconAssetId: 'asset-cosmos',
-    theme: '星屑舞台'
+    altNames: ['コスモス', '星歌ディーヴァ']
   },
   {
     id: 'gch-echo-tide',
     displayName: 'エコータイド',
-    summaryTag: 'ECHO',
     iconAssetId: 'asset-echo',
-    theme: '潮騒の残響'
+    altNames: ['エコー', '潮騒タイド']
   },
   {
     id: 'gch-mistral-note',
     displayName: 'ミストラルノート',
-    summaryTag: 'MISTRAL',
     iconAssetId: 'asset-mistral',
-    theme: '風待ちの譜面'
+    altNames: ['ミストラル', '風詠ノート']
   }
 ];
 
@@ -66,72 +92,83 @@ const ITEM_SETS: Record<string, ItemSeed[]> = {
   'gch-aurora-arc': [
     {
       name: '極光のティアラ',
-      description: '北天の光を閉じ込めた煌めくティアラ。',
-      series: 'AURORA JEWELRY'
+      series: 'AURORA JEWELRY',
+      riagu: true
     },
     {
       name: '氷晶の羽飾り',
-      description: '薄氷の羽を模した軽やかなアクセサリー。',
       series: 'AURORA ACCESSORY'
     },
     {
       name: '夜明けの手紙',
-      description: '黎明の空を描いた限定ポストカード。',
       series: 'AURORA POST'
     }
   ],
   'gch-cosmos-diva': [
     {
       name: '星雲ステージパス',
-      description: '星々を巡るツアーの限定パス。',
-      series: 'COSMOS LIVE'
+      series: 'COSMOS LIVE',
+      riagu: true
     },
     {
       name: '流星のピアス',
-      description: '瞬く流星をイメージしたイヤーアクセ。',
       series: 'COSMOS JEWELRY'
     },
     {
       name: '銀河レコード',
-      description: '宇宙音響を収録した記念レコード。',
       series: 'COSMOS RECORDS'
     }
   ],
   'gch-echo-tide': [
     {
       name: '潮騒サウンドボックス',
-      description: '波音と旋律を重ねたミュージックボックス。',
       series: 'ECHO MUSIC'
     },
     {
       name: '泡沫のミニキーホルダー',
-      description: '海泡を閉じ込めた透明チャーム。',
-      series: 'ECHO GOODS'
+      series: 'ECHO GOODS',
+      riagu: true
     },
     {
       name: '浜辺のポラロイド',
-      description: '夕暮れの浜辺を映したポラロイド写真。',
       series: 'ECHO PHOTO'
     }
   ],
   'gch-mistral-note': [
     {
       name: '風歌マイクロフォン',
-      description: '風を集める共鳴マイク。',
       series: 'MISTRAL AUDIO'
     },
     {
       name: '空渡りのブレスレット',
-      description: '風詠みの旋律が刻まれたブレスレット。',
-      series: 'MISTRAL ACCESSORY'
+      series: 'MISTRAL ACCESSORY',
+      riagu: true
     },
     {
       name: '木漏れ日のスコア',
-      description: '木漏れ日を五線譜に写したスコアブック。',
       series: 'MISTRAL SCORE'
     }
   ]
 };
+
+const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+function makeDeterministicId(prefix: string, seed: string, length = 10): string {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 33 + seed.charCodeAt(index)) >>> 0;
+  }
+
+  let value = hash || 1;
+  let suffix = '';
+
+  for (let position = 0; position < length; position += 1) {
+    value = (value * 1664525 + 1013904223) >>> 0;
+    suffix += BASE62[value % BASE62.length];
+  }
+
+  return `${prefix}${suffix}`;
+}
 
 const USER_SEEDS: UserSeed[] = [
   { displayName: '綾瀬 ひかり', handle: 'ayase', team: '北ブロック' },
@@ -155,39 +192,28 @@ function createMockEntries(): StorageEntry[] {
 
   const aliasByName = GACHA_DEFINITIONS.reduce<Record<string, string>>((acc, gacha) => {
     acc[gacha.displayName] = gacha.id;
-    acc[gacha.summaryTag] = gacha.id;
-    return acc;
-  }, {});
-
-  const aliasBySourceKey = GACHA_DEFINITIONS.reduce<Record<string, string>>((acc, gacha, index) => {
-    acc[`src-${String(index + 1).padStart(2, '0')}`] = gacha.id;
+    gacha.altNames.forEach((alt) => {
+      acc[alt] = gacha.id;
+    });
     return acc;
   }, {});
 
   const appState = {
     version: 3,
     updatedAt: nowIso,
-    meta: GACHA_DEFINITIONS.reduce<Record<string, Record<string, unknown>>>((acc, gacha, index) => {
+    meta: GACHA_DEFINITIONS.reduce<Record<string, Record<string, unknown>>>((acc, gacha) => {
       acc[gacha.id] = {
         id: gacha.id,
         displayName: gacha.displayName,
-        summaryTag: gacha.summaryTag,
         iconAssetId: gacha.iconAssetId,
-        theme: gacha.theme,
         createdAt: nowIso,
-        updatedAt: nowIso,
-        colorHint: ['#60a5fa', '#f472b6', '#34d399', '#f97316'][index % 4]
+        updatedAt: nowIso
       };
       return acc;
     }, {}),
     order: gachaOrder,
     aliasByName,
-    aliasBySourceKey,
-    selectedGachaId: gachaOrder[0] ?? null,
-    importer: {
-      lastSource: 'import-json' as const,
-      lastImportedAt: nowIso
-    }
+    selectedGachaId: gachaOrder[0] ?? null
   };
 
   const rarityEntities: Record<string, Record<string, unknown>> = {};
@@ -196,7 +222,7 @@ function createMockEntries(): StorageEntry[] {
 
   GACHA_DEFINITIONS.forEach((gacha) => {
     const rarityIds = RARITY_TEMPLATES.map((template, templateIndex) => {
-      const rarityId = `${gacha.id}-${template.code}`;
+      const rarityId = makeDeterministicId('rar-', `${gacha.id}-${template.code}`);
       rarityEntities[rarityId] = {
         id: rarityId,
         gachaId: gacha.id,
@@ -227,22 +253,22 @@ function createMockEntries(): StorageEntry[] {
     indexByName: rarityIndexByName
   };
 
-  const itemDefinitions = GACHA_DEFINITIONS.flatMap((gacha) => {
+  const itemDefinitions: ItemDefinition[] = GACHA_DEFINITIONS.flatMap((gacha) => {
     const seeds = ITEM_SETS[gacha.id] ?? [];
     return seeds.map((seed, index) => {
       const rarityIds = rarityByGacha[gacha.id];
       const rarityId = rarityIds[Math.min(index, rarityIds.length - 1)];
       return {
-        id: `itm-${gacha.id.split('-')[1]}-${String(index + 1).padStart(2, '0')}`,
+        itemId: makeDeterministicId('itm-', `${gacha.id}-${seed.name}`),
         gachaId: gacha.id,
         rarityId,
         order: index + 1,
         name: seed.name,
-        description: seed.description,
-        series: seed.series,
         completeTarget: index === 0,
         pickupTarget: index < 2,
-        imageAssetId: `${gacha.iconAssetId}-${index + 1}`
+        imageAssetId: `${gacha.iconAssetId}-${index + 1}`,
+        riagu: Boolean(seed.riagu),
+        series: seed.series
       };
     });
   });
@@ -250,19 +276,25 @@ function createMockEntries(): StorageEntry[] {
   const catalogState = {
     version: 3,
     updatedAt: nowIso,
-    itemCards: itemDefinitions.reduce<Record<string, Record<string, unknown>>>((acc, item) => {
-      acc[item.id] = {
-        id: item.id,
-        gachaId: item.gachaId,
-        rarityId: item.rarityId,
-        name: item.name,
-        description: item.description,
-        order: item.order,
-        pickupTarget: item.pickupTarget,
-        completeTarget: item.completeTarget,
-        imageAssetId: item.imageAssetId,
-        tags: [item.series],
-        updatedAt: nowIso
+    byGacha: GACHA_DEFINITIONS.reduce<Record<string, CatalogGachaSnapshot>>((acc, gacha) => {
+      const gachaItems = itemDefinitions.filter((item) => item.gachaId === gacha.id);
+      acc[gacha.id] = {
+        order: gachaItems.map((item) => item.itemId),
+        items: gachaItems.reduce<Record<string, CatalogItemSnapshot>>((itemsAcc, item) => {
+          itemsAcc[item.itemId] = {
+            itemId: item.itemId,
+            rarityId: item.rarityId,
+            name: item.name,
+            order: item.order,
+            pickupTarget: item.pickupTarget,
+            completeTarget: item.completeTarget,
+            imageAssetId: item.imageAssetId,
+            riagu: item.riagu,
+            series: item.series,
+            updatedAt: nowIso
+          };
+          return itemsAcc;
+        }, {})
       };
       return acc;
     }, {})
@@ -271,7 +303,7 @@ function createMockEntries(): StorageEntry[] {
   const userAccentPalette = ['#4f46e5', '#f97316', '#14b8a6', '#facc15', '#ec4899', '#0ea5e9'];
 
   const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed, index) => {
-    const id = `usr-${String(index + 1).padStart(3, '0')}`;
+    const id = makeDeterministicId('usr-', seed.handle);
     acc[id] = {
       id,
       displayName: seed.displayName,
@@ -290,7 +322,7 @@ function createMockEntries(): StorageEntry[] {
     users: userProfiles
   };
 
-  const itemsByGacha = itemDefinitions.reduce<Record<string, typeof itemDefinitions>>((acc, item) => {
+  const itemsByGacha = itemDefinitions.reduce<Record<string, ItemDefinition[]>>((acc, item) => {
     acc[item.gachaId] = acc[item.gachaId] ?? [];
     acc[item.gachaId].push(item);
     return acc;
@@ -302,7 +334,7 @@ function createMockEntries(): StorageEntry[] {
 
   const userIds = Object.keys(userProfiles);
   const inventories: Record<string, Record<string, unknown>> = {};
-  const reverseIndex: Record<string, Array<Record<string, unknown>>> = {};
+  const reverseIndex: Record<string, Array<{ userId: string; gachaId: string; rarityId: string; count: number }>> = {};
 
   userIds.forEach((userId, userIndex) => {
     const assignedGachas = [
@@ -317,7 +349,7 @@ function createMockEntries(): StorageEntry[] {
       const selections = gachaItems.slice(0, 3).map((item, itemIndex) => {
         const count = ((userIndex + itemIndex + assignmentIndex) % 4) + 1;
         return {
-          itemId: item.id,
+          itemId: item.itemId,
           rarityId: item.rarityId,
           count
         };
@@ -326,7 +358,7 @@ function createMockEntries(): StorageEntry[] {
       const totalCount = selections.reduce((sum, entry) => sum + entry.count, 0);
 
       gachaInventories[gacha.id] = {
-        inventoryId: `inv-${userId}-${gacha.id}`,
+        inventoryId: makeDeterministicId('inv-', `${userId}-${gacha.id}`),
         gachaId: gacha.id,
         updatedAt: nowIso,
         totalCount,
@@ -369,18 +401,19 @@ function createMockEntries(): StorageEntry[] {
     byItemId: hitCounts
   };
 
-  const riaguEntries = itemDefinitions.slice(0, 10).map((item, index) => {
-    const riaguId = `riagu-${String(index + 1).padStart(3, '0')}`;
+  const riaguCandidates = itemDefinitions.filter((item) => item.riagu);
+
+  const riaguEntries = riaguCandidates.map((item, index) => {
+    const riaguId = makeDeterministicId('riagu-', `${item.itemId}-${index}`);
     return [
       riaguId,
       {
         id: riaguId,
-        itemId: item.id,
+        itemId: item.itemId,
         gachaId: item.gachaId,
         unitCost: 1200 + index * 150,
         typeLabel: index % 2 === 0 ? 'ぬいぐるみ' : 'アクリルスタンド',
         orderHint: index + 1,
-        currency: 'JPY',
         stock: 48 - index * 2,
         notes: 'React移行用のダミーリアグデータ',
         updatedAt: nowIso
@@ -403,43 +436,32 @@ function createMockEntries(): StorageEntry[] {
     acc[gacha.id] = {
       perPull: {
         price: 300,
-        currency: 'JPY',
         pulls: 1
       },
       complete: {
-        price: 9000 + index * 400,
-        pulls: 30,
-        bonus: 'コンプリート特典フォト付き'
+        price: 9000 + index * 400
       },
       bundles: [
         {
-          id: `${gacha.id}-bundle-10`,
-          label: '10連ステップ',
+          id: makeDeterministicId('bndl-', `${gacha.id}-10`),
           price: 3000 + index * 120,
-          currency: 'JPY',
-          pulls: 10,
-          bonusTickets: 1,
-          guaranteedRarityId: rarityIds[1]
+          pulls: 10
         },
         {
-          id: `${gacha.id}-bundle-20`,
-          label: '20連スペシャル',
+          id: makeDeterministicId('bndl-', `${gacha.id}-20`),
           price: 5800 + index * 160,
-          currency: 'JPY',
-          pulls: 20,
-          bonusTickets: 3,
-          guaranteedRarityId: rarityIds[0]
+          pulls: 20
         }
       ],
       guarantees: [
         {
-          id: `${gacha.id}-guarantee-top`,
+          id: makeDeterministicId('ptg-', `${gacha.id}-top`),
           rarityId: rarityIds[0],
           threshold: 60,
           pityStep: 10
         },
         {
-          id: `${gacha.id}-guarantee-mid`,
+          id: makeDeterministicId('ptg-', `${gacha.id}-mid`),
           rarityId: rarityIds[1],
           threshold: 30,
           pityStep: 10
@@ -485,7 +507,7 @@ function createMockEntries(): StorageEntry[] {
     lastSeenRelease: '2024.10-preview'
   };
 
-  const primaryUserId = userIds[0] ?? 'usr-001';
+  const primaryUserId = userIds[0] ?? makeDeterministicId('usr-', 'primary');
 
   const saveOptions = {
     version: 3,
