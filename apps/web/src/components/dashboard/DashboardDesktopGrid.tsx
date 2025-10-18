@@ -1,3 +1,4 @@
+import { ArrowsRightLeftIcon } from '@heroicons/react/20/solid';
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -263,13 +264,18 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
               role="separator"
               aria-orientation="vertical"
               aria-label="列幅の調整"
-              className="dashboard-desktop-grid__handle absolute top-0 bottom-0 w-3 -translate-x-1/2 cursor-col-resize touch-none select-none rounded-full bg-white/10 transition hover:bg-white/20 z-10"
+              className="dashboard-desktop-grid__handle absolute top-0 bottom-0 w-4 -translate-x-1/2 cursor-col-resize touch-none select-none rounded-full bg-[#15151b]/95 text-white/60 shadow-panel transition-colors hover:text-white/80 z-10"
               style={{ left }}
               onPointerDown={handlePointerDown(index)}
               onPointerMove={handlePointerMove}
               onPointerUp={clearDragState}
               onPointerCancel={clearDragState}
-            />
+            >
+              <span className="sr-only">ドラッグで列幅を変更</span>
+              <div className="pointer-events-none flex h-full items-center justify-center">
+                <ArrowsRightLeftIcon aria-hidden className="h-3 w-3" />
+              </div>
+            </div>
           ))
         : null}
     </div>
