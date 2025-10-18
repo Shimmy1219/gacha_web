@@ -1,10 +1,32 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
-const packagesDir = path.resolve(workspaceRoot, 'packages').replace(/\\/g, '/');
+const toPosixPath = (value: string) => value.replace(/\\/g, '/');
+
+const findWorkspaceRoot = (startDir: string) => {
+  let currentDir = startDir;
+
+  while (true) {
+    const packagesPath = path.join(currentDir, 'packages');
+    if (fs.existsSync(packagesPath) && fs.statSync(packagesPath).isDirectory()) {
+      return currentDir;
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      throw new Error('Failed to locate workspace root containing packages directory.');
+    }
+
+    currentDir = parentDir;
+  }
+};
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = findWorkspaceRoot(configDir);
+const packagesDir = toPosixPath(path.join(workspaceRoot, 'packages'));
 const domainDir = `${packagesDir}/domain`;
 
 export default defineConfig({
@@ -14,7 +36,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     fs: {
-      allow: [fileURLToPath(new URL('.', import.meta.url)), packagesDir]
+      allow: [toPosixPath(workspaceRoot), packagesDir]
     }
   },
   preview: {
