@@ -56,6 +56,9 @@ export function ItemsSection(): JSX.Element {
   }, [data?.appState, data?.catalogState]);
 
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
+
+  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
     'tab-panel-content',
@@ -123,8 +126,6 @@ export function ItemsSection(): JSX.Element {
 
     return { itemsByGacha: entries, flatItems: flat };
   }, [data]);
-
-  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!gachaTabs.length) {
