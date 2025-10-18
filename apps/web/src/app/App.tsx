@@ -59,19 +59,24 @@ export function App(): JSX.Element {
     });
   };
 
-  const handleOpenStartWizard = (autoPick?: 'txt' | 'json' | 'new') => {
+  const handleOpenStartWizard = () => {
     push(StartWizardDialog, {
       id: 'start-wizard',
-      title: 'ガチャを登録',
-      description: 'TXT/JSONの読み込みや新規ガチャのセットアップを選択できます。',
+      title: 'はじめかたを選択してください',
+      description: '利用状況に合わせて、バックアップ復元やインポート、新規作成など必要な導入方法を選べます。',
       size: 'lg',
       payload: {
-        autoPick,
         onPickTxt: (file) => {
           console.info('TXTインポート処理は未接続です', file);
         },
         onPickJson: (file) => {
           console.info('JSONインポート処理は未接続です', file);
+        },
+        onImportBackup: (file) => {
+          console.info('バックアップ読み込み処理は未接続です', file);
+        },
+        onEnterTransferCode: () => {
+          console.info('引継ぎコード入力処理は未接続です');
         },
         onCreateNew: () => {
           console.info('新規ガチャ作成フローは未接続です');
@@ -95,20 +100,12 @@ export function App(): JSX.Element {
     });
   };
 
-  const handleOpenTxtJsonImport = () => {
-    handleOpenStartWizard('json');
-  };
-
   const handleRegisterGacha = () => {
     handleOpenStartWizard();
   };
 
   const handleExportAll = () => {
     console.info('全体エクスポート処理は未実装です');
-  };
-
-  const handleImportAll = (files: FileList) => {
-    console.info('全体インポート処理は未実装です', files);
   };
 
   return (
@@ -120,10 +117,8 @@ export function App(): JSX.Element {
         summaryVariant="warning"
         summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
         onRegisterGacha={handleRegisterGacha}
-        onOpenTxtJsonImport={handleOpenTxtJsonImport}
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
-        onImportAll={handleImportAll}
       />
       <main ref={mainRef} className="app__main px-4 pb-[5px] pt-8 sm:px-6">
         <AppRoutes />
