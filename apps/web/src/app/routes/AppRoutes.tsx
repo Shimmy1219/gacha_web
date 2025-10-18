@@ -1,6 +1,7 @@
 import { Navigate, useRoutes } from 'react-router-dom';
 
 import { DashboardShell } from '../../components/dashboard/DashboardShell';
+import { MockStorageButton } from '../../features/dev/MockStorageButton';
 import { ItemsSection } from '../../features/items/components/ItemsSection';
 import { RaritySection } from '../../features/rarity/components/RaritySection';
 import { RiaguSection } from '../../features/riagu/components/RiaguSection';
@@ -34,7 +35,7 @@ function DashboardPage(): JSX.Element {
     }
   ];
 
-  return <DashboardShell sections={sections} />;
+  return <DashboardShell sections={sections} controlsSlot={<MockStorageButton />} />;
 }
 
 export function AppRoutes(): JSX.Element | null {
