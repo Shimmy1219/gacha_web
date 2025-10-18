@@ -62,8 +62,8 @@ export function App(): JSX.Element {
   const handleOpenStartWizard = () => {
     push(StartWizardDialog, {
       id: 'start-wizard',
-      title: 'ガチャを登録',
-      description: 'バックアップやTXT/JSONのインポート、新規ガチャのセットアップ方法を選択できます。',
+      title: 'はじめかたを選択してください',
+      description: '利用状況に合わせて、バックアップ復元やインポート、新規作成など必要な導入方法を選べます。',
       size: 'lg',
       payload: {
         onPickTxt: (file) => {

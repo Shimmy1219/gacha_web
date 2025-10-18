@@ -1,11 +1,4 @@
-import {
-  ArrowDownTrayIcon,
-  ArrowPathIcon,
-  DocumentTextIcon,
-  InformationCircleIcon,
-  KeyIcon,
-  SparklesIcon
-} from '@heroicons/react/24/outline';
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { useCallback, useId, useMemo, useRef } from 'react';
 
 import {
@@ -30,8 +23,6 @@ interface StartWizardTileConfig {
   key: StartWizardTileKey;
   title: string;
   description: string;
-  accent: string;
-  icon: JSX.Element;
   onSelect: () => void;
 }
 
@@ -79,40 +70,30 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         key: 'backup',
         title: 'バックアップから読み込む',
         description: 'エクスポートしたバックアップファイル（.shimmy）を取り込み、現在の環境へ復元します。',
-        accent: 'バックアップ復元',
-        icon: <ArrowPathIcon className="h-6 w-6" />,
         onSelect: handleImportBackup
       },
       {
         key: 'transfer',
         title: '引継ぎコード入力',
         description: '別環境で発行した引継ぎコードを入力し、最新のガチャ情報を同期します。',
-        accent: 'コード入力',
-        icon: <KeyIcon className="h-6 w-6" />,
         onSelect: handleEnterTransferCode
       },
       {
         key: 'txt',
         title: '外部ガチャサイトと連携',
         description: '外部サイトでエクスポートしたTXTから排出設定と履歴を取り込みます。',
-        accent: 'TXTインポート',
-        icon: <ArrowDownTrayIcon className="h-6 w-6" />,
         onSelect: handlePickTxt
       },
       {
         key: 'json',
         title: 'JSONを読み込む',
         description: '本ツール形式のgacha_summary.jsonなどを選択してAppStateへ反映します。',
-        accent: 'JSONインポート',
-        icon: <DocumentTextIcon className="h-6 w-6" />,
         onSelect: handlePickJson
       },
       {
         key: 'new',
         title: '新しくガチャを始める',
         description: 'レアリティ・景品・ユーザーの初期設定をゼロから作成します。',
-        accent: '新規プロジェクト',
-        icon: <SparklesIcon className="h-6 w-6" />,
         onSelect: handleCreateNew
       }
     ],
@@ -125,15 +106,9 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         key={tile.key}
         type="button"
         onClick={tile.onSelect}
-        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:border-accent/60 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <span className="start-wizard__tile-icon inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-accent/10 via-surface to-surface text-accent">
-          {tile.icon}
-        </span>
-        <div className="start-wizard__tile-content space-y-2">
-          <div className="start-wizard__tile-accent text-[11px] font-semibold uppercase tracking-[0.28em] text-accent/90">
-            {tile.accent}
-          </div>
+        <div className="start-wizard__tile-content space-y-3">
           <h3 className="start-wizard__tile-title text-lg font-semibold text-surface-foreground">
             {tile.title}
           </h3>
@@ -151,15 +126,8 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
   return (
     <>
       <ModalBody className="start-wizard__body space-y-6 text-sm leading-relaxed">
-        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl border border-white/8 bg-surface/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
-          <div className="space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-accent/80">Setup Options</p>
-            <h3 className="text-xl font-semibold text-surface-foreground">はじめかたを選択してください</h3>
-            <p className="text-sm text-muted-foreground">
-              利用状況に合わせて、バックアップ復元やインポート、新規作成など必要な導入方法を選べます。
-            </p>
-          </div>
-          <div className="start-wizard__grid mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl bg-surface/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+          <div className="start-wizard__grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {tiles.map((tile) => renderTile(tile))}
           </div>
         </section>
