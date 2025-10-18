@@ -187,7 +187,7 @@
   }
 
   .tab-panel-viewport {
-    @apply relative mt-4 overflow-x-hidden;
+    @apply relative mt-4 overflow-x-hidden py-3;
     overflow-y: visible;
   }
 
