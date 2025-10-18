@@ -106,7 +106,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         key={tile.key}
         type="button"
         onClick={tile.onSelect}
-        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-border/60 bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <div className="start-wizard__tile-content space-y-3">
           <h3 className="start-wizard__tile-title text-lg font-semibold text-surface-foreground">
@@ -139,7 +139,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
             </p>
             <button
               type="button"
-              className="start-wizard__guide-button inline-flex items-center gap-1 text-xs font-semibold text-accent transition hover:text-white"
+              className="start-wizard__guide-button inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent/60 hover:bg-accent hover:text-white"
               onClick={() => {
                 if (payload?.onOpenGuide) {
                   payload.onOpenGuide();
