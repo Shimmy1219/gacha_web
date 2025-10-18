@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 
 const toPosixPath = (value: string) => value.replace(/\\/g, '/');
 
-const findWorkspaceRoot = (startDir: string) => {
+const findWorkspaceRoot = (startDir: string): string | null => {
   let currentDir = startDir;
 
   while (true) {
@@ -17,15 +17,32 @@ const findWorkspaceRoot = (startDir: string) => {
 
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
-      throw new Error('Failed to locate workspace root containing packages directory.');
+      return null;
     }
 
     currentDir = parentDir;
   }
 };
 
-const configDir = path.dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = findWorkspaceRoot(configDir);
+const resolveWorkspaceRoot = (): string => {
+  const candidateDirs = Array.from(
+    new Set([
+      fs.realpathSync(path.dirname(fileURLToPath(import.meta.url))),
+      fs.realpathSync(process.cwd())
+    ])
+  );
+
+  for (const candidate of candidateDirs) {
+    const result = findWorkspaceRoot(candidate);
+    if (result) {
+      return result;
+    }
+  }
+
+  throw new Error('Failed to locate workspace root containing packages directory.');
+};
+
+const workspaceRoot = resolveWorkspaceRoot();
 const packagesDir = toPosixPath(path.join(workspaceRoot, 'packages'));
 const domainDir = `${packagesDir}/domain`;
 
