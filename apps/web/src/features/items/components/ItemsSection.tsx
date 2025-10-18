@@ -25,7 +25,7 @@ import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
-const CARD_WIDTH_REM = 18;
+const CARD_WIDTH_REM = 24;
 const CARD_GAP_REM = 0.75; // tailwind gap-3
 
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta };
@@ -232,21 +232,17 @@ export function ItemsSection(): JSX.Element {
   }, [gridState.columns, items.length]);
 
   const gridStyles = useMemo<CSSProperties>(() => {
-    if (gridState.columns <= 1) {
+    if (gridState.columns <= 1 || effectiveColumns <= 1) {
       return { gridTemplateColumns: 'minmax(0, 1fr)' };
     }
 
     const cardWidth = CARD_WIDTH_REM * rootFontSize;
     const gap = CARD_GAP_REM * rootFontSize;
     const columnCount = Math.max(1, effectiveColumns);
-    const totalWidth = columnCount * cardWidth + Math.max(columnCount - 1, 0) * gap;
 
     return {
-      gridTemplateColumns: `repeat(${columnCount}, minmax(${cardWidth}px, ${cardWidth}px))`,
-      justifyContent: 'center',
-      marginLeft: 'auto',
-      marginRight: 'auto',
-      maxWidth: totalWidth
+      gridTemplateColumns: `repeat(${columnCount}, minmax(${cardWidth}px, 1fr))`,
+      columnGap: `${gap}px`
     };
   }, [effectiveColumns, gridState.columns, rootFontSize]);
 
@@ -345,10 +341,7 @@ export function ItemsSection(): JSX.Element {
           {items.length > 0 ? (
             <div ref={gridContainerRef} className="items-section__grid-wrapper w-full">
               <div
-                className={clsx(
-                  'items-section__grid grid gap-3',
-                  gridState.columns <= 1 ? 'justify-items-stretch' : 'justify-items-center'
-                )}
+                className={clsx('items-section__grid grid gap-3 justify-items-stretch')}
                 style={gridStyles}
               >
                 {items.map(({ model, rarity }) => (
