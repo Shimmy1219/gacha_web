@@ -1,11 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { GACHA_STORAGE_UPDATED_EVENT } from '../storage/useGachaLocalStorage';
-
-type StorageEntry = {
-  key: string;
-  value: unknown;
-};
+import { type GachaLocalStorageSnapshot } from '../../../../../packages/domain/app-persistence';
+import { useAppPersistence } from '../storage/AppPersistenceProvider';
 
 type GachaSeed = {
   slug: string;
@@ -197,7 +193,10 @@ const USER_SEEDS: UserSeed[] = [
   { displayName: '霧島 柚葉', handle: 'kirishima', team: 'サポート' }
 ];
 
-function createMockEntries(): StorageEntry[] {
+function createMockSnapshot(): {
+  snapshot: GachaLocalStorageSnapshot;
+  saveOptionsUserIds: string[];
+} {
   const now = new Date();
   const nowIso = now.toISOString();
   const nextWeekIso = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString();
@@ -554,25 +553,29 @@ function createMockEntries(): StorageEntry[] {
     }
   };
 
-  const entries: StorageEntry[] = [
-    { key: 'gacha:app-state:v3', value: appState },
-    { key: 'gacha:catalog-state:v3', value: catalogState },
-    { key: 'gacha:rarity-state:v3', value: rarityState },
-    { key: 'gacha:user-inventories:v3', value: userInventoriesState },
-    { key: 'gacha:user-profiles:v3', value: userProfilesState },
-    { key: 'gacha:hit-counts:v3', value: hitCountsState },
-    { key: 'gacha:riagu-state:v3', value: riaguState },
-    { key: 'gacha:pt-settings:v3', value: ptSettingsState },
-    { key: 'gacha:ui-preferences:v3', value: uiPreferences },
-    { key: `gacha:save-options:last-upload:v3:${primaryUserId}`, value: saveOptions },
-    { key: 'gacha:receive:history:v3', value: receiveHistory },
-    { key: 'gacha:receive:prefs:v3', value: receivePrefs }
-  ];
+  const snapshot: GachaLocalStorageSnapshot = {
+    appState,
+    catalogState,
+    rarityState,
+    userInventories: userInventoriesState,
+    userProfiles: userProfilesState,
+    hitCounts: hitCountsState,
+    riaguState,
+    ptSettings: ptSettingsState,
+    uiPreferences,
+    saveOptions: { [primaryUserId]: saveOptions },
+    receiveHistory,
+    receivePrefs
+  };
 
-  return entries;
+  return {
+    snapshot,
+    saveOptionsUserIds: [primaryUserId]
+  };
 }
 
 export function MockStorageButton(): JSX.Element {
+  const appPersistence = useAppPersistence();
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
@@ -584,20 +587,23 @@ export function MockStorageButton(): JSX.Element {
     }
 
     try {
-      const entries = createMockEntries();
-      entries.forEach(({ key, value }) => {
-        window.localStorage.setItem(key, JSON.stringify(value));
-      });
-      window.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
+      const { snapshot, saveOptionsUserIds } = createMockSnapshot();
+      appPersistence.saveSnapshot(snapshot);
       setStatus('success');
       setErrorMessage('');
-      console.info('ローカルストレージに仮データを保存しました', entries.map((entry) => entry.key));
+      const touchedSlices = Object.entries(snapshot)
+        .filter(([, value]) => typeof value !== 'undefined')
+        .map(([key]) => key);
+      console.info('ローカルストレージに仮データを保存しました', {
+        slices: touchedSlices,
+        saveOptions: saveOptionsUserIds
+      });
     } catch (error) {
       console.error('ローカルストレージへの仮データ保存に失敗しました', error);
       setStatus('error');
       setErrorMessage(error instanceof Error ? error.message : String(error));
     }
-  }, []);
+  }, [appPersistence]);
 
   return (
     <div className="mock-storage-button flex flex-col gap-4 text-sm">

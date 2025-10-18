@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { ModalProvider } from '../components/modal';
 import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
+import { AppPersistenceProvider } from '../features/storage/AppPersistenceProvider';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   const [queryClient] = useState(
@@ -25,9 +26,11 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
       <BrowserRouter
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
         >
-        <ModalProvider>
-          <ToolbarStateProvider>{children}</ToolbarStateProvider>
-        </ModalProvider>
+        <AppPersistenceProvider>
+          <ModalProvider>
+            <ToolbarStateProvider>{children}</ToolbarStateProvider>
+          </ModalProvider>
+        </AppPersistenceProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );
