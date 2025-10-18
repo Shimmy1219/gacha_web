@@ -1,8 +1,21 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 
-import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
+import {
+  ItemCard,
+  type ItemCardModel,
+  type ItemCardProps,
+  type RarityMeta
+} from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
@@ -12,6 +25,9 @@ import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
+const CARD_WIDTH_REM = 18;
+const CARD_GAP_REM = 0.75; // tailwind gap-3
+
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta };
 type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
@@ -20,6 +36,22 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const gridContainerRef = useRef<HTMLDivElement | null>(null);
+  const [rootFontSize, setRootFontSize] = useState(16);
+  const [gridState, setGridState] = useState<{ columns: number; layout: ItemCardProps['layout'] }>(() => ({
+    columns: 3,
+    layout: 'vertical'
+  }));
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    if (!Number.isNaN(fontSize)) {
+      setRootFontSize(fontSize);
+    }
+  }, []);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -148,6 +180,76 @@ export function ItemsSection(): JSX.Element {
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
 
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const element = gridContainerRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = entry.contentRect.width;
+      const cardWidth = CARD_WIDTH_REM * rootFontSize;
+      const gap = CARD_GAP_REM * rootFontSize;
+
+      const thresholdFour = cardWidth * 4 + gap * 3;
+      const thresholdThree = cardWidth * 3 + gap * 2;
+      const thresholdTwo = cardWidth * 2 + gap;
+
+      let columns = 1;
+      if (width >= thresholdFour) {
+        columns = 4;
+      } else if (width >= thresholdThree) {
+        columns = 3;
+      } else if (width >= thresholdTwo) {
+        columns = 2;
+      }
+
+      const layout: ItemCardProps['layout'] = columns === 1 ? 'horizontal' : 'vertical';
+      setGridState((current) => {
+        if (current.columns === columns && current.layout === layout) {
+          return current;
+        }
+        return { columns, layout };
+      });
+    });
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [items.length, rootFontSize]);
+
+  const effectiveColumns = useMemo(() => {
+    if (gridState.columns <= 1) {
+      return 1;
+    }
+    const availableItems = Math.max(items.length, 1);
+    return Math.min(gridState.columns, availableItems);
+  }, [gridState.columns, items.length]);
+
+  const gridStyles = useMemo<CSSProperties>(() => {
+    if (gridState.columns <= 1) {
+      return { gridTemplateColumns: 'minmax(0, 1fr)' };
+    }
+
+    const cardWidth = CARD_WIDTH_REM * rootFontSize;
+    const gap = CARD_GAP_REM * rootFontSize;
+    const columnCount = Math.max(1, effectiveColumns);
+    const totalWidth = columnCount * cardWidth + Math.max(columnCount - 1, 0) * gap;
+
+    return {
+      gridTemplateColumns: `repeat(${columnCount}, minmax(${cardWidth}px, ${cardWidth}px))`,
+      justifyContent: 'center',
+      marginLeft: 'auto',
+      marginRight: 'auto',
+      maxWidth: totalWidth
+    };
+  }, [effectiveColumns, gridState.columns, rootFontSize]);
+
   const handleEditImage = useCallback(
     (itemId: string) => {
       const target = flatItems.find((entry) => entry.model.itemId === itemId);
@@ -241,10 +343,24 @@ export function ItemsSection(): JSX.Element {
           ) : null}
 
           {items.length > 0 ? (
-            <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {items.map(({ model, rarity }) => (
-                <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
-              ))}
+            <div ref={gridContainerRef} className="items-section__grid-wrapper w-full">
+              <div
+                className={clsx(
+                  'items-section__grid grid gap-3',
+                  gridState.columns <= 1 ? 'justify-items-stretch' : 'justify-items-center'
+                )}
+                style={gridStyles}
+              >
+                {items.map(({ model, rarity }) => (
+                  <ItemCard
+                    key={model.itemId}
+                    model={model}
+                    rarity={rarity}
+                    layout={gridState.layout}
+                    onEditImage={handleEditImage}
+                  />
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

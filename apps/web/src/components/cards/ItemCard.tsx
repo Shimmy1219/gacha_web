@@ -39,11 +39,13 @@ export interface ItemCardProps {
   rarity: RarityMeta;
   onToggleRiagu?: (itemId: ItemId) => void;
   onEditImage?: (itemId: ItemId) => void;
+  layout?: 'vertical' | 'horizontal';
 }
 
-export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Element {
+export function ItemCard({ model, rarity, onEditImage, layout = 'vertical' }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
   const hasImage = Boolean(imageAsset?.hasImage && imageAsset?.thumbnailUrl);
+  const isHorizontal = layout === 'horizontal';
 
   return (
     <article
@@ -51,7 +53,8 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
       data-riagu={model.isRiagu}
       className={clsx(
         'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
-        model.isRiagu && 'ring-1 ring-inset ring-accent/60'
+        model.isRiagu && 'ring-1 ring-inset ring-accent/60',
+        isHorizontal ? 'w-full' : 'h-full'
       )}
     >
       <div
@@ -62,11 +65,17 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
-      <div className="space-y-3">
+      <div
+        className={clsx(
+          'item-card__content',
+          isHorizontal ? 'flex items-center gap-4' : 'flex flex-col gap-3'
+        )}
+      >
         <div
           className={clsx(
-            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground',
-            hasImage && 'border-transparent'
+            'item-card__media flex items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground transition-colors',
+            hasImage && 'border-transparent',
+            isHorizontal ? 'aspect-square h-28 w-28 flex-shrink-0' : 'aspect-square w-full'
           )}
           style={
             hasImage
@@ -80,20 +89,32 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
         >
           {!hasImage ? <PhotoIcon className="h-10 w-10" /> : null}
         </div>
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-          <span className="text-[11px] font-medium" style={{ color: rarity.color }}>
-            {rarity.label}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <button
-            type="button"
-            className="badge badge--action"
-            onClick={() => onEditImage?.(model.itemId)}
+        <div
+          className={clsx(
+            'item-card__body text-left',
+            isHorizontal ? 'flex flex-1 flex-col justify-between gap-3 py-1' : 'flex flex-col gap-3'
+          )}
+        >
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
+            <span className="text-[11px] font-medium" style={{ color: rarity.color }}>
+              {rarity.label}
+            </span>
+          </div>
+          <div
+            className={clsx(
+              'item-card__actions flex flex-wrap gap-2 text-xs',
+              isHorizontal ? 'pt-1' : undefined
+            )}
           >
-            画像を設定
-          </button>
+            <button
+              type="button"
+              className="badge badge--action"
+              onClick={() => onEditImage?.(model.itemId)}
+            >
+              画像を設定
+            </button>
+          </div>
         </div>
       </div>
     </article>
