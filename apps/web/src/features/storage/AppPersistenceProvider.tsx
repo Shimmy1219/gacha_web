@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 
 import { AppPersistence } from '@domain/app-persistence';
-import { createDomainStores, type DomainStores } from '@domain/stores';
+import {
+  createDomainStores,
+  type DomainStores
+} from '@domain/stores/createDomainStores';
 
 interface AppPersistenceContextValue {
   persistence: AppPersistence;
