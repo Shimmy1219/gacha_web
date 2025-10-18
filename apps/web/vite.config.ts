@@ -1,11 +1,37 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
-const packagesDir = path.resolve(workspaceRoot, 'packages').replace(/\\/g, '/');
-const domainDir = `${packagesDir}/domain`;
+interface WorkspacePaths {
+  workspaceRoot: string;
+  domainDir: string;
+}
+
+function resolveWorkspacePaths(): WorkspacePaths {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const candidateRoots = [
+    path.resolve(currentDir, '..', '..'),
+    path.resolve(process.cwd()),
+    path.resolve(process.cwd(), '..'),
+    path.resolve(process.cwd(), '..', '..')
+  ];
+
+  for (const rootDir of candidateRoots) {
+    const domainPath = path.resolve(rootDir, 'packages', 'domain');
+    if (fs.existsSync(domainPath)) {
+      return {
+        workspaceRoot: rootDir,
+        domainDir: domainPath
+      };
+    }
+  }
+
+  throw new Error('Unable to locate packages/domain directory for alias resolution.');
+}
+
+const { workspaceRoot, domainDir } = resolveWorkspacePaths();
 
 export default defineConfig({
   plugins: [react()],
@@ -14,7 +40,7 @@ export default defineConfig({
     port: 5173,
     host: true,
     fs: {
-      allow: [fileURLToPath(new URL('.', import.meta.url)), packagesDir]
+      allow: [workspaceRoot]
     }
   },
   preview: {
@@ -22,11 +48,9 @@ export default defineConfig({
     host: true
   },
   resolve: {
-    alias: [
-      { find: /^@domain\/?$/, replacement: domainDir },
-      { find: /^@domain\/app-persistence$/, replacement: `${domainDir}/app-persistence/index.ts` },
-      { find: /^@domain\/(.*)$/, replacement: `${domainDir}/$1` }
-    ]
+    alias: {
+      '@domain': domainDir
+    }
   },
   build: {
     outDir: 'dist',     // 明示（デフォルトと同じだが、Vercel側の設定と揃える意味で）
