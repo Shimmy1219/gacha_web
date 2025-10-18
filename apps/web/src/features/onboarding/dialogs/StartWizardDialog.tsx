@@ -1,10 +1,12 @@
 import {
   ArrowDownTrayIcon,
+  ArrowPathIcon,
   DocumentTextIcon,
   InformationCircleIcon,
+  KeyIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useId, useMemo, useRef } from 'react';
 
 import {
   ModalBody,
@@ -13,18 +15,19 @@ import {
 } from '../../../components/modal';
 import { GuideInfoDialog } from './GuideInfoDialog';
 
-type StartWizardAutoPick = 'txt' | 'json' | 'new';
-
 export interface StartWizardDialogPayload {
   onPickTxt?: (file: File) => void;
   onPickJson?: (file: File) => void;
   onCreateNew?: () => void;
+  onImportBackup?: (file: File) => void;
+  onEnterTransferCode?: () => void;
   onOpenGuide?: () => void;
-  autoPick?: StartWizardAutoPick;
 }
 
+type StartWizardTileKey = 'backup' | 'transfer' | 'txt' | 'json' | 'new';
+
 interface StartWizardTileConfig {
-  key: 'txt' | 'json' | 'new';
+  key: StartWizardTileKey;
   title: string;
   description: string;
   accent: string;
@@ -35,9 +38,10 @@ interface StartWizardTileConfig {
 export function StartWizardDialog({ payload, close, push }: ModalComponentProps<StartWizardDialogPayload>): JSX.Element {
   const jsonInputId = useId();
   const txtInputId = useId();
+  const backupInputId = useId();
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const txtInputRef = useRef<HTMLInputElement | null>(null);
-  const [autoPickHandled, setAutoPickHandled] = useState(false);
+  const backupInputRef = useRef<HTMLInputElement | null>(null);
 
   const handlePickTxt = useCallback(() => {
     txtInputRef.current?.click();
@@ -45,6 +49,10 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
 
   const handlePickJson = useCallback(() => {
     jsonInputRef.current?.click();
+  }, []);
+
+  const handleImportBackup = useCallback(() => {
+    backupInputRef.current?.click();
   }, []);
 
   const handleCreateNew = useCallback(() => {
@@ -56,8 +64,33 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
     close();
   }, [close, payload?.onCreateNew]);
 
+  const handleEnterTransferCode = useCallback(() => {
+    if (payload?.onEnterTransferCode) {
+      payload.onEnterTransferCode();
+    } else {
+      console.info('引継ぎコード入力処理は未接続です');
+    }
+    close();
+  }, [close, payload?.onEnterTransferCode]);
+
   const tiles = useMemo<StartWizardTileConfig[]>(
     () => [
+      {
+        key: 'backup',
+        title: 'バックアップから読み込む',
+        description: 'エクスポートしたバックアップファイル（.shimmy）を取り込み、現在の環境へ復元します。',
+        accent: 'バックアップ復元',
+        icon: <ArrowPathIcon className="h-6 w-6" />,
+        onSelect: handleImportBackup
+      },
+      {
+        key: 'transfer',
+        title: '引継ぎコード入力',
+        description: '別環境で発行した引継ぎコードを入力し、最新のガチャ情報を同期します。',
+        accent: 'コード入力',
+        icon: <KeyIcon className="h-6 w-6" />,
+        onSelect: handleEnterTransferCode
+      },
       {
         key: 'txt',
         title: '外部ガチャサイトと連携',
@@ -83,28 +116,8 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         onSelect: handleCreateNew
       }
     ],
-    [handlePickJson, handlePickTxt, handleCreateNew]
+    [handleImportBackup, handleEnterTransferCode, handlePickJson, handlePickTxt, handleCreateNew]
   );
-
-  const autoPick = payload?.autoPick;
-
-  useEffect(() => {
-    if (autoPickHandled) {
-      return;
-    }
-
-    if (!autoPick) {
-      return;
-    }
-
-    const target = tiles.find((tile) => tile.key === autoPick);
-    if (!target) {
-      return;
-    }
-
-    setAutoPickHandled(true);
-    target.onSelect();
-  }, [autoPick, autoPickHandled, tiles]);
 
   const renderTile = (tile: StartWizardTileConfig) => {
     return (
@@ -112,16 +125,16 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         key={tile.key}
         type="button"
         onClick={tile.onSelect}
-        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/40 p-5 text-left transition hover:border-accent/60 hover:bg-surface/60"
+        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-white/10 bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:border-accent/60 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <span className="start-wizard__tile-icon inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
+        <span className="start-wizard__tile-icon inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-accent/10 via-surface to-surface text-accent">
           {tile.icon}
         </span>
         <div className="start-wizard__tile-content space-y-2">
-          <div className="start-wizard__tile-accent text-[11px] font-semibold uppercase tracking-[0.28em] text-accent">
+          <div className="start-wizard__tile-accent text-[11px] font-semibold uppercase tracking-[0.28em] text-accent/90">
             {tile.accent}
           </div>
-          <h3 className="start-wizard__tile-title text-base font-semibold text-surface-foreground">
+          <h3 className="start-wizard__tile-title text-lg font-semibold text-surface-foreground">
             {tile.title}
           </h3>
           <p className="start-wizard__tile-description text-sm leading-relaxed text-muted-foreground">
@@ -137,15 +150,24 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
 
   return (
     <>
-      <ModalBody>
-        <div className="start-wizard__grid grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tiles.map((tile) => renderTile(tile))}
-        </div>
-        <div className="start-wizard__guide-note flex items-start gap-3 rounded-2xl border border-white/5 bg-surface/40 px-4 py-3 text-sm text-muted-foreground">
+      <ModalBody className="start-wizard__body space-y-6 text-sm leading-relaxed">
+        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl border border-white/8 bg-surface/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-accent/80">Setup Options</p>
+            <h3 className="text-xl font-semibold text-surface-foreground">はじめかたを選択してください</h3>
+            <p className="text-sm text-muted-foreground">
+              利用状況に合わせて、バックアップ復元やインポート、新規作成など必要な導入方法を選べます。
+            </p>
+          </div>
+          <div className="start-wizard__grid mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {tiles.map((tile) => renderTile(tile))}
+          </div>
+        </section>
+        <div className="start-wizard__guide-note flex items-start gap-3 rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/15 via-surface/60 to-surface/80 px-5 py-4 text-sm text-muted-foreground shadow-lg shadow-black/20">
           <InformationCircleIcon className="mt-0.5 h-5 w-5 text-accent" aria-hidden="true" />
           <div className="space-y-2">
-            <p>
-              リアルタイムで結果を貼り付ける場合は、上部の「リアルタイム入力」ボタンから専用モーダルを開いてください。
+            <p className="text-[13px] leading-relaxed">
+              リアルタイムで結果を貼り付ける場合は、画面上部の「リアルタイム入力」ボタンから専用モーダルを開いてください。
             </p>
             <button
               type="button"
@@ -196,6 +218,25 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
             const file = event.currentTarget.files?.[0];
             if (file) {
               payload?.onPickJson?.(file);
+              close();
+            }
+            event.currentTarget.value = '';
+          }}
+        />
+        <input
+          ref={backupInputRef}
+          id={backupInputId}
+          type="file"
+          accept=".shimmy,application/x-shimmy"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) {
+              if (payload?.onImportBackup) {
+                payload.onImportBackup(file);
+              } else {
+                console.info('バックアップ読み込み処理は未接続です', file);
+              }
               close();
             }
             event.currentTarget.value = '';

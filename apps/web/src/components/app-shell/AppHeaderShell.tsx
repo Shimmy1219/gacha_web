@@ -14,11 +14,8 @@ export interface AppHeaderShellProps {
   summaryVariant?: 'default' | 'warning' | 'success';
   summaryDescription?: string;
   onRegisterGacha?: () => void;
-  onOpenTxtJsonImport?: () => void;
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
-  onImportAll?: (files: FileList) => void;
-  importBusy?: boolean;
   onOpenPageSettings?: () => void;
 }
 
@@ -29,11 +26,8 @@ export function AppHeaderShell({
   summaryVariant = 'default',
   summaryDescription,
   onRegisterGacha,
-  onOpenTxtJsonImport,
   onOpenRealtime,
   onExportAll,
-  onImportAll,
-  importBusy,
   onOpenPageSettings
 }: AppHeaderShellProps): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -96,11 +90,8 @@ export function AppHeaderShell({
           <ToolbarActions
             mode="desktop"
             onRegisterGacha={onRegisterGacha}
-            onOpenTxtJsonImport={onOpenTxtJsonImport}
             onOpenRealtime={onOpenRealtime}
             onExportAll={onExportAll}
-            onImportAll={onImportAll}
-            importBusy={importBusy}
           />
           <div className="hidden lg:block">
             <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
@@ -139,11 +130,8 @@ export function AppHeaderShell({
         <ToolbarActions
           mode="mobile"
           onRegisterGacha={onRegisterGacha}
-          onOpenTxtJsonImport={onOpenTxtJsonImport}
           onOpenRealtime={onOpenRealtime}
           onExportAll={onExportAll}
-          onImportAll={onImportAll}
-          importBusy={importBusy}
         />
         <div className="app-header-shell__mobile-login lg:hidden">
           <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
