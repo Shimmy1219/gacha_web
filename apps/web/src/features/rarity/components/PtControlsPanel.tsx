@@ -241,10 +241,15 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
             }
           />
         }
-      >
-        <div className="flex flex-col gap-2">
-          {bundles.map((bundle, index) => (
-            <div key={bundle.id} className="flex items-center gap-2">
+      />
+
+      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl px-1 py-1">
+        {bundles.map((bundle, index) => (
+          <div
+            key={bundle.id}
+            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+          >
+            <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={bundle.price}
                 onChange={(value) =>
@@ -257,7 +262,7 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                 placeholder="3000"
                 className="w-[10ch]"
               />
-              <span className="text-xs text-muted-foreground">pt</span>
+              <span className="text-xs leading-none text-muted-foreground">ptで</span>
               <InlineNumberField
                 value={bundle.pulls}
                 onChange={(value) =>
@@ -268,22 +273,22 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   })
                 }
                 placeholder="10"
+                min={1}
                 className="w-[8ch]"
               />
-              <span className="text-xs text-muted-foreground">連</span>
-              <RemoveButton
-                onClick={() =>
-                  setBundles((prev) => ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id)))
-                }
-              />
+              <span className="text-xs leading-none text-muted-foreground">連</span>
             </div>
-          ))}
-        </div>
-      </ControlsRow>
+            <RemoveButton
+              onClick={() =>
+                setBundles((prev) => ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id)))
+              }
+            />
+          </div>
+        ))}
+      </div>
 
       <ControlsRow
         label="天井保証"
-        alignTop
         action={
           <AddButton
             onClick={() =>
@@ -295,10 +300,15 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
             }
           />
         }
-      >
-        <div className="flex flex-col gap-2">
-          {guarantees.map((guarantee, index) => (
-            <div key={guarantee.id} className="flex items-center gap-2">
+      />
+
+      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl px-1 py-1">
+        {guarantees.map((guarantee, index) => (
+          <div
+            key={guarantee.id}
+            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+          >
+            <div className="pt-controls-panel__guarantee-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
                 value={guarantee.minPulls}
                 onChange={(value) =>
@@ -309,9 +319,10 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   })
                 }
                 placeholder="30"
+                min={1}
                 className="w-[8ch]"
               />
-              <span className="text-xs text-muted-foreground">連以内で</span>
+              <span className="text-xs leading-none text-muted-foreground">連以内で</span>
               <InlineSelectField
                 value={guarantee.minRarity || (rarityOptions[0]?.value ?? '')}
                 onChange={(value) =>
@@ -323,18 +334,18 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                 }
                 options={rarityOptions}
               />
-              <span className="text-xs text-muted-foreground">保証</span>
-              <RemoveButton
-                onClick={() =>
-                  setGuarantees((prev) =>
-                    ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id))
-                  )
-                }
-              />
+              <span className="text-xs leading-none text-muted-foreground">保証</span>
             </div>
-          ))}
-        </div>
-      </ControlsRow>
+            <RemoveButton
+              onClick={() =>
+                setGuarantees((prev) =>
+                  ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id))
+                )
+              }
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
