@@ -1,9 +1,11 @@
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+
+import { useStoreValue } from '@domain/stores';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
-import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
+import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 
@@ -14,6 +16,8 @@ interface RarityRow {
   emitRate?: number;
 }
 
+const FALLBACK_RARITY_COLOR = '#3f3f46';
+
 function formatRate(rate?: number): string {
   if (rate == null) {
     return '';
@@ -23,15 +27,17 @@ function formatRate(rate?: number): string {
 }
 
 export function RaritySection(): JSX.Element {
-  const { status, data } = useGachaLocalStorage();
+  const { appState: appStateStore, rarities: rarityStore, ptControls: ptControlsStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
+  const rarityState = useStoreValue(rarityStore);
+  const ptSettingsState = useStoreValue(ptControlsStore);
+
+  const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
+
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const [draftLabels, setDraftLabels] = useState<Record<string, Record<string, string>>>({});
-  const [draftColors, setDraftColors] = useState<Record<string, Record<string, string>>>({});
-  const lastSyncedLabelsRef = useRef<Record<string, Record<string, string>>>({});
-  const lastSyncedColorsRef = useRef<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
-    const availableIds = data?.appState?.order ?? [];
+    const availableIds = appState?.order ?? [];
     if (availableIds.length === 0) {
       setActiveGachaId(null);
       return;
@@ -41,22 +47,24 @@ export function RaritySection(): JSX.Element {
       if (current && availableIds.includes(current)) {
         return current;
       }
-      return data?.appState?.selectedGachaId && availableIds.includes(data.appState.selectedGachaId)
-        ? data.appState.selectedGachaId
-        : availableIds[0];
+      if (appState?.selectedGachaId && availableIds.includes(appState.selectedGachaId)) {
+        return appState.selectedGachaId;
+      }
+      return availableIds[0];
     });
-  }, [data?.appState]);
+  }, [appState]);
 
   const gachaTabs = useMemo(() => {
-    if (!data?.appState) {
+    if (!appState) {
       return [] as Array<{ id: string; label: string }>;
     }
 
-    return (data.appState.order ?? []).map((gachaId) => ({
+    const ordered = appState.order ?? [];
+    return ordered.map((gachaId) => ({
       id: gachaId,
-      label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId
+      label: appState.meta?.[gachaId]?.displayName ?? gachaId
     }));
-  }, [data?.appState]);
+  }, [appState]);
 
   const gachaTabIds = useMemo(() => gachaTabs.map((gacha) => gacha.id), [gachaTabs]);
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
@@ -67,102 +75,47 @@ export function RaritySection(): JSX.Element {
   );
 
   const rarityRows = useMemo(() => {
-    if (!data?.rarityState || !activeGachaId) {
+    if (!rarityState || !activeGachaId) {
       return [] as RarityRow[];
     }
 
-    const rarityIds = data.rarityState.byGacha?.[activeGachaId] ?? [];
+    const rarityIds = rarityState.byGacha?.[activeGachaId] ?? [];
     return rarityIds
       .map((rarityId) => {
-        const entity = data.rarityState?.entities?.[rarityId];
+        const entity = rarityState.entities?.[rarityId];
         if (!entity) {
           return null;
         }
         return {
           id: entity.id,
-          label: entity.label,
-          color: entity.color ?? '#3f3f46',
+          label: entity.label ?? '',
+          color: entity.color ?? FALLBACK_RARITY_COLOR,
           emitRate: entity.emitRate
-        } satisfies RarityRow;
+        };
       })
       .filter((entry): entry is RarityRow => Boolean(entry));
-  }, [activeGachaId, data?.rarityState]);
-
-  useEffect(() => {
-    if (!activeGachaId) {
-      return;
-    }
-
-    const syncedLabels: Record<string, string> = {};
-    setDraftLabels((prev) => {
-      const prevForGacha = prev[activeGachaId] ?? {};
-      const previousSyncedForGacha = lastSyncedLabelsRef.current[activeGachaId] ?? {};
-      const nextForGacha: Record<string, string> = {};
-
-      rarityRows.forEach((row) => {
-        const previousSynced = previousSyncedForGacha[row.id];
-        const previousDraft = prevForGacha[row.id];
-        const hasUserEdited =
-          previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
-        const nextValue = hasUserEdited ? previousDraft : row.label;
-        nextForGacha[row.id] = nextValue;
-        syncedLabels[row.id] = row.label;
-      });
-
-      return {
-        ...prev,
-        [activeGachaId]: nextForGacha
-      };
-    });
-
-    lastSyncedLabelsRef.current = {
-      ...lastSyncedLabelsRef.current,
-      [activeGachaId]: syncedLabels
-    };
-  }, [activeGachaId, rarityRows]);
-
-  useEffect(() => {
-    if (!activeGachaId) {
-      return;
-    }
-
-    const syncedColors: Record<string, string> = {};
-    setDraftColors((prev) => {
-      const prevForGacha = prev[activeGachaId] ?? {};
-      const previousSyncedForGacha = lastSyncedColorsRef.current[activeGachaId] ?? {};
-      const nextForGacha: Record<string, string> = {};
-
-      rarityRows.forEach((row) => {
-        const previousSynced = previousSyncedForGacha[row.id];
-        const previousDraft = prevForGacha[row.id];
-        const hasUserEdited =
-          previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
-        const nextValue = hasUserEdited ? previousDraft : row.color;
-        nextForGacha[row.id] = nextValue;
-        syncedColors[row.id] = row.color;
-      });
-
-      return {
-        ...prev,
-        [activeGachaId]: nextForGacha
-      };
-    });
-
-    lastSyncedColorsRef.current = {
-      ...lastSyncedColorsRef.current,
-      [activeGachaId]: syncedColors
-    };
-  }, [activeGachaId, rarityRows]);
+  }, [activeGachaId, rarityState]);
 
   const rarityOptions = useMemo(
-    () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label })),
+    () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label || rarity.id })),
     [rarityRows]
   );
 
-  const activeDraftLabels = activeGachaId ? draftLabels[activeGachaId] ?? {} : {};
-  const activeDraftColors = activeGachaId ? draftColors[activeGachaId] ?? {} : {};
+  const ptSettings = activeGachaId ? ptSettingsState?.byGachaId?.[activeGachaId] : undefined;
 
-  const ptSettings = activeGachaId ? data?.ptSettings?.byGachaId?.[activeGachaId] : undefined;
+  const handleLabelChange = useCallback(
+    (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      rarityStore.renameRarity(rarityId, event.target.value);
+    },
+    [rarityStore]
+  );
+
+  const handleColorChange = useCallback(
+    (rarityId: string) => (next: string) => {
+      rarityStore.setRarityColor(rarityId, next);
+    },
+    [rarityStore]
+  );
 
   const handleAddRarity = () => {
     console.info('レアリティ追加のモーダルは未実装です');
@@ -226,80 +179,48 @@ export function RaritySection(): JSX.Element {
                       </tr>
                     </thead>
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
-                      {rarityRows.map((rarity) => {
-                        const labelValue = activeDraftLabels[rarity.id] ?? rarity.label;
-                        const colorValue = activeDraftColors[rarity.id] ?? rarity.color;
-                        return (
-                          <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                            <td className="rarity-section__cell px-[3px] py-2">
+                      {rarityRows.map((rarity) => (
+                        <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
+                          <td className="rarity-section__cell px-[3px] py-2">
+                            <input
+                              type="text"
+                              value={rarity.label}
+                              onChange={handleLabelChange(rarity.id)}
+                              className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
+                              aria-label={`${rarity.label || rarity.id} のレアリティ名`}
+                              placeholder={rarity.label || rarity.id}
+                            />
+                          </td>
+                          <td className="rarity-section__cell px-[3px] py-2">
+                            <RarityColorPicker
+                              value={rarity.color}
+                              ariaLabel={`${rarity.label || rarity.id} のカラー`}
+                              onChange={handleColorChange(rarity.id)}
+                            />
+                          </td>
+                          <td className="rarity-section__cell px-[3px] py-2">
+                            <div className="rarity-section__rate-control flex items-center gap-1.5">
                               <input
-                                type="text"
-                                value={labelValue}
-                                onChange={(event) =>
-                                  setDraftLabels((prev) => {
-                                    if (!activeGachaId) {
-                                      return prev;
-                                    }
-                                    const prevForGacha = prev[activeGachaId] ?? {};
-                                    return {
-                                      ...prev,
-                                      [activeGachaId]: {
-                                        ...prevForGacha,
-                                        [rarity.id]: event.target.value
-                                      }
-                                    };
-                                  })
-                                }
-                                className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
-                                aria-label={`${rarity.label} のレアリティ名`}
-                                placeholder={rarity.label}
+                                type="number"
+                                min={0}
+                                max={100}
+                                defaultValue={formatRate(rarity.emitRate)}
+                                className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                               />
-                            </td>
-                            <td className="rarity-section__cell px-[3px] py-2">
-                              <RarityColorPicker
-                                value={colorValue}
-                                ariaLabel={`${labelValue || rarity.label} のカラー`}
-                                onChange={(next) =>
-                                  setDraftColors((prev) => {
-                                    if (!activeGachaId) {
-                                      return prev;
-                                    }
-                                    const prevForGacha = prev[activeGachaId] ?? {};
-                                    return {
-                                      ...prev,
-                                      [activeGachaId]: {
-                                        ...prevForGacha,
-                                        [rarity.id]: next
-                                      }
-                                    };
-                                  })
-                                }
-                              />
-                            </td>
-                            <td className="rarity-section__cell px-[3px] py-2">
-                              <div className="rarity-section__rate-control flex items-center gap-1.5">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  defaultValue={formatRate(rarity.emitRate)}
-                                  className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-                                />
-                                <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
-                              </div>
-                            </td>
-                            <td className="rarity-section__cell px-[3px] py-2 text-right">
-                              <button
-                                type="button"
-                                className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                                onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
-                              >
-                                削除
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
+                            </div>
+                          </td>
+                          <td className="rarity-section__cell px-[3px] py-2 text-right">
+                            <button
+                              type="button"
+                              className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                              onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                            >
+                              削除
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
                       <tr className="rarity-section__add-row">
                         <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
                           <button
