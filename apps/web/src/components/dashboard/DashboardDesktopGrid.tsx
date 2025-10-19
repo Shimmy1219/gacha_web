@@ -228,7 +228,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
       pointerId: event.pointerId,
       startX: event.clientX,
       startWidths: [...columnWidths],
-      minWidths: minWidthsPx
+      minWidths: columnWidths.map(() => 0)
     };
     target.setPointerCapture(event.pointerId);
   };
