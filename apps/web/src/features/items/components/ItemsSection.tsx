@@ -1,6 +1,6 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
@@ -22,6 +22,9 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const defaultGridWidthRef = useRef<number | null>(null);
+  const [isCondensedGrid, setIsCondensedGrid] = useState(false);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -150,6 +153,59 @@ export function ItemsSection(): JSX.Element {
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
 
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const element = gridRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const width = entry.contentRect.width;
+      if (width <= 0) {
+        return;
+      }
+
+      if (defaultGridWidthRef.current === null || width > defaultGridWidthRef.current) {
+        defaultGridWidthRef.current = width;
+      }
+
+      const threshold = (defaultGridWidthRef.current ?? width) * (2 / 3);
+      setIsCondensedGrid((previous) => {
+        const next = width <= threshold + 0.5;
+        return previous === next ? previous : next;
+      });
+    });
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [activeGachaId, items.length]);
+
+  useEffect(() => {
+    if (items.length === 0) {
+      setIsCondensedGrid(false);
+    }
+  }, [items.length]);
+
+  const gridClassName = useMemo(
+    () =>
+      clsx(
+        'items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2',
+        isCondensedGrid ? 'xl:grid-cols-2' : 'xl:grid-cols-3'
+      ),
+    [isCondensedGrid]
+  );
+
   const handleEditImage = useCallback(
     (itemId: string) => {
       const target = flatItems.find((entry) => entry.model.itemId === itemId);
@@ -260,7 +316,7 @@ export function ItemsSection(): JSX.Element {
               ) : null}
 
               {items.length > 0 ? (
-                <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div ref={gridRef} className={gridClassName}>
                   {items.map(({ model, rarity }) => (
                     <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
                   ))}
