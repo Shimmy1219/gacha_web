@@ -1,5 +1,7 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
+
+import { type PtBundleV3, type PtGuaranteeV3, type PtSettingV3 } from '@domain/app-persistence';
 
 interface PtBundleRowState {
   id: string;
@@ -13,19 +15,17 @@ interface PtGuaranteeRowState {
   minRarity: string;
 }
 
+type PanelSnapshot = {
+  perPull: string;
+  complete: string;
+  bundles: PtBundleRowState[];
+  guarantees: PtGuaranteeRowState[];
+};
+
 interface PtControlsPanelProps {
-  settings?: {
-    perPull?: {
-      price: number;
-      pulls: number;
-    };
-    complete?: {
-      price: number;
-    };
-    bundles?: Array<{ id: string; price: number; pulls: number }>;
-    guarantees?: Array<{ id: string; rarityId: string; threshold: number }>;
-  };
+  settings?: PtSettingV3;
   rarityOptions: Array<{ value: string; label: string }>;
+  onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
 function createBundleRow(seed: number | string, overrides?: Partial<PtBundleRowState>): PtBundleRowState {
@@ -159,13 +159,125 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
   );
 }
 
-export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProps): JSX.Element {
+function parseNonNegativeNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSettingV3 | undefined {
+  if (!setting) {
+    return undefined;
+  }
+  return {
+    ...(setting.perPull ? { perPull: { ...setting.perPull } } : {}),
+    ...(setting.complete ? { complete: { ...setting.complete } } : {}),
+    ...(setting.bundles ? { bundles: setting.bundles.map((bundle) => ({ ...bundle })) } : {}),
+    ...(setting.guarantees ? { guarantees: setting.guarantees.map((guarantee) => ({ ...guarantee })) } : {})
+  };
+}
+
+function buildSettingsFromSnapshot(
+  snapshot: PanelSnapshot,
+  previous: PtSettingV3 | undefined
+): PtSettingV3 | undefined {
+  const next: PtSettingV3 = {};
+
+  const perPullPrice = parseNonNegativeNumber(snapshot.perPull);
+  if (perPullPrice != null) {
+    const pulls = previous?.perPull?.pulls ?? 1;
+    next.perPull = {
+      price: perPullPrice,
+      pulls
+    };
+  }
+
+  const completePrice = parseNonNegativeNumber(snapshot.complete);
+  if (completePrice != null) {
+    next.complete = { price: completePrice };
+  }
+
+  const bundles = snapshot.bundles
+    .map((bundle): PtBundleV3 | null => {
+      const price = parseNonNegativeNumber(bundle.price);
+      const pulls = parsePositiveInteger(bundle.pulls);
+      if (price == null || pulls == null) {
+        return null;
+      }
+      return {
+        id: bundle.id,
+        price,
+        pulls
+      };
+    })
+    .filter((bundle): bundle is PtBundleV3 => bundle !== null);
+
+  if (bundles.length > 0) {
+    next.bundles = bundles;
+  }
+
+  const previousGuarantees = previous?.guarantees ?? [];
+  const guarantees = snapshot.guarantees
+    .map((guarantee): PtGuaranteeV3 | null => {
+      const threshold = parsePositiveInteger(guarantee.minPulls);
+      const rarityId = guarantee.minRarity.trim();
+      if (!rarityId || threshold == null) {
+        return null;
+      }
+      const previousEntry = previousGuarantees.find((entry) => entry.id === guarantee.id);
+      const base: PtGuaranteeV3 = {
+        id: guarantee.id,
+        rarityId,
+        threshold
+      };
+      if (previousEntry?.pityStep != null) {
+        base.pityStep = previousEntry.pityStep;
+      }
+      return base;
+    })
+    .filter((guarantee): guarantee is PtGuaranteeV3 => guarantee !== null);
+
+  if (guarantees.length > 0) {
+    next.guarantees = guarantees;
+  }
+
+  if (!next.perPull && !next.complete && !next.bundles && !next.guarantees) {
+    return undefined;
+  }
+
+  return next;
+}
+
+export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
   const [complete, setComplete] = useState('');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([createBundleRow(0)]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([createGuaranteeRow(0)]);
   const nextBundleId = useRef(1);
   const nextGuaranteeId = useRef(1);
+
+  const initialComparableSettings = cloneSettingWithoutUpdatedAt(settings);
+  const lastEmittedRef = useRef<string>(
+    initialComparableSettings ? JSON.stringify(initialComparableSettings) : ''
+  );
 
   useEffect(() => {
     setPerPull(settings?.perPull?.price != null ? String(settings.perPull.price) : '');
@@ -200,6 +312,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
       setGuarantees([createGuaranteeRow(0)]);
       nextGuaranteeId.current = 1;
     }
+
+    const comparable = cloneSettingWithoutUpdatedAt(settings);
+    lastEmittedRef.current = comparable ? JSON.stringify(comparable) : '';
   }, [settings]);
 
   const ensureBundleExists = (next: PtBundleRowState[]): PtBundleRowState[] =>
@@ -208,12 +323,44 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
   const ensureGuaranteeExists = (next: PtGuaranteeRowState[]): PtGuaranteeRowState[] =>
     next.length === 0 ? [createGuaranteeRow(Date.now())] : next;
 
+  const emitSettingsChange = useCallback(
+    (snapshot: PanelSnapshot) => {
+      if (!onSettingsChange) {
+        return;
+      }
+      const nextSetting = buildSettingsFromSnapshot(snapshot, settings);
+      const serialized = nextSetting ? JSON.stringify(nextSetting) : '';
+      if (lastEmittedRef.current === serialized) {
+        return;
+      }
+      lastEmittedRef.current = serialized;
+      onSettingsChange(nextSetting);
+    },
+    [onSettingsChange, settings]
+  );
+
+  const emitWithState = useCallback(
+    (overrides: Partial<PanelSnapshot> = {}) => {
+      emitSettingsChange({
+        perPull,
+        complete,
+        bundles,
+        guarantees,
+        ...overrides
+      });
+    },
+    [perPull, complete, bundles, guarantees, emitSettingsChange]
+  );
+
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl p-3 shadow-panel">
       <ControlsRow label="1回の消費pt">
         <InlineNumberField
           value={perPull}
-          onChange={setPerPull}
+          onChange={(value) => {
+            setPerPull(value);
+            emitWithState({ perPull: value });
+          }}
           placeholder="10"
           className="ml-auto w-[12ch]"
         />
@@ -222,7 +369,10 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
       <ControlsRow label="コンプpt">
         <InlineNumberField
           value={complete}
-          onChange={setComplete}
+          onChange={(value) => {
+            setComplete(value);
+            emitWithState({ complete: value });
+          }}
           placeholder="1000"
           className="ml-auto w-[12ch]"
         />
@@ -236,7 +386,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
               setBundles((prev) => {
                 const id = nextBundleId.current;
                 nextBundleId.current += 1;
-                return [...prev, createBundleRow(id)];
+                const next = ensureBundleExists([...prev, createBundleRow(id)]);
+                emitWithState({ bundles: next });
+                return next;
               })
             }
           />
@@ -256,7 +408,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], price: value };
-                    return ensureBundleExists(next);
+                    const ensured = ensureBundleExists(next);
+                    emitWithState({ bundles: ensured });
+                    return ensured;
                   })
                 }
                 placeholder="3000"
@@ -269,7 +423,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], pulls: value };
-                    return ensureBundleExists(next);
+                    const ensured = ensureBundleExists(next);
+                    emitWithState({ bundles: ensured });
+                    return ensured;
                   })
                 }
                 placeholder="10"
@@ -280,7 +436,11 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
             </div>
             <RemoveButton
               onClick={() =>
-                setBundles((prev) => ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id)))
+                setBundles((prev) => {
+                  const next = ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id));
+                  emitWithState({ bundles: next });
+                  return next;
+                })
               }
             />
           </div>
@@ -295,7 +455,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
               setGuarantees((prev) => {
                 const id = nextGuaranteeId.current;
                 nextGuaranteeId.current += 1;
-                return [...prev, createGuaranteeRow(id)];
+                const next = ensureGuaranteeExists([...prev, createGuaranteeRow(id)]);
+                emitWithState({ guarantees: next });
+                return next;
               })
             }
           />
@@ -315,7 +477,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minPulls: value };
-                    return ensureGuaranteeExists(next);
+                    const ensured = ensureGuaranteeExists(next);
+                    emitWithState({ guarantees: ensured });
+                    return ensured;
                   })
                 }
                 placeholder="30"
@@ -329,7 +493,9 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minRarity: value };
-                    return ensureGuaranteeExists(next);
+                    const ensured = ensureGuaranteeExists(next);
+                    emitWithState({ guarantees: ensured });
+                    return ensured;
                   })
                 }
                 options={rarityOptions}
@@ -338,9 +504,11 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
             </div>
             <RemoveButton
               onClick={() =>
-                setGuarantees((prev) =>
-                  ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id))
-                )
+                setGuarantees((prev) => {
+                  const next = ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id));
+                  emitWithState({ guarantees: next });
+                  return next;
+                })
               }
             />
           </div>
