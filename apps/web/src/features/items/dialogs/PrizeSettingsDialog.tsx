@@ -24,6 +24,8 @@ export interface PrizeSettingsDialogPayload {
   pickupTarget: boolean;
   completeTarget: boolean;
   isRiagu: boolean;
+  hasRiaguCard?: boolean;
+  riaguAssignmentCount?: number;
   thumbnailUrl: string | null;
   rarityColor?: string;
   riaguPrice?: number;
@@ -83,6 +85,43 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const handleRiaguToggleChange = (nextValue: boolean) => {
+    if (!payload) {
+      setRiaguTarget(nextValue);
+      return;
+    }
+
+    const wasEnabled = riaguTarget;
+    const isDisabling = wasEnabled && !nextValue;
+    const shouldConfirmDisable =
+      isDisabling && (payload.hasRiaguCard || (payload.riaguAssignmentCount ?? 0) > 0);
+
+    if (shouldConfirmDisable) {
+      const assignmentCount = payload.riaguAssignmentCount ?? 0;
+      const message =
+        assignmentCount > 0
+          ? `既にこのアイテムをリアグとして当てている人が${assignmentCount}人います。リアグ設定を解除してもよろしいですか？`
+          : '既にこのアイテムをリアグとして当てている人がいる可能性があります。リアグ設定を解除してもよろしいですか？';
+
+      push(ConfirmDialog, {
+        id: `${payload.itemId}-confirm-riagu-disable`,
+        title: 'リアグ設定の解除',
+        size: 'sm',
+        payload: {
+          message,
+          confirmLabel: 'リアグを解除',
+          cancelLabel: 'キャンセル',
+          onConfirm: () => {
+            setRiaguTarget(false);
+          }
+        }
+      });
+      return;
+    }
+
+    setRiaguTarget(nextValue);
+  };
 
   useEffect(() => {
     return () => {
@@ -307,7 +346,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   label="リアグとして設定"
                   description="リアグ情報の設定を有効にします"
                   checked={riaguTarget}
-                  onChange={setRiaguTarget}
+                  onChange={handleRiaguToggleChange}
                   name="riaguTarget"
                 />
                 <button

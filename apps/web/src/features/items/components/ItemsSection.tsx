@@ -9,7 +9,6 @@ import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
-import { useAppPersistence } from '../../storage/AppPersistenceProvider';
 import { type RiaguCardModelV3 } from '@domain/app-persistence';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
@@ -20,7 +19,7 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
-  const { catalog: catalogStore, userInventories: userInventoryStore } = useDomainStores();
+  const { catalog: catalogStore, userInventories: userInventoryStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -221,6 +220,8 @@ export function ItemsSection(): JSX.Element {
       }
 
       const { model, rarity, riaguCard } = target;
+      const assignmentRecords = data?.userInventories?.byItemId?.[model.itemId] ?? [];
+      const riaguAssignmentCount = assignmentRecords.reduce((total, record) => total + Math.max(0, record.count ?? 0), 0);
       const rarityOptions = rarityOptionsByGacha[model.gachaId] ?? [rarity].map((entry) => ({
         id: entry.rarityId,
         label: entry.label
@@ -242,6 +243,8 @@ export function ItemsSection(): JSX.Element {
           pickupTarget: model.pickupTarget,
           completeTarget: model.completeTarget,
           isRiagu: model.isRiagu,
+          hasRiaguCard: Boolean(riaguCard),
+          riaguAssignmentCount,
           thumbnailUrl: model.imageAsset.thumbnailUrl,
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
@@ -262,6 +265,20 @@ export function ItemsSection(): JSX.Element {
                 updatedAt: timestamp
               });
 
+              if (payload.riagu) {
+                if (!riaguCard) {
+                  riaguStore.upsertCard(
+                    {
+                      itemId: model.itemId,
+                      gachaId: model.gachaId
+                    },
+                    { persist: 'debounced' }
+                  );
+                }
+              } else {
+                riaguStore.removeByItemId(model.itemId, { persist: 'debounced' });
+              }
+
               if (model.rarityId !== payload.rarityId) {
                 userInventoryStore.updateItemRarity({
                   gachaId: model.gachaId,
@@ -278,7 +295,7 @@ export function ItemsSection(): JSX.Element {
         }
       });
     },
-    [catalogStore, flatItems, push, rarityOptionsByGacha, userInventoryStore]
+    [catalogStore, data?.userInventories?.byItemId, flatItems, push, rarityOptionsByGacha, riaguStore, userInventoryStore]
   );
 
   return (
