@@ -1,6 +1,8 @@
 import { clsx } from 'clsx';
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
+import { type PtSettingV3 } from '@domain/app-persistence';
+
 import { useStoreValue } from '@domain/stores';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
@@ -142,6 +144,16 @@ export function RaritySection(): JSX.Element {
 
   const ptSettings = activeGachaId ? ptSettingsState?.byGachaId?.[activeGachaId] : undefined;
 
+  const handlePtSettingsChange = useCallback(
+    (next: PtSettingV3 | undefined) => {
+      if (!activeGachaId) {
+        return;
+      }
+      ptControlsStore.setGachaSettings(activeGachaId, next);
+    },
+    [activeGachaId, ptControlsStore]
+  );
+
   const handleLabelChange = useCallback(
     (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
       rarityStore.renameRarity(rarityId, event.target.value);
@@ -208,6 +220,7 @@ export function RaritySection(): JSX.Element {
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
+            onSettingsChange={handlePtSettingsChange}
           />
 
           {status !== 'ready' ? (
