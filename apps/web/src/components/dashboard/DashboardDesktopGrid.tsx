@@ -65,6 +65,52 @@ function distributeWidths(minWidths: number[], weights: number[], available: num
   return minWidths.map((minWidth, index) => minWidth + (leftover * weights[index]) / weightSum);
 }
 
+function calculateDraggedWidths(
+  startWidths: number[],
+  minWidths: number[],
+  index: number,
+  delta: number
+): number[] {
+  const next = [...startWidths];
+  if (delta === 0) {
+    return next;
+  }
+
+  const safeMinWidths = minWidths.map((value) => Math.max(value, 0));
+
+  if (delta > 0) {
+    let remaining = delta;
+    for (let rightIndex = index + 1; rightIndex < next.length && remaining > 0; rightIndex += 1) {
+      const available = next[rightIndex] - (safeMinWidths[rightIndex] ?? 0);
+      if (available <= 0) {
+        continue;
+      }
+      const take = Math.min(available, remaining);
+      next[rightIndex] -= take;
+      remaining -= take;
+    }
+    const applied = delta - remaining;
+    if (applied <= 0) {
+      return next;
+    }
+    next[index] = Math.max(safeMinWidths[index] ?? 0, startWidths[index] + applied);
+    return next;
+  }
+
+  const available = startWidths[index] - (safeMinWidths[index] ?? 0);
+  const applied = Math.min(-delta, Math.max(available, 0));
+  if (applied <= 0) {
+    return next;
+  }
+
+  next[index] = startWidths[index] - applied;
+  if (index + 1 < next.length) {
+    next[index + 1] = startWidths[index + 1] + applied;
+  }
+
+  return next;
+}
+
 export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
@@ -181,8 +227,8 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
       index,
       pointerId: event.pointerId,
       startX: event.clientX,
-      startWidths: columnWidths,
-      minWidths: minWidthsPx
+      startWidths: [...columnWidths],
+      minWidths: columnWidths.map(() => 0)
     };
     target.setPointerCapture(event.pointerId);
   };
@@ -196,23 +242,21 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
 
     const { index, startX, startWidths, minWidths } = dragState;
     const delta = event.clientX - startX;
-    const combined = startWidths[index] + startWidths[index + 1];
-    const minA = minWidths[index];
-    const minB = minWidths[index + 1];
-
-    let nextA = startWidths[index] + delta;
-    nextA = Math.max(nextA, minA);
-    nextA = Math.min(nextA, combined - minB);
-    const nextB = combined - nextA;
+    const nextWidths = calculateDraggedWidths(startWidths, minWidths, index, delta);
 
     setColumnWidths((current) => {
       if (!current) {
         return current;
       }
-      const next = [...current];
-      next[index] = nextA;
-      next[index + 1] = nextB;
-      return next;
+      if (current.length !== nextWidths.length) {
+        return nextWidths;
+      }
+      for (let i = 0; i < current.length; i += 1) {
+        if (current[i] !== nextWidths[i]) {
+          return nextWidths;
+        }
+      }
+      return current;
     });
   };
 

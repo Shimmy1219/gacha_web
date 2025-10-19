@@ -4,27 +4,20 @@ import {
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-interface MultiSelectOption {
-  value: string;
-  label: string;
-  description?: string;
-}
+import {
+  type UserFilterOption,
+  useUserFilterController,
+  useUserFilterOptions
+} from '../logic/userFilters';
 
 interface MultiSelectFilterProps {
   id: string;
   label: string;
-  options: MultiSelectOption[];
+  options: UserFilterOption[];
   value: '*' | string[];
-  onChange: Dispatch<SetStateAction<'*' | string[]>>;
+  onChange: (value: '*' | string[]) => void;
 }
 
 function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectFilterProps): JSX.Element {
@@ -65,28 +58,26 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
   }, []);
 
   const toggleAll = (): void => {
-    onChange((prev) => {
-      if (prev === '*') {
-        return [];
-      }
-      return '*';
-    });
+    if (value === '*' || selectedSet.size === allValues.length) {
+      onChange([]);
+      return;
+    }
+    onChange('*');
   };
 
   const toggleValue = (nextValue: string): void => {
-    onChange((prev) => {
-      const baseSet = prev === '*' ? new Set(allValues) : new Set(prev);
-      if (baseSet.has(nextValue)) {
-        baseSet.delete(nextValue);
-      } else {
-        baseSet.add(nextValue);
-      }
+    const baseSet = value === '*' ? new Set(allValues) : new Set(value);
+    if (baseSet.has(nextValue)) {
+      baseSet.delete(nextValue);
+    } else {
+      baseSet.add(nextValue);
+    }
 
-      if (baseSet.size === 0 || baseSet.size === allValues.length) {
-        return '*';
-      }
-      return Array.from(baseSet);
-    });
+    if (baseSet.size === 0 || baseSet.size === allValues.length) {
+      onChange('*');
+      return;
+    }
+    onChange(Array.from(baseSet));
   };
 
   return (
@@ -173,12 +164,12 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
 interface ToggleRowProps {
   label: string;
   value: boolean;
-  onChange: Dispatch<SetStateAction<boolean>>;
+  onChange: (next: boolean) => void;
   helperText?: string;
 }
 
 function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.Element {
-  const toggle = (): void => onChange((prev) => !prev);
+  const toggle = (): void => onChange(!value);
 
   return (
     <div className="user-filter-panel__toggle-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
@@ -211,27 +202,13 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
 interface UserFilterPanelProps {
   id?: string;
   open?: boolean;
-  gachaOptions?: MultiSelectOption[];
-  rarityOptions?: MultiSelectOption[];
 }
 
 export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
-  const { id, open = true, gachaOptions = [], rarityOptions = [] } = props ?? {};
-  const [selectedGachas, setSelectedGachas] = useState<'*' | string[]>('*');
-  const [selectedRarities, setSelectedRarities] = useState<'*' | string[]>('*');
-  const [hideMiss, setHideMiss] = useState(false);
-  const [showCounts, setShowCounts] = useState(false);
-  const [showSkipOnly, setShowSkipOnly] = useState(false);
-  const [keyword, setKeyword] = useState('');
-
-  const handleReset = (): void => {
-    setSelectedGachas('*');
-    setSelectedRarities('*');
-    setHideMiss(false);
-    setShowCounts(false);
-    setShowSkipOnly(false);
-    setKeyword('');
-  };
+  const { id, open = true } = props ?? {};
+  const { gachaOptions, rarityOptions } = useUserFilterOptions();
+  const { state, setSelectedGachaIds, setSelectedRarityIds, setHideMiss, setShowCounts, setShowSkipOnly, setKeyword, reset } =
+    useUserFilterController();
 
   return (
     <section
@@ -249,19 +226,19 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
           id="user-filter-gacha"
           label="ガチャ絞り込み"
           options={gachaOptions}
-          value={selectedGachas}
-          onChange={setSelectedGachas}
+          value={state.selectedGachaIds}
+          onChange={setSelectedGachaIds}
         />
         <MultiSelectFilter
           id="user-filter-rarity"
           label="レア度"
           options={rarityOptions}
-          value={selectedRarities}
-          onChange={setSelectedRarities}
+          value={state.selectedRarityIds}
+          onChange={setSelectedRarityIds}
         />
-        <ToggleRow label="はずれを隠す" value={hideMiss} onChange={setHideMiss} />
-        <ToggleRow label="獲得数を表示" value={showCounts} onChange={setShowCounts} />
-        <ToggleRow label="リアグのみを表示" value={showSkipOnly} onChange={setShowSkipOnly} />
+        <ToggleRow label="はずれを隠す" value={state.hideMiss} onChange={setHideMiss} />
+        <ToggleRow label="獲得数を表示" value={state.showCounts} onChange={setShowCounts} />
+        <ToggleRow label="リアグのみを表示" value={state.showSkipOnly} onChange={setShowSkipOnly} />
         <div className="user-filter-panel__search-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
           <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
             ユーザー検索
@@ -271,7 +248,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
             <input
               type="search"
               placeholder="名前で検索"
-              value={keyword}
+              value={state.keyword}
               onChange={(event) => setKeyword(event.currentTarget.value)}
               className="user-filter-panel__search-field w-full bg-transparent text-sm text-surface-foreground placeholder:text-muted-foreground focus:outline-none"
             />
@@ -281,7 +258,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       <div className="user-filter-panel__footer flex justify-end">
         <button
           type="button"
-          onClick={handleReset}
+          onClick={reset}
           className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
         >
           フィルタをリセット
