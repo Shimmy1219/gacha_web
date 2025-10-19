@@ -34,6 +34,7 @@ export interface PrizeSettingsDialogPayload {
     rarityId: string;
     pickupTarget: boolean;
     completeTarget: boolean;
+    riagu: boolean;
     file: File | null;
   }) => void;
 }
@@ -143,6 +144,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId,
       pickupTarget,
       completeTarget,
+      riagu: riaguTarget,
       file: selectedFile
     });
 

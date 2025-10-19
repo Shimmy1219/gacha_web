@@ -20,7 +20,7 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
-  const { catalog: catalogStore } = useDomainStores();
+  const { catalog: catalogStore, userInventories: userInventoryStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -248,6 +248,7 @@ export function ItemsSection(): JSX.Element {
           riaguType: riaguCard?.typeLabel,
           onSave: (payload) => {
             try {
+              const timestamp = new Date().toISOString();
               catalogStore.updateItem({
                 gachaId: model.gachaId,
                 itemId: model.itemId,
@@ -255,9 +256,21 @@ export function ItemsSection(): JSX.Element {
                   name: payload.name,
                   rarityId: payload.rarityId,
                   pickupTarget: payload.pickupTarget,
-                  completeTarget: payload.completeTarget
-                }
+                  completeTarget: payload.completeTarget,
+                  riagu: payload.riagu
+                },
+                updatedAt: timestamp
               });
+
+              if (model.rarityId !== payload.rarityId) {
+                userInventoryStore.updateItemRarity({
+                  gachaId: model.gachaId,
+                  itemId: model.itemId,
+                  previousRarityId: model.rarityId,
+                  nextRarityId: payload.rarityId,
+                  updatedAt: timestamp
+                });
+              }
             } catch (error) {
               console.error('景品設定の保存に失敗しました', error);
             }
@@ -265,7 +278,7 @@ export function ItemsSection(): JSX.Element {
         }
       });
     },
-    [catalogStore, flatItems, push, rarityOptionsByGacha]
+    [catalogStore, flatItems, push, rarityOptionsByGacha, userInventoryStore]
   );
 
   return (
