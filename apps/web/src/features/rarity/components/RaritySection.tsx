@@ -74,6 +74,8 @@ export function RaritySection(): JSX.Element {
   const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
 
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const [activeRateInput, setActiveRateInput] = useState<string | null>(null);
+  const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const availableIds = appState?.order ?? [];
@@ -135,6 +137,31 @@ export function RaritySection(): JSX.Element {
       .filter((entry): entry is RarityRow => Boolean(entry));
   }, [activeGachaId, rarityState]);
 
+  useEffect(() => {
+    const activeIds = new Set(rarityRows.map((rarity) => rarity.id));
+    setRateDrafts((current) => {
+      let didRemove = false;
+      const next: Record<string, string> = {};
+      for (const [id, value] of Object.entries(current)) {
+        if (activeIds.has(id)) {
+          next[id] = value;
+        } else {
+          didRemove = true;
+        }
+      }
+      if (!didRemove) {
+        return current;
+      }
+      return next;
+    });
+    setActiveRateInput((current) => {
+      if (current && !activeIds.has(current)) {
+        return null;
+      }
+      return current;
+    });
+  }, [rarityRows]);
+
   const rarityOptions = useMemo(
     () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label || rarity.id })),
     [rarityRows]
@@ -163,6 +190,12 @@ export function RaritySection(): JSX.Element {
   const handleEmitRateChange = useCallback(
     (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
       const rawValue = event.target.value;
+      setRateDrafts((current) => {
+        if (current[rarityId] === rawValue) {
+          return current;
+        }
+        return { ...current, [rarityId]: rawValue };
+      });
       if (rawValue.trim() === '') {
         rarityStore.setRarityEmitRate(rarityId, undefined);
         return;
@@ -248,6 +281,10 @@ export function RaritySection(): JSX.Element {
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
                       {rarityRows.map((rarity) => {
                         const presentation = getRarityTextPresentation(rarity.color);
+                        const isActiveRateInput = activeRateInput === rarity.id;
+                        const draftValue = rateDrafts[rarity.id];
+                        const rateInputValue =
+                          isActiveRateInput && draftValue != null ? draftValue : formatRate(rarity.emitRate);
                         return (
                           <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
                             <td className="rarity-section__cell rarity-section__cell-label px-[3px] py-2">
@@ -279,9 +316,29 @@ export function RaritySection(): JSX.Element {
                                   max={100}
                                   inputMode="decimal"
                                   step="any"
-                                  key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
-                                  defaultValue={formatRate(rarity.emitRate)}
+                                  value={rateInputValue}
                                   onChange={handleEmitRateChange(rarity.id)}
+                                  onFocus={(event) => {
+                                    const currentValue = event.target.value;
+                                    setActiveRateInput(rarity.id);
+                                    setRateDrafts((current) => {
+                                      if (current[rarity.id] === currentValue) {
+                                        return current;
+                                      }
+                                      return { ...current, [rarity.id]: currentValue };
+                                    });
+                                  }}
+                                  onBlur={() => {
+                                    setActiveRateInput((current) => (current === rarity.id ? null : current));
+                                    setRateDrafts((current) => {
+                                      if (!(rarity.id in current)) {
+                                        return current;
+                                      }
+                                      const next = { ...current };
+                                      delete next[rarity.id];
+                                      return next;
+                                    });
+                                  }}
                                   className="rarity-section__rate-input w-full min-w-[6ch] max-w-[12ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                                 />
                                 <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
