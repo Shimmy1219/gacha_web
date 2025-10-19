@@ -236,10 +236,12 @@
 
 .rarity-section__rate-control {
   justify-content: flex-end;
+  width: 100%;
 }
 
 .rarity-section__rate-input {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 @layer utilities {

@@ -417,7 +417,7 @@ export function RaritySection(): JSX.Element {
                                   key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
                                   defaultValue={formatRate(rarity.emitRate)}
                                   onChange={handleEmitRateChange(rarity.id)}
-                                  className="rarity-section__rate-input w-full min-w-[6ch] max-w-[12ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                                  className="rarity-section__rate-input flex-1 min-w-[6ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                                 />
                                 <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                               </div>
