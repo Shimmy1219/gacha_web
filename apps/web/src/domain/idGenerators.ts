@@ -1,5 +1,16 @@
 export const BASE62_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
+export const ID_PREFIXES = {
+  gacha: 'gch-',
+  item: 'itm-',
+  rarity: 'rar-',
+  user: 'usr-',
+  inventory: 'inv-',
+  riagu: 'riagu-',
+  ptBundle: 'bndl-',
+  ptGuarantee: 'ptg-'
+} as const;
+
 export function generateBase62IdSuffix(length = 10): string {
   const alphabetLength = BASE62_ALPHABET.length;
   if (length <= 0) {
@@ -46,4 +57,36 @@ export function generateDeterministicPrefixedId(prefix: string, seed: string, le
   }
 
   return `${prefix}${suffix}`;
+}
+
+export function generateGachaId(): string {
+  return generatePrefixedId(ID_PREFIXES.gacha);
+}
+
+export function generateItemId(): string {
+  return generatePrefixedId(ID_PREFIXES.item);
+}
+
+export function generateRarityId(): string {
+  return generatePrefixedId(ID_PREFIXES.rarity);
+}
+
+export function generateUserId(): string {
+  return generatePrefixedId(ID_PREFIXES.user);
+}
+
+export function generateInventoryId(): string {
+  return generatePrefixedId(ID_PREFIXES.inventory);
+}
+
+export function generateRiaguId(): string {
+  return generatePrefixedId(ID_PREFIXES.riagu);
+}
+
+export function generatePtBundleId(): string {
+  return generatePrefixedId(ID_PREFIXES.ptBundle);
+}
+
+export function generatePtGuaranteeId(): string {
+  return generatePrefixedId(ID_PREFIXES.ptGuarantee);
 }

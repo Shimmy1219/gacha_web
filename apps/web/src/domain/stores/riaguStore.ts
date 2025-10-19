@@ -1,5 +1,5 @@
 import { AppPersistence, type RiaguCardModelV3, type RiaguStateV3 } from '../app-persistence';
-import { generatePrefixedId } from '../idGenerators';
+import { generateRiaguId } from '../idGenerators';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
 interface UpsertRiaguCardInput {
@@ -10,10 +10,6 @@ interface UpsertRiaguCardInput {
   orderHint?: number | null;
   stock?: number | null;
   notes?: string | null;
-}
-
-function generateRiaguId(): string {
-  return generatePrefixedId('riagu-');
 }
 
 export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {

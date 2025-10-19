@@ -1,10 +1,6 @@
 import { AppPersistence, type GachaRarityEntityV3, type GachaRarityStateV3 } from '../app-persistence';
-import { generatePrefixedId } from '../idGenerators';
+import { generateRarityId } from '../idGenerators';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
-
-function createRarityId(): string {
-  return generatePrefixedId('rar-');
-}
 
 export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
@@ -40,7 +36,7 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
       return null;
     }
 
-    const rarityId = initial.id ?? createRarityId();
+    const rarityId = initial.id ?? generateRarityId();
     let created = false;
 
     this.update((previous) => {
