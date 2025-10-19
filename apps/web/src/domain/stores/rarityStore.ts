@@ -110,6 +110,75 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
     return created ? rarityId : null;
   }
 
+  removeRarity(rarityId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!rarityId) {
+      return;
+    }
+
+    this.update((previous) => {
+      if (!previous || !previous.entities || !previous.entities[rarityId]) {
+        return previous;
+      }
+
+      const entity = previous.entities[rarityId];
+      const gachaId = entity.gachaId;
+
+      const nextEntities = { ...previous.entities };
+      delete nextEntities[rarityId];
+
+      const nextByGacha = { ...(previous.byGacha ?? {}) };
+      const currentOrder = nextByGacha[gachaId] ?? [];
+      const filteredOrder = currentOrder.filter((id) => id !== rarityId);
+      if (filteredOrder.length > 0) {
+        nextByGacha[gachaId] = filteredOrder;
+      } else {
+        delete nextByGacha[gachaId];
+      }
+
+      let nextIndexByName = previous.indexByName ? { ...previous.indexByName } : undefined;
+      if (nextIndexByName) {
+        const gachaIndex = { ...(nextIndexByName[gachaId] ?? {}) };
+        let mutated = false;
+        if (entity.label && gachaIndex[entity.label] === rarityId) {
+          delete gachaIndex[entity.label];
+          mutated = true;
+        }
+        if (entity.shortName && gachaIndex[entity.shortName] === rarityId) {
+          delete gachaIndex[entity.shortName];
+          mutated = true;
+        }
+        if (mutated) {
+          if (Object.keys(gachaIndex).length > 0) {
+            nextIndexByName[gachaId] = gachaIndex;
+          } else {
+            delete nextIndexByName[gachaId];
+          }
+        }
+        if (nextIndexByName && Object.keys(nextIndexByName).length === 0) {
+          nextIndexByName = undefined;
+        }
+      }
+
+      const timestamp = new Date().toISOString();
+
+      const hasEntities = Object.keys(nextEntities).length > 0;
+      const hasByGacha = Object.keys(nextByGacha).length > 0;
+      if (!hasEntities && !hasByGacha && !nextIndexByName) {
+        return undefined;
+      }
+
+      const nextState: GachaRarityStateV3 = {
+        version: typeof previous.version === 'number' ? previous.version : 3,
+        updatedAt: timestamp,
+        byGacha: nextByGacha,
+        entities: nextEntities,
+        ...(nextIndexByName ? { indexByName: nextIndexByName } : {})
+      };
+
+      return nextState;
+    }, options);
+  }
+
   protected persistImmediate(state: GachaRarityStateV3 | undefined): void {
     this.persistence.saveRarityState(state);
   }
