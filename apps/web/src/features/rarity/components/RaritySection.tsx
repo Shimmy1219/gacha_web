@@ -26,10 +26,10 @@ function formatRate(rate?: number): string {
 export function RaritySection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const [draftLabels, setDraftLabels] = useState<Record<string, string>>({});
-  const [draftColors, setDraftColors] = useState<Record<string, string>>({});
-  const lastSyncedLabelsRef = useRef<Record<string, string>>({});
-  const lastSyncedColorsRef = useRef<Record<string, string>>({});
+  const [draftLabels, setDraftLabels] = useState<Record<string, Record<string, string>>>({});
+  const [draftColors, setDraftColors] = useState<Record<string, Record<string, string>>>({});
+  const lastSyncedLabelsRef = useRef<Record<string, Record<string, string>>>({});
+  const lastSyncedColorsRef = useRef<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
     const availableIds = data?.appState?.order ?? [];
@@ -90,43 +90,78 @@ export function RaritySection(): JSX.Element {
   }, [activeGachaId, data?.rarityState]);
 
   useEffect(() => {
+    if (!activeGachaId) {
+      return;
+    }
+
     const syncedLabels: Record<string, string> = {};
     setDraftLabels((prev) => {
-      const next: Record<string, string> = {};
+      const prevForGacha = prev[activeGachaId] ?? {};
+      const previousSyncedForGacha = lastSyncedLabelsRef.current[activeGachaId] ?? {};
+      const nextForGacha: Record<string, string> = {};
+
       rarityRows.forEach((row) => {
-        const previousSynced = lastSyncedLabelsRef.current[row.id];
-        const previousDraft = prev[row.id];
-        const hasUserEdited = previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
+        const previousSynced = previousSyncedForGacha[row.id];
+        const previousDraft = prevForGacha[row.id];
+        const hasUserEdited =
+          previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
         const nextValue = hasUserEdited ? previousDraft : row.label;
-        next[row.id] = nextValue;
+        nextForGacha[row.id] = nextValue;
         syncedLabels[row.id] = row.label;
       });
-      return next;
+
+      return {
+        ...prev,
+        [activeGachaId]: nextForGacha
+      };
     });
-    lastSyncedLabelsRef.current = syncedLabels;
-  }, [rarityRows]);
+
+    lastSyncedLabelsRef.current = {
+      ...lastSyncedLabelsRef.current,
+      [activeGachaId]: syncedLabels
+    };
+  }, [activeGachaId, rarityRows]);
 
   useEffect(() => {
+    if (!activeGachaId) {
+      return;
+    }
+
     const syncedColors: Record<string, string> = {};
     setDraftColors((prev) => {
-      const next: Record<string, string> = {};
+      const prevForGacha = prev[activeGachaId] ?? {};
+      const previousSyncedForGacha = lastSyncedColorsRef.current[activeGachaId] ?? {};
+      const nextForGacha: Record<string, string> = {};
+
       rarityRows.forEach((row) => {
-        const previousSynced = lastSyncedColorsRef.current[row.id];
-        const previousDraft = prev[row.id];
-        const hasUserEdited = previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
+        const previousSynced = previousSyncedForGacha[row.id];
+        const previousDraft = prevForGacha[row.id];
+        const hasUserEdited =
+          previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
         const nextValue = hasUserEdited ? previousDraft : row.color;
-        next[row.id] = nextValue;
+        nextForGacha[row.id] = nextValue;
         syncedColors[row.id] = row.color;
       });
-      return next;
+
+      return {
+        ...prev,
+        [activeGachaId]: nextForGacha
+      };
     });
-    lastSyncedColorsRef.current = syncedColors;
-  }, [rarityRows]);
+
+    lastSyncedColorsRef.current = {
+      ...lastSyncedColorsRef.current,
+      [activeGachaId]: syncedColors
+    };
+  }, [activeGachaId, rarityRows]);
 
   const rarityOptions = useMemo(
     () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label })),
     [rarityRows]
   );
+
+  const activeDraftLabels = activeGachaId ? draftLabels[activeGachaId] ?? {} : {};
+  const activeDraftColors = activeGachaId ? draftColors[activeGachaId] ?? {} : {};
 
   const ptSettings = activeGachaId ? data?.ptSettings?.byGachaId?.[activeGachaId] : undefined;
 
@@ -184,8 +219,8 @@ export function RaritySection(): JSX.Element {
                 </thead>
                 <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
                   {rarityRows.map((rarity) => {
-                    const labelValue = draftLabels[rarity.id] ?? rarity.label;
-                    const colorValue = draftColors[rarity.id] ?? rarity.color;
+                    const labelValue = activeDraftLabels[rarity.id] ?? rarity.label;
+                    const colorValue = activeDraftColors[rarity.id] ?? rarity.color;
                     return (
                       <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
                         <td className="rarity-section__cell px-[3px] py-2">
@@ -193,7 +228,19 @@ export function RaritySection(): JSX.Element {
                             type="text"
                             value={labelValue}
                             onChange={(event) =>
-                              setDraftLabels((prev) => ({ ...prev, [rarity.id]: event.target.value }))
+                              setDraftLabels((prev) => {
+                                if (!activeGachaId) {
+                                  return prev;
+                                }
+                                const prevForGacha = prev[activeGachaId] ?? {};
+                                return {
+                                  ...prev,
+                                  [activeGachaId]: {
+                                    ...prevForGacha,
+                                    [rarity.id]: event.target.value
+                                  }
+                                };
+                              })
                             }
                             className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
                             aria-label={`${rarity.label} のレアリティ名`}
@@ -205,10 +252,19 @@ export function RaritySection(): JSX.Element {
                             value={colorValue}
                             ariaLabel={`${labelValue || rarity.label} のカラー`}
                             onChange={(next) =>
-                              setDraftColors((prev) => ({
-                                ...prev,
-                                [rarity.id]: next
-                              }))
+                              setDraftColors((prev) => {
+                                if (!activeGachaId) {
+                                  return prev;
+                                }
+                                const prevForGacha = prev[activeGachaId] ?? {};
+                                return {
+                                  ...prev,
+                                  [activeGachaId]: {
+                                    ...prevForGacha,
+                                    [rarity.id]: next
+                                  }
+                                };
+                              })
                             }
                           />
                         </td>
