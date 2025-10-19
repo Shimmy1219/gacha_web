@@ -262,4 +262,11 @@
     background-clip: text;
     color: transparent;
   }
+
+  .text-gradient-rainbow {
+    background-image: linear-gradient(90deg, #ff0000, #ff9900, #ffee00, #0aff7c, #009bff, #7b2bff, #ff00ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }

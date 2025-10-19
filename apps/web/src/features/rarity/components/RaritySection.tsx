@@ -8,6 +8,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
+import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
 
 interface RarityRow {
   id: string;
@@ -19,11 +20,49 @@ interface RarityRow {
 const FALLBACK_RARITY_COLOR = '#3f3f46';
 
 function formatRate(rate?: number): string {
-  if (rate == null) {
+  if (rate == null || Number.isNaN(rate)) {
     return '';
   }
+
   const percent = rate * 100;
-  return Number.isInteger(percent) ? String(percent) : percent.toFixed(2);
+  if (!Number.isFinite(percent)) {
+    return '';
+  }
+
+  if (percent === 0) {
+    return '0';
+  }
+
+  const absPercent = Math.abs(percent);
+  let maximumFractionDigits = 2;
+  if (absPercent < 0.0001) {
+    maximumFractionDigits = 8;
+  } else if (absPercent < 0.01) {
+    maximumFractionDigits = 6;
+  } else if (absPercent < 1) {
+    maximumFractionDigits = 6;
+  } else if (absPercent < 10) {
+    maximumFractionDigits = 4;
+  } else if (absPercent < 100) {
+    maximumFractionDigits = 2;
+  } else {
+    maximumFractionDigits = 0;
+  }
+
+  return new Intl.NumberFormat('ja-JP', {
+    useGrouping: false,
+    maximumFractionDigits
+  }).format(percent);
+}
+
+function parseRateInput(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return null;
+  }
+
+  const clamped = Math.min(Math.max(parsed, 0), 100);
+  return clamped / 100;
 }
 
 export function RaritySection(): JSX.Element {
@@ -121,6 +160,22 @@ export function RaritySection(): JSX.Element {
     console.info('レアリティ追加のモーダルは未実装です');
   };
 
+  const handleEmitRateChange = useCallback(
+    (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      const rawValue = event.target.value;
+      if (rawValue.trim() === '') {
+        rarityStore.setRarityEmitRate(rarityId, undefined);
+        return;
+      }
+
+      const nextRate = parseRateInput(rawValue);
+      if (nextRate != null) {
+        rarityStore.setRarityEmitRate(rarityId, nextRate);
+      }
+    },
+    [rarityStore]
+  );
+
   const shouldRenderTable = Boolean(activeGachaId);
 
   return (
@@ -179,14 +234,20 @@ export function RaritySection(): JSX.Element {
                       </tr>
                     </thead>
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
-                      {rarityRows.map((rarity) => (
-                        <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
+                      {rarityRows.map((rarity) => {
+                        const presentation = getRarityTextPresentation(rarity.color);
+                        return (
+                          <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
                           <td className="rarity-section__cell px-[3px] py-2">
                             <input
                               type="text"
                               value={rarity.label}
                               onChange={handleLabelChange(rarity.id)}
-                              className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
+                              className={clsx(
+                                'rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                                presentation.className ?? 'text-surface-foreground'
+                              )}
+                              style={presentation.style}
                               aria-label={`${rarity.label || rarity.id} のレアリティ名`}
                               placeholder={rarity.label || rarity.id}
                             />
@@ -204,7 +265,11 @@ export function RaritySection(): JSX.Element {
                                 type="number"
                                 min={0}
                                 max={100}
+                                inputMode="decimal"
+                                step="any"
+                                key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
                                 defaultValue={formatRate(rarity.emitRate)}
+                                onChange={handleEmitRateChange(rarity.id)}
                                 className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                               />
                               <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
@@ -219,8 +284,9 @@ export function RaritySection(): JSX.Element {
                               削除
                             </button>
                           </td>
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                       <tr className="rarity-section__add-row">
                         <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
                           <button

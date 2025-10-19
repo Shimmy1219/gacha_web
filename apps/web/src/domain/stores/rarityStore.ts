@@ -18,6 +18,14 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
     this.updateRarity(rarityId, { color }, options);
   }
 
+  setRarityEmitRate(
+    rarityId: string,
+    emitRate: number | undefined,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    this.updateRarity(rarityId, { emitRate }, options);
+  }
+
   protected persistImmediate(state: GachaRarityStateV3 | undefined): void {
     this.persistence.saveRarityState(state);
   }
