@@ -13,6 +13,7 @@ type RarityColorChipProps = {
   disabled?: boolean;
   onClick?: () => void;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
+  colorInfo?: string;
 };
 
 function normalize(value: string): string {
@@ -38,7 +39,16 @@ function getChipClassName(rawValue: string): string {
 }
 
 export const RarityColorChip = forwardRef<HTMLButtonElement, RarityColorChipProps>(
-  ({ value, ariaLabel, ariaControls, ariaExpanded, disabled, onClick, onKeyDown }, ref) => {
+  ({
+    value,
+    ariaLabel,
+    ariaControls,
+    ariaExpanded,
+    disabled,
+    onClick,
+    onKeyDown,
+    colorInfo
+  }, ref) => {
     const chipClass = getChipClassName(value);
     const displayValue = value.startsWith('#') ? value.toUpperCase() : value;
 
@@ -57,6 +67,7 @@ export const RarityColorChip = forwardRef<HTMLButtonElement, RarityColorChipProp
         disabled={disabled}
         onClick={onClick}
         onKeyDown={onKeyDown}
+        data-color-info={colorInfo ?? displayValue}
       >
         <span
           className={`rarity-color-chip__swatch h-5 w-10 rounded-md border border-border/60 transition group-hover:border-accent/60 ${chipClass}`.trim()}

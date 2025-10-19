@@ -394,8 +394,8 @@ export function RarityColorPicker({
         disabled={disabled}
         onClick={handleChipClick}
         onKeyDown={handleTriggerKeyDown}
+        colorInfo={displayLabel || displayValue}
       />
-      <span className="text-xs text-muted-foreground">{displayLabel || displayValue}</span>
       {popover}
     </div>
   );
