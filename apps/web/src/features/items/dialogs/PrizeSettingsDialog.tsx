@@ -1,9 +1,12 @@
 import { PhotoIcon, PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { clsx } from 'clsx';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 
 import { SwitchField } from '../../../components/form/SwitchField';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
 import { type RiaguConfigDialogPayload, RiaguConfigDialog } from '../../riagu/dialogs/RiaguConfigDialog';
+import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../rarity/components/color-picker/palette';
+import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
 
 interface RarityOption {
   id: string;
@@ -37,6 +40,27 @@ export interface PrizeSettingsDialogPayload {
 
 const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
+
+function getBadgeBackground(color?: string | null): string | undefined {
+  if (!color) {
+    return undefined;
+  }
+
+  const normalized = color.trim().toLowerCase();
+  if (normalized.startsWith('#')) {
+    return `${color}30`;
+  }
+  if (normalized === RAINBOW_VALUE) {
+    return 'rgba(244, 114, 182, 0.25)';
+  }
+  if (normalized === GOLD_HEX) {
+    return 'rgba(250, 204, 21, 0.25)';
+  }
+  if (normalized === SILVER_HEX) {
+    return 'rgba(209, 213, 219, 0.25)';
+  }
+  return undefined;
+}
 
 export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProps<PrizeSettingsDialogPayload>): JSX.Element {
   const initialState = useMemo(
@@ -95,6 +119,14 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
     selectedFile !== null;
+
+  const rarityColor = payload?.rarityColor ?? '#ff4f89';
+  const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
+  const rarityBadgeBackground = getBadgeBackground(rarityColor);
+  const rarityBadgeStyle = {
+    ...(rarityPreviewPresentation.style ?? {}),
+    ...(rarityBadgeBackground ? { backgroundColor: rarityBadgeBackground } : {})
+  };
 
   const handleSave = () => {
     if (!payload) {
@@ -206,8 +238,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   <div className="space-y-1 text-center">
                     <p className="text-sm font-semibold text-surface-foreground">{name || '未設定'}</p>
                     <span
-                      className="inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold"
-                      style={{ backgroundColor: `${payload?.rarityColor ?? '#ff4f89'}30`, color: payload?.rarityColor ?? '#ff4f89' }}
+                      className={clsx(
+                        'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold',
+                        rarityPreviewPresentation.className
+                      )}
+                      style={rarityBadgeStyle}
                     >
                       {payload?.rarityLabel}
                     </span>

@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { useMemo } from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -168,39 +169,41 @@ function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps):
         ) : null}
       </header>
       <div className="user-card__rarity-groups space-y-3">
-        {rarityGroups.map((group) => (
-          <div
-            key={group.rarity.rarityId ?? group.rarity.label}
-            className="user-card__rarity-row grid gap-2 sm:grid-cols-[minmax(5rem,auto),1fr] sm:items-start"
-          >
-            <div className="user-card__rarity-label flex items-center gap-2">
-              <span
-                className="user-card__rarity-name text-sm font-semibold"
-                style={{ color: group.rarity.color }}
-              >
-                {group.rarity.label}
-              </span>
-              {showCounts ? (
+        {rarityGroups.map((group) => {
+          const { className, style } = getRarityTextPresentation(group.rarity.color);
+          return (
+            <div
+              key={group.rarity.rarityId ?? group.rarity.label}
+              className="user-card__rarity-row grid gap-2 sm:grid-cols-[minmax(5rem,auto),1fr] sm:items-start"
+            >
+              <div className="user-card__rarity-label flex items-center gap-2">
+                <span className={clsx('user-card__rarity-name text-sm font-semibold', className)} style={style}>
+                  {group.rarity.label}
+                </span>
                 <span className="user-card__rarity-count text-[11px] text-muted-foreground">
                   {group.items.reduce((sum, item) => sum + item.count, 0)}件
                 </span>
-              ) : null}
+              </div>
+              <div className="user-card__rarity-items flex flex-wrap gap-2">
+                {group.items.map((item) => (
+                  <span
+                    key={`${inventory.inventoryId}-${item.itemId}`}
+                    className={clsx(
+                      'user-card__item-chip inline-flex items-center gap-2',
+                      'rounded-full border border-border/60 bg-[#23232b]',
+                      'px-3 py-1 text-xs text-surface-foreground',
+                    )}
+                  >
+                    <span>{item.itemName}</span>
+                    {item.count > 1 ? (
+                      <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="user-card__rarity-items flex flex-wrap gap-2">
-              {group.items.map((item) => (
-                <span
-                  key={`${inventory.inventoryId}-${item.itemId}`}
-                  className="user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-[#23232b] px-3 py-1 text-xs text-surface-foreground"
-                >
-                  <span>{item.itemName}</span>
-                  {showCounts && item.count > 1 ? (
-                    <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
-                  ) : null}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

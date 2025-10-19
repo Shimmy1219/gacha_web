@@ -7,3 +7,4 @@ export * from './riaguStore';
 export * from './ptControlsStore';
 export * from './uiPreferencesStore';
 export * from './createDomainStores';
+export * from './useStoreValue';
