@@ -8,7 +8,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
-import { useAppPersistence } from '../../storage/AppPersistenceProvider';
+import { useDomainStores } from '../../storage/AppPersistenceProvider';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -18,7 +18,7 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
-  const appPersistence = useAppPersistence();
+  const { catalog: catalogStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -241,7 +241,7 @@ export function ItemsSection(): JSX.Element {
           riaguType: model.isRiagu ? 'リアグ景品' : undefined,
           onSave: (payload) => {
             try {
-              appPersistence.updateCatalogItem({
+              catalogStore.updateItem({
                 gachaId: model.gachaId,
                 itemId: model.itemId,
                 patch: {
@@ -258,7 +258,7 @@ export function ItemsSection(): JSX.Element {
         }
       });
     },
-    [appPersistence, flatItems, push, rarityOptionsByGacha]
+    [catalogStore, flatItems, push, rarityOptionsByGacha]
   );
 
   return (
