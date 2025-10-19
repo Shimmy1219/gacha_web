@@ -5,5 +5,6 @@ export * from './rarityStore';
 export * from './userInventoryStore';
 export * from './riaguStore';
 export * from './ptControlsStore';
+export * from './uiPreferencesStore';
 export * from './createDomainStores';
 export * from './useStoreValue';
