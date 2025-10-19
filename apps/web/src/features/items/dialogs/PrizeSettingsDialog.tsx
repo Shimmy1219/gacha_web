@@ -69,6 +69,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId: payload?.rarityId ?? '',
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
+      riagu: payload?.isRiagu ?? false,
       thumbnailUrl: payload?.thumbnailUrl ?? null
     }),
     [payload]
@@ -78,6 +79,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [rarityId, setRarityId] = useState(initialState.rarityId);
   const [pickupTarget, setPickupTarget] = useState(initialState.pickup);
   const [completeTarget, setCompleteTarget] = useState(initialState.complete);
+  const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -118,6 +120,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     rarityId !== initialState.rarityId ||
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
+    riaguTarget !== initialState.riagu ||
     selectedFile !== null;
 
   const rarityColor = payload?.rarityColor ?? '#ff4f89';
@@ -169,6 +172,10 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
   const handleOpenRiaguDialog = () => {
     if (!payload) {
+      return;
+    }
+
+    if (!riaguTarget) {
       return;
     }
 
@@ -293,6 +300,25 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   onChange={setCompleteTarget}
                   name="completeTarget"
                 />
+                <SwitchField
+                  label="リアグとして設定"
+                  description="リアグ情報の設定を有効にします"
+                  checked={riaguTarget}
+                  onChange={setRiaguTarget}
+                  name="riaguTarget"
+                />
+                <button
+                  type="button"
+                  className={clsx(
+                    'btn border border-accent/60 bg-accent/10 text-accent transition hover:border-accent hover:bg-accent/20',
+                    'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold',
+                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-accent/60 disabled:hover:bg-accent/10'
+                  )}
+                  onClick={handleOpenRiaguDialog}
+                  disabled={!riaguTarget}
+                >
+                  リアグ設定
+                </button>
               </div>
             </div>
           </div>
@@ -304,13 +330,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       <ModalFooter>
         <button type="button" className="btn btn-primary" onClick={handleSave}>
           保存する
-        </button>
-        <button
-          type="button"
-          className="btn border border-accent/60 bg-accent/10 text-accent transition hover:border-accent hover:bg-accent/20"
-          onClick={handleOpenRiaguDialog}
-        >
-          リアグとして設定
         </button>
         <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
           閉じる
