@@ -1,12 +1,12 @@
 import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { PtControlsPanel } from './PtControlsPanel';
-import { RarityColorChip } from './RarityColorChip';
+import { RarityColorPicker } from './color-picker/RarityColorPicker';
 
 interface RarityRow {
   id: string;
@@ -23,17 +23,13 @@ function formatRate(rate?: number): string {
   return Number.isInteger(percent) ? String(percent) : percent.toFixed(2);
 }
 
-function createBadgeStyle(color: string): { background: string; boxShadow: string } {
-  const primary = color || '#3f3f46';
-  return {
-    background: `linear-gradient(135deg, ${primary} 0%, ${primary}cc 45%, #111827 100%)`,
-    boxShadow: `0 10px 24px ${primary}55`
-  };
-}
-
 export function RaritySection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const [draftLabels, setDraftLabels] = useState<Record<string, string>>({});
+  const [draftColors, setDraftColors] = useState<Record<string, string>>({});
+  const lastSyncedLabelsRef = useRef<Record<string, string>>({});
+  const lastSyncedColorsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     const availableIds = data?.appState?.order ?? [];
@@ -93,6 +89,40 @@ export function RaritySection(): JSX.Element {
       .filter((entry): entry is RarityRow => Boolean(entry));
   }, [activeGachaId, data?.rarityState]);
 
+  useEffect(() => {
+    const syncedLabels: Record<string, string> = {};
+    setDraftLabels((prev) => {
+      const next: Record<string, string> = {};
+      rarityRows.forEach((row) => {
+        const previousSynced = lastSyncedLabelsRef.current[row.id];
+        const previousDraft = prev[row.id];
+        const hasUserEdited = previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
+        const nextValue = hasUserEdited ? previousDraft : row.label;
+        next[row.id] = nextValue;
+        syncedLabels[row.id] = row.label;
+      });
+      return next;
+    });
+    lastSyncedLabelsRef.current = syncedLabels;
+  }, [rarityRows]);
+
+  useEffect(() => {
+    const syncedColors: Record<string, string> = {};
+    setDraftColors((prev) => {
+      const next: Record<string, string> = {};
+      rarityRows.forEach((row) => {
+        const previousSynced = lastSyncedColorsRef.current[row.id];
+        const previousDraft = prev[row.id];
+        const hasUserEdited = previousDraft != null && previousSynced != null && previousDraft !== previousSynced;
+        const nextValue = hasUserEdited ? previousDraft : row.color;
+        next[row.id] = nextValue;
+        syncedColors[row.id] = row.color;
+      });
+      return next;
+    });
+    lastSyncedColorsRef.current = syncedColors;
+  }, [rarityRows]);
+
   const rarityOptions = useMemo(
     () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label })),
     [rarityRows]
@@ -143,36 +173,46 @@ export function RaritySection(): JSX.Element {
 
           {rarityRows.length > 0 ? (
             <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
-              <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
+              <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
                 <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
                   <tr>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">排出率</th>
-                    <th className="rarity-section__column px-3 py-2.5" />
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">レアリティ</th>
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">カラー</th>
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">排出率</th>
+                    <th className="rarity-section__column px-[3px] py-2.5" />
                   </tr>
                 </thead>
                 <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
                   {rarityRows.map((rarity) => {
-                    const badgeStyle = createBadgeStyle(rarity.color);
+                    const labelValue = draftLabels[rarity.id] ?? rarity.label;
+                    const colorValue = draftColors[rarity.id] ?? rarity.color;
                     return (
                       <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                        <td className="rarity-section__cell px-3 py-2">
-                          <span
-                            className="rarity-section__rarity-badge inline-flex h-11 w-11 items-center justify-center rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] text-white"
-                            style={badgeStyle}
-                          >
-                            {rarity.label.slice(0, 3).toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="rarity-section__cell px-3 py-2">
-                          <RarityColorChip
-                            value={rarity.color}
-                            ariaLabel={`${rarity.label} のカラー`}
-                            onClick={() => console.info('カラーピッカーは未実装です', rarity.id)}
+                        <td className="rarity-section__cell px-[3px] py-2">
+                          <input
+                            type="text"
+                            value={labelValue}
+                            onChange={(event) =>
+                              setDraftLabels((prev) => ({ ...prev, [rarity.id]: event.target.value }))
+                            }
+                            className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
+                            aria-label={`${rarity.label} のレアリティ名`}
+                            placeholder={rarity.label}
                           />
                         </td>
-                        <td className="rarity-section__cell px-3 py-2">
+                        <td className="rarity-section__cell px-[3px] py-2">
+                          <RarityColorPicker
+                            value={colorValue}
+                            ariaLabel={`${labelValue || rarity.label} のカラー`}
+                            onChange={(next) =>
+                              setDraftColors((prev) => ({
+                                ...prev,
+                                [rarity.id]: next
+                              }))
+                            }
+                          />
+                        </td>
+                        <td className="rarity-section__cell px-[3px] py-2">
                           <div className="rarity-section__rate-control flex items-center gap-1.5">
                             <input
                               type="number"
@@ -184,10 +224,10 @@ export function RaritySection(): JSX.Element {
                             <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                           </div>
                         </td>
-                        <td className="rarity-section__cell px-3 py-2 text-right">
+                        <td className="rarity-section__cell px-[3px] py-2 text-right">
                           <button
                             type="button"
-                            className="rarity-section__delete-button chip"
+                            className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
                             onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
                           >
                             削除
