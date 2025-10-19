@@ -227,10 +227,16 @@ export function RaritySection(): JSX.Element {
                   <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
                     <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
                       <tr>
-                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">レアリティ</th>
-                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">カラー</th>
-                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">排出率</th>
-                        <th className="rarity-section__column px-[3px] py-2.5" />
+                        <th className="rarity-section__column rarity-section__column-label w-[45%] px-[3px] py-2.5 font-semibold">
+                          レアリティ
+                        </th>
+                        <th className="rarity-section__column rarity-section__column-color w-[22%] px-[3px] py-2.5 font-semibold">
+                          カラー
+                        </th>
+                        <th className="rarity-section__column rarity-section__column-rate w-[23%] px-[3px] py-2.5 font-semibold">
+                          排出率
+                        </th>
+                        <th className="rarity-section__column rarity-section__column-actions w-[10%] px-[3px] py-2.5" />
                       </tr>
                     </thead>
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
@@ -238,52 +244,52 @@ export function RaritySection(): JSX.Element {
                         const presentation = getRarityTextPresentation(rarity.color);
                         return (
                           <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                          <td className="rarity-section__cell px-[3px] py-2">
-                            <input
-                              type="text"
-                              value={rarity.label}
-                              onChange={handleLabelChange(rarity.id)}
-                              className={clsx(
-                                'rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
-                                presentation.className ?? 'text-surface-foreground'
-                              )}
-                              style={presentation.style}
-                              aria-label={`${rarity.label || rarity.id} のレアリティ名`}
-                              placeholder={rarity.label || rarity.id}
-                            />
-                          </td>
-                          <td className="rarity-section__cell px-[3px] py-2">
-                            <RarityColorPicker
-                              value={rarity.color}
-                              ariaLabel={`${rarity.label || rarity.id} のカラー`}
-                              onChange={handleColorChange(rarity.id)}
-                            />
-                          </td>
-                          <td className="rarity-section__cell px-[3px] py-2">
-                            <div className="rarity-section__rate-control flex items-center gap-1.5">
+                            <td className="rarity-section__cell rarity-section__cell-label w-[45%] px-[3px] py-2">
                               <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                inputMode="decimal"
-                                step="any"
-                                key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
-                                defaultValue={formatRate(rarity.emitRate)}
-                                onChange={handleEmitRateChange(rarity.id)}
-                                className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                                type="text"
+                                value={rarity.label}
+                                onChange={handleLabelChange(rarity.id)}
+                                className={clsx(
+                                  'rarity-section__label-input w-full min-w-[12rem] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                                  presentation.className ?? 'text-surface-foreground'
+                                )}
+                                style={presentation.style}
+                                aria-label={`${rarity.label || rarity.id} のレアリティ名`}
+                                placeholder={rarity.label || rarity.id}
                               />
-                              <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
-                            </div>
-                          </td>
-                          <td className="rarity-section__cell px-[3px] py-2 text-right">
-                            <button
-                              type="button"
-                              className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                              onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
-                            >
-                              削除
-                            </button>
-                          </td>
+                            </td>
+                            <td className="rarity-section__cell rarity-section__cell-color w-[22%] px-[3px] py-2">
+                              <RarityColorPicker
+                                value={rarity.color}
+                                ariaLabel={`${rarity.label || rarity.id} のカラー`}
+                                onChange={handleColorChange(rarity.id)}
+                              />
+                            </td>
+                            <td className="rarity-section__cell rarity-section__cell-rate w-[23%] px-[3px] py-2">
+                              <div className="rarity-section__rate-control flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  inputMode="decimal"
+                                  step="any"
+                                  key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
+                                  defaultValue={formatRate(rarity.emitRate)}
+                                  onChange={handleEmitRateChange(rarity.id)}
+                                  className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                                />
+                                <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
+                              </div>
+                            </td>
+                            <td className="rarity-section__cell rarity-section__cell-actions w-[10%] px-[3px] py-2 text-right">
+                              <button
+                                type="button"
+                                className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                                onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                              >
+                                削除
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
