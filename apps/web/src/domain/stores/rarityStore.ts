@@ -1,11 +1,9 @@
 import { AppPersistence, type GachaRarityEntityV3, type GachaRarityStateV3 } from '../app-persistence';
+import { generatePrefixedId } from '../idGenerators';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
 function createRarityId(): string {
-  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
-    return `rar-${globalThis.crypto.randomUUID()}`;
-  }
-  return `rar-${Math.random().toString(36).slice(2, 10)}`;
+  return generatePrefixedId('rar-');
 }
 
 export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> {
