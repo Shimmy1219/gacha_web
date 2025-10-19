@@ -8,6 +8,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
+import { DEFAULT_PALETTE } from './color-picker/palette';
 import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
 
 interface RarityRow {
@@ -19,25 +20,9 @@ interface RarityRow {
 
 const FALLBACK_RARITY_COLOR = '#3f3f46';
 
-const RARITY_LABEL_PREFIXES = ['ミスティック', 'クリスタル', 'ブレイブ', 'ルミナス', 'シャドウ', 'エアリアル'];
-const RARITY_LABEL_SUFFIXES = ['スター', 'ジェム', 'プリズム', 'シャード', 'ソウル', 'ティア'];
+const RARITY_LABEL_OPTIONS = ['SR', 'UR', 'SSR', 'N', 'AR', 'NR', 'USR', 'SSSR', 'HR', 'はずれ'];
 
-function generateRandomHexColor(): string {
-  const random = Math.floor(Math.random() * 0xd0d0d0) + 0x202020;
-  const clamped = Math.min(random, 0xffffff);
-  return `#${clamped.toString(16).padStart(6, '0')}`;
-}
-
-function generateRandomLabel(existing: Set<string>): string {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    const prefix = RARITY_LABEL_PREFIXES[Math.floor(Math.random() * RARITY_LABEL_PREFIXES.length)] ?? 'レアリティ';
-    const suffix = RARITY_LABEL_SUFFIXES[Math.floor(Math.random() * RARITY_LABEL_SUFFIXES.length)] ?? '';
-    const candidate = `${prefix}${suffix}`;
-    if (!existing.has(candidate)) {
-      return candidate;
-    }
-  }
-
+function generateFallbackLabel(existing: Set<string>): string {
   let counter = existing.size + 1;
   let fallback = `レアリティ${counter}`;
   while (existing.has(fallback)) {
@@ -45,6 +30,37 @@ function generateRandomLabel(existing: Set<string>): string {
     fallback = `レアリティ${counter}`;
   }
   return fallback;
+}
+
+function generateRandomLabel(existing: Set<string>): string {
+  const trimmedExisting = new Set(
+    Array.from(existing)
+      .map((label) => label.trim())
+      .filter((label): label is string => label.length > 0)
+  );
+  const unused = RARITY_LABEL_OPTIONS.filter((label) => !trimmedExisting.has(label));
+  if (unused.length > 0) {
+    const index = Math.floor(Math.random() * unused.length);
+    return unused[index] ?? generateFallbackLabel(trimmedExisting);
+  }
+
+  return generateFallbackLabel(trimmedExisting);
+}
+
+function generateRandomPaletteColor(existingColors: Set<string>): string {
+  const normalizedExisting = new Set(
+    Array.from(existingColors)
+      .map((color) => color.trim().toLowerCase())
+      .filter((value): value is string => value.length > 0)
+  );
+
+  const unused = DEFAULT_PALETTE.filter(
+    (option) => !normalizedExisting.has(option.value.trim().toLowerCase())
+  );
+
+  const pool = unused.length > 0 ? unused : DEFAULT_PALETTE;
+  const selected = pool[Math.floor(Math.random() * pool.length)];
+  return selected?.value ?? FALLBACK_RARITY_COLOR;
 }
 
 function generateRandomEmitRate(): number {
@@ -197,9 +213,16 @@ export function RaritySection(): JSX.Element {
       return;
     }
 
-    const existingLabels = new Set(rarityRows.map((rarity) => rarity.label).filter(Boolean));
+    const existingLabels = new Set(
+      rarityRows.map((rarity) => rarity.label).filter((label): label is string => Boolean(label))
+    );
     const label = generateRandomLabel(existingLabels);
-    const color = generateRandomHexColor();
+    const existingColors = new Set(
+      rarityRows
+        .map((rarity) => rarity.color)
+        .filter((color): color is string => Boolean(color))
+    );
+    const color = generateRandomPaletteColor(existingColors);
     const emitRate = generateRandomEmitRate();
 
     const createdId = rarityStore.addRarity(activeGachaId, {
