@@ -19,6 +19,42 @@ interface RarityRow {
 
 const FALLBACK_RARITY_COLOR = '#3f3f46';
 
+const RARITY_LABEL_PREFIXES = ['ミスティック', 'クリスタル', 'ブレイブ', 'ルミナス', 'シャドウ', 'エアリアル'];
+const RARITY_LABEL_SUFFIXES = ['スター', 'ジェム', 'プリズム', 'シャード', 'ソウル', 'ティア'];
+
+function generateRandomHexColor(): string {
+  const random = Math.floor(Math.random() * 0xd0d0d0) + 0x202020;
+  const clamped = Math.min(random, 0xffffff);
+  return `#${clamped.toString(16).padStart(6, '0')}`;
+}
+
+function generateRandomLabel(existing: Set<string>): string {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const prefix = RARITY_LABEL_PREFIXES[Math.floor(Math.random() * RARITY_LABEL_PREFIXES.length)] ?? 'レアリティ';
+    const suffix = RARITY_LABEL_SUFFIXES[Math.floor(Math.random() * RARITY_LABEL_SUFFIXES.length)] ?? '';
+    const candidate = `${prefix}${suffix}`;
+    if (!existing.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  let counter = existing.size + 1;
+  let fallback = `レアリティ${counter}`;
+  while (existing.has(fallback)) {
+    counter += 1;
+    fallback = `レアリティ${counter}`;
+  }
+  return fallback;
+}
+
+function generateRandomEmitRate(): number {
+  const minPercent = 0.5;
+  const maxPercent = 5;
+  const percent = Math.random() * (maxPercent - minPercent) + minPercent;
+  const rounded = Math.round(percent * 100) / 100;
+  return rounded / 100;
+}
+
 function formatRate(rate?: number): string {
   if (rate == null || Number.isNaN(rate)) {
     return '';
@@ -156,9 +192,26 @@ export function RaritySection(): JSX.Element {
     [rarityStore]
   );
 
-  const handleAddRarity = () => {
-    console.info('レアリティ追加のモーダルは未実装です');
-  };
+  const handleAddRarity = useCallback(() => {
+    if (!activeGachaId) {
+      return;
+    }
+
+    const existingLabels = new Set(rarityRows.map((rarity) => rarity.label).filter(Boolean));
+    const label = generateRandomLabel(existingLabels);
+    const color = generateRandomHexColor();
+    const emitRate = generateRandomEmitRate();
+
+    const createdId = rarityStore.addRarity(activeGachaId, {
+      label,
+      color,
+      emitRate
+    });
+
+    if (!createdId) {
+      console.warn('レアリティの追加に失敗しました', { gachaId: activeGachaId });
+    }
+  }, [activeGachaId, rarityRows, rarityStore]);
 
   const handleEmitRateChange = useCallback(
     (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
