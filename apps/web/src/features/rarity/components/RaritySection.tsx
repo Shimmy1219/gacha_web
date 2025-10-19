@@ -173,13 +173,13 @@ export function RaritySection(): JSX.Element {
 
           {rarityRows.length > 0 ? (
             <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
-              <table className="rarity-section__table min-w-full divide-y divide-border/60 text-left">
+              <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
                 <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
                   <tr>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">レアリティ</th>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">カラー</th>
-                    <th className="rarity-section__column px-3 py-2.5 font-semibold">排出率</th>
-                    <th className="rarity-section__column px-3 py-2.5" />
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">レアリティ</th>
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">カラー</th>
+                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">排出率</th>
+                    <th className="rarity-section__column px-[3px] py-2.5" />
                   </tr>
                 </thead>
                 <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
@@ -188,7 +188,7 @@ export function RaritySection(): JSX.Element {
                     const colorValue = draftColors[rarity.id] ?? rarity.color;
                     return (
                       <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                        <td className="rarity-section__cell px-3 py-2">
+                        <td className="rarity-section__cell px-[3px] py-2">
                           <input
                             type="text"
                             value={labelValue}
@@ -200,7 +200,7 @@ export function RaritySection(): JSX.Element {
                             placeholder={rarity.label}
                           />
                         </td>
-                        <td className="rarity-section__cell px-3 py-2">
+                        <td className="rarity-section__cell px-[3px] py-2">
                           <RarityColorPicker
                             value={colorValue}
                             ariaLabel={`${labelValue || rarity.label} のカラー`}
@@ -212,7 +212,7 @@ export function RaritySection(): JSX.Element {
                             }
                           />
                         </td>
-                        <td className="rarity-section__cell px-3 py-2">
+                        <td className="rarity-section__cell px-[3px] py-2">
                           <div className="rarity-section__rate-control flex items-center gap-1.5">
                             <input
                               type="number"
@@ -224,7 +224,7 @@ export function RaritySection(): JSX.Element {
                             <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                           </div>
                         </td>
-                        <td className="rarity-section__cell px-3 py-2 text-right">
+                        <td className="rarity-section__cell px-[3px] py-2 text-right">
                           <button
                             type="button"
                             className="rarity-section__delete-button chip"
