@@ -175,6 +175,7 @@ export function RaritySection(): JSX.Element {
       id="rarity"
       title="レアリティ設定"
       description="排出率・カラー・順序を編集し、RarityStoreと同期します。"
+      contentClassName="rarity-section__content"
     >
       <div className="rarity-section__gacha-tabs tab-scroll-area">
         {gachaTabs.map((gacha) => (
@@ -194,11 +195,8 @@ export function RaritySection(): JSX.Element {
         ))}
       </div>
 
-      <div className="tab-panel-viewport">
-        <div
-          key={activeGachaId ?? 'rarity-empty'}
-          className={panelAnimationClass}
-        >
+      <div className="rarity-section__scroll section-scroll flex-1">
+        <div className="rarity-section__scroll-content space-y-4">
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
@@ -211,107 +209,114 @@ export function RaritySection(): JSX.Element {
             <p className="text-sm text-muted-foreground">選択中のガチャにレアリティが登録されていません。</p>
           ) : null}
 
-          {shouldRenderTable ? (
-            <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
-              <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
-                <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                  <tr>
-                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">レアリティ</th>
-                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">カラー</th>
-                    <th className="rarity-section__column px-[3px] py-2.5 font-semibold">排出率</th>
-                    <th className="rarity-section__column px-[3px] py-2.5" />
-                  </tr>
-                </thead>
-                <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
-                  {rarityRows.map((rarity) => {
-                    const labelValue = activeDraftLabels[rarity.id] ?? rarity.label;
-                    const colorValue = activeDraftColors[rarity.id] ?? rarity.color;
-                    return (
-                      <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                        <td className="rarity-section__cell px-[3px] py-2">
-                          <input
-                            type="text"
-                            value={labelValue}
-                            onChange={(event) =>
-                              setDraftLabels((prev) => {
-                                if (!activeGachaId) {
-                                  return prev;
+          <div className="tab-panel-viewport">
+            <div
+              key={activeGachaId ?? 'rarity-empty'}
+              className={panelAnimationClass}
+            >
+              {shouldRenderTable ? (
+                <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
+                  <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
+                    <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                      <tr>
+                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">レアリティ</th>
+                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">カラー</th>
+                        <th className="rarity-section__column px-[3px] py-2.5 font-semibold">排出率</th>
+                        <th className="rarity-section__column px-[3px] py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
+                      {rarityRows.map((rarity) => {
+                        const labelValue = activeDraftLabels[rarity.id] ?? rarity.label;
+                        const colorValue = activeDraftColors[rarity.id] ?? rarity.color;
+                        return (
+                          <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
+                            <td className="rarity-section__cell px-[3px] py-2">
+                              <input
+                                type="text"
+                                value={labelValue}
+                                onChange={(event) =>
+                                  setDraftLabels((prev) => {
+                                    if (!activeGachaId) {
+                                      return prev;
+                                    }
+                                    const prevForGacha = prev[activeGachaId] ?? {};
+                                    return {
+                                      ...prev,
+                                      [activeGachaId]: {
+                                        ...prevForGacha,
+                                        [rarity.id]: event.target.value
+                                      }
+                                    };
+                                  })
                                 }
-                                const prevForGacha = prev[activeGachaId] ?? {};
-                                return {
-                                  ...prev,
-                                  [activeGachaId]: {
-                                    ...prevForGacha,
-                                    [rarity.id]: event.target.value
-                                  }
-                                };
-                              })
-                            }
-                            className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
-                            aria-label={`${rarity.label} のレアリティ名`}
-                            placeholder={rarity.label}
-                          />
-                        </td>
-                        <td className="rarity-section__cell px-[3px] py-2">
-                          <RarityColorPicker
-                            value={colorValue}
-                            ariaLabel={`${labelValue || rarity.label} のカラー`}
-                            onChange={(next) =>
-                              setDraftColors((prev) => {
-                                if (!activeGachaId) {
-                                  return prev;
+                                className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
+                                aria-label={`${rarity.label} のレアリティ名`}
+                                placeholder={rarity.label}
+                              />
+                            </td>
+                            <td className="rarity-section__cell px-[3px] py-2">
+                              <RarityColorPicker
+                                value={colorValue}
+                                ariaLabel={`${labelValue || rarity.label} のカラー`}
+                                onChange={(next) =>
+                                  setDraftColors((prev) => {
+                                    if (!activeGachaId) {
+                                      return prev;
+                                    }
+                                    const prevForGacha = prev[activeGachaId] ?? {};
+                                    return {
+                                      ...prev,
+                                      [activeGachaId]: {
+                                        ...prevForGacha,
+                                        [rarity.id]: next
+                                      }
+                                    };
+                                  })
                                 }
-                                const prevForGacha = prev[activeGachaId] ?? {};
-                                return {
-                                  ...prev,
-                                  [activeGachaId]: {
-                                    ...prevForGacha,
-                                    [rarity.id]: next
-                                  }
-                                };
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="rarity-section__cell px-[3px] py-2">
-                          <div className="rarity-section__rate-control flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              defaultValue={formatRate(rarity.emitRate)}
-                              className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-                            />
-                            <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
-                          </div>
-                        </td>
-                        <td className="rarity-section__cell px-[3px] py-2 text-right">
+                              />
+                            </td>
+                            <td className="rarity-section__cell px-[3px] py-2">
+                              <div className="rarity-section__rate-control flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  defaultValue={formatRate(rarity.emitRate)}
+                                  className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                                />
+                                <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
+                              </div>
+                            </td>
+                            <td className="rarity-section__cell px-[3px] py-2 text-right">
+                              <button
+                                type="button"
+                                className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                                onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                              >
+                                削除
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="rarity-section__add-row">
+                        <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
                           <button
                             type="button"
-                            className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                            onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                            className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                            onClick={handleAddRarity}
                           >
-                            削除
+                            追加
                           </button>
                         </td>
                       </tr>
-                    );
-                  })}
-                  <tr className="rarity-section__add-row">
-                    <td className="rarity-section__cell px-[3px] py-2" colSpan={4}>
-                      <button
-                        type="button"
-                        className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                        onClick={handleAddRarity}
-                      >
-                        追加
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
     </SectionContainer>

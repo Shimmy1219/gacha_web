@@ -221,6 +221,7 @@ export function ItemsSection(): JSX.Element {
         </button>
       }
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
+      contentClassName="items-section__content"
     >
       <div className="items-section__tabs tab-scroll-area">
         {gachaTabs.map((tab) => (
@@ -240,29 +241,33 @@ export function ItemsSection(): JSX.Element {
         ))}
       </div>
 
-      {gachaTabs.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">表示できるガチャがありません。</p>
-      ) : null}
-
-      <div className="tab-panel-viewport">
-        <div
-          key={activeGachaId ?? 'items-empty'}
-          className={panelAnimationClass}
-        >
-          {status !== 'ready' ? (
-            <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
-          ) : null}
-          {status === 'ready' && activeGachaId && items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+      <div className="items-section__scroll section-scroll flex-1">
+        <div className="items-section__scroll-content space-y-4">
+          {gachaTabs.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">表示できるガチャがありません。</p>
           ) : null}
 
-          {items.length > 0 ? (
-            <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {items.map(({ model, rarity }) => (
-                <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
-              ))}
+          <div className="tab-panel-viewport">
+            <div
+              key={activeGachaId ?? 'items-empty'}
+              className={panelAnimationClass}
+            >
+              {status !== 'ready' ? (
+                <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
+              ) : null}
+              {status === 'ready' && activeGachaId && items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+              ) : null}
+
+              {items.length > 0 ? (
+                <div className="items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {items.map(({ model, rarity }) => (
+                    <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
     </SectionContainer>

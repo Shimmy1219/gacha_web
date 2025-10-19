@@ -113,6 +113,7 @@ export function RiaguSection(): JSX.Element {
         </button>
       }
       footer="RiaguStoreのマーク/解除とAppStateStore.saveDebounced()を連携予定です。"
+      contentClassName="riagu-section__content"
     >
       <div className="riagu-section__tabs tab-scroll-area">
         {filterTabs.map((tab) => (
@@ -135,66 +136,70 @@ export function RiaguSection(): JSX.Element {
         ))}
       </div>
 
-      <div className="tab-panel-viewport">
-        <div key={activeFilter} className={panelAnimationClass}>
-          {status !== 'ready' ? (
-            <p className="text-sm text-muted-foreground">ローカルストレージからリアグ情報を読み込み中です…</p>
-          ) : null}
-          {status === 'ready' && filteredEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">リアグ対象のアイテムがありません。仮データを投入してから再度ご確認ください。</p>
-          ) : null}
+      <div className="riagu-section__scroll section-scroll flex-1">
+        <div className="riagu-section__scroll-content space-y-4">
+          <div className="tab-panel-viewport">
+            <div key={activeFilter} className={panelAnimationClass}>
+              {status !== 'ready' ? (
+                <p className="text-sm text-muted-foreground">ローカルストレージからリアグ情報を読み込み中です…</p>
+              ) : null}
+              {status === 'ready' && filteredEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">リアグ対象のアイテムがありません。仮データを投入してから再度ご確認ください。</p>
+              ) : null}
 
-          {filteredEntries.length > 0 ? (
-            <div className="riagu-section__list space-y-3">
-              {filteredEntries.map((entry) => (
-                <article
-                  key={entry.id}
-                  className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
-                >
-                  <header className="riagu-card__header flex items-start justify-between gap-3">
-                    <div className="riagu-card__meta space-y-1">
-                      <span className="riagu-card__rarity badge" style={{ color: entry.rarityColor }}>
-                        {entry.rarityLabel}
-                      </span>
-                      <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
-                      <p className="riagu-card__status text-xs text-muted-foreground">
-                        {entry.gachaName} / {entry.costLabel} / {entry.status}
-                      </p>
-                    </div>
-                    <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
-                      <button
-                        type="button"
-                        className="riagu-card__detail-button chip"
-                        onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
-                      >
-                        <GiftIcon className="h-4 w-4" />
-                        詳細
-                      </button>
-                      <button
-                        type="button"
-                        className="riagu-card__share-button chip"
-                        onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
-                      >
-                        <GlobeAltIcon className="h-4 w-4" />
-                        共有
-                      </button>
-                    </div>
-                  </header>
-                  <div className="riagu-card__winners space-y-2">
-                    {entry.winners.map((winner) => (
-                      <div
-                        key={`${entry.id}-${winner.name}`}
-                        className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
-                      >
-                        <span>{winner.name}</span>
-                        <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
+              {filteredEntries.length > 0 ? (
+                <div className="riagu-section__list space-y-3">
+                  {filteredEntries.map((entry) => (
+                    <article
+                      key={entry.id}
+                      className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                    >
+                      <header className="riagu-card__header flex items-start justify-between gap-3">
+                        <div className="riagu-card__meta space-y-1">
+                          <span className="riagu-card__rarity badge" style={{ color: entry.rarityColor }}>
+                            {entry.rarityLabel}
+                          </span>
+                          <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
+                          <p className="riagu-card__status text-xs text-muted-foreground">
+                            {entry.gachaName} / {entry.costLabel} / {entry.status}
+                          </p>
+                        </div>
+                        <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
+                          <button
+                            type="button"
+                            className="riagu-card__detail-button chip"
+                            onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
+                          >
+                            <GiftIcon className="h-4 w-4" />
+                            詳細
+                          </button>
+                          <button
+                            type="button"
+                            className="riagu-card__share-button chip"
+                            onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
+                          >
+                            <GlobeAltIcon className="h-4 w-4" />
+                            共有
+                          </button>
+                        </div>
+                      </header>
+                      <div className="riagu-card__winners space-y-2">
+                        {entry.winners.map((winner) => (
+                          <div
+                            key={`${entry.id}-${winner.name}`}
+                            className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
+                          >
+                            <span>{winner.name}</span>
+                            <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
     </SectionContainer>

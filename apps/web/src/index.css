@@ -194,6 +194,16 @@
   .tab-panel-content {
     @apply space-y-6;
   }
+
+  .section-container__content.rarity-section__content,
+  .section-container__content.items-section__content,
+  .section-container__content.riagu-section__content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: visible;
+    padding-right: 0;
+  }
 }
 
 @layer utilities {
