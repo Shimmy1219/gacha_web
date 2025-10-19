@@ -1,6 +1,6 @@
-import { Cog8ToothIcon, GiftIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import { GiftIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
@@ -17,6 +17,9 @@ interface RiaguDisplayEntry {
   status: string;
   winners: Array<{ name: string; count: number }>;
 }
+
+type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
+type GachaTab = { id: string; label: string };
 
 function formatCost(cost?: number): string {
   if (cost == null) {
@@ -38,40 +41,40 @@ function formatStatus(stock?: number, notes?: string): string {
 
 export function RiaguSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
-  const filterTabs = useMemo(() => ['全て', '優先', '発送待ち'], []);
-  const [activeFilter, setActiveFilter] = useState<string>(() => filterTabs[0]);
-  const filterMotion = useTabMotion(activeFilter, filterTabs);
-  const panelAnimationClass = clsx(
-    'tab-panel-content',
-    filterMotion === 'forward' && 'animate-tab-slide-from-right',
-    filterMotion === 'backward' && 'animate-tab-slide-from-left'
-  );
+  const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
-  const entries = useMemo<RiaguDisplayEntry[]>(() => {
-    if (!data?.riaguState) {
-      return [];
-    }
+  const { entriesByGacha, riaguGachaIds, totalEntryCount } = useMemo(() => {
+    const grouped: RiaguEntriesByGacha = {};
+    const gachaIds = new Set<string>();
+    let count = 0;
 
-    return Object.values(data.riaguState.riaguCards ?? {}).map((card) => {
-      const catalogItem = data.catalogState?.byGacha?.[card.gachaId]?.items?.[card.itemId];
-      const gachaName = data.appState?.meta?.[card.gachaId]?.displayName ?? card.gachaId;
-      const rarityEntity = catalogItem?.rarityId
-        ? data.rarityState?.entities?.[catalogItem.rarityId]
-        : undefined;
+    const riaguCards = Object.values(data?.riaguState?.riaguCards ?? {});
+    const catalogByGacha = data?.catalogState?.byGacha ?? {};
+    const userInventoriesByItemId = data?.userInventories?.byItemId ?? {};
+    const userProfiles = data?.userProfiles?.users ?? {};
+
+    riaguCards.forEach((card) => {
+      const gachaId = card.gachaId;
+      gachaIds.add(gachaId);
+      count += 1;
+
+      const catalogItem = catalogByGacha[gachaId]?.items?.[card.itemId];
+      const gachaName = data?.appState?.meta?.[card.gachaId]?.displayName ?? card.gachaId;
+      const rarityEntity = catalogItem?.rarityId ? data?.rarityState?.entities?.[catalogItem.rarityId] : undefined;
       const itemName = catalogItem?.name ?? card.itemId;
       const rarityLabel = rarityEntity?.label ?? '未分類';
       const rarityColor = rarityEntity?.color ?? '#a855f7';
 
-      const reverseEntries = data.userInventories?.byItemId?.[card.itemId] ?? [];
+      const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const winners = reverseEntries
         .map((record) => ({
-          name: data.userProfiles?.users?.[record.userId]?.displayName ?? record.userId,
+          name: userProfiles[record.userId]?.displayName ?? record.userId,
           count: record.count ?? 0
         }))
         .filter((winner) => winner.count > 0)
         .sort((a, b) => b.count - a.count);
 
-      return {
+      const entry: RiaguDisplayEntry = {
         id: card.id,
         itemName,
         gachaName,
@@ -80,59 +83,102 @@ export function RiaguSection(): JSX.Element {
         costLabel: formatCost(card.unitCost),
         status: formatStatus(card.stock, card.notes),
         winners: winners.length > 0 ? winners : [{ name: '当選者なし', count: 0 }]
-      } satisfies RiaguDisplayEntry;
+      };
+
+      if (!grouped[gachaId]) {
+        grouped[gachaId] = [];
+      }
+      grouped[gachaId].push(entry);
     });
+
+    return {
+      entriesByGacha: grouped,
+      riaguGachaIds: Array.from(gachaIds),
+      totalEntryCount: count
+    };
   }, [data]);
 
-  const filteredEntries = useMemo(() => {
-    if (activeFilter === '全て') {
-      return entries;
+  const gachaTabs = useMemo<GachaTab[]>(() => {
+    const catalogByGacha = data?.catalogState?.byGacha ?? {};
+    const baseOrder = data?.appState?.order ?? [];
+    const orderedIds: string[] = [];
+    const seen = new Set<string>();
+
+    const addGachaId = (gachaId?: string) => {
+      if (!gachaId || seen.has(gachaId)) {
+        return;
+      }
+      seen.add(gachaId);
+      orderedIds.push(gachaId);
+    };
+
+    baseOrder.forEach(addGachaId);
+    Object.keys(catalogByGacha).forEach(addGachaId);
+    riaguGachaIds.forEach(addGachaId);
+
+    return orderedIds.map((gachaId) => ({
+      id: gachaId,
+      label: data?.appState?.meta?.[gachaId]?.displayName ?? gachaId
+    }));
+  }, [data?.appState, data?.catalogState, riaguGachaIds]);
+
+  useEffect(() => {
+    if (!gachaTabs.length) {
+      setActiveGachaId(null);
+      return;
     }
-    if (activeFilter === '優先') {
-      return entries.filter((entry) => entry.status.includes('優先'));
-    }
-    if (activeFilter === '発送待ち') {
-      return entries.filter((entry) => entry.status.includes('発送'));
-    }
-    return entries;
-  }, [entries, activeFilter]);
+
+    setActiveGachaId((current) => {
+      if (current && gachaTabs.some((tab) => tab.id === current)) {
+        return current;
+      }
+
+      const preferred = data?.appState?.selectedGachaId;
+      if (preferred && gachaTabs.some((tab) => tab.id === preferred)) {
+        return preferred;
+      }
+
+      return gachaTabs[0].id;
+    });
+  }, [data?.appState?.selectedGachaId, gachaTabs]);
+
+  const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
+  const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
+  const panelAnimationClass = clsx(
+    'tab-panel-content',
+    panelMotion === 'forward' && 'animate-tab-slide-from-right',
+    panelMotion === 'backward' && 'animate-tab-slide-from-left'
+  );
+
+  const activeEntries = activeGachaId ? entriesByGacha[activeGachaId] ?? [] : [];
+  const hasAnyEntries = totalEntryCount > 0;
+  const activeGachaLabel = useMemo(
+    () => gachaTabs.find((tab) => tab.id === activeGachaId)?.label ?? activeGachaId ?? '',
+    [gachaTabs, activeGachaId]
+  );
 
   return (
     <SectionContainer
       id="riagu"
       title="リアグ設定"
       description="リアルグッズの在庫と当選者を同期します。"
-      accentLabel="Riagu Control"
-      actions={
-        <button
-          type="button"
-          className="riagu-section__settings-button chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('リアグ設定モーダルは未実装です')}
-        >
-          <Cog8ToothIcon className="h-4 w-4" />
-          設定を編集
-        </button>
-      }
       footer="RiaguStoreのマーク/解除とAppStateStore.saveDebounced()を連携予定です。"
       contentClassName="riagu-section__content"
     >
       <div className="riagu-section__tabs tab-scroll-area">
-        {filterTabs.map((tab) => (
+        {gachaTabs.map((tab) => (
           <button
-            key={tab}
+            key={tab.id}
             type="button"
             className={clsx(
               'riagu-section__tab tab-pill shrink-0 rounded-full border px-4 py-1.5',
-              activeFilter === tab
+              activeGachaId === tab.id
                 ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.45)]'
                 : 'border-border/40 text-muted-foreground hover:border-accent/60'
             )}
-            onClick={() => {
-              setActiveFilter(tab);
-              console.info('タブ切り替えは未実装です', tab);
-            }}
+            onClick={() => setActiveGachaId(tab.id)}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </div>
@@ -140,63 +186,70 @@ export function RiaguSection(): JSX.Element {
       <div className="riagu-section__scroll section-scroll flex-1">
         <div className="riagu-section__scroll-content space-y-4">
           <div className="tab-panel-viewport">
-            <div key={activeFilter} className={panelAnimationClass}>
+            <div key={activeGachaId ?? 'none'} className={panelAnimationClass}>
               {status !== 'ready' ? (
                 <p className="text-sm text-muted-foreground">ローカルストレージからリアグ情報を読み込み中です…</p>
               ) : null}
-              {status === 'ready' && filteredEntries.length === 0 ? (
+              {status === 'ready' && !hasAnyEntries ? (
                 <p className="text-sm text-muted-foreground">リアグ対象のアイテムがありません。仮データを投入してから再度ご確認ください。</p>
               ) : null}
+              {status === 'ready' && hasAnyEntries && activeEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {activeGachaLabel
+                    ? `${activeGachaLabel} にリアグ対象のアイテムがありません。`
+                    : '選択中のガチャにリアグ対象のアイテムがありません。'}
+                </p>
+              ) : null}
 
-              {filteredEntries.length > 0 ? (
+              {activeEntries.length > 0 ? (
                 <div className="riagu-section__list space-y-3">
-                  {filteredEntries.map((entry) => {
+                  {activeEntries.map((entry) => {
                     const { className, style } = getRarityTextPresentation(entry.rarityColor);
                     return (
                       <article
                         key={entry.id}
                         className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                       >
-                      <header className="riagu-card__header flex items-start justify-between gap-3">
-                        <div className="riagu-card__meta space-y-1">
-                          <span className={clsx('riagu-card__rarity badge', className)} style={style}>
-                            {entry.rarityLabel}
-                          </span>
-                          <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
-                          <p className="riagu-card__status text-xs text-muted-foreground">
-                            {entry.gachaName} / {entry.costLabel} / {entry.status}
-                          </p>
-                        </div>
-                        <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
-                          <button
-                            type="button"
-                            className="riagu-card__detail-button chip"
-                            onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
-                          >
-                            <GiftIcon className="h-4 w-4" />
-                            詳細
-                          </button>
-                          <button
-                            type="button"
-                            className="riagu-card__share-button chip"
-                            onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
-                          >
-                            <GlobeAltIcon className="h-4 w-4" />
-                            共有
-                          </button>
-                        </div>
-                      </header>
-                      <div className="riagu-card__winners space-y-2">
-                        {entry.winners.map((winner) => (
-                          <div
-                            key={`${entry.id}-${winner.name}`}
-                            className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
-                          >
-                            <span>{winner.name}</span>
-                            <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
+                        <header className="riagu-card__header flex items-start justify-between gap-3">
+                          <div className="riagu-card__meta space-y-1">
+                            <span className={clsx('riagu-card__rarity badge', className)} style={style}>
+                              {entry.rarityLabel}
+                            </span>
+                            <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
+                            <p className="riagu-card__status text-xs text-muted-foreground">
+                              {entry.gachaName} / {entry.costLabel} / {entry.status}
+                            </p>
                           </div>
-                        ))}
-                      </div>
+                          <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
+                            <button
+                              type="button"
+                              className="riagu-card__detail-button chip"
+                              onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
+                            >
+                              <GiftIcon className="h-4 w-4" />
+                              詳細
+                            </button>
+                            <button
+                              type="button"
+                              className="riagu-card__share-button chip"
+                              onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
+                            >
+                              <GlobeAltIcon className="h-4 w-4" />
+                              共有
+                            </button>
+                          </div>
+                        </header>
+                        <div className="riagu-card__winners space-y-2">
+                          {entry.winners.map((winner) => (
+                            <div
+                              key={`${entry.id}-${winner.name}`}
+                              className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
+                            >
+                              <span>{winner.name}</span>
+                              <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
+                            </div>
+                          ))}
+                        </div>
                       </article>
                     );
                   })}
