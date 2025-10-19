@@ -218,7 +218,7 @@
 
 .rarity-section__col-color,
 .rarity-section__col-actions {
-  width: 0;
+  width: 1%;
 }
 
 .rarity-section__col-rate {
@@ -235,18 +235,29 @@
 
 .rarity-section__cell-color,
 .rarity-section__cell-actions {
-  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  width: 1%;
   white-space: nowrap;
 }
 
+.rarity-section__cell-rate {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.rarity-section__label-input {
+  min-width: 6ch;
+}
+
 .rarity-section__rate-control {
-  justify-content: flex-end;
+  justify-content: flex-start;
   width: 100%;
 }
 
 .rarity-section__rate-input {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 6ch;
 }
 
 @layer utilities {
