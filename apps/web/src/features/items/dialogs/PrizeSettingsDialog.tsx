@@ -180,6 +180,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     }
 
     const riaguPayload: RiaguConfigDialogPayload = {
+      gachaId: payload.gachaId,
       itemId: payload.itemId,
       itemName: payload.itemName,
       defaultPrice: payload.riaguPrice,
