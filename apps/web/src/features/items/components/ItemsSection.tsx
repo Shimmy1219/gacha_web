@@ -9,11 +9,12 @@ import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useAppPersistence } from '../../storage/AppPersistenceProvider';
+import { type RiaguCardModelV3 } from '@domain/app-persistence';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
-type ItemEntry = { model: ItemCardModel; rarity: RarityMeta };
+type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
 type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
@@ -76,6 +77,8 @@ export function ItemsSection(): JSX.Element {
     }
 
     const catalogByGacha = data.catalogState.byGacha ?? {};
+    const riaguCards = data.riaguState?.riaguCards ?? {};
+    const riaguIndex = data.riaguState?.indexByItemId ?? {};
     const entries: ItemsByGacha = {};
     const flat: ItemEntry[] = [];
 
@@ -101,6 +104,9 @@ export function ItemsSection(): JSX.Element {
           ? `https://picsum.photos/seed/${encodeURIComponent(snapshot.imageAssetId)}/400/400`
           : null;
 
+        const riaguId = riaguIndex[snapshot.itemId];
+        const riaguCard = riaguId ? riaguCards[riaguId] : undefined;
+
         const model: ItemCardModel = {
           itemId: snapshot.itemId,
           gachaId,
@@ -112,7 +118,7 @@ export function ItemsSection(): JSX.Element {
             assetHash: snapshot.imageAssetId ?? null,
             hasImage: Boolean(thumbnailUrl)
           },
-          isRiagu: Boolean(snapshot.riagu),
+          isRiagu: Boolean(snapshot.riagu || riaguCard),
           completeTarget: Boolean(snapshot.completeTarget),
           pickupTarget: Boolean(snapshot.pickupTarget),
           order: snapshot.order ?? 0,
@@ -120,7 +126,7 @@ export function ItemsSection(): JSX.Element {
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
         };
 
-        const entry = { model, rarity };
+        const entry = { model, rarity, riaguCard };
         results.push(entry);
         flat.push(entry);
       });
@@ -213,7 +219,7 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
-      const { model, rarity } = target;
+      const { model, rarity, riaguCard } = target;
       const rarityOptions = rarityOptionsByGacha[model.gachaId] ?? [rarity].map((entry) => ({
         id: entry.rarityId,
         label: entry.label
@@ -237,8 +243,8 @@ export function ItemsSection(): JSX.Element {
           isRiagu: model.isRiagu,
           thumbnailUrl: model.imageAsset.thumbnailUrl,
           rarityColor: rarity.color,
-          riaguPrice: model.isRiagu ? 300 : undefined,
-          riaguType: model.isRiagu ? 'リアグ景品' : undefined,
+          riaguPrice: riaguCard?.unitCost,
+          riaguType: riaguCard?.typeLabel,
           onSave: (payload) => {
             try {
               appPersistence.updateCatalogItem({

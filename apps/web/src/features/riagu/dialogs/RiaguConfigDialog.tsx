@@ -1,8 +1,10 @@
 import { useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { useDomainStores } from '../../storage/AppPersistenceProvider';
 
 export interface RiaguConfigDialogPayload {
+  gachaId: string;
   itemId: string;
   itemName: string;
   defaultPrice?: number;
@@ -15,6 +17,7 @@ const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
+  const { riagu: riaguStore } = useDomainStores();
   const [price, setPrice] = useState<string>(
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
@@ -26,16 +29,25 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       return;
     }
 
-    const parsedPrice = price ? Number(price) : null;
+    const normalizedPrice = price.trim();
+    const parsedNumber = normalizedPrice ? Number(normalizedPrice) : null;
+    const parsedPrice = typeof parsedNumber === 'number' && Number.isFinite(parsedNumber) ? parsedNumber : null;
+    const normalizedType = type.trim();
+
+    riaguStore.upsertCard(
+      {
+        itemId: payload.itemId,
+        gachaId: payload.gachaId,
+        unitCost: parsedPrice,
+        typeLabel: normalizedType || null
+      },
+      { persist: 'debounced' }
+    );
+
     payload.onSave?.({
       itemId: payload.itemId,
       price: parsedPrice,
-      type
-    });
-    console.info('リアグ設定の保存（ダミー）', {
-      itemId: payload.itemId,
-      price: parsedPrice,
-      type
+      type: normalizedType
     });
     close();
   };
@@ -46,8 +58,8 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       return;
     }
 
+    riaguStore.removeByItemId(payload.itemId, { persist: 'debounced' });
     payload.onRemove?.(payload.itemId);
-    console.info('リアグ設定の解除（ダミー）', payload.itemId);
     close();
   };
 
