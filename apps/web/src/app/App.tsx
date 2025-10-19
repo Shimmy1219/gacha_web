@@ -120,7 +120,7 @@ export function App(): JSX.Element {
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
       />
-      <main ref={mainRef} className="app__main px-4 pb-[5px] pt-8 sm:px-6">
+      <main ref={mainRef} className="app__main px-4 pb-[5px] pt-8">
         <AppRoutes />
       </main>
     </div>
