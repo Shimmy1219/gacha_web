@@ -1,7 +1,8 @@
-import { PhotoIcon } from '@heroicons/react/24/outline';
+import { MusicalNoteIcon, PhotoIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { useAssetPreview } from '../../features/assets/useAssetPreview';
 
 export type ItemId = string;
 export type GachaId = string;
@@ -45,7 +46,13 @@ export interface ItemCardProps {
 
 export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
-  const hasImage = Boolean(imageAsset?.hasImage && imageAsset?.thumbnailUrl);
+  const preview = useAssetPreview(imageAsset?.assetHash ?? null);
+  const isImageAsset = Boolean(preview.type?.startsWith('image/'));
+  const isVideoAsset = Boolean(preview.type?.startsWith('video/'));
+  const isAudioAsset = Boolean(preview.type?.startsWith('audio/'));
+  const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
+  const previewUrl = preview.url ?? fallbackUrl;
+  const hasImage = Boolean(imageAsset?.hasImage && (isImageAsset ? previewUrl : fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
 
   return (
@@ -68,20 +75,22 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
       <div className="space-y-3">
         <div
           className={clsx(
-            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground',
-            hasImage && 'border-transparent'
+            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground overflow-hidden',
+            hasImage && isImageAsset && previewUrl && 'border-transparent'
           )}
-          style={
-            hasImage
-              ? {
-                  backgroundImage: `url(${imageAsset.thumbnailUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
-                }
-              : undefined
-          }
         >
-          {!hasImage ? <PhotoIcon className="h-10 w-10" /> : null}
+          {isImageAsset && previewUrl ? (
+            <div
+              className="h-full w-full bg-cover bg-center"
+              style={{ backgroundImage: `url(${previewUrl})` }}
+            />
+          ) : isVideoAsset ? (
+            <VideoCameraIcon className="h-10 w-10" />
+          ) : isAudioAsset ? (
+            <MusicalNoteIcon className="h-10 w-10" />
+          ) : (
+            <PhotoIcon className="h-10 w-10" />
+          )}
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>

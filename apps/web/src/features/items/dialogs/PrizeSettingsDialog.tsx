@@ -1,6 +1,6 @@
-import { PhotoIcon, PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MusicalNoteIcon, PhotoIcon, PlusCircleIcon, VideoCameraIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { SwitchField } from '../../../components/form/SwitchField';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
@@ -8,6 +8,8 @@ import { type RiaguConfigDialogPayload, RiaguConfigDialog } from '../../riagu/di
 import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../rarity/components/color-picker/palette';
 import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
 import { RiaguDisableConfirmDialog } from './RiaguDisableConfirmDialog';
+import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
+import { useAssetPreview } from '../../assets/useAssetPreview';
 
 interface RarityOption {
   id: string;
@@ -28,6 +30,7 @@ export interface PrizeSettingsDialogPayload {
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
   thumbnailUrl: string | null;
+  imageAssetId: string | null;
   rarityColor?: string;
   riaguPrice?: number;
   riaguType?: string;
@@ -38,7 +41,7 @@ export interface PrizeSettingsDialogPayload {
     pickupTarget: boolean;
     completeTarget: boolean;
     riagu: boolean;
-    file: File | null;
+    imageAssetId: string | null;
   }) => void;
 }
 
@@ -74,7 +77,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
       riagu: payload?.isRiagu ?? false,
-      thumbnailUrl: payload?.thumbnailUrl ?? null
+      thumbnailUrl: payload?.thumbnailUrl ?? null,
+      assetId: payload?.imageAssetId ?? null
     }),
     [payload]
   );
@@ -86,6 +90,19 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [currentAssetId, setCurrentAssetId] = useState<string | null>(initialState.assetId);
+  const [unsavedAssetId, setUnsavedAssetId] = useState<string | null>(null);
+  const [isProcessingAsset, setIsProcessingAsset] = useState(false);
+  const assetRequestIdRef = useRef(0);
+  const unsavedAssetIdRef = useRef<string | null>(null);
+  const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null);
+
+  const revokePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+  };
 
   const handleRiaguToggleChange = (nextValue: boolean) => {
     if (!payload) {
@@ -127,28 +144,82 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     };
   }, [previewUrl]);
 
-  const currentPreview = previewUrl ?? payload?.thumbnailUrl ?? null;
+  useEffect(() => {
+    unsavedAssetIdRef.current = unsavedAssetId;
+  }, [unsavedAssetId]);
 
-  const handleFileChange = (file: File | null) => {
-    setSelectedFile(file);
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+  useEffect(() => {
+    return () => {
+      const pendingId = unsavedAssetIdRef.current;
+      if (pendingId) {
+        void deleteAsset(pendingId);
+      }
+    };
+  }, []);
+
+  const currentPreview = previewUrl ?? existingAssetPreview.url ?? payload?.thumbnailUrl ?? null;
+  const previewType = selectedFile?.type ?? existingAssetPreview.type ?? (currentPreview ? 'image/*' : null);
+  const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
+  const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
+  const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
+
+  const handleFileChange = async (file: File | null) => {
+    revokePreview();
+
+    if (!file) {
+      setSelectedFile(null);
+      if (unsavedAssetId) {
+        await deleteAsset(unsavedAssetId);
+        setUnsavedAssetId(null);
+        unsavedAssetIdRef.current = null;
+      }
+      setCurrentAssetId(initialState.assetId ?? null);
+      return;
     }
-    if (file) {
-      const nextUrl = URL.createObjectURL(file);
-      setPreviewUrl(nextUrl);
-    } else {
-      setPreviewUrl(null);
+
+    const requestId = assetRequestIdRef.current + 1;
+    assetRequestIdRef.current = requestId;
+    setIsProcessingAsset(true);
+    setSelectedFile(file);
+    const nextUrl = URL.createObjectURL(file);
+    setPreviewUrl(nextUrl);
+
+    try {
+      if (unsavedAssetId) {
+        await deleteAsset(unsavedAssetId);
+        setUnsavedAssetId(null);
+        unsavedAssetIdRef.current = null;
+      }
+      const record = await saveAsset(file);
+      if (assetRequestIdRef.current !== requestId) {
+        await deleteAsset(record.id);
+        return;
+      }
+      setUnsavedAssetId(record.id);
+      unsavedAssetIdRef.current = record.id;
+      setCurrentAssetId(record.id);
+    } catch (error) {
+      console.error('ファイルの保存に失敗しました', error);
+      if (assetRequestIdRef.current === requestId) {
+        setSelectedFile(null);
+        setCurrentAssetId(initialState.assetId ?? null);
+        revokePreview();
+      }
+    } finally {
+      if (assetRequestIdRef.current === requestId) {
+        setIsProcessingAsset(false);
+      }
     }
   };
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    handleFileChange(file);
+    void handleFileChange(file);
+    event.target.value = '';
   };
 
   const handleClearImage = () => {
-    handleFileChange(null);
+    void handleFileChange(null);
   };
 
   const hasChanges =
@@ -157,7 +228,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
     riaguTarget !== initialState.riagu ||
-    selectedFile !== null;
+    (currentAssetId ?? null) !== (initialState.assetId ?? null);
 
   const rarityColor = payload?.rarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
@@ -168,6 +239,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   };
 
   const handleSave = () => {
+    if (isProcessingAsset) {
+      return;
+    }
     if (!payload) {
       close();
       return;
@@ -180,9 +254,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       pickupTarget,
       completeTarget,
       riagu: riaguTarget,
-      file: selectedFile
+      imageAssetId: currentAssetId ?? null
     });
 
+    if (unsavedAssetId) {
+      setUnsavedAssetId(null);
+      unsavedAssetIdRef.current = null;
+    }
     close();
   };
 
@@ -273,9 +351,20 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
               <div className="mt-3 grid gap-4 lg:grid-cols-1">
                 <div className="flex flex-col items-center gap-3">
-                  <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl">
+                  <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl bg-border/20">
                     {currentPreview ? (
-                      <img src={currentPreview} alt="プレビュー" className="h-full w-full object-cover" />
+                      isImagePreview ? (
+                        <img src={currentPreview} alt="プレビュー" className="h-full w-full object-cover" />
+                      ) : isVideoPreview ? (
+                        <video src={currentPreview} controls className="h-full w-full object-cover" />
+                      ) : isAudioPreview ? (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <MusicalNoteIcon className="h-10 w-10" />
+                          <span className="text-xs font-medium">音声ファイル</span>
+                        </div>
+                      ) : (
+                        <PhotoIcon className="h-12 w-12 text-muted-foreground" />
+                      )
                     ) : (
                       <PhotoIcon className="h-12 w-12 text-muted-foreground" />
                     )}
@@ -299,13 +388,18 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
           <div className="space-y-1">
             <div className="rounded-2xl p-3">
-              <p className="text-sm font-medium text-surface-foreground">画像ファイルを選択</p>
-              <p className="mt-2 text-xs text-muted-foreground">透過PNG / JPG / WEBP に対応。880px以上の正方形を推奨します。</p>
+              <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+              <p className="mt-2 text-xs text-muted-foreground">画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
                   <PlusCircleIcon className="h-4 w-4" />
                   ファイルを選ぶ
-                  <input type="file" accept="image/*" className="sr-only" onChange={handleFileInputChange} />
+                  <input
+                    type="file"
+                    accept="image/*,video/*,audio/*"
+                    className="sr-only"
+                    onChange={handleFileInputChange}
+                  />
                 </label>
                 {selectedFile ? (
                   <button
@@ -320,6 +414,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               </div>
               {selectedFile ? (
                 <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
+              ) : existingAssetPreview.name ? (
+                <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {existingAssetPreview.name}</p>
+              ) : null}
+              {isProcessingAsset ? (
+                <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
               ) : null}
             </div>
             <div className="rounded-2xl p-2">
@@ -366,8 +465,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
       </p>
       <ModalFooter>
-        <button type="button" className="btn btn-primary" onClick={handleSave}>
-          保存する
+        <button
+          type="button"
+          className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-70"
+          onClick={handleSave}
+          disabled={isProcessingAsset}
+        >
+          {isProcessingAsset ? '保存中…' : '保存する'}
         </button>
         <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
           閉じる
