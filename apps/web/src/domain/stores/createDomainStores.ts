@@ -5,6 +5,7 @@ import { PtControlsStore } from './ptControlsStore';
 import { RarityStore } from './rarityStore';
 import { RiaguStore } from './riaguStore';
 import { UserInventoryStore } from './userInventoryStore';
+import { UiPreferencesStore } from './uiPreferencesStore';
 
 export interface DomainStores {
   appState: AppStateStore;
@@ -13,6 +14,7 @@ export interface DomainStores {
   userInventories: UserInventoryStore;
   riagu: RiaguStore;
   ptControls: PtControlsStore;
+  uiPreferences: UiPreferencesStore;
 }
 
 export function createDomainStores(persistence: AppPersistence): DomainStores {
@@ -22,7 +24,8 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     rarities: new RarityStore(persistence),
     userInventories: new UserInventoryStore(persistence),
     riagu: new RiaguStore(persistence),
-    ptControls: new PtControlsStore(persistence)
+    ptControls: new PtControlsStore(persistence),
+    uiPreferences: new UiPreferencesStore(persistence)
   };
 
   hydrateStores(stores, () => persistence.loadSnapshot());
@@ -39,6 +42,7 @@ function hydrateStores(stores: DomainStores, load: () => GachaLocalStorageSnapsh
     stores.userInventories.hydrate(snapshot.userInventories);
     stores.riagu.hydrate(snapshot.riaguState);
     stores.ptControls.hydrate(snapshot.ptSettings);
+    stores.uiPreferences.hydrate(snapshot.uiPreferences);
   } catch (error) {
     console.warn('Failed to hydrate domain stores from persistence snapshot', error);
   }

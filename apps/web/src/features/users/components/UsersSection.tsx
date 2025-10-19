@@ -107,29 +107,6 @@ export function UsersSection(): JSX.Element {
     return results;
   }, [data]);
 
-  const gachaFilterOptions = useMemo(() => {
-    if (!data?.appState) {
-      return [] as Array<{ value: string; label: string; description?: string }>;
-    }
-
-    return (data.appState.order ?? []).map((gachaId) => ({
-      value: gachaId,
-      label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId,
-      description: gachaId
-    }));
-  }, [data?.appState]);
-
-  const rarityFilterOptions = useMemo(() => {
-    if (!data?.rarityState) {
-      return [] as Array<{ value: string; label: string }>;
-    }
-
-    return Object.values(data.rarityState.entities ?? {}).map((entity) => ({
-      value: entity.id,
-      label: entity.label
-    }));
-  }, [data?.rarityState]);
-
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
       const saved = data?.saveOptions?.[userId];
@@ -203,7 +180,7 @@ export function UsersSection(): JSX.Element {
         )}
       >
         <div className={clsx('overflow-hidden transition-opacity duration-300 ease-linear', filtersOpen ? 'opacity-100' : 'opacity-0')}>
-          <UserFilterPanel id="users-filter-panel" open={filtersOpen} gachaOptions={gachaFilterOptions} rarityOptions={rarityFilterOptions} />
+          <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
         </div>
       </div>
 
