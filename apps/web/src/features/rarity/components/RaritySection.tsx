@@ -224,19 +224,25 @@ export function RaritySection(): JSX.Element {
             >
               {shouldRenderTable ? (
                 <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
-                  <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
+                  <table className="rarity-section__table w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
+                    <colgroup>
+                      <col className="rarity-section__col rarity-section__col-label" />
+                      <col className="rarity-section__col rarity-section__col-color" />
+                      <col className="rarity-section__col rarity-section__col-rate" />
+                      <col className="rarity-section__col rarity-section__col-actions" />
+                    </colgroup>
                     <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
                       <tr>
-                        <th className="rarity-section__column rarity-section__column-label w-[45%] px-[3px] py-2.5 font-semibold">
+                        <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 font-semibold">
                           レアリティ
                         </th>
-                        <th className="rarity-section__column rarity-section__column-color w-[22%] px-[3px] py-2.5 font-semibold">
+                        <th className="rarity-section__column rarity-section__column-color px-[3px] py-2.5 font-semibold">
                           カラー
                         </th>
-                        <th className="rarity-section__column rarity-section__column-rate w-[23%] px-[3px] py-2.5 font-semibold">
+                        <th className="rarity-section__column rarity-section__column-rate px-[3px] py-2.5 font-semibold">
                           排出率
                         </th>
-                        <th className="rarity-section__column rarity-section__column-actions w-[10%] px-[3px] py-2.5" />
+                        <th className="rarity-section__column rarity-section__column-actions px-[3px] py-2.5" />
                       </tr>
                     </thead>
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
@@ -244,13 +250,13 @@ export function RaritySection(): JSX.Element {
                         const presentation = getRarityTextPresentation(rarity.color);
                         return (
                           <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                            <td className="rarity-section__cell rarity-section__cell-label w-[45%] px-[3px] py-2">
+                            <td className="rarity-section__cell rarity-section__cell-label px-[3px] py-2">
                               <input
                                 type="text"
                                 value={rarity.label}
                                 onChange={handleLabelChange(rarity.id)}
                                 className={clsx(
-                                  'rarity-section__label-input w-full min-w-[12rem] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                                  'rarity-section__label-input w-full min-w-0 rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
                                   presentation.className ?? 'text-surface-foreground'
                                 )}
                                 style={presentation.style}
@@ -258,14 +264,14 @@ export function RaritySection(): JSX.Element {
                                 placeholder={rarity.label || rarity.id}
                               />
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-color w-[22%] px-[3px] py-2">
+                            <td className="rarity-section__cell rarity-section__cell-color px-[3px] py-2">
                               <RarityColorPicker
                                 value={rarity.color}
                                 ariaLabel={`${rarity.label || rarity.id} のカラー`}
                                 onChange={handleColorChange(rarity.id)}
                               />
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-rate w-[23%] px-[3px] py-2">
+                            <td className="rarity-section__cell rarity-section__cell-rate px-[3px] py-2">
                               <div className="rarity-section__rate-control flex items-center gap-1.5">
                                 <input
                                   type="number"
@@ -276,12 +282,12 @@ export function RaritySection(): JSX.Element {
                                   key={`${rarity.id}-${rarity.emitRate ?? 'unset'}`}
                                   defaultValue={formatRate(rarity.emitRate)}
                                   onChange={handleEmitRateChange(rarity.id)}
-                                  className="rarity-section__rate-input min-w-[8ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                                  className="rarity-section__rate-input w-full min-w-[6ch] max-w-[12ch] rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
                                 />
                                 <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                               </div>
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-actions w-[10%] px-[3px] py-2 text-right">
+                            <td className="rarity-section__cell rarity-section__cell-actions px-[3px] py-2 text-right">
                               <button
                                 type="button"
                                 className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"

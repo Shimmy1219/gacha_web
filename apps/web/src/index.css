@@ -206,6 +206,42 @@
   }
 }
 
+.rarity-section__table {
+  table-layout: fixed;
+  max-width: 100%;
+}
+
+.rarity-section__col-label {
+  width: clamp(6rem, 42%, 24rem);
+}
+
+.rarity-section__col-color {
+  width: clamp(5rem, 22%, 16rem);
+}
+
+.rarity-section__col-rate {
+  width: clamp(5rem, 18%, 12rem);
+}
+
+.rarity-section__col-actions {
+  width: clamp(3.5rem, 18%, 10rem);
+}
+
+.rarity-section__cell-label,
+.rarity-section__cell-color,
+.rarity-section__cell-rate,
+.rarity-section__cell-actions {
+  max-width: 100%;
+}
+
+.rarity-section__rate-control {
+  justify-content: flex-end;
+}
+
+.rarity-section__rate-input {
+  width: 100%;
+}
+
 @layer utilities {
   @keyframes tab-slide-from-right {
     from {
