@@ -298,7 +298,7 @@ export function RaritySection(): JSX.Element {
                     );
                   })}
                   <tr className="rarity-section__add-row">
-                    <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
+                    <td className="rarity-section__cell px-[3px] py-2" colSpan={4}>
                       <button
                         type="button"
                         className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
