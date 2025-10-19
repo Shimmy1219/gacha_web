@@ -24,16 +24,16 @@ interface ColumnConfig {
 
 const COLUMN_CONFIGS: Record<Exclude<Breakpoint, 'base'>, ColumnConfig> = {
   lg: {
-    minWidths: [24, 24],
-    weights: [1, 1]
+    minWidths: [18, 16],
+    weights: [1, 1.1]
   },
   xl: {
-    minWidths: [24, 32, 30, 24],
-    weights: [1, 1.25, 1, 0.9]
+    minWidths: [18, 20, 18, 16],
+    weights: [1, 1.2, 1, 0.9]
   },
   '2xl': {
-    minWidths: [26, 38, 32, 24],
-    weights: [1, 1.4, 1.05, 0.95]
+    minWidths: [18, 24, 20, 16],
+    weights: [1, 1.35, 1.05, 0.95]
   }
 };
 
@@ -133,12 +133,33 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     return COLUMN_CONFIGS[breakpoint as Exclude<Breakpoint, 'base'>];
   }, [breakpoint]);
 
-  const minWidthsPx = useMemo(() => {
+  const baseMinWidthsPx = useMemo(() => {
     if (!activeConfig) {
       return [] as number[];
     }
     return activeConfig.minWidths.map((rem) => rem * rootFontSize);
   }, [activeConfig, rootFontSize]);
+
+  const minWidthsPx = useMemo(() => {
+    if (!activeConfig) {
+      return [] as number[];
+    }
+    if (containerMetrics.width === 0) {
+      return baseMinWidthsPx;
+    }
+
+    const columnCount = baseMinWidthsPx.length;
+    const gapTotal = containerMetrics.gap * Math.max(columnCount - 1, 0);
+    const available = Math.max(containerMetrics.width - gapTotal, 0);
+    const minTotal = baseMinWidthsPx.reduce((sum, value) => sum + value, 0);
+
+    if (minTotal === 0 || minTotal <= available) {
+      return baseMinWidthsPx;
+    }
+
+    const scale = available / minTotal;
+    return baseMinWidthsPx.map((value) => value * scale);
+  }, [activeConfig, baseMinWidthsPx, containerMetrics.width, containerMetrics.gap]);
 
   useEffect(() => {
     if (!activeConfig) {
@@ -149,7 +170,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
       return;
     }
 
-    const columnCount = activeConfig.minWidths.length;
+    const columnCount = minWidthsPx.length;
     const gapTotal = containerMetrics.gap * Math.max(columnCount - 1, 0);
     const available = Math.max(containerMetrics.width - gapTotal, 0);
 
