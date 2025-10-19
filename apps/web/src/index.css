@@ -206,8 +206,9 @@
   }
 }
 
+
 .rarity-section__table {
-  table-layout: fixed;
+  table-layout: auto;
   max-width: 100%;
 }
 
@@ -215,16 +216,14 @@
   width: clamp(6rem, 42%, 24rem);
 }
 
-.rarity-section__col-color {
-  width: clamp(5rem, 22%, 16rem);
+.rarity-section__col-color,
+.rarity-section__col-actions {
+  width: 1%;
 }
 
 .rarity-section__col-rate {
-  width: clamp(5rem, 18%, 12rem);
-}
-
-.rarity-section__col-actions {
-  width: clamp(3.5rem, 18%, 10rem);
+  min-width: clamp(5rem, 18%, 12rem);
+  width: auto;
 }
 
 .rarity-section__cell-label,
@@ -234,12 +233,31 @@
   max-width: 100%;
 }
 
+.rarity-section__cell-color,
+.rarity-section__cell-actions {
+  padding-left: 0;
+  padding-right: 0;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.rarity-section__cell-rate {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.rarity-section__label-input {
+  min-width: 6ch;
+}
+
 .rarity-section__rate-control {
-  justify-content: flex-end;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .rarity-section__rate-input {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 6ch;
 }
 
 @layer utilities {
