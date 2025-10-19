@@ -1,4 +1,3 @@
-import { PlusCircleIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -165,6 +164,12 @@ export function RaritySection(): JSX.Element {
 
   const ptSettings = activeGachaId ? data?.ptSettings?.byGachaId?.[activeGachaId] : undefined;
 
+  const handleAddRarity = () => {
+    console.info('レアリティ追加のモーダルは未実装です');
+  };
+
+  const shouldRenderTable = Boolean(activeGachaId);
+
   return (
     <SectionContainer
       id="rarity"
@@ -206,7 +211,7 @@ export function RaritySection(): JSX.Element {
             <p className="text-sm text-muted-foreground">選択中のガチャにレアリティが登録されていません。</p>
           ) : null}
 
-          {rarityRows.length > 0 ? (
+          {shouldRenderTable ? (
             <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
               <table className="rarity-section__table min-w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
                 <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
@@ -292,21 +297,21 @@ export function RaritySection(): JSX.Element {
                       </tr>
                     );
                   })}
+                  <tr className="rarity-section__add-row">
+                    <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
+                      <button
+                        type="button"
+                        className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                        onClick={handleAddRarity}
+                      >
+                        追加
+                      </button>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           ) : null}
-
-          <div className="rarity-section__footer flex justify-end">
-            <button
-              type="button"
-              className="rarity-section__add-rarity chip border-accent/40 bg-accent/10 text-accent"
-              onClick={() => console.info('レアリティ追加のモーダルは未実装です')}
-            >
-              <PlusCircleIcon className="h-4 w-4" />
-              レアリティを追加
-            </button>
-          </div>
         </div>
       </div>
     </SectionContainer>
