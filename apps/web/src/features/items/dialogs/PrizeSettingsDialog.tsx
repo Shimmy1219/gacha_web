@@ -7,6 +7,7 @@ import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from 
 import { type RiaguConfigDialogPayload, RiaguConfigDialog } from '../../riagu/dialogs/RiaguConfigDialog';
 import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../rarity/components/color-picker/palette';
 import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
+import { RiaguDisableConfirmDialog } from './RiaguDisableConfirmDialog';
 
 interface RarityOption {
   id: string;
@@ -99,19 +100,14 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
     if (shouldConfirmDisable) {
       const assignmentCount = payload.riaguAssignmentCount ?? 0;
-      const message =
-        assignmentCount > 0
-          ? `既にこのアイテムをリアグとして当てている人が${assignmentCount}人います。リアグ設定を解除してもよろしいですか？`
-          : '既にこのアイテムをリアグとして当てている人がいる可能性があります。リアグ設定を解除してもよろしいですか？';
 
-      push(ConfirmDialog, {
+      push(RiaguDisableConfirmDialog, {
         id: `${payload.itemId}-confirm-riagu-disable`,
         title: 'リアグ設定の解除',
         size: 'sm',
         payload: {
-          message,
-          confirmLabel: 'リアグを解除',
-          cancelLabel: 'キャンセル',
+          itemName: payload.itemName,
+          assignmentCount,
           onConfirm: () => {
             setRiaguTarget(false);
           }
