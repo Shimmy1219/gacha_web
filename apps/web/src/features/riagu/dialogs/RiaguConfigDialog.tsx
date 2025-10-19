@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
@@ -22,6 +22,45 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
+
+  useEffect(() => {
+    const itemId = payload?.itemId;
+    if (!itemId) {
+      setPrice('');
+      setType('');
+      return;
+    }
+
+    const fallbackPrice = (() => {
+      const value = payload?.defaultPrice;
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
+    })();
+    const fallbackType = payload?.defaultType ?? '';
+
+    const unsubscribe = riaguStore.subscribe((state) => {
+      const riaguId = state?.indexByItemId?.[itemId];
+      const card = riaguId ? state?.riaguCards?.[riaguId] : undefined;
+      const hasCard = Boolean(card);
+
+      const resolvedPrice = hasCard
+        ? card && typeof card.unitCost === 'number' && Number.isFinite(card.unitCost)
+          ? card.unitCost
+          : null
+        : fallbackPrice;
+      const resolvedType = hasCard ? card?.typeLabel ?? '' : fallbackType;
+
+      const nextPriceValue =
+        resolvedPrice !== undefined && resolvedPrice !== null ? String(resolvedPrice) : '';
+      const nextTypeValue = resolvedType ?? '';
+
+      setPrice((previous) => (previous === nextPriceValue ? previous : nextPriceValue));
+      setType((previous) => (previous === nextTypeValue ? previous : nextTypeValue));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [payload?.itemId, payload?.defaultPrice, payload?.defaultType, riaguStore]);
 
   const handleSave = () => {
     if (!payload) {
