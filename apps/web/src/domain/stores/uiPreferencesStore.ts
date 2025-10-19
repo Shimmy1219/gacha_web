@@ -201,10 +201,17 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
         }
 
         const serialized = serializeUserFilterPreferences(nextFilter);
+        const previousFilterSnapshot: Record<string, unknown> = isRecord(previousFilterRaw)
+          ? { ...previousFilterRaw }
+          : {};
+        if ('keyword' in previousFilterSnapshot) {
+          delete previousFilterSnapshot.keyword;
+        }
+
         const nextUsers = {
           ...previousUsers,
           filter: {
-            ...(isRecord(previousFilterRaw) ? previousFilterRaw : {}),
+            ...previousFilterSnapshot,
             ...serialized
           }
         };
