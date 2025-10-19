@@ -177,7 +177,7 @@ export function RarityColorPicker({
       handleRequestClose();
     };
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         handleRequestClose();
