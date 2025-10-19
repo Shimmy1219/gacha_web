@@ -248,6 +248,13 @@ export function RaritySection(): JSX.Element {
                     <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
                       {rarityRows.map((rarity) => {
                         const presentation = getRarityTextPresentation(rarity.color);
+                        const isGradientText = presentation.className?.includes('text-gradient');
+                        const labelInputStyle = isGradientText
+                          ? {
+                              ...presentation.style,
+                              color: presentation.style?.caretColor
+                            }
+                          : presentation.style;
                         return (
                           <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
                             <td className="rarity-section__cell rarity-section__cell-label px-[3px] py-2">
@@ -257,9 +264,9 @@ export function RaritySection(): JSX.Element {
                                 onChange={handleLabelChange(rarity.id)}
                                 className={clsx(
                                   'rarity-section__label-input w-full min-w-0 rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
-                                  presentation.className ?? 'text-surface-foreground'
+                                  isGradientText ? 'text-surface-foreground' : presentation.className ?? 'text-surface-foreground'
                                 )}
-                                style={presentation.style}
+                                style={labelInputStyle}
                                 aria-label={`${rarity.label || rarity.id} のレアリティ名`}
                                 placeholder={rarity.label || rarity.id}
                               />
