@@ -264,6 +264,13 @@ export function RaritySection(): JSX.Element {
     [rarityStore]
   );
 
+  const handleDeleteRarity = useCallback(
+    (rarityId: string) => {
+      rarityStore.removeRarity(rarityId);
+    },
+    [rarityStore]
+  );
+
   const shouldRenderTable = Boolean(activeGachaId);
 
   return (
@@ -380,7 +387,7 @@ export function RaritySection(): JSX.Element {
                               <button
                                 type="button"
                                 className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                                onClick={() => console.info('レアリティ削除は未実装です', rarity.id)}
+                                onClick={() => handleDeleteRarity(rarity.id)}
                               >
                                 削除
                               </button>
