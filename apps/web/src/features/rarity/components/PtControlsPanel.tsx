@@ -322,7 +322,7 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                 min={1}
                 className="w-[8ch]"
               />
-              <span className="text-xs leading-none text-muted-foreground">連以内で</span>
+              <span className="text-xs leading-none text-muted-foreground">連で</span>
               <InlineSelectField
                 value={guarantee.minRarity || (rarityOptions[0]?.value ?? '')}
                 onChange={(value) =>
@@ -334,7 +334,7 @@ export function PtControlsPanel({ settings, rarityOptions }: PtControlsPanelProp
                 }
                 options={rarityOptions}
               />
-              <span className="text-xs leading-none text-muted-foreground">保証</span>
+              <span className="text-xs leading-none text-muted-foreground">確定</span>
             </div>
             <RemoveButton
               onClick={() =>
