@@ -6,12 +6,14 @@ import { type PtSettingV3 } from '@domain/app-persistence';
 import { useStoreValue } from '@domain/stores';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
+import { useModal } from '../../../components/modal';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { DEFAULT_PALETTE } from './color-picker/palette';
 import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
+import { RarityInUseDialog } from '../dialogs/RarityInUseDialog';
 
 interface RarityRow {
   id: string;
@@ -120,10 +122,17 @@ function parseRateInput(value: string): number | null {
 }
 
 export function RaritySection(): JSX.Element {
-  const { appState: appStateStore, rarities: rarityStore, ptControls: ptControlsStore } = useDomainStores();
+  const {
+    appState: appStateStore,
+    rarities: rarityStore,
+    ptControls: ptControlsStore,
+    catalog: catalogStore
+  } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControlsStore);
+  const catalogState = useStoreValue(catalogStore);
+  const { push } = useModal();
 
   const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
 
@@ -266,9 +275,39 @@ export function RaritySection(): JSX.Element {
 
   const handleDeleteRarity = useCallback(
     (rarityId: string) => {
+      const entity = rarityState?.entities?.[rarityId];
+
+      if (!entity) {
+        rarityStore.removeRarity(rarityId);
+        return;
+      }
+
+      const catalog = catalogState?.byGacha?.[entity.gachaId];
+      const itemsUsing = catalog
+        ? Object.values(catalog.items ?? {}).filter((item) => item?.rarityId === rarityId)
+        : [];
+
+      if (itemsUsing.length > 0) {
+        const itemNames = itemsUsing
+          .map((item) => item?.name || item?.itemId)
+          .filter((value): value is string => Boolean(value));
+
+        push(RarityInUseDialog, {
+          id: 'rarity-in-use',
+          title: 'レアリティを削除できません',
+          size: 'sm',
+          payload: {
+            rarityLabel: entity.label || entity.id,
+            affectedCount: itemsUsing.length,
+            itemNames
+          }
+        });
+        return;
+      }
+
       rarityStore.removeRarity(rarityId);
     },
-    [rarityStore]
+    [catalogState, push, rarityState, rarityStore]
   );
 
   const shouldRenderTable = Boolean(activeGachaId);
