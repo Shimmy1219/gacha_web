@@ -8,6 +8,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
+import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { useAppPersistence } from '../../storage/AppPersistenceProvider';
 import { type RiaguCardModelV3 } from '@domain/app-persistence';
 
@@ -19,7 +20,7 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
 
 export function ItemsSection(): JSX.Element {
-  const appPersistence = useAppPersistence();
+  const { catalog: catalogStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -247,7 +248,7 @@ export function ItemsSection(): JSX.Element {
           riaguType: riaguCard?.typeLabel,
           onSave: (payload) => {
             try {
-              appPersistence.updateCatalogItem({
+              catalogStore.updateItem({
                 gachaId: model.gachaId,
                 itemId: model.itemId,
                 patch: {
@@ -264,7 +265,7 @@ export function ItemsSection(): JSX.Element {
         }
       });
     },
-    [appPersistence, flatItems, push, rarityOptionsByGacha]
+    [catalogStore, flatItems, push, rarityOptionsByGacha]
   );
 
   return (
