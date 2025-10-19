@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { type GachaLocalStorageSnapshot } from '@domain/app-persistence';
+import { generateDeterministicPrefixedId as makeDeterministicId } from '@domain/idGenerators';
 import { useAppPersistence } from '../storage/AppPersistenceProvider';
 
 type GachaSeed = {
@@ -63,25 +64,6 @@ type UserSeed = {
   handle: string;
   team: string;
 };
-
-const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-
-function makeDeterministicId(prefix: string, seed: string, length = 10): string {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 33 + seed.charCodeAt(index)) >>> 0;
-  }
-
-  let value = hash || 1;
-  let suffix = '';
-
-  for (let position = 0; position < length; position += 1) {
-    value = (value * 1664525 + 1013904223) >>> 0;
-    suffix += BASE62[value % BASE62.length];
-  }
-
-  return `${prefix}${suffix}`;
-}
 
 const GACHA_SEEDS: GachaSeed[] = [
   {
