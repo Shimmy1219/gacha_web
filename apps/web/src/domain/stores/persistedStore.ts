@@ -12,17 +12,24 @@ export type StoreListener<T> = (state: T | undefined) => void;
 export abstract class PersistedStore<T> {
   protected state: T | undefined;
 
+  private hydrated = false;
+
   private readonly listeners = new Set<StoreListener<T>>();
 
   protected constructor(protected readonly persistence: AppPersistence) {}
 
   hydrate(initialState: T | undefined): void {
     this.state = initialState;
+    this.hydrated = true;
     this.notify();
   }
 
   getState(): T | undefined {
     return this.state;
+  }
+
+  isHydrated(): boolean {
+    return this.hydrated;
   }
 
   setState(nextState: T | undefined, options: UpdateOptions = {}): T | undefined {

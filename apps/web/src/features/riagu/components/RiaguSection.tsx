@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
+import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
 
 interface RiaguDisplayEntry {
   id: string;
@@ -149,14 +150,16 @@ export function RiaguSection(): JSX.Element {
 
               {filteredEntries.length > 0 ? (
                 <div className="riagu-section__list space-y-3">
-                  {filteredEntries.map((entry) => (
-                    <article
-                      key={entry.id}
-                      className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
-                    >
+                  {filteredEntries.map((entry) => {
+                    const { className, style } = getRarityTextPresentation(entry.rarityColor);
+                    return (
+                      <article
+                        key={entry.id}
+                        className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+                      >
                       <header className="riagu-card__header flex items-start justify-between gap-3">
                         <div className="riagu-card__meta space-y-1">
-                          <span className="riagu-card__rarity badge" style={{ color: entry.rarityColor }}>
+                          <span className={clsx('riagu-card__rarity badge', className)} style={style}>
                             {entry.rarityLabel}
                           </span>
                           <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
@@ -194,8 +197,9 @@ export function RiaguSection(): JSX.Element {
                           </div>
                         ))}
                       </div>
-                    </article>
-                  ))}
+                      </article>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
