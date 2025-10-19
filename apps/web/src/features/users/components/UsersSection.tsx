@@ -1,17 +1,14 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 
-import { UserCard, type UserCardProps, type UserInventoryEntryItem } from '../../../components/cards/UserCard';
+import { UserCard } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useModal } from '../../../components/modal';
 import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
-
-const FALLBACK_RARITY_COLOR = '#a1a1aa';
-
-type DerivedUser = Omit<UserCardProps, 'onExport'>;
+import { useFilteredUsers } from '../logic/userFilters';
 
 function formatExpiresAt(value?: string): string | undefined {
   if (!value) {
@@ -31,104 +28,7 @@ export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
-
-  const users = useMemo<DerivedUser[]>(() => {
-    if (!data?.userProfiles || !data?.userInventories) {
-      return [];
-    }
-
-    const results: DerivedUser[] = [];
-    const profiles = data.userProfiles.users ?? {};
-
-    Object.values(profiles).forEach((profile) => {
-      const userId = profile.id;
-      const inventoriesByGacha = data.userInventories?.inventories?.[userId] ?? {};
-      const inventories = Object.values(inventoriesByGacha)
-        .map((inventory) => {
-          const gachaMeta = data.appState?.meta?.[inventory.gachaId];
-          const gachaName = gachaMeta?.displayName ?? inventory.gachaId;
-          const itemsByRarity = inventory.items ?? {};
-          const countsByRarity = inventory.counts ?? {};
-          const pulls: UserInventoryEntryItem[] = [];
-
-          Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
-            itemIds.forEach((itemId) => {
-              const count = countsByRarity[rarityId]?.[itemId] ?? 0;
-              if (count <= 0) {
-                return;
-              }
-              const catalogItem = data.catalogState?.byGacha?.[inventory.gachaId]?.items?.[itemId];
-              const rarityEntity = data.rarityState?.entities?.[rarityId];
-              pulls.push({
-                itemId,
-                itemName: catalogItem?.name ?? itemId,
-                rarity: {
-                  rarityId,
-                  label: rarityEntity?.label ?? rarityId,
-                  color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR
-                },
-                count
-              });
-            });
-          });
-
-          if (pulls.length === 0) {
-            return null;
-          }
-
-          return {
-            inventoryId: inventory.inventoryId,
-            gachaId: inventory.gachaId,
-            gachaName,
-            pulls
-          } satisfies UserCardProps['inventories'][number];
-        })
-        .filter(Boolean) as UserCardProps['inventories'];
-
-      if (inventories.length === 0) {
-        return;
-      }
-
-      const totalPulls = inventories.reduce(
-        (total, inventory) => total + inventory.pulls.reduce((sum, item) => sum + item.count, 0),
-        0
-      );
-
-      results.push({
-        userId,
-        userName: profile.displayName,
-        totalSummary: `${totalPulls}連`,
-        memo: [profile.team, profile.role].filter(Boolean).join(' / ') || undefined,
-        inventories,
-        expandedByDefault: results.length === 0
-      });
-    });
-
-    return results;
-  }, [data]);
-
-  const gachaFilterOptions = useMemo(() => {
-    if (!data?.appState) {
-      return [] as Array<{ value: string; label: string; description?: string }>;
-    }
-
-    return (data.appState.order ?? []).map((gachaId) => ({
-      value: gachaId,
-      label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId,
-      description: gachaId
-    }));
-  }, [data?.appState]);
-
-  const rarityFilterOptions = useMemo(() => {
-    if (!data?.rarityState) {
-      return [] as Array<{ value: string; label: string }>;
-    }
-
-    return Object.values(data.rarityState.entities ?? {}).map((entity) => ({
-      value: entity.id,
-      label: entity.label
-    }));
-  }, [data?.rarityState]);
+  const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
 
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
@@ -203,7 +103,7 @@ export function UsersSection(): JSX.Element {
         )}
       >
         <div className={clsx('overflow-hidden transition-opacity duration-300 ease-linear', filtersOpen ? 'opacity-100' : 'opacity-0')}>
-          <UserFilterPanel id="users-filter-panel" open={filtersOpen} gachaOptions={gachaFilterOptions} rarityOptions={rarityFilterOptions} />
+          <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
         </div>
       </div>
 
@@ -217,7 +117,7 @@ export function UsersSection(): JSX.Element {
       {users.length > 0 ? (
         <div className="users-section__list space-y-3">
           {users.map((user) => (
-            <UserCard key={user.userId} {...user} onExport={handleOpenSaveOptions} />
+            <UserCard key={user.userId} {...user} onExport={handleOpenSaveOptions} showCounts={showCounts} />
           ))}
         </div>
       ) : null}

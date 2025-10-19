@@ -32,6 +32,7 @@ export interface UserCardProps {
   inventories: UserInventoryEntry[];
   expandedByDefault?: boolean;
   onExport?: (userId: UserId) => void;
+  showCounts?: boolean;
 }
 
 export function UserCard({
@@ -39,7 +40,10 @@ export function UserCard({
   userName,
   inventories,
   expandedByDefault,
-  onExport
+  onExport,
+  totalSummary,
+  memo,
+  showCounts = true
 }: UserCardProps): JSX.Element {
   return (
     <Disclosure defaultOpen={expandedByDefault}>
@@ -58,6 +62,12 @@ export function UserCard({
               />
               <div className="user-card__summary space-y-1">
                 <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
+                {memo ? (
+                  <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
+                ) : null}
+                {showCounts && totalSummary ? (
+                  <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
+                ) : null}
               </div>
             </Disclosure.Button>
             <div className="user-card__actions flex flex-wrap items-center gap-2">
@@ -89,7 +99,7 @@ export function UserCard({
             >
               <div className="user-card__inventories space-y-4">
                 {inventories.map((inventory) => (
-                  <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} />
+                  <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} showCounts={showCounts} />
                 ))}
               </div>
             </Disclosure.Panel>
@@ -110,9 +120,10 @@ const RARITY_ORDER: Record<string, number> = {
 
 interface GachaInventoryCardProps {
   inventory: UserInventoryEntry;
+  showCounts: boolean;
 }
 
-function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element {
+function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps): JSX.Element {
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
     [inventory.pulls]
@@ -150,9 +161,11 @@ function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
           <p className="user-card__inventory-id text-[11px] text-muted-foreground">{inventory.inventoryId}</p>
         </div>
-        <span className="user-card__inventory-total chip border-accent/30 bg-accent/10 text-[11px] text-accent">
-          {totalPulls}連
-        </span>
+        {showCounts ? (
+          <span className="user-card__inventory-total chip border-accent/30 bg-accent/10 text-[11px] text-accent">
+            {totalPulls}連
+          </span>
+        ) : null}
       </header>
       <div className="user-card__rarity-groups space-y-3">
         {rarityGroups.map((group) => (
@@ -167,9 +180,11 @@ function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element
               >
                 {group.rarity.label}
               </span>
-              <span className="user-card__rarity-count text-[11px] text-muted-foreground">
-                {group.items.reduce((sum, item) => sum + item.count, 0)}件
-              </span>
+              {showCounts ? (
+                <span className="user-card__rarity-count text-[11px] text-muted-foreground">
+                  {group.items.reduce((sum, item) => sum + item.count, 0)}件
+                </span>
+              ) : null}
             </div>
             <div className="user-card__rarity-items flex flex-wrap gap-2">
               {group.items.map((item) => (
@@ -178,7 +193,7 @@ function GachaInventoryCard({ inventory }: GachaInventoryCardProps): JSX.Element
                   className="user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-[#23232b] px-3 py-1 text-xs text-surface-foreground"
                 >
                   <span>{item.itemName}</span>
-                  {item.count > 1 ? (
+                  {showCounts && item.count > 1 ? (
                     <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
                   ) : null}
                 </span>
