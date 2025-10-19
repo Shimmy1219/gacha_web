@@ -10,6 +10,7 @@ import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
+import { DEFAULT_PALETTE } from './color-picker/palette';
 import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
 
 interface RarityRow {
@@ -20,6 +21,57 @@ interface RarityRow {
 }
 
 const FALLBACK_RARITY_COLOR = '#3f3f46';
+
+const RARITY_LABEL_OPTIONS = ['SR', 'UR', 'SSR', 'N', 'AR', 'NR', 'USR', 'SSSR', 'HR', 'はずれ'];
+
+function generateFallbackLabel(existing: Set<string>): string {
+  let counter = existing.size + 1;
+  let fallback = `レアリティ${counter}`;
+  while (existing.has(fallback)) {
+    counter += 1;
+    fallback = `レアリティ${counter}`;
+  }
+  return fallback;
+}
+
+function generateRandomLabel(existing: Set<string>): string {
+  const trimmedExisting = new Set(
+    Array.from(existing)
+      .map((label) => label.trim())
+      .filter((label): label is string => label.length > 0)
+  );
+  const unused = RARITY_LABEL_OPTIONS.filter((label) => !trimmedExisting.has(label));
+  if (unused.length > 0) {
+    const index = Math.floor(Math.random() * unused.length);
+    return unused[index] ?? generateFallbackLabel(trimmedExisting);
+  }
+
+  return generateFallbackLabel(trimmedExisting);
+}
+
+function generateRandomPaletteColor(existingColors: Set<string>): string {
+  const normalizedExisting = new Set(
+    Array.from(existingColors)
+      .map((color) => color.trim().toLowerCase())
+      .filter((value): value is string => value.length > 0)
+  );
+
+  const unused = DEFAULT_PALETTE.filter(
+    (option) => !normalizedExisting.has(option.value.trim().toLowerCase())
+  );
+
+  const pool = unused.length > 0 ? unused : DEFAULT_PALETTE;
+  const selected = pool[Math.floor(Math.random() * pool.length)];
+  return selected?.value ?? FALLBACK_RARITY_COLOR;
+}
+
+function generateRandomEmitRate(): number {
+  const minPercent = 0.5;
+  const maxPercent = 5;
+  const percent = Math.random() * (maxPercent - minPercent) + minPercent;
+  const rounded = Math.round(percent * 100) / 100;
+  return rounded / 100;
+}
 
 function formatRate(rate?: number): string {
   if (rate == null || Number.isNaN(rate)) {
@@ -168,9 +220,33 @@ export function RaritySection(): JSX.Element {
     [rarityStore]
   );
 
-  const handleAddRarity = () => {
-    console.info('レアリティ追加のモーダルは未実装です');
-  };
+  const handleAddRarity = useCallback(() => {
+    if (!activeGachaId) {
+      return;
+    }
+
+    const existingLabels = new Set(
+      rarityRows.map((rarity) => rarity.label).filter((label): label is string => Boolean(label))
+    );
+    const label = generateRandomLabel(existingLabels);
+    const existingColors = new Set(
+      rarityRows
+        .map((rarity) => rarity.color)
+        .filter((color): color is string => Boolean(color))
+    );
+    const color = generateRandomPaletteColor(existingColors);
+    const emitRate = generateRandomEmitRate();
+
+    const createdId = rarityStore.addRarity(activeGachaId, {
+      label,
+      color,
+      emitRate
+    });
+
+    if (!createdId) {
+      console.warn('レアリティの追加に失敗しました', { gachaId: activeGachaId });
+    }
+  }, [activeGachaId, rarityRows, rarityStore]);
 
   const handleEmitRateChange = useCallback(
     (rarityId: string) => (event: ChangeEvent<HTMLInputElement>) => {
