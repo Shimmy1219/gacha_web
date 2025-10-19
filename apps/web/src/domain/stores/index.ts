@@ -6,3 +6,4 @@ export * from './userInventoryStore';
 export * from './riaguStore';
 export * from './ptControlsStore';
 export * from './createDomainStores';
+export * from './useStoreValue';

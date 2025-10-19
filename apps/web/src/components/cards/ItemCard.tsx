@@ -1,6 +1,8 @@
 import { PhotoIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+
 export type ItemId = string;
 export type GachaId = string;
 export type RarityId = string;
@@ -44,6 +46,7 @@ export interface ItemCardProps {
 export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
   const hasImage = Boolean(imageAsset?.hasImage && imageAsset?.thumbnailUrl);
+  const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
 
   return (
     <article
@@ -82,7 +85,7 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-          <span className="text-[11px] font-medium" style={{ color: rarity.color }}>
+          <span className={clsx('text-[11px] font-medium', rarityClassName)} style={rarityStyle}>
             {rarity.label}
           </span>
         </div>
