@@ -266,13 +266,27 @@ function buildSettingsFromSnapshot(
   return next;
 }
 
+function getNextSequentialId(rows: Array<{ id: string }>, fallback: number): number {
+  return rows.reduce((next, row) => {
+    const match = row.id.match(/(\d+)$/);
+    if (!match) {
+      return Math.max(next, fallback);
+    }
+    const numericId = Number.parseInt(match[1] ?? '', 10);
+    if (Number.isNaN(numericId)) {
+      return next;
+    }
+    return Math.max(next, numericId + 1);
+  }, fallback);
+}
+
 export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
   const [complete, setComplete] = useState('');
-  const [bundles, setBundles] = useState<PtBundleRowState[]>([createBundleRow(0)]);
-  const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([createGuaranteeRow(0)]);
-  const nextBundleId = useRef(1);
-  const nextGuaranteeId = useRef(1);
+  const [bundles, setBundles] = useState<PtBundleRowState[]>([]);
+  const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([]);
+  const nextBundleId = useRef(0);
+  const nextGuaranteeId = useRef(0);
 
   const initialComparableSettings = cloneSettingWithoutUpdatedAt(settings);
   const lastEmittedRef = useRef<string>(
@@ -283,45 +297,31 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
     setPerPull(settings?.perPull?.price != null ? String(settings.perPull.price) : '');
     setComplete(settings?.complete?.price != null ? String(settings.complete.price) : '');
 
-    if (settings?.bundles && settings.bundles.length > 0) {
-      setBundles(
-        settings.bundles.map((bundle) =>
+    const nextBundles = settings?.bundles
+      ? settings.bundles.map((bundle) =>
           createBundleRow(bundle.id, {
             price: String(bundle.price),
             pulls: String(bundle.pulls)
           })
         )
-      );
-      nextBundleId.current = settings.bundles.length + 1;
-    } else {
-      setBundles([createBundleRow(0)]);
-      nextBundleId.current = 1;
-    }
+      : [];
+    setBundles(nextBundles);
+    nextBundleId.current = getNextSequentialId(nextBundles, nextBundles.length);
 
-    if (settings?.guarantees && settings.guarantees.length > 0) {
-      setGuarantees(
-        settings.guarantees.map((guarantee) =>
+    const nextGuarantees = settings?.guarantees
+      ? settings.guarantees.map((guarantee) =>
           createGuaranteeRow(guarantee.id, {
             minPulls: String(guarantee.threshold),
             minRarity: guarantee.rarityId
           })
         )
-      );
-      nextGuaranteeId.current = settings.guarantees.length + 1;
-    } else {
-      setGuarantees([createGuaranteeRow(0)]);
-      nextGuaranteeId.current = 1;
-    }
+      : [];
+    setGuarantees(nextGuarantees);
+    nextGuaranteeId.current = getNextSequentialId(nextGuarantees, nextGuarantees.length);
 
     const comparable = cloneSettingWithoutUpdatedAt(settings);
     lastEmittedRef.current = comparable ? JSON.stringify(comparable) : '';
   }, [settings]);
-
-  const ensureBundleExists = (next: PtBundleRowState[]): PtBundleRowState[] =>
-    next.length === 0 ? [createBundleRow(Date.now())] : next;
-
-  const ensureGuaranteeExists = (next: PtGuaranteeRowState[]): PtGuaranteeRowState[] =>
-    next.length === 0 ? [createGuaranteeRow(Date.now())] : next;
 
   const emitSettingsChange = useCallback(
     (snapshot: PanelSnapshot) => {
@@ -386,7 +386,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
               setBundles((prev) => {
                 const id = nextBundleId.current;
                 nextBundleId.current += 1;
-                const next = ensureBundleExists([...prev, createBundleRow(id)]);
+                const next = [...prev, createBundleRow(id)];
                 emitWithState({ bundles: next });
                 return next;
               })
@@ -408,9 +408,8 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], price: value };
-                    const ensured = ensureBundleExists(next);
-                    emitWithState({ bundles: ensured });
-                    return ensured;
+                    emitWithState({ bundles: next });
+                    return next;
                   })
                 }
                 placeholder="3000"
@@ -423,9 +422,8 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], pulls: value };
-                    const ensured = ensureBundleExists(next);
-                    emitWithState({ bundles: ensured });
-                    return ensured;
+                    emitWithState({ bundles: next });
+                    return next;
                   })
                 }
                 placeholder="10"
@@ -437,7 +435,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
             <RemoveButton
               onClick={() =>
                 setBundles((prev) => {
-                  const next = ensureBundleExists(prev.filter((entry) => entry.id !== bundle.id));
+                  const next = prev.filter((entry) => entry.id !== bundle.id);
                   emitWithState({ bundles: next });
                   return next;
                 })
@@ -455,7 +453,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
               setGuarantees((prev) => {
                 const id = nextGuaranteeId.current;
                 nextGuaranteeId.current += 1;
-                const next = ensureGuaranteeExists([...prev, createGuaranteeRow(id)]);
+                const next = [...prev, createGuaranteeRow(id)];
                 emitWithState({ guarantees: next });
                 return next;
               })
@@ -477,9 +475,8 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minPulls: value };
-                    const ensured = ensureGuaranteeExists(next);
-                    emitWithState({ guarantees: ensured });
-                    return ensured;
+                    emitWithState({ guarantees: next });
+                    return next;
                   })
                 }
                 placeholder="30"
@@ -493,9 +490,8 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minRarity: value };
-                    const ensured = ensureGuaranteeExists(next);
-                    emitWithState({ guarantees: ensured });
-                    return ensured;
+                    emitWithState({ guarantees: next });
+                    return next;
                   })
                 }
                 options={rarityOptions}
@@ -505,7 +501,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
             <RemoveButton
               onClick={() =>
                 setGuarantees((prev) => {
-                  const next = ensureGuaranteeExists(prev.filter((entry) => entry.id !== guarantee.id));
+                  const next = prev.filter((entry) => entry.id !== guarantee.id);
                   emitWithState({ guarantees: next });
                   return next;
                 })
