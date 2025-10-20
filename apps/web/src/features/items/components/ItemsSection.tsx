@@ -9,7 +9,7 @@ import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
-import { type RiaguCardModelV3 } from '@domain/app-persistence';
+import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -100,10 +100,6 @@ export function ItemsSection(): JSX.Element {
           color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR
         };
 
-        const thumbnailUrl = snapshot.imageAssetId
-          ? `https://picsum.photos/seed/${encodeURIComponent(snapshot.imageAssetId)}/400/400`
-          : null;
-
         const riaguId = riaguIndex[snapshot.itemId];
         const riaguCard = riaguId ? riaguCards[riaguId] : undefined;
 
@@ -114,9 +110,12 @@ export function ItemsSection(): JSX.Element {
           rarityId: snapshot.rarityId,
           name: snapshot.name,
           imageAsset: {
-            thumbnailUrl,
+            thumbnailUrl:
+              snapshot.imageAssetId
+                ? `https://picsum.photos/seed/${encodeURIComponent(snapshot.imageAssetId)}/400/400`
+                : null,
             assetHash: snapshot.imageAssetId ?? null,
-            hasImage: Boolean(thumbnailUrl)
+            hasImage: Boolean(snapshot.imageAssetId)
           },
           isRiagu: Boolean(snapshot.riagu || riaguCard),
           completeTarget: Boolean(snapshot.completeTarget),
@@ -249,19 +248,22 @@ export function ItemsSection(): JSX.Element {
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
           riaguType: riaguCard?.typeLabel,
+          imageAssetId: model.imageAsset.assetHash,
           onSave: (payload) => {
             try {
               const timestamp = new Date().toISOString();
+              const patch: Partial<GachaCatalogItemV3> = {
+                name: payload.name,
+                rarityId: payload.rarityId,
+                pickupTarget: payload.pickupTarget,
+                completeTarget: payload.completeTarget,
+                riagu: payload.riagu,
+                imageAssetId: typeof payload.imageAssetId === 'string' ? payload.imageAssetId : null
+              };
               catalogStore.updateItem({
                 gachaId: model.gachaId,
                 itemId: model.itemId,
-                patch: {
-                  name: payload.name,
-                  rarityId: payload.rarityId,
-                  pickupTarget: payload.pickupTarget,
-                  completeTarget: payload.completeTarget,
-                  riagu: payload.riagu
-                },
+                patch,
                 updatedAt: timestamp
               });
 
