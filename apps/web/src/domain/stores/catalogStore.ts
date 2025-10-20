@@ -74,6 +74,75 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
     );
   }
 
+  addItems(params: { gachaId: string; items: GachaCatalogItemV3[]; updatedAt?: string }): void {
+    const { gachaId, items, updatedAt } = params;
+
+    if (!gachaId || !items?.length) {
+      console.warn('CatalogStore.addItems called without gachaId or items');
+      return;
+    }
+
+    const timestamp = updatedAt ?? new Date().toISOString();
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          console.warn('CatalogStore.addItems called before store was hydrated');
+          return previous;
+        }
+
+        const gachaCatalog = previous.byGacha?.[gachaId];
+        if (!gachaCatalog) {
+          console.warn(`CatalogStore.addItems could not find gacha ${gachaId}`);
+          return previous;
+        }
+
+        const nextItems = { ...gachaCatalog.items };
+        const nextOrder = [...(gachaCatalog.order ?? [])];
+
+        items.forEach((item) => {
+          if (!item?.itemId) {
+            return;
+          }
+
+          const nextItem: GachaCatalogItemV3 = {
+            ...item,
+            itemId: item.itemId,
+            rarityId: item.rarityId,
+            updatedAt: item.updatedAt ?? timestamp
+          };
+
+          nextItems[item.itemId] = nextItem;
+          if (!nextOrder.includes(item.itemId)) {
+            nextOrder.push(item.itemId);
+          }
+        });
+
+        const previousOrderLength = gachaCatalog.order?.length ?? 0;
+
+        if (nextOrder.length === previousOrderLength) {
+          return previous;
+        }
+
+        const nextState: GachaCatalogStateV3 = {
+          ...previous,
+          updatedAt: timestamp,
+          byGacha: {
+            ...previous.byGacha,
+            [gachaId]: {
+              ...gachaCatalog,
+              items: nextItems,
+              order: nextOrder
+            }
+          }
+        };
+
+        return nextState;
+      },
+      { persist: 'immediate' }
+    );
+  }
+
   protected persistImmediate(state: GachaCatalogStateV3 | undefined): void {
     this.persistence.saveCatalogState(state);
   }
