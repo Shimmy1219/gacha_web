@@ -118,7 +118,9 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
           }
         });
 
-        if (nextOrder.length === gachaCatalog.order.length) {
+        const previousOrderLength = gachaCatalog.order?.length ?? 0;
+
+        if (nextOrder.length === previousOrderLength) {
           return previous;
         }
 
