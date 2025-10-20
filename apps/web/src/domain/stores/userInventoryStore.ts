@@ -114,6 +114,15 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     super(persistence);
   }
 
+  private loadLatestState(): UserInventoriesStateV3 | undefined {
+    try {
+      return this.persistence.loadSnapshot().userInventories;
+    } catch (error) {
+      console.warn('UserInventoryStore failed to load snapshot from persistence', error);
+      return undefined;
+    }
+  }
+
   setInventoryItemCount(
     params: {
       userId: string;
@@ -136,12 +145,14 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     const timestamp = updatedAt ?? new Date().toISOString();
 
     this.update((previous) => {
-      if (!previous?.inventories) {
-        console.warn('UserInventoryStore.setInventoryItemCount called before store was hydrated');
+      const baseState = previous ?? this.loadLatestState();
+
+      if (!baseState?.inventories) {
+        console.warn('UserInventoryStore.setInventoryItemCount could not access inventories state');
         return previous;
       }
 
-      const userInventories = previous.inventories[userId];
+      const userInventories = baseState.inventories[userId];
       if (!userInventories) {
         console.warn('UserInventoryStore.setInventoryItemCount could not find inventories for user', params);
         return previous;
@@ -203,11 +214,11 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
       }
 
       const nextUserInventories = { ...userInventories, [inventoryId]: nextSnapshot };
-      const nextInventories = { ...previous.inventories, [userId]: nextUserInventories };
+      const nextInventories = { ...baseState.inventories, [userId]: nextUserInventories };
       const nextByItemId = rebuildByItemId(nextInventories);
 
       return {
-        ...previous,
+        ...baseState,
         updatedAt: timestamp,
         inventories: nextInventories,
         byItemId: nextByItemId
@@ -237,15 +248,17 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
 
     this.update(
       (previous) => {
-        if (!previous) {
-          console.warn('UserInventoryStore.updateItemRarity called before store was hydrated');
+        const baseState = previous ?? this.loadLatestState();
+
+        if (!baseState) {
+          console.warn('UserInventoryStore.updateItemRarity could not access inventories state');
           return previous;
         }
 
         let inventoriesChanged = false;
         const nextInventories: UserInventoriesStateV3['inventories'] = {};
 
-        for (const [userId, inventories] of Object.entries(previous.inventories ?? {})) {
+        for (const [userId, inventories] of Object.entries(baseState.inventories ?? {})) {
           let userChanged = false;
           const nextUserInventories: typeof inventories = {};
 
@@ -344,7 +357,7 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
           return previous;
         }
 
-        const nextByItemId = { ...(previous.byItemId ?? {}) };
+        const nextByItemId = { ...(baseState.byItemId ?? {}) };
         const aggregatedEntries: Array<{
           userId: string;
           gachaId: string;
@@ -388,7 +401,7 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
         }
 
         return {
-          ...previous,
+          ...baseState,
           updatedAt: timestamp,
           inventories: nextInventories,
           byItemId: nextByItemId
