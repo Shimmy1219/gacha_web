@@ -1,6 +1,6 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
@@ -10,6 +10,8 @@ import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
+import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
+import { generateItemId } from '@domain/idGenerators';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -17,6 +19,24 @@ const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
 type ItemsByGacha = Record<string, ItemEntry[]>;
 type GachaTab = { id: string; label: string };
+
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+function getSequentialItemName(position: number): string {
+  if (Number.isNaN(position) || !Number.isFinite(position)) {
+    return 'A';
+  }
+
+  let index = Math.max(0, Math.floor(position));
+  let name = '';
+
+  while (index >= 0) {
+    name = `${ALPHABET[index % ALPHABET.length]}${name}`;
+    index = Math.floor(index / ALPHABET.length) - 1;
+  }
+
+  return name || 'A';
+}
 
 export function ItemsSection(): JSX.Element {
   const { catalog: catalogStore, userInventories: userInventoryStore, riagu: riaguStore } = useDomainStores();
@@ -26,6 +46,7 @@ export function ItemsSection(): JSX.Element {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const defaultGridWidthRef = useRef<number | null>(null);
   const [isCondensedGrid, setIsCondensedGrid] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -157,6 +178,126 @@ export function ItemsSection(): JSX.Element {
   }, [data?.appState?.selectedGachaId, gachaTabs]);
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
+
+  const canAddItems = useMemo(() => {
+    if (status !== 'ready' || !activeGachaId) {
+      return false;
+    }
+
+    const gachaCatalog = data?.catalogState?.byGacha?.[activeGachaId];
+    const rarityIds = data?.rarityState?.byGacha?.[activeGachaId] ?? [];
+    return Boolean(gachaCatalog && rarityIds.length > 0);
+  }, [activeGachaId, data?.catalogState, data?.rarityState, status]);
+
+  const showAddCard = status === 'ready' && Boolean(activeGachaId);
+
+  const getDefaultRarityId = useCallback(
+    (gachaId: string): string | null => {
+      const rarityState = data?.rarityState;
+      if (!rarityState) {
+        return null;
+      }
+
+      const rarityIds = rarityState.byGacha?.[gachaId] ?? [];
+      if (rarityIds.length === 0) {
+        return null;
+      }
+
+      let selectedId: string | null = null;
+      let minEmitRate = Number.POSITIVE_INFINITY;
+
+      rarityIds.forEach((rarityId) => {
+        const entity = rarityState.entities?.[rarityId];
+        const emitRate = entity?.emitRate;
+        if (typeof emitRate === 'number' && Number.isFinite(emitRate) && emitRate < minEmitRate) {
+          minEmitRate = emitRate;
+          selectedId = rarityId;
+        }
+      });
+
+      return selectedId ?? rarityIds[0] ?? null;
+    },
+    [data?.rarityState]
+  );
+
+  const handleAddCardClick = useCallback(() => {
+    if (!showAddCard || !canAddItems) {
+      return;
+    }
+
+    const input = fileInputRef.current;
+    if (input) {
+      input.click();
+    }
+  }, [canAddItems, showAddCard]);
+
+  const handleFileInputChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.target;
+      const files = input.files ? Array.from(input.files) : [];
+      input.value = '';
+
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!activeGachaId) {
+        console.warn('ファイル選択時に有効なガチャが見つかりませんでした');
+        return;
+      }
+
+      const catalogState = data?.catalogState;
+      const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
+      if (!gachaCatalog) {
+        console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
+        return;
+      }
+
+      const rarityId = getDefaultRarityId(activeGachaId);
+      if (!rarityId) {
+        console.warn('追加可能なレアリティが見つかりませんでした');
+        return;
+      }
+
+      let assetRecords: StoredAssetRecord[] = [];
+
+      try {
+        const storedRecords: StoredAssetRecord[] = [];
+        for (const file of files) {
+          // eslint-disable-next-line no-await-in-loop
+          const record = await saveAsset(file);
+          storedRecords.push(record);
+        }
+        assetRecords = storedRecords;
+
+        const baseOrder = gachaCatalog.order?.length ?? 0;
+        const timestamp = new Date().toISOString();
+
+        const itemsToAdd: GachaCatalogItemV3[] = assetRecords.map((asset, index) => {
+          const position = baseOrder + index;
+          return {
+            itemId: generateItemId(),
+            name: getSequentialItemName(position),
+            rarityId,
+            order: position + 1,
+            pickupTarget: false,
+            completeTarget: false,
+            imageAssetId: asset.id,
+            riagu: false,
+            updatedAt: timestamp
+          } satisfies GachaCatalogItemV3;
+        });
+
+        catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
+      } catch (error) {
+        console.error('景品の追加に失敗しました', error);
+        if (assetRecords.length > 0) {
+          void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
+        }
+      }
+    },
+    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
+  );
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') {
@@ -354,8 +495,11 @@ export function ItemsSection(): JSX.Element {
                 <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
               ) : null}
 
-              {items.length > 0 ? (
+              {showAddCard || items.length > 0 ? (
                 <div ref={gridRef} className={gridClassName}>
+                  {showAddCard ? (
+                    <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
+                  ) : null}
                   {items.map(({ model, rarity }) => (
                     <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
                   ))}
@@ -365,6 +509,47 @@ export function ItemsSection(): JSX.Element {
           </div>
         </div>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*"
+        multiple
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
     </SectionContainer>
+  );
+}
+
+interface AddItemCardProps {
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label="景品を追加"
+      className={clsx(
+        'item-card item-card--add relative flex h-full flex-col overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition focus:outline-none',
+        disabled
+          ? 'cursor-not-allowed opacity-60'
+          : 'hover:border-accent/70 hover:bg-accent/5 focus-visible:ring-2 focus-visible:ring-accent/50'
+      )}
+      onClick={onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+    >
+      <div className="flex flex-1 flex-col space-y-3">
+        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-[#1b1b22] text-5xl font-semibold text-accent">
+          +
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-surface-foreground">景品を追加</h3>
+          <p className="text-xs text-muted-foreground">画像・動画・音声ファイルを登録</p>
+        </div>
+      </div>
+    </button>
   );
 }
