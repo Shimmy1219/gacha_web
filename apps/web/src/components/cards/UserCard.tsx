@@ -7,7 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
-import { Fragment, useCallback, useId, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useMemo, useState, type FormEvent } from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
@@ -166,7 +166,7 @@ function GachaInventoryCard({
   showCounts,
   userId,
   catalogItems,
-  rarityOptions
+  rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
   const { userInventories: userInventoryStore } = useDomainStores();
   const totalPulls = useMemo(
@@ -206,11 +206,19 @@ function GachaInventoryCard({
   const [draftCount, setDraftCount] = useState('');
   const [draftRarityId, setDraftRarityId] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const datalistId = useId();
 
   const catalogItemMap = useMemo(() => {
     return catalogItems.reduce<Map<string, InventoryCatalogItemOption>>((acc, item) => {
       acc.set(item.itemId, item);
+      return acc;
+    }, new Map());
+  }, [catalogItems]);
+
+  const catalogItemsByRarity = useMemo(() => {
+    return catalogItems.reduce<Map<string, InventoryCatalogItemOption[]>>((acc, item) => {
+      const list = acc.get(item.rarityId) ?? [];
+      list.push(item);
+      acc.set(item.rarityId, list);
       return acc;
     }, new Map());
   }, [catalogItems]);
@@ -280,13 +288,22 @@ function GachaInventoryCard({
       const normalizedCount = Number.parseInt(draftCount, 10);
 
       if (!trimmedItemId) {
-        setErrorMessage('景品IDを入力してください');
+        setErrorMessage('景品を選択してください');
         return;
       }
 
       if (!rarityId) {
-        setErrorMessage('レアリティを選択してください');
+        setErrorMessage('レアリティ情報を取得できませんでした');
         return;
+      }
+
+      if (draftMode === 'add') {
+        const allowedItems = catalogItemsByRarity.get(rarityId) ?? [];
+        const isAllowed = allowedItems.some((item) => item.itemId === trimmedItemId);
+        if (!isAllowed) {
+          setErrorMessage('選択したレアリティで利用できない景品です');
+          return;
+        }
       }
 
       if (!Number.isFinite(normalizedCount) || Number.isNaN(normalizedCount)) {
@@ -299,17 +316,22 @@ function GachaInventoryCard({
         return;
       }
 
-      userInventoryStore.setInventoryItemCount({
-        userId,
-        inventoryId: inventory.inventoryId,
-        itemId: trimmedItemId,
-        rarityId,
-        count: normalizedCount
-      });
+      userInventoryStore.setInventoryItemCount(
+        {
+          userId,
+          inventoryId: inventory.inventoryId,
+          itemId: trimmedItemId,
+          rarityId,
+          count: normalizedCount
+        },
+        { persist: 'immediate' }
+      );
 
       resetDraft();
     },
     [
+      catalogItemsByRarity,
+      draftMode,
       draftCount,
       draftItemId,
       draftRarityId,
@@ -329,27 +351,10 @@ function GachaInventoryCard({
           setDraftRarityId(matched.rarityId);
         }
       }
+      setErrorMessage(null);
     },
     [catalogItemMap, draftMode]
   );
-
-  const raritySelectOptions = useMemo(() => {
-    if (rarityOptions.length > 0) {
-      return rarityOptions;
-    }
-    const unique = new Map<string, InventoryRarityOption>();
-    rarityGroups.forEach((group) => {
-      const key = group.rarity.rarityId ?? group.rarity.label;
-      if (!unique.has(key)) {
-        unique.set(key, {
-          rarityId: key,
-          label: group.rarity.label,
-          color: group.rarity.color
-        });
-      }
-    });
-    return Array.from(unique.values());
-  }, [rarityGroups, rarityOptions]);
 
   return (
     <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[#15151b] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
@@ -406,6 +411,7 @@ function GachaInventoryCard({
           const { className, style } = getRarityTextPresentation(group.rarity.color);
           const rarityId = group.rarity.rarityId ?? group.rarity.label;
           const addKey = `add:${rarityId}`;
+          const rarityCatalogItems = catalogItemsByRarity.get(rarityId) ?? [];
           return (
             <div
               key={rarityId}
@@ -428,13 +434,13 @@ function GachaInventoryCard({
                       <form
                         key={`${inventory.inventoryId}-${editorKey}`}
                         className={clsx(
-                          'user-card__item-chip flex items-center gap-2 rounded-full border border-accent/40 bg-[#1f1f27]',
+                          'user-card__item-chip flex items-center gap-2 rounded-xl border border-accent/40 bg-[#1f1f27]',
                           'px-3 py-1 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
                         )}
                         onSubmit={handleSubmitDraft}
                       >
                         <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-muted-foreground">{item.itemName}</span>
+                          <span className="text-xs text-muted-foreground">{item.itemName}</span>
                           <input
                             type="number"
                             min={0}
@@ -492,46 +498,35 @@ function GachaInventoryCard({
                     <form
                       key={`${inventory.inventoryId}-${addKey}`}
                       className={clsx(
-                        'user-card__item-chip flex flex-wrap items-center gap-2 rounded-full border border-accent/40 bg-[#1f1f27]',
+                        'user-card__item-chip flex flex-wrap items-center gap-2 rounded-xl border border-accent/40 bg-[#1f1f27]',
                         'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
                       )}
                       onSubmit={handleSubmitDraft}
                     >
                       <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-muted-foreground" htmlFor={`${inventory.inventoryId}-${addKey}-item`}>
-                          景品ID
+                        <label className="text-xs text-muted-foreground" htmlFor={`${inventory.inventoryId}-${addKey}-item`}>
+                          景品
                         </label>
-                        <input
+                        <select
                           id={`${inventory.inventoryId}-${addKey}-item`}
                           className="w-40 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                           value={draftItemId}
                           onChange={(event) => handleDraftItemIdChange(event.target.value)}
-                          list={`${datalistId}-items`}
                           autoFocus
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-muted-foreground" htmlFor={`${inventory.inventoryId}-${addKey}-rarity`}>
-                          レアリティ
-                        </label>
-                        <select
-                          id={`${inventory.inventoryId}-${addKey}-rarity`}
-                          className="rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
-                          value={draftRarityId}
-                          onChange={(event) => setDraftRarityId(event.target.value)}
+                          disabled={rarityCatalogItems.length === 0}
                         >
                           <option value="" disabled>
                             選択してください
                           </option>
-                          {raritySelectOptions.map((option) => (
-                            <option key={`${inventory.inventoryId}-${option.rarityId}`} value={option.rarityId}>
-                              {option.label}
+                          {rarityCatalogItems.map((option) => (
+                            <option key={`${inventory.inventoryId}-${option.itemId}`} value={option.itemId}>
+                              {option.name}
                             </option>
                           ))}
                         </select>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-muted-foreground" htmlFor={`${inventory.inventoryId}-${addKey}-count`}>
+                        <label className="text-xs text-muted-foreground" htmlFor={`${inventory.inventoryId}-${addKey}-count`}>
                           個数
                         </label>
                         <input
@@ -559,7 +554,7 @@ function GachaInventoryCard({
                         </button>
                       </div>
                       {selectedCatalogItem ? (
-                        <p className="w-full text-[10px] text-muted-foreground">{selectedCatalogItem.name}</p>
+                        <p className="w-full text-xs text-muted-foreground">{selectedCatalogItem.name}</p>
                       ) : null}
                       {errorMessage && activeEditor === addKey ? (
                         <p className="w-full text-[10px] text-red-400">{errorMessage}</p>
@@ -584,15 +579,6 @@ function GachaInventoryCard({
             </div>
           );
         })}
-        {isEditing ? (
-          <datalist id={`${datalistId}-items`}>
-            {catalogItems.map((item) => (
-              <option key={`${inventory.inventoryId}-${item.itemId}`} value={item.itemId}>
-                {item.name}
-              </option>
-            ))}
-          </datalist>
-        ) : null}
       </div>
     </section>
   );
