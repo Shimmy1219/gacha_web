@@ -102,7 +102,12 @@ export function UsersSection(): JSX.Element {
           filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         )}
       >
-        <div className={clsx('overflow-hidden transition-opacity duration-300 ease-linear', filtersOpen ? 'opacity-100' : 'opacity-0')}>
+        <div
+          className={clsx(
+            'transition-opacity duration-300 ease-linear',
+            filtersOpen ? 'opacity-100 overflow-visible' : 'opacity-0 overflow-hidden'
+          )}
+        >
           <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
         </div>
       </div>
