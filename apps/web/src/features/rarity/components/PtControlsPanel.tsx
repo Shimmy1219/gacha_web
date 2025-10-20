@@ -5,6 +5,8 @@ import { clsx } from 'clsx';
 import { type PtBundleV3, type PtGuaranteeV3, type PtSettingV3 } from '@domain/app-persistence';
 import { generatePtBundleId, generatePtGuaranteeId } from '@domain/idGenerators';
 
+import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
+
 interface PtBundleRowState {
   id: string;
   price: string;
@@ -24,9 +26,15 @@ type PanelSnapshot = {
   guarantees: PtGuaranteeRowState[];
 };
 
+interface RarityOption {
+  value: string;
+  label: string;
+  color?: string | null;
+}
+
 interface PtControlsPanelProps {
   settings?: PtSettingV3;
-  rarityOptions: Array<{ value: string; label: string }>;
+  rarityOptions: RarityOption[];
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
@@ -118,7 +126,7 @@ function InlineSelectField({
 }: {
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: RarityOption[];
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -136,6 +144,7 @@ function InlineSelectField({
 
   const resolvedValue = value || options[0]?.value || '';
   const selectedOption = options.find((option) => option.value === resolvedValue);
+  const selectedPresentation = getRarityTextPresentation(selectedOption?.color);
 
   const handleSelect = (nextValue: string): void => {
     onChange(nextValue);
@@ -154,7 +163,12 @@ function InlineSelectField({
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
       >
-        <span>{selectedOption?.label ?? '未選択'}</span>
+        <span
+          className={clsx('pt-controls-panel__select-label flex-1 text-left', selectedPresentation.className)}
+          style={selectedPresentation.style}
+        >
+          {selectedOption?.label ?? '未選択'}
+        </span>
         <ChevronDownIcon className={clsx('pt-controls-panel__select-icon h-4 w-4 transition-transform', open && 'rotate-180')} />
       </button>
       {open ? (
@@ -164,6 +178,7 @@ function InlineSelectField({
         >
           {options.map((option) => {
             const active = option.value === resolvedValue;
+            const presentation = getRarityTextPresentation(option.color);
             return (
               <button
                 key={option.value}
@@ -176,7 +191,12 @@ function InlineSelectField({
                 )}
                 onClick={() => handleSelect(option.value)}
               >
-                <span>{option.label}</span>
+                <span
+                  className={clsx('pt-controls-panel__select-option-label', presentation.className)}
+                  style={presentation.style}
+                >
+                  {option.label}
+                </span>
                 <CheckIcon
                   className={clsx(
                     'pt-controls-panel__select-check h-4 w-4 transition',

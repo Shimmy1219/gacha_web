@@ -199,7 +199,12 @@ export function RaritySection(): JSX.Element {
   }, [activeGachaId, rarityState]);
 
   const rarityOptions = useMemo(
-    () => rarityRows.map((rarity) => ({ value: rarity.id, label: rarity.label || rarity.id })),
+    () =>
+      rarityRows.map((rarity) => ({
+        value: rarity.id,
+        label: rarity.label || rarity.id,
+        color: rarity.color
+      })),
     [rarityRows]
   );
 
