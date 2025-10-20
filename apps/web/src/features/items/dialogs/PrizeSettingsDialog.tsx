@@ -360,7 +360,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                         <img
                           src={currentPreview}
                           alt="プレビュー"
-                          className="max-h-full max-w-full object-contain"
+                          className="h-full w-full object-contain"
                         />
                       ) : isVideoPreview ? (
                         <video src={currentPreview} controls className="max-h-full max-w-full" />
