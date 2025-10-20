@@ -1,6 +1,16 @@
 import { useCallback, useState } from 'react';
 
 import { type GachaLocalStorageSnapshot } from '@domain/app-persistence';
+import {
+  generateDeterministicGachaId,
+  generateDeterministicInventoryId,
+  generateDeterministicItemId,
+  generateDeterministicPtBundleId,
+  generateDeterministicPtGuaranteeId,
+  generateDeterministicRarityId,
+  generateDeterministicRiaguId,
+  generateDeterministicUserId
+} from '@domain/idGenerators';
 import { useAppPersistence } from '../storage/AppPersistenceProvider';
 
 type GachaSeed = {
@@ -64,25 +74,6 @@ type UserSeed = {
   team: string;
 };
 
-const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-
-function makeDeterministicId(prefix: string, seed: string, length = 10): string {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 33 + seed.charCodeAt(index)) >>> 0;
-  }
-
-  let value = hash || 1;
-  let suffix = '';
-
-  for (let position = 0; position < length; position += 1) {
-    value = (value * 1664525 + 1013904223) >>> 0;
-    suffix += BASE62[value % BASE62.length];
-  }
-
-  return `${prefix}${suffix}`;
-}
-
 const GACHA_SEEDS: GachaSeed[] = [
   {
     slug: 'aurora-arc',
@@ -108,7 +99,7 @@ const GACHA_SEEDS: GachaSeed[] = [
 
 const GACHA_DEFINITIONS: GachaDefinition[] = GACHA_SEEDS.map((seed) => ({
   ...seed,
-  id: makeDeterministicId('gch-', seed.slug)
+  id: generateDeterministicGachaId(seed.slug)
 }));
 
 const RARITY_TEMPLATES = [
@@ -226,7 +217,7 @@ function createMockSnapshot(): {
 
   GACHA_DEFINITIONS.forEach((gacha) => {
     const rarityIds = RARITY_TEMPLATES.map((template, templateIndex) => {
-      const rarityId = makeDeterministicId('rar-', `${gacha.id}-${template.code}`);
+      const rarityId = generateDeterministicRarityId(`${gacha.id}-${template.code}`);
       rarityEntities[rarityId] = {
         id: rarityId,
         gachaId: gacha.id,
@@ -263,7 +254,7 @@ function createMockSnapshot(): {
       const rarityIds = rarityByGacha[gacha.id];
       const rarityId = rarityIds[Math.min(index, rarityIds.length - 1)];
       return {
-        itemId: makeDeterministicId('itm-', `${gacha.id}-${seed.name}`),
+        itemId: generateDeterministicItemId(`${gacha.id}-${seed.name}`),
         gachaId: gacha.id,
         rarityId,
         order: index + 1,
@@ -307,7 +298,7 @@ function createMockSnapshot(): {
   const userAccentPalette = ['#4f46e5', '#f97316', '#14b8a6', '#facc15', '#ec4899', '#0ea5e9'];
 
   const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed, index) => {
-    const id = makeDeterministicId('usr-', seed.handle);
+    const id = generateDeterministicUserId(seed.handle);
     acc[id] = {
       id,
       displayName: seed.displayName,
@@ -376,7 +367,7 @@ function createMockSnapshot(): {
       });
 
       gachaInventories[gacha.id] = {
-        inventoryId: makeDeterministicId('inv-', `${userId}-${gacha.id}`),
+        inventoryId: generateDeterministicInventoryId(`${userId}-${gacha.id}`),
         gachaId: gacha.id,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -424,7 +415,7 @@ function createMockSnapshot(): {
   const riaguCandidates = itemDefinitions.filter((item) => item.riagu);
 
   const riaguEntries = riaguCandidates.map((item, index) => {
-    const riaguId = makeDeterministicId('riagu-', `${item.itemId}-${index}`);
+    const riaguId = generateDeterministicRiaguId(`${item.itemId}-${index}`);
     return [
       riaguId,
       {
@@ -463,25 +454,25 @@ function createMockSnapshot(): {
       },
       bundles: [
         {
-          id: makeDeterministicId('bndl-', `${gacha.id}-10`),
+          id: generateDeterministicPtBundleId(`${gacha.id}-10`),
           price: 3000 + index * 120,
           pulls: 10
         },
         {
-          id: makeDeterministicId('bndl-', `${gacha.id}-20`),
+          id: generateDeterministicPtBundleId(`${gacha.id}-20`),
           price: 5800 + index * 160,
           pulls: 20
         }
       ],
       guarantees: [
         {
-          id: makeDeterministicId('ptg-', `${gacha.id}-top`),
+          id: generateDeterministicPtGuaranteeId(`${gacha.id}-top`),
           rarityId: rarityIds[0],
           threshold: 60,
           pityStep: 10
         },
         {
-          id: makeDeterministicId('ptg-', `${gacha.id}-mid`),
+          id: generateDeterministicPtGuaranteeId(`${gacha.id}-mid`),
           rarityId: rarityIds[1],
           threshold: 30,
           pityStep: 10
@@ -527,7 +518,7 @@ function createMockSnapshot(): {
     lastSeenRelease: '2024.10-preview'
   };
 
-  const primaryUserId = userIds[0] ?? makeDeterministicId('usr-', 'primary');
+  const primaryUserId = userIds[0] ?? generateDeterministicUserId('primary');
 
   const saveOptions = {
     version: 3,

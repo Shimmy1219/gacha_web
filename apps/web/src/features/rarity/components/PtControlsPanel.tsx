@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { clsx } from 'clsx';
 
 import { type PtBundleV3, type PtGuaranteeV3, type PtSettingV3 } from '@domain/app-persistence';
+import { generatePtBundleId, generatePtGuaranteeId } from '@domain/idGenerators';
 
 interface PtBundleRowState {
   id: string;
@@ -28,8 +29,8 @@ interface PtControlsPanelProps {
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
-function createBundleRow(seed: number | string, overrides?: Partial<PtBundleRowState>): PtBundleRowState {
-  const id = typeof seed === 'number' ? `bundle-${seed}` : seed;
+function createBundleRow(seed?: string, overrides?: Partial<PtBundleRowState>): PtBundleRowState {
+  const id = seed ?? generatePtBundleId();
   return {
     id,
     price: overrides?.price ?? '',
@@ -37,8 +38,8 @@ function createBundleRow(seed: number | string, overrides?: Partial<PtBundleRowS
   };
 }
 
-function createGuaranteeRow(seed: number | string, overrides?: Partial<PtGuaranteeRowState>): PtGuaranteeRowState {
-  const id = typeof seed === 'number' ? `guarantee-${seed}` : seed;
+function createGuaranteeRow(seed?: string, overrides?: Partial<PtGuaranteeRowState>): PtGuaranteeRowState {
+  const id = seed ?? generatePtGuaranteeId();
   return {
     id,
     minPulls: overrides?.minPulls ?? '',
@@ -266,27 +267,11 @@ function buildSettingsFromSnapshot(
   return next;
 }
 
-function getNextSequentialId(rows: Array<{ id: string }>, fallback: number): number {
-  return rows.reduce((next, row) => {
-    const match = row.id.match(/(\d+)$/);
-    if (!match) {
-      return Math.max(next, fallback);
-    }
-    const numericId = Number.parseInt(match[1] ?? '', 10);
-    if (Number.isNaN(numericId)) {
-      return next;
-    }
-    return Math.max(next, numericId + 1);
-  }, fallback);
-}
-
 export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
   const [complete, setComplete] = useState('');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([]);
-  const nextBundleId = useRef(0);
-  const nextGuaranteeId = useRef(0);
 
   const initialComparableSettings = cloneSettingWithoutUpdatedAt(settings);
   const lastEmittedRef = useRef<string>(
@@ -306,7 +291,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
         )
       : [];
     setBundles(nextBundles);
-    nextBundleId.current = getNextSequentialId(nextBundles, nextBundles.length);
 
     const nextGuarantees = settings?.guarantees
       ? settings.guarantees.map((guarantee) =>
@@ -317,7 +301,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
         )
       : [];
     setGuarantees(nextGuarantees);
-    nextGuaranteeId.current = getNextSequentialId(nextGuarantees, nextGuarantees.length);
 
     const comparable = cloneSettingWithoutUpdatedAt(settings);
     lastEmittedRef.current = comparable ? JSON.stringify(comparable) : '';
@@ -384,9 +367,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           <AddButton
             onClick={() =>
               setBundles((prev) => {
-                const id = nextBundleId.current;
-                nextBundleId.current += 1;
-                const next = [...prev, createBundleRow(id)];
+                const next = [...prev, createBundleRow()];
                 emitWithState({ bundles: next });
                 return next;
               })
@@ -451,9 +432,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           <AddButton
             onClick={() =>
               setGuarantees((prev) => {
-                const id = nextGuaranteeId.current;
-                nextGuaranteeId.current += 1;
-                const next = [...prev, createGuaranteeRow(id)];
+                const next = [...prev, createGuaranteeRow()];
                 emitWithState({ guarantees: next });
                 return next;
               })

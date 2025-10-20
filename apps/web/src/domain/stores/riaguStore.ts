@@ -1,4 +1,5 @@
 import { AppPersistence, type RiaguCardModelV3, type RiaguStateV3 } from '../app-persistence';
+import { generateRiaguId } from '../idGenerators';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
 interface UpsertRiaguCardInput {
@@ -9,14 +10,6 @@ interface UpsertRiaguCardInput {
   orderHint?: number | null;
   stock?: number | null;
   notes?: string | null;
-}
-
-function generateRiaguId(): string {
-  const globalCrypto = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
-  if (globalCrypto && typeof globalCrypto.randomUUID === 'function') {
-    return globalCrypto.randomUUID();
-  }
-  return `riagu-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
