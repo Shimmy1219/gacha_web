@@ -1,3 +1,4 @@
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
@@ -120,17 +121,24 @@ function InlineSelectField({
   options: Array<{ value: string; label: string }>;
 }): JSX.Element {
   return (
-    <select
-      className="pt-controls-panel__select h-9 rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground shadow-inner transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div className="pt-controls-panel__select-wrapper relative">
+      <select
+        className={clsx(
+          'pt-controls-panel__select peer block h-9 min-w-[8rem] appearance-none rounded-xl border border-border/60 bg-[#1b1b22] px-4 pr-9 text-sm font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+          'focus:border-accent focus:text-accent focus:outline-none',
+          'hover:border-accent/70'
+        )}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition peer-focus:text-accent" />
+    </div>
   );
 }
 
