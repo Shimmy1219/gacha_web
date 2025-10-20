@@ -44,6 +44,91 @@ function calculateInventoryTotal(
   return total;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function normalizeItemsMap(raw: unknown): Record<string, string[]> {
+  if (!isRecord(raw)) {
+    return {};
+  }
+  const result: Record<string, string[]> = {};
+  for (const [rarityId, entries] of Object.entries(raw)) {
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    const normalized = entries.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    if (normalized.length > 0) {
+      result[rarityId] = normalized;
+    }
+  }
+  return result;
+}
+
+function normalizeCountsMap(raw: unknown): Record<string, Record<string, number>> {
+  if (!isRecord(raw)) {
+    return {};
+  }
+  const result: Record<string, Record<string, number>> = {};
+  for (const [rarityId, counts] of Object.entries(raw)) {
+    if (!isRecord(counts)) {
+      continue;
+    }
+    const normalized: Record<string, number> = {};
+    for (const [itemId, value] of Object.entries(counts)) {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        normalized[itemId] = Math.floor(value);
+      }
+    }
+    if (Object.keys(normalized).length > 0) {
+      result[rarityId] = normalized;
+    }
+  }
+  return result;
+}
+
+function normalizeInventorySnapshot(
+  raw: unknown,
+  fallbackInventoryId: string
+): UserInventorySnapshotV3 | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const gachaId = typeof raw.gachaId === 'string' && raw.gachaId.length > 0 ? raw.gachaId : undefined;
+  if (!gachaId) {
+    return null;
+  }
+
+  const preferredId =
+    typeof raw.inventoryId === 'string' && raw.inventoryId.length > 0 ? raw.inventoryId : undefined;
+  const inventoryId = preferredId ?? (fallbackInventoryId.length > 0 ? fallbackInventoryId : undefined);
+  if (!inventoryId) {
+    return null;
+  }
+
+  const items = normalizeItemsMap(raw.items);
+  const counts = normalizeCountsMap(raw.counts);
+  const normalizedCounts = Object.keys(counts).length > 0 ? counts : undefined;
+  const totalCount = calculateInventoryTotal(items, normalizedCounts);
+
+  const snapshot: UserInventorySnapshotV3 = {
+    inventoryId,
+    gachaId,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+    items,
+    counts: normalizedCounts ?? {},
+    notes: typeof raw.notes === 'string' ? raw.notes : undefined
+  };
+
+  if (totalCount > 0) {
+    snapshot.totalCount = totalCount;
+  }
+
+  return snapshot;
+}
+
 function rebuildByItemId(
   inventories: UserInventoriesStateV3['inventories']
 ): UserInventoriesStateV3['byItemId'] {
@@ -109,14 +194,57 @@ function rebuildByItemId(
   return result;
 }
 
+function normalizeUserInventoriesState(
+  state: UserInventoriesStateV3 | undefined
+): UserInventoriesStateV3 | undefined {
+  if (!state) {
+    return undefined;
+  }
+
+  const normalizedInventories: UserInventoriesStateV3['inventories'] = {};
+
+  for (const [userId, rawInventories] of Object.entries(state.inventories ?? {})) {
+    if (!isRecord(rawInventories)) {
+      continue;
+    }
+
+    const normalizedSnapshots: Record<string, UserInventorySnapshotV3> = {};
+
+    for (const [key, rawSnapshot] of Object.entries(rawInventories)) {
+      const fallbackKey = typeof key === 'string' ? key : '';
+      const snapshot = normalizeInventorySnapshot(rawSnapshot, fallbackKey);
+      if (!snapshot) {
+        continue;
+      }
+
+      normalizedSnapshots[snapshot.inventoryId] = snapshot;
+    }
+
+    if (Object.keys(normalizedSnapshots).length > 0) {
+      normalizedInventories[userId] = normalizedSnapshots;
+    }
+  }
+
+  return {
+    version: typeof state.version === 'number' ? state.version : 3,
+    updatedAt: typeof state.updatedAt === 'string' ? state.updatedAt : new Date().toISOString(),
+    inventories: normalizedInventories,
+    byItemId: rebuildByItemId(normalizedInventories)
+  };
+}
+
 export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
   }
 
+  hydrate(initialState: UserInventoriesStateV3 | undefined): void {
+    super.hydrate(normalizeUserInventoriesState(initialState));
+  }
+
   private loadLatestState(): UserInventoriesStateV3 | undefined {
     try {
-      return this.persistence.loadSnapshot().userInventories;
+      return normalizeUserInventoriesState(this.persistence.loadSnapshot().userInventories);
     } catch (error) {
       console.warn('UserInventoryStore failed to load snapshot from persistence', error);
       return undefined;
