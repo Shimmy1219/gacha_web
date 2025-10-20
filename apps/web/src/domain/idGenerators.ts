@@ -63,30 +63,62 @@ export function generateGachaId(): string {
   return generatePrefixedId(ID_PREFIXES.gacha);
 }
 
+export function generateDeterministicGachaId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.gacha, seed, length);
+}
+
 export function generateItemId(): string {
   return generatePrefixedId(ID_PREFIXES.item);
+}
+
+export function generateDeterministicItemId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.item, seed, length);
 }
 
 export function generateRarityId(): string {
   return generatePrefixedId(ID_PREFIXES.rarity);
 }
 
+export function generateDeterministicRarityId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.rarity, seed, length);
+}
+
 export function generateUserId(): string {
   return generatePrefixedId(ID_PREFIXES.user);
+}
+
+export function generateDeterministicUserId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.user, seed, length);
 }
 
 export function generateInventoryId(): string {
   return generatePrefixedId(ID_PREFIXES.inventory);
 }
 
+export function generateDeterministicInventoryId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.inventory, seed, length);
+}
+
 export function generateRiaguId(): string {
   return generatePrefixedId(ID_PREFIXES.riagu);
+}
+
+export function generateDeterministicRiaguId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.riagu, seed, length);
 }
 
 export function generatePtBundleId(): string {
   return generatePrefixedId(ID_PREFIXES.ptBundle);
 }
 
+export function generateDeterministicPtBundleId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.ptBundle, seed, length);
+}
+
 export function generatePtGuaranteeId(): string {
   return generatePrefixedId(ID_PREFIXES.ptGuarantee);
+}
+
+export function generateDeterministicPtGuaranteeId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.ptGuarantee, seed, length);
 }
