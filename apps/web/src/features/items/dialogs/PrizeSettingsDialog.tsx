@@ -357,9 +357,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl bg-border/20">
                     {currentPreview ? (
                       isImagePreview ? (
-                        <img src={currentPreview} alt="プレビュー" className="h-full w-full object-cover" />
+                        <img
+                          src={currentPreview}
+                          alt="プレビュー"
+                          className="max-h-full max-w-full object-contain"
+                        />
                       ) : isVideoPreview ? (
-                        <video src={currentPreview} controls className="h-full w-full object-cover" />
+                        <video src={currentPreview} controls className="max-h-full max-w-full" />
                       ) : isAudioPreview ? (
                         <div className="flex flex-col items-center gap-2 text-muted-foreground">
                           <MusicalNoteIcon className="h-10 w-10" />
