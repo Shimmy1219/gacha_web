@@ -14,6 +14,7 @@ import {
   type GachaRarityStateV3,
   type HitCountsStateV3
 } from './types';
+import { normalizeUserInventoriesState } from './normalizers/userInventories';
 
 export const GACHA_STORAGE_UPDATED_EVENT = 'gacha-storage:updated' as const;
 
@@ -85,7 +86,9 @@ export class AppPersistence {
       appState: this.readJson<GachaAppStateV3>('appState'),
       catalogState: this.readJson<GachaCatalogStateV3>('catalogState'),
       rarityState: this.readJson<GachaRarityStateV3>('rarityState'),
-      userInventories: this.readJson<UserInventoriesStateV3>('userInventories'),
+      userInventories: normalizeUserInventoriesState(
+        this.readJson<UserInventoriesStateV3>('userInventories')
+      ),
       userProfiles: this.readJson<UserProfilesStateV3>('userProfiles'),
       hitCounts: this.readJson<HitCountsStateV3>('hitCounts'),
       riaguState: this.readJson<RiaguStateV3>('riaguState'),
