@@ -167,6 +167,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     revokePreview();
 
     if (!file) {
+      const requestId = assetRequestIdRef.current + 1;
+      assetRequestIdRef.current = requestId;
       setSelectedFile(null);
       if (unsavedAssetId) {
         await deleteAsset(unsavedAssetId);
@@ -174,6 +176,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         unsavedAssetIdRef.current = null;
       }
       setCurrentAssetId(initialState.assetId ?? null);
+      setIsProcessingAsset(false);
       return;
     }
 
