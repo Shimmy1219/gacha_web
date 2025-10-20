@@ -366,8 +366,10 @@ function createMockSnapshot(): {
         countsMap[entry.rarityId][entry.itemId] = entry.count;
       });
 
-      gachaInventories[gacha.id] = {
-        inventoryId: generateDeterministicInventoryId(`${userId}-${gacha.id}`),
+      const inventoryId = generateDeterministicInventoryId(`${userId}-${gacha.id}`);
+
+      gachaInventories[inventoryId] = {
+        inventoryId,
         gachaId: gacha.id,
         createdAt: nowIso,
         updatedAt: nowIso,
