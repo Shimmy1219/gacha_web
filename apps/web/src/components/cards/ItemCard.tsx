@@ -80,10 +80,7 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
           )}
         >
           {isImageAsset && previewUrl ? (
-            <div
-              className="h-full w-full bg-cover bg-center"
-              style={{ backgroundImage: `url(${previewUrl})` }}
-            />
+            <img src={previewUrl} alt={model.name} className="max-h-full max-w-full object-contain" />
           ) : isVideoAsset ? (
             <VideoCameraIcon className="h-10 w-10" />
           ) : isAudioAsset ? (
