@@ -91,7 +91,7 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
       )}
     >
       <div
-        className="absolute flex flex-col items-end gap-2"
+        className="absolute z-10 flex flex-col items-end gap-2"
         style={{ top: '-0.3rem', right: '-0.3rem' }}
       >
         {model.completeTarget ? <span className="badge badge--status badge--status-complete">完走対象</span> : null}
