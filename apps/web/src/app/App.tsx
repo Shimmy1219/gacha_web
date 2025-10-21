@@ -5,14 +5,15 @@ import { useModal } from '../components/modal';
 import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
+import { LivePasteGachaPickerDialog } from '../features/realtime/dialogs/LivePasteGachaPickerDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
-import { applyLivePasteText } from '../logic/livePaste';
+import { applyLivePasteText, LivePasteGachaConflictError } from '../logic/livePaste';
 import { AppRoutes } from './routes/AppRoutes';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
-  const { push } = useModal();
+  const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
 
@@ -122,6 +123,41 @@ export function App(): JSX.Element {
             console.info('リアルタイム結果を反映しました', result);
             return true;
           } catch (error) {
+            if (error instanceof LivePasteGachaConflictError) {
+              push(LivePasteGachaPickerDialog, {
+                id: 'live-paste-gacha-picker',
+                title: '対象ガチャを選択',
+                description: '同名のガチャが複数見つかりました。反映先を選択してください。',
+                size: 'md',
+                payload: {
+                  conflicts: error.conflicts,
+                  onResolve: async (selection) => {
+                    try {
+                      const resultWithSelection = applyLivePasteText(trimmed, { persistence, stores }, {
+                        gachaSelections: selection
+                      });
+                      console.info('ガチャ選択後にリアルタイム結果を反映しました', resultWithSelection);
+                      dismissAll();
+                      return false;
+                    } catch (innerError) {
+                      console.error('ガチャ選択後の反映に失敗しました', innerError);
+                      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                        const message =
+                          innerError instanceof LivePasteGachaConflictError
+                            ? '選択結果に不足があります。再度選択してください。'
+                            : innerError instanceof Error
+                              ? innerError.message
+                              : '選択したガチャへの反映に失敗しました。再度お試しください。';
+                        window.alert(message);
+                      }
+                      return false;
+                    }
+                  },
+                  helperText: '反映先のガチャを選択するとリアルタイム結果を同期します。'
+                }
+              });
+              return false;
+            }
             console.error('リアルタイム結果の反映に失敗しました', error);
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               const message =

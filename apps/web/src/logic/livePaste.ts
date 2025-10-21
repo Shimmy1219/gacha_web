@@ -49,6 +49,32 @@ export interface ApplyLivePasteResult {
   usersUpdated: number;
 }
 
+export interface LivePasteGachaCandidate {
+  id: string;
+  displayName: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LivePasteGachaConflict {
+  gachaName: string;
+  candidates: LivePasteGachaCandidate[];
+}
+
+export class LivePasteGachaConflictError extends Error {
+  readonly conflicts: LivePasteGachaConflict[];
+
+  constructor(conflicts: LivePasteGachaConflict[]) {
+    super('同名のガチャが複数見つかりました。対象のガチャを選択してください。');
+    this.name = 'LivePasteGachaConflictError';
+    this.conflicts = conflicts;
+  }
+}
+
+export interface ApplyLivePasteOptions {
+  gachaSelections?: Record<string, string>;
+}
+
 export function splitLivePasteBlocks(rawText: string): string[] {
   const normalized = rawText.replace(/\r/g, '').trim();
   if (!normalized) {
@@ -126,7 +152,8 @@ export function parseLivePasteBlock(block: string): ParsedLiveBlock | null {
 
 export function applyLivePasteText(
   rawText: string,
-  context: { persistence: AppPersistence; stores: DomainStores }
+  context: { persistence: AppPersistence; stores: DomainStores },
+  options: ApplyLivePasteOptions = {}
 ): ApplyLivePasteResult {
   const blocks = splitLivePasteBlocks(rawText);
   if (blocks.length === 0) {
@@ -159,8 +186,20 @@ export function applyLivePasteText(
   const rarityIdMapByGacha = new Map<string, Map<string, string>>();
   const itemIdMapByGacha = new Map<string, Map<string, string>>();
 
+  const gachaConflicts: LivePasteGachaConflict[] = [];
+
   aggregated.forEach((aggregate, gachaName) => {
-    const gachaId = resolveGachaId(nextAppState, gachaName);
+    const gachaId = resolveGachaId({
+      appState: nextAppState,
+      displayName: gachaName,
+      gachaSelections: options.gachaSelections,
+      conflicts: gachaConflicts
+    });
+
+    if (!gachaId) {
+      return;
+    }
+
     gachaIdByName.set(gachaName, gachaId);
 
     ensureGachaMeta(nextAppState, gachaId, gachaName, nowIso);
@@ -182,6 +221,10 @@ export function applyLivePasteText(
     );
     itemIdMapByGacha.set(gachaId, itemIdMap);
   });
+
+  if (gachaConflicts.length > 0) {
+    throw new LivePasteGachaConflictError(gachaConflicts);
+  }
 
   let lastGachaId: string | null = null;
   const touchedUsers = new Set<string>();
@@ -376,14 +419,64 @@ function prepareUserInventories(
   } satisfies UserInventoriesStateV3;
 }
 
-function resolveGachaId(appState: GachaAppStateV3, displayName: string): string {
-  for (const [gachaId, meta] of Object.entries(appState.meta ?? {})) {
-    if (meta?.displayName === displayName) {
-      return gachaId;
-    }
+function resolveGachaId({
+  appState,
+  displayName,
+  gachaSelections,
+  conflicts
+}: {
+  appState: GachaAppStateV3;
+  displayName: string;
+  gachaSelections: Record<string, string> | undefined;
+  conflicts: LivePasteGachaConflict[];
+}): string | null {
+  const candidates = collectGachaCandidates(appState, displayName);
+
+  if (candidates.length === 1) {
+    return candidates[0].id;
   }
+
+  if (candidates.length > 1) {
+    const selectedId = gachaSelections?.[displayName];
+    if (selectedId && candidates.some((candidate) => candidate.id === selectedId)) {
+      return selectedId;
+    }
+
+    conflicts.push({ gachaName: displayName, candidates });
+    return null;
+  }
+
   const seed = displayName || `gacha-${Date.now()}`;
   return generateDeterministicGachaId(seed);
+}
+
+function collectGachaCandidates(appState: GachaAppStateV3, displayName: string): LivePasteGachaCandidate[] {
+  const meta = appState.meta ?? {};
+  const order = Array.isArray(appState.order) ? appState.order : [];
+  const collected: LivePasteGachaCandidate[] = [];
+  const seen = new Set<string>();
+
+  const pushCandidate = (gachaId: string) => {
+    if (seen.has(gachaId)) {
+      return;
+    }
+    const entry = meta[gachaId];
+    if (!entry || entry.displayName !== displayName) {
+      return;
+    }
+    seen.add(gachaId);
+    collected.push({
+      id: gachaId,
+      displayName: entry.displayName,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt
+    });
+  };
+
+  order.forEach(pushCandidate);
+  Object.keys(meta).forEach(pushCandidate);
+
+  return collected;
 }
 
 function ensureGachaMeta(
