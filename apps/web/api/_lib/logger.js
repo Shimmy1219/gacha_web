@@ -40,7 +40,7 @@ export function createRequestLogger(scope, req) {
   const requestId = nextRequestId();
 
   function log(level, message, meta) {
-    const payload = formatMeta(req, { ...meta, requestId });
+    const payload = formatMeta(req, { ...(meta ?? {}), requestId });
     const text = `[${scope}] ${message}`;
 
     switch (level) {
