@@ -411,13 +411,13 @@ function GachaInventoryCard({
                     return (
                       <form
                         key={`${inventory.inventoryId}-${editorKey}`}
-                          className={clsx(
-                            'user-card__item-chip flex items-center gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
-                            'px-3 py-1 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
-                          )}
+                        className={clsx(
+                          'user-card__item-chip flex flex-col gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+                          'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                        )}
                         onSubmit={handleSubmitDraft}
                       >
-                        <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">{item.itemName}</span>
                           <input
                             type="number"
