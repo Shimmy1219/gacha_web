@@ -5,12 +5,30 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../compo
 
 export interface LivePasteDialogPayload {
   defaultValue?: string;
-  onApply?: (value: string) => void;
+  onApply?: (value: string) => Promise<boolean | void> | boolean | void;
   helperText?: string;
 }
 
 export function LivePasteDialog({ payload, close }: ModalComponentProps<LivePasteDialogPayload>): JSX.Element {
   const [value, setValue] = useState(payload?.defaultValue ?? '');
+  const [isApplying, setIsApplying] = useState(false);
+
+  const handleApply = async () => {
+    if (isApplying) {
+      return;
+    }
+    try {
+      setIsApplying(true);
+      const result = await payload?.onApply?.(value);
+      if (result !== false) {
+        close();
+      }
+    } catch (error) {
+      console.error('ライブ貼り付けの反映に失敗しました', error);
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   return (
     <>
@@ -39,10 +57,8 @@ export function LivePasteDialog({ payload, close }: ModalComponentProps<LivePast
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => {
-            payload?.onApply?.(value);
-            close();
-          }}
+          onClick={handleApply}
+          disabled={isApplying}
         >
           <ClipboardDocumentCheckIcon className="h-5 w-5" />
           反映する

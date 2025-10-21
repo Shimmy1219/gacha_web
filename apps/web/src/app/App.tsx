@@ -7,6 +7,7 @@ import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog'
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
+import { applyLivePasteText } from '../logic/livePaste';
 import { AppRoutes } from './routes/AppRoutes';
 
 export function App(): JSX.Element {
@@ -107,8 +108,30 @@ export function App(): JSX.Element {
       description: 'リアルタイムの結果テキストを貼り付けて解析・同期します。',
       size: 'lg',
       payload: {
-        onApply: (value) => {
-          console.info('リアルタイム結果の反映処理は未接続です', value);
+        onApply: async (value) => {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              window.alert('テキストを貼り付けてください。');
+            }
+            return false;
+          }
+
+          try {
+            const result = applyLivePasteText(trimmed, { persistence, stores });
+            console.info('リアルタイム結果を反映しました', result);
+            return true;
+          } catch (error) {
+            console.error('リアルタイム結果の反映に失敗しました', error);
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : 'リアルタイム結果の反映に失敗しました。再度お試しください。';
+              window.alert(message);
+            }
+            return false;
+          }
         }
       }
     });
