@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { SwitchField } from '../../../components/form/SwitchField';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { ItemDeleteConfirmDialog } from './ItemDeleteConfirmDialog';
 import { type RiaguConfigDialogPayload, RiaguConfigDialog } from '../../riagu/dialogs/RiaguConfigDialog';
 import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../rarity/components/color-picker/palette';
 import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
@@ -34,6 +35,7 @@ export interface PrizeSettingsDialogPayload {
   rarityColor?: string;
   riaguPrice?: number;
   riaguType?: string;
+  assignmentUsers?: Array<{ userId: string; displayName: string }>;
   onSave?: (data: {
     itemId: string;
     name: string;
@@ -43,6 +45,7 @@ export interface PrizeSettingsDialogPayload {
     riagu: boolean;
     imageAssetId: string | null;
   }) => void;
+  onDelete?: (data: { itemId: string; gachaId: string }) => void;
 }
 
 const INPUT_CLASSNAME =
@@ -288,6 +291,31 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     });
   };
 
+  const handleDeleteItem = () => {
+    if (!payload) {
+      return;
+    }
+
+    const winnerNames = payload.assignmentUsers?.map((entry) => entry.displayName.trim()).filter((name) => name.length > 0);
+
+    push(ItemDeleteConfirmDialog, {
+      id: `${payload.itemId}-confirm-delete`,
+      title: 'アイテムを削除',
+      size: 'sm',
+      payload: {
+        itemId: payload.itemId,
+        itemName: payload.itemName,
+        gachaName: payload.gachaName,
+        hasUserReferences: (payload.assignmentUsers?.length ?? 0) > 0,
+        winnerNames,
+        onConfirm: () => {
+          payload.onDelete?.({ itemId: payload.itemId, gachaId: payload.gachaId });
+          close();
+        }
+      }
+    });
+  };
+
   const handleOpenRiaguDialog = () => {
     if (!payload) {
       return;
@@ -471,18 +499,31 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
         画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
       </p>
-      <ModalFooter>
+      <ModalFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <button
           type="button"
-          className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-70"
-          onClick={handleSave}
-          disabled={isProcessingAsset}
+          className={clsx(
+            'btn w-full border-red-500/60 bg-red-500/15 text-red-100 transition hover:border-red-400 hover:bg-red-500/25',
+            'disabled:cursor-not-allowed disabled:opacity-50'
+          )}
+          onClick={handleDeleteItem}
+          disabled={!payload?.onDelete}
         >
-          {isProcessingAsset ? '保存中…' : '保存する'}
+          景品を削除
         </button>
-        <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
-          閉じる
-        </button>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={handleSave}
+            disabled={isProcessingAsset}
+          >
+            {isProcessingAsset ? '保存中…' : '保存する'}
+          </button>
+          <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
+            閉じる
+          </button>
+        </div>
       </ModalFooter>
     </>
   );
