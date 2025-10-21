@@ -2,15 +2,21 @@
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
+import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
+  const log = createRequestLogger('api/auth/discord/callback', req);
+  log.info('request received', { hasCode: Boolean(req.query?.code), hasState: Boolean(req.query?.state) });
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
+    log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
   const { code, state, error } = req.query || {};
   if (error) {
+    log.warn('oauth error reported', { error });
     return res.status(400).send(`OAuth error: ${error}`);
   }
   const cookies = getCookies(req);
@@ -18,6 +24,12 @@ export default async function handler(req, res) {
   const verifier = cookies['d_verifier'];
 
   if (!code || !state || !expectedState || !verifier || state !== expectedState) {
+    log.warn('state or verifier mismatch', {
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      hasExpectedState: Boolean(expectedState),
+      hasVerifier: Boolean(verifier),
+    });
     return res.status(400).send('Invalid state or verifier');
   }
 
@@ -39,6 +51,7 @@ export default async function handler(req, res) {
 
   if (!tokenRes.ok) {
     const t = await tokenRes.text();
+    log.error('token exchange failed', { status: tokenRes.status, body: t });
     return res.status(401).send(`Token exchange failed: ${t}`);
   }
 
@@ -50,6 +63,7 @@ export default async function handler(req, res) {
   });
   if (!meRes.ok) {
     const t = await meRes.text();
+    log.error('fetch /users/@me failed', { status: meRes.status, body: t });
     return res.status(401).send(`Fetch /users/@me failed: ${t}`);
   }
   const me = await meRes.json();
@@ -77,5 +91,7 @@ export default async function handler(req, res) {
 
   // UX: ルートへ返す（必要なら /?loggedin=1 など）
   res.setHeader('Cache-Control', 'no-store');
+  const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
+  log.info('login session issued', { userId: me.id, sessionIdPreview });
   return res.redirect('/');
 }

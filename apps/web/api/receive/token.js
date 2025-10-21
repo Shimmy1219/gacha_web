@@ -1,5 +1,6 @@
 // /api/receive/token.js
 import crypto from 'crypto';
+import { createRequestLogger } from '../_lib/logger.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 
@@ -102,19 +103,25 @@ function readKey(){
 }
 
 export default async function handler(req, res){
+  const log = createRequestLogger('api/receive/token', req);
+  log.info('request received');
+
   // health
   if (req.method === 'GET' && 'health' in (req.query||{})) {
+    log.info('health check ok');
     return res.status(200).json({ ok: true, route: '/api/receive/token' });
   }
 
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, GET');
+    log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok:false, error:'Method Not Allowed' });
   }
 
   try{
     // 同一オリジン検証
     if (!isAllowedOrigin(req)) {
+      log.warn('origin check failed');
       return res.status(403).json({ ok:false, error:'Forbidden: origin not allowed' });
     }
 
@@ -122,19 +129,27 @@ export default async function handler(req, res){
                 : JSON.parse(req.body || '{}');
 
     const { url, name, purpose, validUntil, csrf } = body || {};
+    log.info('payload received', {
+      hasUrl: Boolean(url),
+      hasName: Boolean(name),
+      purpose: typeof purpose === 'string' ? purpose : undefined,
+    });
 
     // CSRF（二重送信: Cookie + body）
     const cookies = parseCookies(req.headers.cookie || '');
     if (!csrf || !cookies.csrf || cookies.csrf !== csrf) {
+      log.warn('csrf mismatch');
       return res.status(403).json({ ok:false, error:'Forbidden: CSRF token mismatch' });
     }
 
     if (!url || typeof url !== 'string') {
+      log.warn('url missing or invalid');
       return res.status(400).json({ ok:false, error:'Bad Request: url required' });
     }
 
     const normalizedUrl = normalizeDownloadUrl(url);
     if (!urlHostAllowed(normalizedUrl)) {
+      log.warn('download host not allowed', { urlHost: new URL(normalizedUrl).host });
       return res.status(403).json({ ok:false, error:'Forbidden: download host not allowed' });
     }
 
@@ -176,11 +191,13 @@ export default async function handler(req, res){
     const shareUrl = `${site.replace(/\/+$/,'')}/receive?t=${encodeURIComponent(token)}`;
 
     vLog('issued', { exp, name: filename, purpose: purp });
+    log.info('token issued', { purpose: purp, exp, downloadHost: new URL(normalizedUrl).host });
 
     return res.status(200).json({ ok:true, token, shareUrl, exp });
   } catch (err){
     const msg = err?.message || String(err);
     console.error('[receive/token error]', msg, VERBOSE ? { stack: err?.stack } : '');
+    log.error('token issuance failed', { error: err });
     return res.status(/forbidden/i.test(msg) ? 403 : 500).json({
       ok:false, error: msg
     });

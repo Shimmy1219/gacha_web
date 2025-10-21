@@ -2,10 +2,15 @@
 // PKCE + state を発行して Discord 認可画面へ 302
 import crypto from 'crypto';
 import { setCookie } from '../../_lib/cookies.js';
+import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
+  const log = createRequestLogger('api/auth/discord/start', req);
+  log.info('request received');
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
+    log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
@@ -34,6 +39,14 @@ export default async function handler(req, res) {
     prompt: 'consent', // 再承認を促したい時は維持、不要なら削除可
   });
 
+  log.info('issuing discord authorize redirect', {
+    statePreview: `${state.slice(0, 4)}...`,
+    hasVerifier: Boolean(verifier),
+  });
+
   res.setHeader('Cache-Control', 'no-store');
-  return res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
+  const location = `https://discord.com/oauth2/authorize?${params.toString()}`;
+  res.writeHead(302, { Location: location });
+  log.info('redirect response sent', { location });
+  return res.end();
 }

@@ -46,7 +46,23 @@ export function useDiscordSession(): UseDiscordSessionResult {
   });
 
   const login = useCallback(() => {
-    window.location.href = '/api/auth/discord/start';
+    const loginUrl = '/api/auth/discord/start';
+
+    try {
+      window.location.assign(loginUrl);
+    } catch (assignError) {
+      console.error('window.location.assign によるDiscordログイン遷移に失敗しました', assignError);
+
+      try {
+        const popup = window.open(loginUrl, '_self');
+        if (!popup) {
+          throw new Error('Failed to open login window');
+        }
+      } catch (openError) {
+        console.error('window.open によるDiscordログイン遷移にも失敗しました', openError);
+        throw openError instanceof Error ? openError : new Error('Failed to initiate Discord login redirect');
+      }
+    }
   }, []);
 
   const logout = useCallback(async () => {
