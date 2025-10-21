@@ -74,6 +74,55 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
     );
   }
 
+  removeItem(params: { gachaId: string; itemId: string; updatedAt?: string }): void {
+    const { gachaId, itemId, updatedAt } = params;
+
+    if (!gachaId || !itemId) {
+      console.warn('CatalogStore.removeItem called without gachaId or itemId');
+      return;
+    }
+
+    const timestamp = updatedAt ?? new Date().toISOString();
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          console.warn('CatalogStore.removeItem called before store was hydrated');
+          return previous;
+        }
+
+        const gachaCatalog = previous.byGacha?.[gachaId];
+        if (!gachaCatalog) {
+          console.warn(`CatalogStore.removeItem could not find gacha ${gachaId}`);
+          return previous;
+        }
+
+        if (!gachaCatalog.items?.[itemId]) {
+          return previous;
+        }
+
+        const { [itemId]: _removed, ...restItems } = gachaCatalog.items;
+        const nextOrder = (gachaCatalog.order ?? []).filter((value) => value !== itemId);
+
+        const nextState: GachaCatalogStateV3 = {
+          ...previous,
+          updatedAt: timestamp,
+          byGacha: {
+            ...previous.byGacha,
+            [gachaId]: {
+              ...gachaCatalog,
+              items: restItems,
+              order: nextOrder
+            }
+          }
+        };
+
+        return nextState;
+      },
+      { persist: 'immediate' }
+    );
+  }
+
   addItems(params: { gachaId: string; items: GachaCatalogItemV3[]; updatedAt?: string }): void {
     const { gachaId, items, updatedAt } = params;
 
