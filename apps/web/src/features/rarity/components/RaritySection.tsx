@@ -29,6 +29,11 @@ interface RarityRow {
   emitRate?: number;
 }
 
+interface EmitRateInputStateEntry {
+  value: string;
+  lastSyncedRate: number | undefined;
+}
+
 export function RaritySection(): JSX.Element {
   const {
     appState: appStateStore,
@@ -85,6 +90,8 @@ export function RaritySection(): JSX.Element {
     panelMotion === 'backward' && 'animate-tab-slide-from-left'
   );
 
+  const [emitRateInputs, setEmitRateInputs] = useState<Record<string, EmitRateInputStateEntry>>({});
+
   const rarityRows = useMemo(() => {
     if (!rarityState || !activeGachaId) {
       return [] as RarityRow[];
@@ -119,15 +126,59 @@ export function RaritySection(): JSX.Element {
 
   const tableRows = useMemo<RarityTableRow[]>(
     () =>
-      rarityRows.map((rarity) => ({
-        id: rarity.id,
-        label: rarity.label,
-        color: rarity.color,
-        emitRateInput: formatRarityRate(rarity.emitRate),
-        placeholder: rarity.label ? rarity.label : rarity.id
-      })),
-    [rarityRows]
+      rarityRows.map((rarity) => {
+        const entry = emitRateInputs[rarity.id];
+        const emitRateInput = entry?.value ?? formatRarityRate(rarity.emitRate);
+        return {
+          id: rarity.id,
+          label: rarity.label,
+          color: rarity.color,
+          emitRateInput,
+          placeholder: rarity.label ? rarity.label : rarity.id
+        };
+      }),
+    [emitRateInputs, rarityRows]
   );
+
+  useEffect(() => {
+    setEmitRateInputs((previous) => {
+      let changed = false;
+      const next: Record<string, EmitRateInputStateEntry> = {};
+
+      rarityRows.forEach((rarity) => {
+        const prevEntry = previous[rarity.id];
+        const formatted = formatRarityRate(rarity.emitRate);
+
+        if (!prevEntry) {
+          next[rarity.id] = { value: formatted, lastSyncedRate: rarity.emitRate };
+          changed = true;
+          return;
+        }
+
+        if (rarity.emitRate !== prevEntry.lastSyncedRate && formatted !== prevEntry.value) {
+          next[rarity.id] = { value: formatted, lastSyncedRate: rarity.emitRate };
+          changed = true;
+          return;
+        }
+
+        const shouldUpdateSync = rarity.emitRate !== prevEntry.lastSyncedRate;
+        next[rarity.id] = { value: prevEntry.value, lastSyncedRate: rarity.emitRate };
+        if (shouldUpdateSync) {
+          changed = true;
+        }
+      });
+
+      if (Object.keys(previous).length !== rarityRows.length) {
+        changed = true;
+      }
+
+      if (!changed) {
+        return previous;
+      }
+
+      return next;
+    });
+  }, [rarityRows]);
 
   const ptSettings = activeGachaId ? ptSettingsState?.byGachaId?.[activeGachaId] : undefined;
 
@@ -185,14 +236,35 @@ export function RaritySection(): JSX.Element {
 
   const handleEmitRateChange = useCallback(
     (rarityId: string, value: string) => {
-      if (value.trim() === '') {
+      const trimmed = value.trim();
+      const parsedRate = parseRarityRateInput(value);
+
+      setEmitRateInputs((previous) => {
+        const prevEntry = previous[rarityId];
+        let nextSyncedRate = prevEntry?.lastSyncedRate;
+
+        if (trimmed === '') {
+          nextSyncedRate = undefined;
+        } else if (parsedRate != null) {
+          nextSyncedRate = parsedRate;
+        }
+
+        return {
+          ...previous,
+          [rarityId]: {
+            value,
+            lastSyncedRate: nextSyncedRate
+          }
+        };
+      });
+
+      if (trimmed === '') {
         rarityStore.setRarityEmitRate(rarityId, undefined);
         return;
       }
 
-      const nextRate = parseRarityRateInput(value);
-      if (nextRate != null) {
-        rarityStore.setRarityEmitRate(rarityId, nextRate);
+      if (parsedRate != null) {
+        rarityStore.setRarityEmitRate(rarityId, parsedRate);
       }
     },
     [rarityStore]
