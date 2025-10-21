@@ -268,12 +268,9 @@ export function ItemsSection(): JSX.Element {
       let assetRecords: StoredAssetRecord[] = [];
 
       try {
-        const storedRecords: StoredAssetRecord[] = [];
-        for (const file of files) {
-          // eslint-disable-next-line no-await-in-loop
-          const record = await saveAsset(file);
-          storedRecords.push(record);
-        }
+        const storedRecords = await Promise.all(
+          Array.from(files, async (file) => await saveAsset(file))
+        );
         assetRecords = storedRecords;
 
         const baseOrder = gachaCatalog.order?.length ?? 0;

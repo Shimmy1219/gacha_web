@@ -68,8 +68,10 @@ async function openDatabase(): Promise<IDBDatabase> {
   return openRequest;
 }
 
+type TransactionMode = 'readonly' | 'readwrite';
+
 async function runTransaction<T>(
-  mode: IndexedDbTransactionMode,
+  mode: TransactionMode,
   handler: (store: IDBObjectStore) => Promise<T>
 ): Promise<T> {
   const db = await openDatabase();
