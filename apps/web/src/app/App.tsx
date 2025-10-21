@@ -33,6 +33,29 @@ function formatCatalogIssueMessage(issue?: LivePasteCatalogIssue): string | unde
       return `「${issue.gachaName}」のレアリティ「${issue.rarityLabel}」にアイテム「${issue.itemName}」が登録されていません。`;
     case 'rarity-mismatch':
       return `「${issue.gachaName}」でアイテム「${issue.itemName}」のレアリティが一致しません（期待：${issue.rarityLabel}）。`;
+    case 'malformed-block': {
+      const scope = issue.gachaName ? `「${issue.gachaName}」` : '貼り付け内容';
+      switch (issue.reason) {
+        case 'missing-gacha-name':
+          return 'ガチャ名が入力されていません。';
+        case 'missing-user-line':
+          return `${scope}の2行目にユーザー名と連数を入力してください。`;
+        case 'missing-user-name':
+          return `${scope}のユーザー名が入力されていません。`;
+        case 'missing-user-pulls':
+          return `${scope}の連数が入力されていません。`;
+        case 'missing-results':
+          return `${scope}の獲得結果が確認できません。`;
+        case 'missing-rarity-label':
+          return `${scope}の行にレアリティが設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        case 'missing-item-name':
+          return `${scope}の行にアイテム名が設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        case 'missing-item-count':
+          return `${scope}の行に獲得数が設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        default:
+          return undefined;
+      }
+    }
     default:
       return undefined;
   }

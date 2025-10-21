@@ -57,12 +57,23 @@ export class LivePasteGachaConflictError extends Error {
   }
 }
 
+type LivePasteMalformedReason =
+  | 'missing-gacha-name'
+  | 'missing-user-line'
+  | 'missing-user-name'
+  | 'missing-user-pulls'
+  | 'missing-results'
+  | 'missing-rarity-label'
+  | 'missing-item-name'
+  | 'missing-item-count';
+
 export type LivePasteCatalogIssue =
   | { type: 'missing-gacha'; gachaName: string }
   | { type: 'missing-rarity-index'; gachaName: string }
   | { type: 'missing-rarity'; gachaName: string; rarityLabel: string }
   | { type: 'missing-item'; gachaName: string; rarityLabel: string; itemName: string }
-  | { type: 'rarity-mismatch'; gachaName: string; rarityLabel: string; itemName: string };
+  | { type: 'rarity-mismatch'; gachaName: string; rarityLabel: string; itemName: string }
+  | { type: 'malformed-block'; reason: LivePasteMalformedReason; gachaName?: string; line?: string };
 
 export class LivePasteCatalogMismatchError extends Error {
   readonly issue: LivePasteCatalogIssue;
@@ -91,49 +102,90 @@ export function splitLivePasteBlocks(rawText: string): string[] {
     .filter(Boolean);
 }
 
-export function parseLivePasteBlock(block: string): ParsedLiveBlock | null {
+function raiseMalformedBlockError(
+  reason: LivePasteMalformedReason,
+  context: { gachaName?: string; line?: string } = {}
+): never {
+  throw new LivePasteCatalogMismatchError({
+    type: 'malformed-block',
+    reason,
+    gachaName: context.gachaName,
+    line: context.line
+  });
+}
+
+export function parseLivePasteBlock(block: string): ParsedLiveBlock {
   const lines = block
     .replace(/\r/g, '')
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (lines.length < 3) {
-    return null;
+  if (lines.length === 0) {
+    raiseMalformedBlockError('missing-gacha-name');
   }
 
   const gachaName = lines[0];
   if (!gachaName) {
-    return null;
+    raiseMalformedBlockError('missing-gacha-name');
   }
 
-  const userMatch = /^(.+?)\s*([0-9０-９]+)\s*連$/u.exec(lines[1]);
-  if (!userMatch) {
-    return null;
+  if (lines.length < 2) {
+    raiseMalformedBlockError('missing-user-line', { gachaName });
   }
 
-  const userName = userMatch[1].trim();
+  const userLine = lines[1];
+  if (!userLine) {
+    raiseMalformedBlockError('missing-user-line', { gachaName });
+  }
+
+  const pullsMatch = /([0-9０-９]+)\s*連$/u.exec(userLine);
+  if (!pullsMatch) {
+    raiseMalformedBlockError('missing-user-pulls', { gachaName });
+  }
+
+  const pulls = parseInt(normalizeDigits(pullsMatch[1]), 10) || 0;
+  const userName = userLine.slice(0, pullsMatch.index).trim();
   if (!userName) {
-    return null;
+    raiseMalformedBlockError('missing-user-name', { gachaName });
   }
-
-  const pulls = parseInt(normalizeDigits(userMatch[2]), 10) || 0;
 
   const counts = new Map<string, Map<string, number>>();
 
   for (let index = 2; index < lines.length; index += 1) {
     const line = lines[index];
-    const match = /【([^】]+)】\s*([^\s　]+)[\s　]+([0-9０-９]+)\s*個?/u.exec(line);
-    if (!match) {
+    if (!line) {
       continue;
     }
 
-    const rarityLabel = match[1].trim();
-    const code = match[2].trim();
-    const count = parseInt(normalizeDigits(match[3]), 10) || 0;
-
-    if (!rarityLabel || !code || count <= 0) {
+    const rarityMatch = /^【([^】]*)】\s*(.*)$/u.exec(line);
+    if (!rarityMatch) {
       continue;
+    }
+
+    const rarityLabel = rarityMatch[1].trim();
+    if (!rarityLabel) {
+      raiseMalformedBlockError('missing-rarity-label', { gachaName, line });
+    }
+
+    const remainder = rarityMatch[2].trim();
+    if (!remainder) {
+      raiseMalformedBlockError('missing-item-name', { gachaName, line });
+    }
+
+    const countMatch = /([0-9０-９]+)\s*個?$/u.exec(remainder);
+    if (!countMatch) {
+      raiseMalformedBlockError('missing-item-count', { gachaName, line });
+    }
+
+    const count = parseInt(normalizeDigits(countMatch[1]), 10) || 0;
+    if (count <= 0) {
+      raiseMalformedBlockError('missing-item-count', { gachaName, line });
+    }
+
+    const code = remainder.slice(0, countMatch.index).trim();
+    if (!code) {
+      raiseMalformedBlockError('missing-item-name', { gachaName, line });
     }
 
     if (!counts.has(rarityLabel)) {
@@ -144,7 +196,7 @@ export function parseLivePasteBlock(block: string): ParsedLiveBlock | null {
   }
 
   if (counts.size === 0) {
-    return null;
+    raiseMalformedBlockError('missing-results', { gachaName });
   }
 
   return {
@@ -165,17 +217,7 @@ export function applyLivePasteText(
     throw new Error('解析できるブロックが見つかりませんでした。入力形式をご確認ください。');
   }
 
-  const parsedBlocks: ParsedLiveBlock[] = [];
-  blocks.forEach((block) => {
-    const parsed = parseLivePasteBlock(block);
-    if (parsed) {
-      parsedBlocks.push(parsed);
-    }
-  });
-
-  if (parsedBlocks.length === 0) {
-    throw new Error('ブロックを検出しましたが、解析に失敗しました。形式をご確認ください。');
-  }
+  const parsedBlocks = blocks.map((block) => parseLivePasteBlock(block));
 
   const snapshot = context.persistence.loadSnapshot();
   const nowIso = new Date().toISOString();
