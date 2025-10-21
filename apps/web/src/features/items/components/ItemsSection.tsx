@@ -365,6 +365,19 @@ export function ItemsSection(): JSX.Element {
 
       const { model, rarity, riaguCard } = target;
       const assignmentRecords = data?.userInventories?.byItemId?.[model.itemId] ?? [];
+      const userProfiles = data?.userProfiles?.users ?? {};
+      const assignmentUsersMap = new Map<string, { userId: string; displayName: string }>();
+      assignmentRecords.forEach((record) => {
+        if (!record?.userId || assignmentUsersMap.has(record.userId)) {
+          return;
+        }
+
+        const profile = userProfiles[record.userId];
+        const displayName =
+          profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        assignmentUsersMap.set(record.userId, { userId: record.userId, displayName });
+      });
+      const assignmentUsers = Array.from(assignmentUsersMap.values());
       const riaguAssignmentCount = assignmentRecords.reduce((total, record) => total + Math.max(0, record.count ?? 0), 0);
       const rarityOptions = rarityOptionsByGacha[model.gachaId] ?? [rarity].map((entry) => ({
         id: entry.rarityId,
@@ -394,6 +407,7 @@ export function ItemsSection(): JSX.Element {
           riaguPrice: riaguCard?.unitCost,
           riaguType: riaguCard?.typeLabel,
           imageAssetId: model.imageAsset.assetHash,
+          assignmentUsers,
           onSave: (payload) => {
             try {
               const timestamp = new Date().toISOString();
@@ -438,11 +452,30 @@ export function ItemsSection(): JSX.Element {
             } catch (error) {
               console.error('景品設定の保存に失敗しました', error);
             }
+          },
+          onDelete: ({ itemId, gachaId }) => {
+            try {
+              const timestamp = new Date().toISOString();
+              catalogStore.removeItem({ gachaId, itemId, updatedAt: timestamp });
+              userInventoryStore.removeItemReferences({ itemId, gachaId, updatedAt: timestamp });
+              riaguStore.removeByItemId(itemId, { persist: 'immediate' });
+            } catch (error) {
+              console.error('景品の削除に失敗しました', error);
+            }
           }
         }
       });
     },
-    [catalogStore, data?.userInventories?.byItemId, flatItems, push, rarityOptionsByGacha, riaguStore, userInventoryStore]
+    [
+      catalogStore,
+      data?.userInventories?.byItemId,
+      data?.userProfiles?.users,
+      flatItems,
+      push,
+      rarityOptionsByGacha,
+      riaguStore,
+      userInventoryStore
+    ]
   );
 
   const handlePreviewAsset = useCallback(

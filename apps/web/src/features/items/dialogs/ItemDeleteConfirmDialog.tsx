@@ -7,10 +7,29 @@ export interface ItemDeleteConfirmDialogPayload {
   itemName: string;
   gachaName?: string;
   hasUserReferences?: boolean;
+  winnerNames?: string[];
   onConfirm?: (itemId: string) => void;
 }
 
 export function ItemDeleteConfirmDialog({ payload, close }: ModalComponentProps<ItemDeleteConfirmDialogPayload>): JSX.Element {
+  const winnerNames = (payload?.winnerNames ?? []).map((name) => name.trim()).filter((name) => name.length > 0);
+
+  const referenceWarning = (() => {
+    if (winnerNames.length === 1) {
+      return `${winnerNames[0]}がこのアイテムを獲得していますが、削除しますか？`;
+    }
+    if (winnerNames.length === 2) {
+      return `${winnerNames[0]}と${winnerNames[1]}がこのアイテムを獲得していますが、削除しますか？`;
+    }
+    if (winnerNames.length >= 3) {
+      return `${winnerNames[0]}と${winnerNames[1]}ほか${winnerNames.length - 2}名がこのアイテムを獲得していますが、削除しますか？`;
+    }
+    if (payload?.hasUserReferences) {
+      return 'このアイテムを獲得したユーザーがいます。削除するとユーザーの獲得履歴からも取り除かれます。本当に削除しますか？';
+    }
+    return null;
+  })();
+
   const handleConfirm = () => {
     payload?.onConfirm?.(payload.itemId);
     close();
@@ -33,9 +52,9 @@ export function ItemDeleteConfirmDialog({ payload, close }: ModalComponentProps<
               <span className="ml-2 text-xs text-red-200/90">({payload.gachaName})</span>
             ) : null}
           </p>
-          {payload.hasUserReferences ? (
+          {referenceWarning ? (
             <p className="mt-3 rounded-xl border border-red-400/60 bg-red-500/25 px-3 py-2 text-xs text-red-100">
-              このアイテムを獲得したユーザーがいます。削除するとユーザーの獲得履歴からも取り除かれます。本当に削除しますか？
+              {referenceWarning}
             </p>
           ) : null}
         </div>

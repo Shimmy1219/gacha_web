@@ -2,6 +2,10 @@
   "version": 2,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/sw.js", "destination": "/sw.js" },
+    { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
