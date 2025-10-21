@@ -268,6 +268,29 @@ export class AppPersistence {
     this.saveDebounced({ receivePrefs: state });
   }
 
+  onUpdated(listener: () => void): () => void {
+    if (!this.eventTarget || typeof this.eventTarget.addEventListener !== 'function') {
+      return () => {};
+    }
+
+    const handler = () => {
+      try {
+        listener();
+      } catch (error) {
+        console.warn('Failed to handle storage updated event', error);
+      }
+    };
+
+    this.eventTarget.addEventListener(GACHA_STORAGE_UPDATED_EVENT, handler);
+
+    return () => {
+      if (!this.eventTarget || typeof this.eventTarget.removeEventListener !== 'function') {
+        return;
+      }
+      this.eventTarget.removeEventListener(GACHA_STORAGE_UPDATED_EVENT, handler);
+    };
+  }
+
   saveDebounced(partial: PersistPartialSnapshot = {}): void {
     if (!this.storage) {
       return;

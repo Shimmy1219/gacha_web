@@ -5,6 +5,10 @@ import { PersistedStore, type UpdateOptions } from './persistedStore';
 export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
+
+    this.persistence.onUpdated(() => {
+      this.handlePersistenceUpdated();
+    });
   }
 
   renameRarity(rarityId: string, label: string, options: UpdateOptions = { persist: 'immediate' }): void {
@@ -248,5 +252,27 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
         ...(nextIndexByName ? { indexByName: nextIndexByName } : {})
       };
     }, options);
+  }
+
+  private handlePersistenceUpdated(): void {
+    try {
+      const snapshot = this.persistence.loadSnapshot();
+      const nextState = snapshot.rarityState;
+      const currentState = this.getState();
+
+      if (!nextState && !currentState) {
+        return;
+      }
+
+      const nextUpdatedAt = nextState?.updatedAt;
+      const currentUpdatedAt = currentState?.updatedAt;
+      if (nextUpdatedAt && currentUpdatedAt && nextUpdatedAt === currentUpdatedAt) {
+        return;
+      }
+
+      this.setState(nextState, { persist: 'none' });
+    } catch (error) {
+      console.warn('Failed to resync rarity store from persistence snapshot', error);
+    }
   }
 }
