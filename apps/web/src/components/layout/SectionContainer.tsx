@@ -99,7 +99,14 @@ export function SectionContainer({
           </div>
           {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
         </header>
-        <div className="section-container__content-wrapper flex-1 min-h-0 overflow-hidden">
+        <div
+          className={clsx(
+            'section-container__content-wrapper flex-1 min-h-0 overflow-visible',
+            hasScrollbar
+              ? 'section-container__content-wrapper--scrollable'
+              : 'section-container__content-wrapper--no-scrollbar'
+          )}
+        >
           <div
             ref={contentRef}
             className={clsx(
