@@ -1,11 +1,6 @@
 {
   "version": 2,
   "trailingSlash": false,
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
