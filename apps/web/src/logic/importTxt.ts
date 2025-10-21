@@ -1,3 +1,5 @@
+import { inflate, inflateRaw } from 'pako';
+
 import type {
   AppPersistence,
   GachaAppStateV3,
@@ -133,8 +135,6 @@ async function decodeNamazuPayload(rawBase64: string): Promise<string> {
       // Fall through to try inflate
     }
   }
-
-  const { inflateRaw, inflate } = await import('pako');
 
   try {
     const inflated = inflateRaw(u8);
