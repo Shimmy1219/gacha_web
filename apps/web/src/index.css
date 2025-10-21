@@ -238,8 +238,8 @@
 .rarity-section__cell-color,
 .rarity-section__cell-rate,
 .rarity-section__cell-actions {
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -251,11 +251,12 @@
 
 .rarity-section__rate-control {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.375rem;
   align-items: center;
   justify-content: flex-start;
   width: 100%;
+  white-space: nowrap;
 }
 
 .rarity-section__rate-input {

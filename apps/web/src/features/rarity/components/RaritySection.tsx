@@ -390,7 +390,7 @@ export function RaritySection(): JSX.Element {
                         const presentation = getRarityTextPresentation(rarity.color);
                         return (
                           <tr key={rarity.id} className="rarity-section__row text-sm text-surface-foreground">
-                            <td className="rarity-section__cell rarity-section__cell-label px-[3px] py-2">
+                            <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
                               <input
                                 type="text"
                                 value={rarity.label}
@@ -404,15 +404,15 @@ export function RaritySection(): JSX.Element {
                                 placeholder={rarity.label || rarity.id}
                               />
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-color py-2">
+                            <td className="rarity-section__cell rarity-section__cell-color px-1 py-2">
                               <RarityColorPicker
                                 value={rarity.color}
                                 ariaLabel={`${rarity.label || rarity.id} のカラー`}
                                 onChange={handleColorChange(rarity.id)}
                               />
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-rate py-2">
-                              <div className="rarity-section__rate-control flex items-center gap-1.5">
+                            <td className="rarity-section__cell rarity-section__cell-rate px-1 py-2">
+                              <div className="rarity-section__rate-control flex flex-nowrap items-center gap-1.5">
                                 <input
                                   type="number"
                                   min={0}
@@ -427,7 +427,7 @@ export function RaritySection(): JSX.Element {
                                 <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                               </div>
                             </td>
-                            <td className="rarity-section__cell rarity-section__cell-actions py-2 text-right">
+                            <td className="rarity-section__cell rarity-section__cell-actions px-1 py-2 text-right">
                               <button
                                 type="button"
                                 className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
@@ -440,7 +440,7 @@ export function RaritySection(): JSX.Element {
                         );
                       })}
                       <tr className="rarity-section__add-row">
-                        <td className="rarity-section__cell px-[3px] py-3" colSpan={4}>
+                        <td className="rarity-section__cell px-1 py-3" colSpan={4}>
                           <button
                             type="button"
                             className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
