@@ -3,7 +3,7 @@
   "trailingSlash": false,
   "functions": {
     "api/**/*.js": {
-      "runtime": "edge"
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
