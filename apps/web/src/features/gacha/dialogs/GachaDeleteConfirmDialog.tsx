@@ -26,8 +26,9 @@ export function GachaDeleteConfirmDialog({ payload, close }: ModalComponentProps
                 {payload.gachaName}
               </span>
             </p>
+            <p className="text-xs text-red-200/90">この操作は取り消せません。削除すると、このガチャに紐づくすべてのデータが完全に失われます。</p>
             <p className="text-xs text-red-200/90">
-              ガチャに紐づくユーザー集計も削除され、復元できません。必要であれば保存オプションからZIPを出力しておいてください。
+              獲得した人からもこのガチャの獲得情報は無くなります。必要であれば保存オプションからZIPを出力しておいてください。
             </p>
           </div>
         </div>

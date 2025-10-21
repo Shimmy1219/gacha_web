@@ -9,6 +9,8 @@ import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useModal } from '../../../components/modal';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
+import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
+import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { DEFAULT_PALETTE } from './color-picker/palette';
@@ -133,6 +135,7 @@ export function RaritySection(): JSX.Element {
   const ptSettingsState = useStoreValue(ptControlsStore);
   const catalogState = useStoreValue(catalogStore);
   const { push } = useModal();
+  const confirmDeleteGacha = useGachaDeletion();
 
   const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
 
@@ -156,9 +159,9 @@ export function RaritySection(): JSX.Element {
     });
   }, [appState]);
 
-  const gachaTabs = useMemo(() => {
+  const gachaTabs = useMemo<GachaTabOption[]>(() => {
     if (!appState) {
-      return [] as Array<{ id: string; label: string }>;
+      return [];
     }
 
     const ordered = appState.order ?? [];
@@ -324,23 +327,13 @@ export function RaritySection(): JSX.Element {
       description="排出率・カラー・順序を編集し、RarityStoreと同期します。"
       contentClassName="rarity-section__content"
     >
-      <div className="rarity-section__gacha-tabs tab-scroll-area">
-        {gachaTabs.map((gacha) => (
-          <button
-            key={gacha.id}
-            type="button"
-            className={clsx(
-              'rarity-section__gacha-tab tab-pill shrink-0 rounded-full border px-4 py-1.5',
-              gacha.id === activeGachaId
-                ? 'border-accent/80 bg-accent text-accent-foreground'
-                : 'border-border/40 text-muted-foreground hover:border-accent/60'
-            )}
-            onClick={() => setActiveGachaId(gacha.id)}
-          >
-            {gacha.label}
-          </button>
-        ))}
-      </div>
+      <GachaTabs
+        tabs={gachaTabs}
+        activeId={activeGachaId}
+        onSelect={(gachaId) => setActiveGachaId(gachaId)}
+        onDelete={(tab) => confirmDeleteGacha(tab)}
+        className="rarity-section__gacha-tabs"
+      />
 
       <div className="rarity-section__scroll section-scroll flex-1">
         <div className="rarity-section__scroll-content space-y-4">

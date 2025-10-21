@@ -32,4 +32,43 @@ export class AppStateStore extends PersistedStore<GachaAppStateV3 | undefined> {
       options
     );
   }
+
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const hasMeta = Boolean(previous.meta?.[gachaId]);
+        const isInOrder = previous.order?.includes(gachaId);
+
+        if (!hasMeta && !isInOrder && previous.selectedGachaId !== gachaId) {
+          return previous;
+        }
+
+        const timestamp = new Date().toISOString();
+        const nextMeta = { ...(previous.meta ?? {}) };
+        if (hasMeta) {
+          delete nextMeta[gachaId];
+        }
+
+        const nextOrder = (previous.order ?? []).filter((id) => id !== gachaId);
+        const nextSelected = previous.selectedGachaId === gachaId ? nextOrder[0] ?? null : previous.selectedGachaId;
+
+        return {
+          ...previous,
+          meta: nextMeta,
+          order: nextOrder,
+          selectedGachaId: nextSelected,
+          updatedAt: timestamp
+        };
+      },
+      options
+    );
+  }
 }
