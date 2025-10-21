@@ -207,47 +207,42 @@
 }
 
 
-.rarity-section__table {
-  table-layout: auto;
+.rarity-section__table-wrapper {
   width: 100%;
   max-width: 100%;
-  min-width: 0;
+}
+
+.rarity-section__table {
+  width: 100%;
+  max-width: 100%;
+  table-layout: auto;
 }
 
 .rarity-section__col-label {
-  width: clamp(6rem, 42%, 24rem);
+  width: 37%;
 }
 
-.rarity-section__col-color,
-.rarity-section__col-actions {
-  width: auto;
+.rarity-section__col-color {
+  width: 24%;
 }
 
 .rarity-section__col-rate {
-  min-width: clamp(5rem, 18%, 12rem);
-  width: auto;
+  width: 21%;
+}
+
+.rarity-section__col-actions {
+  width: 18%;
 }
 
 .rarity-section__cell-label,
 .rarity-section__cell-color,
 .rarity-section__cell-rate,
 .rarity-section__cell-actions {
-  max-width: 100%;
-}
-
-.rarity-section__cell-color,
-.rarity-section__cell-actions {
   padding-left: 0;
   padding-right: 0;
-  min-width: 6rem;
-  width: auto;
+  min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
-}
-
-.rarity-section__cell-rate {
-  padding-left: 0;
-  padding-right: 0;
 }
 
 .rarity-section__label-input {
@@ -255,13 +250,17 @@
 }
 
 .rarity-section__rate-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
   justify-content: flex-start;
   width: 100%;
 }
 
 .rarity-section__rate-input {
-  flex: 1 1 auto;
-  min-width: 6ch;
+  flex: 1 1 6ch;
+  min-width: 0;
 }
 
 @layer utilities {
