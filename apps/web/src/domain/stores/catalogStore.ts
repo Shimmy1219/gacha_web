@@ -3,7 +3,7 @@ import {
   type GachaCatalogItemV3,
   type GachaCatalogStateV3
 } from '../app-persistence';
-import { PersistedStore } from './persistedStore';
+import { PersistedStore, type UpdateOptions } from './persistedStore';
 
 export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
@@ -64,6 +64,55 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
                 ...gachaCatalog.items,
                 [itemId]: nextItem
               }
+            }
+          }
+        };
+
+        return nextState;
+      },
+      { persist: 'immediate' }
+    );
+  }
+
+  removeItem(params: { gachaId: string; itemId: string; updatedAt?: string }): void {
+    const { gachaId, itemId, updatedAt } = params;
+
+    if (!gachaId || !itemId) {
+      console.warn('CatalogStore.removeItem called without gachaId or itemId');
+      return;
+    }
+
+    const timestamp = updatedAt ?? new Date().toISOString();
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          console.warn('CatalogStore.removeItem called before store was hydrated');
+          return previous;
+        }
+
+        const gachaCatalog = previous.byGacha?.[gachaId];
+        if (!gachaCatalog) {
+          console.warn(`CatalogStore.removeItem could not find gacha ${gachaId}`);
+          return previous;
+        }
+
+        if (!gachaCatalog.items?.[itemId]) {
+          return previous;
+        }
+
+        const { [itemId]: _removed, ...restItems } = gachaCatalog.items;
+        const nextOrder = (gachaCatalog.order ?? []).filter((value) => value !== itemId);
+
+        const nextState: GachaCatalogStateV3 = {
+          ...previous,
+          updatedAt: timestamp,
+          byGacha: {
+            ...previous.byGacha,
+            [gachaId]: {
+              ...gachaCatalog,
+              items: restItems,
+              order: nextOrder
             }
           }
         };
@@ -140,6 +189,34 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
         return nextState;
       },
       { persist: 'immediate' }
+    );
+  }
+
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous?.byGacha?.[gachaId]) {
+          return previous;
+        }
+
+        const { [gachaId]: _removed, ...rest } = previous.byGacha;
+        const timestamp = new Date().toISOString();
+
+        if (Object.keys(rest).length === 0) {
+          return undefined;
+        }
+
+        return {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: timestamp,
+          byGacha: rest
+        } satisfies GachaCatalogStateV3;
+      },
+      options
     );
   }
 

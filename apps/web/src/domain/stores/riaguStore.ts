@@ -145,4 +145,52 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
       return next;
     }, options);
   }
+
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous?.riaguCards) {
+          return previous;
+        }
+
+        const nextCards = { ...previous.riaguCards };
+        const nextIndex = { ...(previous.indexByItemId ?? {}) };
+        let mutated = false;
+
+        Object.entries(nextCards).forEach(([cardId, card]) => {
+          if (card?.gachaId === gachaId) {
+            mutated = true;
+            delete nextCards[cardId];
+            if (card.itemId && nextIndex[card.itemId] === cardId) {
+              delete nextIndex[card.itemId];
+            }
+          }
+        });
+
+        if (!mutated) {
+          return previous;
+        }
+
+        const timestamp = new Date().toISOString();
+        const hasCards = Object.keys(nextCards).length > 0;
+        const hasIndex = Object.keys(nextIndex).length > 0;
+
+        if (!hasCards && !hasIndex) {
+          return undefined;
+        }
+
+        return {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: timestamp,
+          riaguCards: nextCards,
+          indexByItemId: nextIndex
+        } satisfies RiaguStateV3;
+      },
+      options
+    );
+  }
 }

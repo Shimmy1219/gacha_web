@@ -18,14 +18,14 @@ import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { generateItemId } from '@domain/idGenerators';
+import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
+import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
 type ItemsByGacha = Record<string, ItemEntry[]>;
-type GachaTab = { id: string; label: string };
-
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 function getSequentialItemName(position: number): string {
@@ -53,6 +53,7 @@ export function ItemsSection(): JSX.Element {
   const defaultGridWidthRef = useRef<number | null>(null);
   const [isCondensedGrid, setIsCondensedGrid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const confirmDeleteGacha = useGachaDeletion();
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -71,7 +72,7 @@ export function ItemsSection(): JSX.Element {
     );
   }, [data?.rarityState]);
 
-  const gachaTabs = useMemo<GachaTab[]>(() => {
+  const gachaTabs = useMemo<GachaTabOption[]>(() => {
     if (!data?.appState || !data?.catalogState) {
       return [];
     }
@@ -364,6 +365,19 @@ export function ItemsSection(): JSX.Element {
 
       const { model, rarity, riaguCard } = target;
       const assignmentRecords = data?.userInventories?.byItemId?.[model.itemId] ?? [];
+      const userProfiles = data?.userProfiles?.users ?? {};
+      const assignmentUsersMap = new Map<string, { userId: string; displayName: string }>();
+      assignmentRecords.forEach((record) => {
+        if (!record?.userId || assignmentUsersMap.has(record.userId)) {
+          return;
+        }
+
+        const profile = userProfiles[record.userId];
+        const displayName =
+          profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        assignmentUsersMap.set(record.userId, { userId: record.userId, displayName });
+      });
+      const assignmentUsers = Array.from(assignmentUsersMap.values());
       const riaguAssignmentCount = assignmentRecords.reduce((total, record) => total + Math.max(0, record.count ?? 0), 0);
       const rarityOptions = rarityOptionsByGacha[model.gachaId] ?? [rarity].map((entry) => ({
         id: entry.rarityId,
@@ -393,6 +407,7 @@ export function ItemsSection(): JSX.Element {
           riaguPrice: riaguCard?.unitCost,
           riaguType: riaguCard?.typeLabel,
           imageAssetId: model.imageAsset.assetHash,
+          assignmentUsers,
           onSave: (payload) => {
             try {
               const timestamp = new Date().toISOString();
@@ -437,11 +452,30 @@ export function ItemsSection(): JSX.Element {
             } catch (error) {
               console.error('景品設定の保存に失敗しました', error);
             }
+          },
+          onDelete: ({ itemId, gachaId }) => {
+            try {
+              const timestamp = new Date().toISOString();
+              catalogStore.removeItem({ gachaId, itemId, updatedAt: timestamp });
+              userInventoryStore.removeItemReferences({ itemId, gachaId, updatedAt: timestamp });
+              riaguStore.removeByItemId(itemId, { persist: 'immediate' });
+            } catch (error) {
+              console.error('景品の削除に失敗しました', error);
+            }
           }
         }
       });
     },
-    [catalogStore, data?.userInventories?.byItemId, flatItems, push, rarityOptionsByGacha, riaguStore, userInventoryStore]
+    [
+      catalogStore,
+      data?.userInventories?.byItemId,
+      data?.userProfiles?.users,
+      flatItems,
+      push,
+      rarityOptionsByGacha,
+      riaguStore,
+      userInventoryStore
+    ]
   );
 
   const handlePreviewAsset = useCallback(
@@ -488,23 +522,13 @@ export function ItemsSection(): JSX.Element {
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
       contentClassName="items-section__content"
     >
-      <div className="items-section__tabs tab-scroll-area">
-        {gachaTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={clsx(
-              'items-section__tab tab-pill shrink-0 rounded-full border px-4 py-1.5 transition',
-              tab.id === activeGachaId
-                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.25)]'
-                : 'border-border/40 text-muted-foreground hover:border-accent/60'
-            )}
-            onClick={() => setActiveGachaId(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <GachaTabs
+        tabs={gachaTabs}
+        activeId={activeGachaId}
+        onSelect={(gachaId) => setActiveGachaId(gachaId)}
+        onDelete={(tab) => confirmDeleteGacha(tab)}
+        className="items-section__tabs"
+      />
 
       <div className="items-section__scroll section-scroll flex-1">
         <div className="items-section__scroll-content space-y-4">
