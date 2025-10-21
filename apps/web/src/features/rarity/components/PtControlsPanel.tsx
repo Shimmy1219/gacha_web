@@ -400,18 +400,14 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
     [onSettingsChange, settings]
   );
 
-  const emitWithState = useCallback(
-    (overrides: Partial<PanelSnapshot> = {}) => {
-      emitSettingsChange({
-        perPull,
-        complete,
-        bundles,
-        guarantees,
-        ...overrides
-      });
-    },
-    [perPull, complete, bundles, guarantees, emitSettingsChange]
-  );
+  useEffect(() => {
+    emitSettingsChange({
+      perPull,
+      complete,
+      bundles,
+      guarantees
+    });
+  }, [perPull, complete, bundles, guarantees, emitSettingsChange]);
 
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl p-3 shadow-panel">
@@ -420,7 +416,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           value={perPull}
           onChange={(value) => {
             setPerPull(value);
-            emitWithState({ perPull: value });
           }}
           placeholder="10"
           className="ml-auto w-[12ch]"
@@ -432,7 +427,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           value={complete}
           onChange={(value) => {
             setComplete(value);
-            emitWithState({ complete: value });
           }}
           placeholder="1000"
           className="ml-auto w-[12ch]"
@@ -446,7 +440,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
             onClick={() =>
               setBundles((prev) => {
                 const next = [...prev, createBundleRow()];
-                emitWithState({ bundles: next });
                 return next;
               })
             }
@@ -467,7 +460,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], price: value };
-                    emitWithState({ bundles: next });
                     return next;
                   })
                 }
@@ -481,7 +473,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setBundles((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], pulls: value };
-                    emitWithState({ bundles: next });
                     return next;
                   })
                 }
@@ -495,7 +486,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
               onClick={() =>
                 setBundles((prev) => {
                   const next = prev.filter((entry) => entry.id !== bundle.id);
-                  emitWithState({ bundles: next });
                   return next;
                 })
               }
@@ -511,7 +501,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
             onClick={() =>
               setGuarantees((prev) => {
                 const next = [...prev, createGuaranteeRow()];
-                emitWithState({ guarantees: next });
                 return next;
               })
             }
@@ -532,7 +521,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minPulls: value };
-                    emitWithState({ guarantees: next });
                     return next;
                   })
                 }
@@ -547,7 +535,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                   setGuarantees((prev) => {
                     const next = [...prev];
                     next[index] = { ...next[index], minRarity: value };
-                    emitWithState({ guarantees: next });
                     return next;
                   })
                 }
@@ -559,7 +546,6 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
               onClick={() =>
                 setGuarantees((prev) => {
                   const next = prev.filter((entry) => entry.id !== guarantee.id);
-                  emitWithState({ guarantees: next });
                   return next;
                 })
               }
