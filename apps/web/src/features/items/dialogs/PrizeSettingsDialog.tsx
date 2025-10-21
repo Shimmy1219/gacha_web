@@ -1,4 +1,4 @@
-import { MusicalNoteIcon, PhotoIcon, PlusCircleIcon, VideoCameraIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MusicalNoteIcon, PhotoIcon, PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
