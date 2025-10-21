@@ -499,11 +499,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
         画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
       </p>
-      <ModalFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <ModalFooter className="flex flex-wrap justify-end gap-3">
         <button
           type="button"
           className={clsx(
-            'btn w-full border-red-500/60 bg-red-500/15 text-red-100 transition hover:border-red-400 hover:bg-red-500/25',
+            'btn border-red-500/60 bg-red-500/15 text-red-100 transition hover:border-red-400 hover:bg-red-500/25',
             'disabled:cursor-not-allowed disabled:opacity-50'
           )}
           onClick={handleDeleteItem}
@@ -511,19 +511,17 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         >
           景品を削除
         </button>
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-70"
-            onClick={handleSave}
-            disabled={isProcessingAsset}
-          >
-            {isProcessingAsset ? '保存中…' : '保存する'}
-          </button>
-          <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
-            閉じる
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-70"
+          onClick={handleSave}
+          disabled={isProcessingAsset}
+        >
+          {isProcessingAsset ? '保存中…' : '保存'}
+        </button>
+        <button type="button" className="btn btn-muted" onClick={handleRequestClose}>
+          閉じる
+        </button>
       </ModalFooter>
     </>
   );
