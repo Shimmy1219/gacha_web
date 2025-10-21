@@ -11,12 +11,7 @@ import {
 import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
 import { generateGachaId, generateItemId, generateRarityId } from '@domain/idGenerators';
 
-import {
-  ModalBody,
-  ModalFooter,
-  ModalHeader,
-  type ModalComponentProps
-} from '../../../components/modal';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { PtControlsPanel } from '../../rarity/components/PtControlsPanel';
 import { RarityTable, type RarityTableRow } from '../../rarity/components/RarityTable';
@@ -42,9 +37,17 @@ interface DraftItem {
   assetId: string;
   name: string;
   previewUrl: string;
+  isRiagu: boolean;
+  isCompleteTarget: boolean;
 }
 
-const INITIAL_RARITY_LABELS = ['はずれ', 'N', 'R', 'SR', 'UR'];
+const INITIAL_RARITY_PRESETS = [
+  { label: 'はずれ', emitRate: 0.8 },
+  { label: 'N', emitRate: 0.1 },
+  { label: 'R', emitRate: 0.06 },
+  { label: 'SR', emitRate: 0.03 },
+  { label: 'UR', emitRate: 0.01 }
+] as const;
 
 const ITEM_NAME_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -74,15 +77,15 @@ function getSequentialItemName(index: number): string {
 
 function createInitialRarities(): DraftRarity[] {
   const usedColors = new Set<string>();
-  return INITIAL_RARITY_LABELS.map((label, index) => {
+  return INITIAL_RARITY_PRESETS.map((preset, index) => {
     const paletteColor = DEFAULT_PALETTE[index]?.value;
     const color = paletteColor ?? generateRandomRarityColor(usedColors);
     usedColors.add(color);
     return {
       id: generateRarityId(),
-      label,
+      label: preset.label,
       color,
-      emitRateInput: ''
+      emitRateInput: formatRarityRate(preset.emitRate)
     } satisfies DraftRarity;
   });
 }
@@ -101,6 +104,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [isProcessingAssets, setIsProcessingAssets] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showNameError, setShowNameError] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
@@ -167,7 +171,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
   const stepIndex = step === 'basic' ? 1 : step === 'assets' ? 2 : 3;
   const totalSteps = 3;
-  const canProceedToAssets = gachaName.trim().length > 0 && rarities.length > 0;
+  const canProceedToAssets = rarities.length > 0;
   const canProceedToPt = !isProcessingAssets;
   const highestRarity = rarities[rarities.length - 1] ?? rarities[0] ?? null;
 
@@ -254,7 +258,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           nextItems.push({
             assetId: record.id,
             name: '',
-            previewUrl
+            previewUrl,
+            isRiagu: false,
+            isCompleteTarget: false
           });
         });
 
@@ -296,6 +302,24 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     }
   }, []);
 
+  type ItemFlagKey = 'isRiagu' | 'isCompleteTarget';
+
+  const handleToggleItemFlag = useCallback((assetId: string, key: ItemFlagKey, checked: boolean) => {
+    setItems((previous) =>
+      previous.map((item) => (item.assetId === assetId ? { ...item, [key]: checked } : item))
+    );
+  }, []);
+
+  const handleProceedFromBasicStep = useCallback(() => {
+    const trimmedName = gachaName.trim();
+    if (!trimmedName) {
+      setShowNameError(true);
+      return;
+    }
+    setShowNameError(false);
+    setStep('assets');
+  }, [gachaName]);
+
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) {
       return;
@@ -304,6 +328,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     const trimmedName = gachaName.trim();
     if (!trimmedName) {
       setStep('basic');
+      setShowNameError(true);
       return;
     }
 
@@ -416,6 +441,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             rarityId: highestRarityId,
             order: index,
             imageAssetId: item.assetId,
+            ...(item.isRiagu ? { riagu: true } : {}),
+            ...(item.isCompleteTarget ? { completeTarget: true } : {}),
             updatedAt: timestamp
           } satisfies GachaCatalogItemV3;
         });
@@ -461,14 +488,32 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   ]);
 
   const renderBasicStep = () => {
+    const gachaNameInputId = 'create-gacha-wizard-name';
     return (
       <div className="space-y-6">
         <div className="space-y-2">
-          <label className="block text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">ガチャ名</label>
+          <div className="flex items-center gap-3">
+            <label
+              htmlFor={gachaNameInputId}
+              className="block text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground"
+            >
+              ガチャ名（必須）
+            </label>
+            {showNameError ? (
+              <span className="text-xs font-semibold text-red-400">この項目は必須です。</span>
+            ) : null}
+          </div>
           <input
             type="text"
+            id={gachaNameInputId}
             value={gachaName}
-            onChange={(event) => setGachaName(event.target.value)}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setGachaName(nextValue);
+              if (showNameError && nextValue.trim().length > 0) {
+                setShowNameError(false);
+              }
+            }}
             className="w-full rounded-2xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground shadow-inner transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
@@ -546,6 +591,28 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                       <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.assetId}</p>
                     </div>
+                    <div className="flex shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                          checked={item.isRiagu}
+                          onChange={(event) => handleToggleItemFlag(item.assetId, 'isRiagu', event.target.checked)}
+                        />
+                        <span>リアグとして登録</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                          checked={item.isCompleteTarget}
+                          onChange={(event) =>
+                            handleToggleItemFlag(item.assetId, 'isCompleteTarget', event.target.checked)
+                          }
+                        />
+                        <span>コンプ対象</span>
+                      </label>
+                    </div>
                     <div className="flex shrink-0">
                       <button
                         type="button"
@@ -580,8 +647,18 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
   return (
     <>
-      <ModalHeader title="新規ガチャを作成" description={`ステップ${stepIndex} / ${totalSteps}`} />
       <ModalBody className="space-y-6">
+        <div className="space-y-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <h2 className="text-lg font-semibold text-surface-foreground">新規ガチャを作成</h2>
+            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              ステップ{stepIndex} / {totalSteps}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            基本情報の入力から景品画像、ポイント設定まで順番に登録できます。
+          </p>
+        </div>
         {step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep()}
       </ModalBody>
       <ModalFooter>
@@ -612,8 +689,14 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => setStep(step === 'basic' ? 'assets' : 'pt')}
-            disabled={step === 'basic' ? !canProceedToAssets : !canProceedToPt}
+            onClick={() => {
+              if (step === 'basic') {
+                handleProceedFromBasicStep();
+              } else {
+                setStep('pt');
+              }
+            }}
+            disabled={step === 'basic' ? !canProceedToAssets || isSubmitting || isProcessingAssets : !canProceedToPt}
           >
             次へ
           </button>
