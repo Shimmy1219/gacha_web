@@ -18,7 +18,8 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   sm: 'max-w-lg',
   md: 'max-w-xl',
   lg: 'max-w-[55rem]',
-  xl: 'max-w-[64rem]'
+  xl: 'max-w-[64rem]',
+  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)]'
 };
 
 interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof DialogBackdrop> {}

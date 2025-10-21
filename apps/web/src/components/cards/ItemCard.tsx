@@ -37,14 +37,24 @@ export interface ItemCardModel {
   updatedAt: string;
 }
 
+export interface ItemCardPreviewPayload {
+  itemId: ItemId;
+  itemName: string;
+  gachaId: GachaId;
+  gachaDisplayName: string;
+  assetHash: string | null;
+  thumbnailUrl: string | null;
+}
+
 export interface ItemCardProps {
   model: ItemCardModel;
   rarity: RarityMeta;
   onToggleRiagu?: (itemId: ItemId) => void;
   onEditImage?: (itemId: ItemId) => void;
+  onPreviewAsset?: (payload: ItemCardPreviewPayload) => void;
 }
 
-export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Element {
+export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCardProps): JSX.Element {
   const { imageAsset } = model;
   const preview = useAssetPreview(imageAsset?.assetHash ?? null);
   const isImageAsset = Boolean(preview.type?.startsWith('image/'));
@@ -53,7 +63,23 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
   const previewUrl = preview.url ?? fallbackUrl;
   const hasImage = Boolean(imageAsset?.hasImage && (isImageAsset ? previewUrl : fallbackUrl));
+  const canPreviewAsset = Boolean(onPreviewAsset && (previewUrl || fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
+
+  const handlePreviewClick = () => {
+    if (!canPreviewAsset) {
+      return;
+    }
+
+    onPreviewAsset?.({
+      itemId: model.itemId,
+      itemName: model.name,
+      gachaId: model.gachaId,
+      gachaDisplayName: model.gachaDisplayName,
+      assetHash: imageAsset?.assetHash ?? null,
+      thumbnailUrl: fallbackUrl
+    });
+  };
 
   return (
     <article
@@ -73,10 +99,16 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
       <div className="space-y-3">
-        <div
+        <button
+          type="button"
+          onClick={handlePreviewClick}
+          disabled={!canPreviewAsset}
+          aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
+          title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(
-            'flex aspect-square items-center justify-center rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground overflow-hidden',
-            hasImage && isImageAsset && previewUrl && 'border-transparent'
+            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f] disabled:cursor-default disabled:opacity-90',
+            hasImage && isImageAsset && previewUrl && 'border-transparent',
+            canPreviewAsset && 'cursor-zoom-in'
           )}
         >
           {isImageAsset && previewUrl ? (
@@ -88,7 +120,7 @@ export function ItemCard({ model, rarity, onEditImage }: ItemCardProps): JSX.Ele
           ) : (
             <PhotoIcon className="h-10 w-10" />
           )}
-        </div>
+        </button>
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
           <span className={clsx('text-[11px] font-medium', rarityClassName)} style={rarityStyle}>
