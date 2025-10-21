@@ -31,6 +31,12 @@ apps/web/src/domain/stores 配下のストア群は、ローカルストレー�
 
 すべてのストアは `createDomainStores` で一括生成され、アプリ起動時に永続化データで初期化されます。【F:apps/web/src/domain/stores/createDomainStores.ts†L17-L37】
 
+### 3.1 UserInventoryStore とローカルストレージの正規化挙動
+
+- `AppPersistence.loadSnapshot()` は `userInventories` を読み込む際に `normalizeUserInventoriesState` を適用し、旧来の `gachaId` キー構造で保存されている在庫でも `inventoryId` キーへ変換した上でストアへ渡します。【F:apps/web/src/domain/app-persistence/appPersistence.ts†L63-L99】【F:apps/web/src/domain/app-persistence/normalizers/userInventories.ts†L169-L214】
+- 正規化では `items` / `counts` の整合性をチェックし、不正値を除外しつつ `totalCount` を再計算します。さらに各アイテムから逆引きできる `byItemId` インデックスを再構築し、UI の獲得内訳ビューを復元します。【F:apps/web/src/domain/app-persistence/normalizers/userInventories.ts†L10-L157】【F:apps/web/src/domain/app-persistence/normalizers/userInventories.ts†L214-L220】
+- `UserInventoryStore` が所持数を更新する際も同ヘルパー群で正規化された状態を保存するため、ローカルストレージ上には常に `inventoryId` キー主体のスナップショットが残るようになりました。【F:apps/web/src/domain/stores/userInventoryStore.ts†L1-L210】
+
 ## 4. 利用フロー
 1. `const stores = createDomainStores(persistence);` でドメインストア群を初期化する。
 2. 各ストアで `store.subscribe(...)` を使って React の `useEffect` などから購読し、状態更新を UI に反映する。
