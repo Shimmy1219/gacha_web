@@ -41,9 +41,36 @@ interface DraftRarity {
 interface DraftItem {
   assetId: string;
   name: string;
+  previewUrl: string;
 }
 
 const INITIAL_RARITY_LABELS = ['はずれ', 'N', 'R', 'SR', 'UR'];
+
+const ITEM_NAME_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+function safeRevokeObjectURL(url: string): void {
+  if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function getSequentialItemName(index: number): string {
+  const alphabetLength = ITEM_NAME_ALPHABET.length;
+  if (alphabetLength === 0) {
+    return String(index + 1);
+  }
+
+  let current = index;
+  let label = '';
+
+  while (current >= 0) {
+    const remainder = current % alphabetLength;
+    label = ITEM_NAME_ALPHABET[remainder] + label;
+    current = Math.floor(current / alphabetLength) - 1;
+  }
+
+  return label;
+}
 
 function createInitialRarities(): DraftRarity[] {
   const usedColors = new Set<string>();
@@ -77,10 +104,16 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
+  const previewUrlMapRef = useRef<Map<string, string>>(new Map());
   const committedRef = useRef(false);
 
   useEffect(() => {
     return () => {
+      previewUrlMapRef.current.forEach((url) => {
+        safeRevokeObjectURL(url);
+      });
+      previewUrlMapRef.current.clear();
+
       if (committedRef.current) {
         return;
       }
@@ -208,13 +241,28 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         Array.from(fileList, async (file) => await saveAsset(file))
       );
 
-      setItems((previous) => [
-        ...previous,
-        ...records.map((record) => ({
-          assetId: record.id,
-          name: record.name || '無題の景品'
-        }))
-      ]);
+      setItems((previous) => {
+        const nextItems = [...previous];
+
+        records.forEach((record) => {
+          let previewUrl = '';
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            previewUrl = URL.createObjectURL(record.blob);
+            previewUrlMapRef.current.set(record.id, previewUrl);
+          }
+
+          nextItems.push({
+            assetId: record.id,
+            name: '',
+            previewUrl
+          });
+        });
+
+        return nextItems.map((item, index) => ({
+          ...item,
+          name: getSequentialItemName(index)
+        }));
+      });
 
       records.forEach((record) => {
         createdAssetIdsRef.current.add(record.id);
@@ -228,7 +276,20 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, []);
 
   const handleRemoveItem = useCallback((assetId: string) => {
-    setItems((previous) => previous.filter((item) => item.assetId !== assetId));
+    setItems((previous) => {
+      const removedItem = previous.find((item) => item.assetId === assetId);
+      if (removedItem?.previewUrl) {
+        safeRevokeObjectURL(removedItem.previewUrl);
+        previewUrlMapRef.current.delete(assetId);
+      }
+
+      return previous
+        .filter((item) => item.assetId !== assetId)
+        .map((item, index) => ({
+          ...item,
+          name: getSequentialItemName(index)
+        }));
+    });
     if (createdAssetIdsRef.current.has(assetId)) {
       createdAssetIdsRef.current.delete(assetId);
       void deleteAsset(assetId);
@@ -415,15 +476,17 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         </div>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
-          <RarityTable
-            rows={rarityTableRows}
-            onLabelChange={handleLabelChange}
-            onColorChange={handleColorChange}
-            onEmitRateChange={handleEmitRateChange}
-            onDelete={handleRemoveRarity}
-            onAdd={handleAddRarity}
-            canDeleteRow={canDeleteRarityRow}
-          />
+          <div className="max-h-[45vh] overflow-y-auto pr-1">
+            <RarityTable
+              rows={rarityTableRows}
+              onLabelChange={handleLabelChange}
+              onColorChange={handleColorChange}
+              onEmitRateChange={handleEmitRateChange}
+              onDelete={handleRemoveRarity}
+              onAdd={handleAddRarity}
+              canDeleteRow={canDeleteRarityRow}
+            />
+          </div>
         </div>
       </div>
     );
@@ -460,23 +523,38 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             {items.length === 0 ? (
               <p className="text-sm text-muted-foreground">まだ画像が登録されていません。</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
                 {items.map((item) => (
                   <li
                     key={item.assetId}
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-border/60 bg-[#13131a] px-4 py-3"
+                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-[#13131a] px-4 py-3"
                   >
-                    <div className="min-w-0">
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-[#0f0f14]">
+                      {item.previewUrl ? (
+                        <img
+                          src={item.previewUrl}
+                          alt={`${item.name}のプレビュー`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                          画像なし
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.assetId}</p>
                     </div>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200"
-                      onClick={() => handleRemoveItem(item.assetId)}
-                    >
-                      削除
-                    </button>
+                    <div className="flex shrink-0">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200"
+                        onClick={() => handleRemoveItem(item.assetId)}
+                      >
+                        削除
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -493,7 +571,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         <p className="text-sm text-muted-foreground">
           ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
         </p>
-        <div className="rounded-2xl border border-border/60 bg-surface/50 p-4">
+        <div className="max-h-[45vh] overflow-y-auto rounded-2xl border border-border/60 bg-surface/50 p-4 pr-1">
           <PtControlsPanel settings={ptSettings} rarityOptions={rarityOptions} onSettingsChange={setPtSettings} />
         </div>
       </div>
