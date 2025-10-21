@@ -88,7 +88,12 @@ export function RiaguSection(): JSX.Element {
       if (!grouped[gachaId]) {
         grouped[gachaId] = [];
       }
-      grouped[gachaId].push(entry);
+      const existingIndex = grouped[gachaId].findIndex((existing) => existing.id === entry.id);
+      if (existingIndex >= 0) {
+        grouped[gachaId][existingIndex] = entry;
+      } else {
+        grouped[gachaId].push(entry);
+      }
     });
 
     return {
