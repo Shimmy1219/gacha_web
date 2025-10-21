@@ -2,8 +2,6 @@ const DB_NAME = 'gacha-asset-store';
 const DB_VERSION = 1;
 const STORE_NAME = 'assets';
 
-type IndexedDbTransactionMode = 'readonly' | 'readwrite' | 'versionchange';
-
 export interface StoredAssetRecord {
   id: string;
   name: string;

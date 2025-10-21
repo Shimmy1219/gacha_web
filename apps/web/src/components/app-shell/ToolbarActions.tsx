@@ -1,8 +1,9 @@
 import { clsx } from 'clsx';
-import { ArrowUpTrayIcon, PlayIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon, PlayIcon, PlusCircleIcon, SparklesIcon } from '@heroicons/react/24/outline';
 
 interface ToolbarActionsProps {
   mode?: 'desktop' | 'mobile';
+  onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
@@ -10,6 +11,7 @@ interface ToolbarActionsProps {
 
 export function ToolbarActions({
   mode = 'desktop',
+  onDrawGacha,
   onRegisterGacha,
   onOpenRealtime,
   onExportAll
@@ -21,6 +23,14 @@ export function ToolbarActions({
 
   return (
     <div className={clsx('toolbar-actions', containerClass)}>
+      <button
+        type="button"
+        onClick={() => onDrawGacha?.()}
+        className="toolbar-actions__draw-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
+      >
+        <SparklesIcon className="h-4 w-4" />
+        ガチャを引く
+      </button>
       <button
         type="button"
         onClick={() => onRegisterGacha?.()}

@@ -100,6 +100,18 @@ export function App(): JSX.Element {
     });
   };
 
+  const handleDrawGacha = () => {
+    push(GuideInfoDialog, {
+      id: 'draw-gacha-info',
+      title: 'ガチャを引く',
+      size: 'sm',
+      payload: {
+        message: 'ガチャの実行シミュレーターは現在準備中です。公開までしばらくお待ちください。',
+        confirmLabel: '了解'
+      }
+    });
+  };
+
   const handleOpenRealtime = () => {
     push(LivePasteDialog, {
       id: 'live-paste',
@@ -130,6 +142,7 @@ export function App(): JSX.Element {
         summaryLabel="TXT/JSON未読込"
         summaryVariant="warning"
         summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
+        onDrawGacha={handleDrawGacha}
         onRegisterGacha={handleRegisterGacha}
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
