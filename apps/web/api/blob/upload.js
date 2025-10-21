@@ -6,6 +6,7 @@
 // - トークン有効期限 (validUntil)
 // - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
 import crypto from 'crypto';
+import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
 function vLog(...args) {
@@ -42,13 +43,18 @@ function sanitizeSegment(s, fallback) {
 }
 
 export default async function handler(req, res) {
+  const log = createRequestLogger('api/blob/upload', req);
+  log.info('request received', { method: req.method, hasBody: Boolean(req.body) });
+
   // ヘルスチェック
   if (req.method === 'GET' && 'health' in (req.query || {})) {
+    log.info('health check ok');
     return res.status(200).json({ ok: true, route: '/api/blob/upload' });
   }
 
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, GET');
+    log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
@@ -78,6 +84,7 @@ export default async function handler(req, res) {
   vLog('isAllowed:', isAllowed);
 
   if (!isAllowed) {
+    log.warn('origin check failed', { originHdr, referer, derivedOrigin, selfOriginFromHost });
     return res.status(403).json({
       ok: false,
       error: 'Forbidden: origin not allowed',
@@ -143,7 +150,10 @@ export default async function handler(req, res) {
         //    - 元ファイル名は保存先では使わない（必要なら別メタで管理）
         const pathname = `/uploads/${userId}/${purpose}/${h}.zip`;
 
-        vLog('policy', { userId, purpose, ip, windowId, pathname, validUntilMs });
+        const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 12);
+        const policyLog = { userId, purpose, windowId, pathname, validUntilMs, ipHash };
+        vLog('policy', policyLog);
+        log.info('upload token policy decided', { ...policyLog, hasCsrf: Boolean(csrfFromPayload) });
 
         return {
           // ★ DBレス・ハードレートの要点
@@ -174,6 +184,10 @@ export default async function handler(req, res) {
       },
     });
 
+    log.info('upload token issued', {
+      pathname: jsonResponse?.pathname || null,
+      uploadUrl: jsonResponse?.uploadUrl || null,
+    });
     return res.status(200).json(jsonResponse);
   } catch (err) {
     const msg = err?.message || String(err);
@@ -182,6 +196,7 @@ export default async function handler(req, res) {
       : (/forbidden/i.test(msg) ? 403 : 500);
 
     console.error('[blob/upload error]', msg, VERBOSE ? { stack: err?.stack } : '');
+    log.error('upload token issuance failed', { status, error: err });
     return res.status(status).json({
       ok: false,
       error: msg,
