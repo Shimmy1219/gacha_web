@@ -363,7 +363,7 @@ export function RaritySection(): JSX.Element {
               className={panelAnimationClass}
             >
               {shouldRenderTable ? (
-                <div className="rarity-section__table-wrapper overflow-hidden rounded-2xl border border-border/60">
+                <div className="rarity-section__table-wrapper max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-border/60">
                   <table className="rarity-section__table w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
                     <colgroup>
                       <col className="rarity-section__col rarity-section__col-label" />

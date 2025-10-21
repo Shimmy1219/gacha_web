@@ -209,7 +209,9 @@
 
 .rarity-section__table {
   table-layout: auto;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
 }
 
 .rarity-section__col-label {
@@ -218,7 +220,7 @@
 
 .rarity-section__col-color,
 .rarity-section__col-actions {
-  width: 1%;
+  width: auto;
 }
 
 .rarity-section__col-rate {
@@ -237,8 +239,10 @@
 .rarity-section__cell-actions {
   padding-left: 0;
   padding-right: 0;
-  width: 1%;
-  white-space: nowrap;
+  min-width: 6rem;
+  width: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .rarity-section__cell-rate {
