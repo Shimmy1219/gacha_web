@@ -5,13 +5,65 @@ import { useModal } from '../components/modal';
 import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
+import { LivePasteGachaPickerDialog } from '../features/realtime/dialogs/LivePasteGachaPickerDialog';
+import { LivePasteCatalogErrorDialog } from '../features/realtime/dialogs/LivePasteCatalogErrorDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
+import {
+  applyLivePasteText,
+  LivePasteCatalogMismatchError,
+  LivePasteGachaConflictError,
+  type LivePasteCatalogIssue
+} from '../logic/livePaste';
 import { AppRoutes } from './routes/AppRoutes';
+
+function formatCatalogIssueMessage(issue?: LivePasteCatalogIssue): string | undefined {
+  if (!issue) {
+    return undefined;
+  }
+
+  switch (issue.type) {
+    case 'missing-gacha':
+      return `「${issue.gachaName}」のガチャが登録されていません。`;
+    case 'missing-rarity-index':
+      return `「${issue.gachaName}」のレアリティ情報が見つかりません。`;
+    case 'missing-rarity':
+      return `「${issue.gachaName}」にレアリティ「${issue.rarityLabel}」が登録されていません。`;
+    case 'missing-item':
+      return `「${issue.gachaName}」のレアリティ「${issue.rarityLabel}」にアイテム「${issue.itemName}」が登録されていません。`;
+    case 'rarity-mismatch':
+      return `「${issue.gachaName}」でアイテム「${issue.itemName}」のレアリティが一致しません（期待：${issue.rarityLabel}）。`;
+    case 'malformed-block': {
+      const scope = issue.gachaName ? `「${issue.gachaName}」` : '貼り付け内容';
+      switch (issue.reason) {
+        case 'missing-gacha-name':
+          return 'ガチャ名が入力されていません。';
+        case 'missing-user-line':
+          return `${scope}の2行目にユーザー名と連数を入力してください。`;
+        case 'missing-user-name':
+          return `${scope}のユーザー名が入力されていません。`;
+        case 'missing-user-pulls':
+          return `${scope}の連数が入力されていません。`;
+        case 'missing-results':
+          return `${scope}の獲得結果が確認できません。`;
+        case 'missing-rarity-label':
+          return `${scope}の行にレアリティが設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        case 'missing-item-name':
+          return `${scope}の行にアイテム名が設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        case 'missing-item-count':
+          return `${scope}の行に獲得数が設定されていません${issue.line ? `：${issue.line}` : '。'}`;
+        default:
+          return undefined;
+      }
+    }
+    default:
+      return undefined;
+  }
+}
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
-  const { push } = useModal();
+  const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
 
@@ -119,8 +171,93 @@ export function App(): JSX.Element {
       description: 'リアルタイムの結果テキストを貼り付けて解析・同期します。',
       size: 'lg',
       payload: {
-        onApply: (value) => {
-          console.info('リアルタイム結果の反映処理は未接続です', value);
+        onApply: async (value) => {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              window.alert('テキストを貼り付けてください。');
+            }
+            return false;
+          }
+
+          try {
+            const result = applyLivePasteText(trimmed, { persistence, stores });
+            console.info('リアルタイム結果を反映しました', result);
+            return true;
+          } catch (error) {
+            if (error instanceof LivePasteCatalogMismatchError) {
+              console.error('リアルタイム結果のカタログ整合性チェックで失敗しました', error);
+              const detail = formatCatalogIssueMessage(error.issue);
+              push(LivePasteCatalogErrorDialog, {
+                id: 'live-paste-catalog-error',
+                title: 'ガチャカタログの整合性エラー',
+                description: '登録済みのガチャカタログと結果の内容が一致しませんでした。',
+                size: 'sm',
+                payload: {
+                  detail
+                }
+              });
+              return false;
+            }
+            if (error instanceof LivePasteGachaConflictError) {
+              push(LivePasteGachaPickerDialog, {
+                id: 'live-paste-gacha-picker',
+                title: '対象ガチャを選択',
+                description: '同名のガチャが複数見つかりました。反映先を選択してください。',
+                size: 'md',
+                payload: {
+                  conflicts: error.conflicts,
+                  onResolve: async (selection) => {
+                    try {
+                      const resultWithSelection = applyLivePasteText(trimmed, { persistence, stores }, {
+                        gachaSelections: selection
+                      });
+                      console.info('ガチャ選択後にリアルタイム結果を反映しました', resultWithSelection);
+                      dismissAll();
+                      return false;
+                    } catch (innerError) {
+                      if (innerError instanceof LivePasteCatalogMismatchError) {
+                        console.error('ガチャ選択後のカタログ整合性チェックで失敗しました', innerError);
+                        const detail = formatCatalogIssueMessage(innerError.issue);
+                        push(LivePasteCatalogErrorDialog, {
+                          id: 'live-paste-catalog-error',
+                          title: 'ガチャカタログの整合性エラー',
+                          description: '登録済みのガチャカタログと結果の内容が一致しませんでした。',
+                          size: 'sm',
+                          payload: {
+                            detail
+                          }
+                        });
+                        return false;
+                      }
+                      console.error('ガチャ選択後の反映に失敗しました', innerError);
+                      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+                        const message =
+                          innerError instanceof LivePasteGachaConflictError
+                            ? '選択結果に不足があります。再度選択してください。'
+                            : innerError instanceof Error
+                              ? innerError.message
+                              : '選択したガチャへの反映に失敗しました。再度お試しください。';
+                        window.alert(message);
+                      }
+                      return false;
+                    }
+                  },
+                  helperText: '反映先のガチャを選択するとリアルタイム結果を同期します。'
+                }
+              });
+              return false;
+            }
+            console.error('リアルタイム結果の反映に失敗しました', error);
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : 'リアルタイム結果の反映に失敗しました。再度お試しください。';
+              window.alert(message);
+            }
+            return false;
+          }
         }
       }
     });
