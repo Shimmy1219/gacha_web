@@ -1,6 +1,11 @@
 {
   "version": 2,
   "trailingSlash": false,
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "edge"
+    }
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
