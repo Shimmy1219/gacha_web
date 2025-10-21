@@ -403,7 +403,7 @@ function GachaInventoryCard({
                   {group.items.reduce((sum, item) => sum + item.count, 0)}件
                 </span>
               </div>
-              <div className="user-card__rarity-items flex flex-wrap gap-2">
+              <div className="user-card__rarity-items flex flex-wrap items-start gap-2">
                 {group.items.map((item) => {
                   const editorKey = `edit:${rarityId}:${item.itemId}`;
                   const isActive = activeEditor === editorKey && draftMode === 'edit';
@@ -412,7 +412,7 @@ function GachaInventoryCard({
                       <form
                         key={`${inventory.inventoryId}-${editorKey}`}
                         className={clsx(
-                          'user-card__item-chip flex flex-col gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+                          'user-card__item-chip flex w-full flex-col gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
                           'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
                         )}
                         onSubmit={handleSubmitDraft}
@@ -478,7 +478,7 @@ function GachaInventoryCard({
         {isEditing && activeEditor === 'add' && draftMode === 'add' ? (
           <form
             className={clsx(
-              'user-card__item-chip mt-1 flex flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+              'user-card__item-chip mt-1 flex w-full flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
               'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
             )}
             onSubmit={handleSubmitDraft}
