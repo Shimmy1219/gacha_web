@@ -1,11 +1,10 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { Menu, Transition } from '@headlessui/react';
-import { ArrowPathIcon, ChevronDownIcon } from '@heroicons/react/20/solid';
+import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import {
   ArrowRightOnRectangleIcon,
   Cog6ToothIcon,
-  ShieldCheckIcon,
-  XMarkIcon
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
@@ -29,8 +28,19 @@ export function DiscordLoginButton({
   onOpenPageSettings,
   className
 }: DiscordLoginButtonProps): JSX.Element {
-  const { data, isLoading, isError, login, logout, refetch } = useDiscordSession();
+  const { data, isLoading, login, logout } = useDiscordSession();
   const user = data?.user;
+  const previousUserIdRef = useRef<string | null>(null);
+
+  const userId = user?.id;
+  const userName = user?.name;
+
+  useEffect(() => {
+    if (userId && previousUserIdRef.current !== userId) {
+      console.info('Discordログインに成功しました', { userId, userName });
+    }
+    previousUserIdRef.current = userId ?? null;
+  }, [userId, userName]);
 
   if (isLoading) {
     return (
@@ -102,59 +112,19 @@ export function DiscordLoginButton({
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
       >
-        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-60 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
-          <div className="discord-login-button__menu-header p-3 text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-            Discord セッション操作
-            {isError ? (
-              <span className="discord-login-button__menu-status ml-2 text-[#f87171]">同期失敗</span>
-            ) : null}
-          </div>
+        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
           <Menu.Item>
             {({ active }) => (
               <button
                 type="button"
                 onClick={handleOpenPageSettings}
                 className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >
                 <Cog6ToothIcon className="h-4 w-4" />
-                ページ設定
-              </button>
-            )}
-          </Menu.Item>
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type="button"
-                onClick={async () => {
-                  await refetch();
-                }}
-                className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
-                  active ? 'bg-surface/40' : undefined
-                )}
-              >
-                <ArrowPathIcon className="h-4 w-4" />
-                最新情報を取得
-              </button>
-            )}
-          </Menu.Item>
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type="button"
-                onClick={async () => {
-                  await logout();
-                }}
-                className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
-                  active ? 'bg-surface/40' : undefined
-                )}
-              >
-                <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                ログアウト
+                設定
               </button>
             )}
           </Menu.Item>
@@ -163,13 +133,16 @@ export function DiscordLoginButton({
             {({ active }) => (
               <button
                 type="button"
+                onClick={async () => {
+                  await logout();
+                }}
                 className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-2.5 text-sm text-surface-foreground transition',
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
                 )}
               >
-                <XMarkIcon className="h-4 w-4" />
-                閉じる
+                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                ログアウト
               </button>
             )}
           </Menu.Item>
