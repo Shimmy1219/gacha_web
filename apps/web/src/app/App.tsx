@@ -4,6 +4,7 @@ import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
 import { useModal } from '../components/modal';
 import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
+import { CreateGachaWizardDialog } from '../features/onboarding/dialogs/CreateGachaWizardDialog';
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
 import { LivePasteGachaPickerDialog } from '../features/realtime/dialogs/LivePasteGachaPickerDialog';
 import { LivePasteCatalogErrorDialog } from '../features/realtime/dialogs/LivePasteCatalogErrorDialog';
@@ -145,7 +146,11 @@ export function App(): JSX.Element {
           console.info('引継ぎコード入力処理は未接続です');
         },
         onCreateNew: () => {
-          console.info('新規ガチャ作成フローは未接続です');
+          push(CreateGachaWizardDialog, {
+            id: 'create-gacha-wizard',
+            title: '新規ガチャを作成',
+            size: 'xl'
+          });
         },
         onOpenGuide: handleOpenGuide
       }
