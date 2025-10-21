@@ -1,8 +1,12 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { UserCard } from '../../../components/cards/UserCard';
+import {
+  UserCard,
+  type InventoryCatalogItemOption,
+  type InventoryRarityOption
+} from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useModal } from '../../../components/modal';
 import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
@@ -29,6 +33,55 @@ export function UsersSection(): JSX.Element {
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
+
+  const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
+    const catalogState = data?.catalogState;
+    if (!catalogState?.byGacha) {
+      return {};
+    }
+
+    return Object.entries(catalogState.byGacha).reduce<Record<string, InventoryCatalogItemOption[]>>(
+      (acc, [gachaId, snapshot]) => {
+        const entries: InventoryCatalogItemOption[] = [];
+        snapshot.order.forEach((itemId) => {
+          const item = snapshot.items[itemId];
+          if (!item) {
+            return;
+          }
+          entries.push({
+            itemId: item.itemId,
+            name: item.name,
+            rarityId: item.rarityId
+          });
+        });
+        acc[gachaId] = entries;
+        return acc;
+      },
+      {}
+    );
+  }, [data?.catalogState]);
+
+  const rarityOptionsByGacha = useMemo<Record<string, InventoryRarityOption[]>>(() => {
+    const rarityState = data?.rarityState;
+    if (!rarityState?.byGacha) {
+      return {};
+    }
+
+    return Object.entries(rarityState.byGacha).reduce<Record<string, InventoryRarityOption[]>>(
+      (acc, [gachaId, rarityIds]) => {
+        acc[gachaId] = rarityIds.map((rarityId) => {
+          const entity = rarityState.entities?.[rarityId];
+          return {
+            rarityId,
+            label: entity?.label ?? rarityId,
+            color: entity?.color
+          } satisfies InventoryRarityOption;
+        });
+        return acc;
+      },
+      {}
+    );
+  }, [data?.rarityState]);
 
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
@@ -122,7 +175,14 @@ export function UsersSection(): JSX.Element {
       {users.length > 0 ? (
         <div className="users-section__list space-y-3">
           {users.map((user) => (
-            <UserCard key={user.userId} {...user} onExport={handleOpenSaveOptions} showCounts={showCounts} />
+            <UserCard
+              key={user.userId}
+              {...user}
+              onExport={handleOpenSaveOptions}
+              showCounts={showCounts}
+              catalogItemsByGacha={catalogItemsByGacha}
+              rarityOptionsByGacha={rarityOptionsByGacha}
+            />
           ))}
         </div>
       ) : null}
