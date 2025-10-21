@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import {
@@ -31,6 +31,7 @@ export function DiscordLoginButton({
   const { data, isLoading, login, logout } = useDiscordSession();
   const user = data?.user;
   const previousUserIdRef = useRef<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const userId = user?.id;
   const userName = user?.name;
@@ -52,16 +53,32 @@ export function DiscordLoginButton({
   }
 
   if (!user) {
+    const handleLoginClick = () => {
+      if (isLoggingIn) {
+        return;
+      }
+
+      setIsLoggingIn(true);
+      try {
+        login();
+      } catch (error) {
+        console.error('Discordログインの開始に失敗しました', error);
+        setIsLoggingIn(false);
+      }
+    };
+
     return (
       <button
         type="button"
-        onClick={login}
+        onClick={handleLoginClick}
         data-placement={placement}
         className={clsx(
-          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70',
+          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70',
           className
         )}
         aria-label="Discordでログイン"
+        disabled={isLoggingIn}
+        aria-busy={isLoggingIn}
       >
         <ShieldCheckIcon className="h-5 w-5" />
         Discordでログイン
