@@ -427,6 +427,130 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     );
   }
 
+  removeItemReferences(
+    params: { itemId: string; gachaId?: string; updatedAt?: string },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const { itemId, gachaId, updatedAt } = params;
+
+    if (!itemId) {
+      console.warn('UserInventoryStore.removeItemReferences called without itemId');
+      return;
+    }
+
+    const timestamp = updatedAt ?? new Date().toISOString();
+
+    this.update((previous) => {
+      const baseState = previous ?? this.loadLatestState();
+
+      if (!baseState) {
+        console.warn('UserInventoryStore.removeItemReferences could not access inventories state');
+        return previous;
+      }
+
+      let inventoriesChanged = false;
+      const nextInventories: UserInventoriesStateV3['inventories'] = {};
+
+      for (const [userId, inventories] of Object.entries(baseState.inventories ?? {})) {
+        let userChanged = false;
+        const nextUserInventories: typeof inventories = {};
+
+        for (const [inventoryId, snapshot] of Object.entries(inventories ?? {})) {
+          if (!snapshot) {
+            nextUserInventories[inventoryId] = snapshot;
+            continue;
+          }
+
+          if (gachaId && snapshot.gachaId !== gachaId) {
+            nextUserInventories[inventoryId] = snapshot;
+            continue;
+          }
+
+          const itemsByRarity = snapshot.items ?? {};
+          const countsByRarity = snapshot.counts ?? {};
+
+          let snapshotChanged = false;
+          const nextItems: Record<string, string[]> = {};
+
+          for (const [rarityId, itemIds] of Object.entries(itemsByRarity)) {
+            const list = Array.isArray(itemIds) ? [...itemIds] : [];
+            const filtered = list.filter((value) => value !== itemId);
+            if (filtered.length !== list.length) {
+              snapshotChanged = true;
+            }
+            if (filtered.length > 0) {
+              nextItems[rarityId] = filtered;
+            }
+          }
+
+          const nextCounts: Record<string, Record<string, number>> = {};
+          for (const [rarityId, record] of Object.entries(countsByRarity)) {
+            const countsRecord = { ...(record ?? {}) };
+            if (Object.prototype.hasOwnProperty.call(countsRecord, itemId)) {
+              snapshotChanged = true;
+              delete countsRecord[itemId];
+            }
+
+            if (Object.keys(countsRecord).length > 0) {
+              nextCounts[rarityId] = countsRecord;
+            }
+          }
+
+          if (!snapshotChanged) {
+            nextUserInventories[inventoryId] = snapshot;
+            continue;
+          }
+
+          userChanged = true;
+
+          const normalizedCounts = Object.keys(nextCounts).length > 0 ? nextCounts : undefined;
+          const normalizedItems = Object.keys(nextItems).length > 0 ? nextItems : {};
+          const totalCount = calculateInventoryTotal(normalizedItems, normalizedCounts);
+
+          const nextSnapshot: UserInventorySnapshotV3 = {
+            ...snapshot,
+            items: normalizedItems,
+            totalCount,
+            updatedAt: timestamp
+          };
+
+          if (normalizedCounts) {
+            nextSnapshot.counts = normalizedCounts;
+          } else if (nextSnapshot.counts) {
+            delete (nextSnapshot as Partial<UserInventorySnapshotV3>).counts;
+          }
+
+          nextUserInventories[inventoryId] = nextSnapshot;
+        }
+
+        if (userChanged) {
+          inventoriesChanged = true;
+          nextInventories[userId] = nextUserInventories;
+        } else {
+          nextInventories[userId] = inventories;
+        }
+      }
+
+      if (!inventoriesChanged && Object.keys(baseState.byItemId ?? {}).length === 0) {
+        return previous;
+      }
+
+      const nextByItemId = { ...(baseState.byItemId ?? {}) };
+      delete nextByItemId[itemId];
+
+      if (!inventoriesChanged && !Object.prototype.hasOwnProperty.call(baseState.byItemId ?? {}, itemId)) {
+        return previous;
+      }
+
+      return {
+        ...baseState,
+        updatedAt: timestamp,
+        inventories: inventoriesChanged ? nextInventories : baseState.inventories,
+        byItemId: nextByItemId
+      };
+    }, options);
+  }
+
   removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
     if (!gachaId) {
       return;
