@@ -5,11 +5,15 @@ import { useModal } from '../components/modal';
 import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
+import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
+import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
   const { push } = useModal();
+  const persistence = useAppPersistence();
+  const stores = useDomainStores();
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -66,8 +70,18 @@ export function App(): JSX.Element {
       description: '利用状況に合わせて、バックアップ復元やインポート、新規作成など必要な導入方法を選べます。',
       size: 'lg',
       payload: {
-        onPickTxt: (file) => {
-          console.info('TXTインポート処理は未接続です', file);
+        onPickTxt: async (file) => {
+          try {
+            const result = await importTxtFile(file, { persistence, stores });
+            console.info(`TXTインポートが完了しました: ${result.displayName}`, result);
+          } catch (error) {
+            console.error('TXTインポートに失敗しました', error);
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              const message =
+                error instanceof Error ? error.message : 'TXTの取り込みで不明なエラーが発生しました';
+              window.alert(message);
+            }
+          }
         },
         onPickJson: (file) => {
           console.info('JSONインポート処理は未接続です', file);
