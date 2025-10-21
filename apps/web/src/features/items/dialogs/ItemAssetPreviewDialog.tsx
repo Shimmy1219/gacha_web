@@ -48,7 +48,7 @@ export function ItemAssetPreviewDialog({
 
   return (
     <>
-      <ModalBody className="flex flex-col gap-6">
+      <ModalBody className="flex flex-1 flex-col gap-6 space-y-0 overflow-y-auto">
         <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">{typeLabel}</span>
           <span
@@ -61,7 +61,7 @@ export function ItemAssetPreviewDialog({
         {assetName ? (
           <p className="text-sm text-muted-foreground">{assetName}</p>
         ) : null}
-        <div className="relative flex h-[min(72vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d14] p-4">
+        <div className="relative flex h-[min(70vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d14] p-4">
           {isImagePreview && previewUrl ? (
             <img src={previewUrl} alt={itemName} className="max-h-full w-auto max-w-full object-contain" />
           ) : isVideoPreview && previewUrl ? (
