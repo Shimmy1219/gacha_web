@@ -170,8 +170,8 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 1rem 0.65rem;
+    gap: 0.1rem;
+    padding: 0.3rem;
     cursor: pointer;
     color: theme('colors.muted.foreground');
   }
@@ -232,7 +232,7 @@
     @apply relative z-10 inline-flex items-center justify-center text-muted-foreground/70 transition;
     background: transparent;
     border: none;
-    padding: 0.25rem;
+    padding: 0.1rem;
     cursor: pointer;
   }
 
