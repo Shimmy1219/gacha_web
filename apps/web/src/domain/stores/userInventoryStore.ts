@@ -427,6 +427,50 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     );
   }
 
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous?.inventories) {
+          return previous;
+        }
+
+        const nextInventories: UserInventoriesStateV3['inventories'] = {};
+        let mutated = false;
+
+        for (const [userId, snapshots] of Object.entries(previous.inventories)) {
+          const entries = Object.entries(snapshots ?? {});
+          const filtered = entries.filter(([, snapshot]) => snapshot?.gachaId !== gachaId);
+          if (filtered.length !== entries.length) {
+            mutated = true;
+          }
+          if (filtered.length > 0) {
+            nextInventories[userId] = Object.fromEntries(filtered);
+          }
+        }
+
+        if (!mutated) {
+          return previous;
+        }
+
+        if (Object.keys(nextInventories).length === 0) {
+          return undefined;
+        }
+
+        return {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: new Date().toISOString(),
+          inventories: nextInventories,
+          byItemId: rebuildByItemId(nextInventories)
+        };
+      },
+      options
+    );
+  }
+
   protected persistImmediate(state: UserInventoriesStateV3 | undefined): void {
     this.persistence.saveUserInventories(state);
   }

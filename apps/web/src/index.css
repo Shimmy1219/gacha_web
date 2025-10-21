@@ -156,14 +156,97 @@
     @apply border-transparent bg-accent text-white;
   }
 
-  .tab-pill {
-    @apply inline-flex items-center gap-2 rounded-full border border-transparent bg-surface/40 px-3 py-1 text-xs font-semibold text-muted-foreground transition hover:text-surface-foreground;
-  }
-
   .tab-scroll-area {
-    @apply flex flex-nowrap items-center gap-2 overflow-x-auto pb-1;
+    @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
     scrollbar-width: thin;
     scrollbar-color: theme('colors.accent.DEFAULT') transparent;
+  }
+
+  .gacha-tabs {
+    @apply flex flex-nowrap items-end gap-2;
+  }
+
+  .gacha-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem 0.55rem;
+    cursor: pointer;
+    color: theme('colors.muted.foreground');
+  }
+
+  .gacha-tab::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 0.9rem 0.9rem 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom: 0;
+    background: linear-gradient(180deg, rgba(36, 36, 52, 0.85), rgba(16, 16, 24, 0.8));
+    opacity: 0.85;
+    clip-path: polygon(6% 0%, 94% 0%, 100% 100%, 0% 100%);
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  }
+
+  .gacha-tab--active::before {
+    background: linear-gradient(180deg, rgba(255, 63, 102, 0.95), rgba(255, 63, 102, 0.75));
+    border-color: rgba(255, 81, 122, 0.95);
+    opacity: 1;
+    box-shadow: 0 18px 36px rgba(255, 63, 102, 0.35);
+  }
+
+  .gacha-tab--inactive:hover::before {
+    background: linear-gradient(180deg, rgba(52, 52, 72, 0.92), rgba(20, 20, 30, 0.82));
+    border-color: rgba(255, 63, 102, 0.55);
+    opacity: 1;
+  }
+
+  .gacha-tab__label {
+    @apply relative z-10 flex-1 select-none whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground transition;
+    background: transparent;
+    border: none;
+    padding: 0.1rem 0.15rem;
+    cursor: pointer;
+  }
+
+  .gacha-tab__label:focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2;
+    --tw-ring-offset-color: #0b0b13;
+  }
+
+  .gacha-tab--active .gacha-tab__label {
+    @apply text-white;
+  }
+
+  .gacha-tab--inactive .gacha-tab__label {
+    @apply text-muted-foreground;
+  }
+
+  .gacha-tab__label-text {
+    pointer-events: none;
+  }
+
+  .gacha-tab__close {
+    @apply relative z-10 inline-flex items-center justify-center text-muted-foreground/70 transition;
+    background: transparent;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+  }
+
+  .gacha-tab__close:hover {
+    color: rgba(255, 132, 170, 0.95);
+  }
+
+  .gacha-tab__close:focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2;
+    --tw-ring-offset-color: #0b0b13;
+    border-radius: 9999px;
+  }
+
+  .gacha-tab__close-icon {
+    @apply h-4 w-4;
   }
 
   .tab-scroll-area::-webkit-scrollbar {

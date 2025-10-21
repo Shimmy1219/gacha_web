@@ -154,4 +154,8 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
   protected persistDebounced(state: PtSettingsStateV3 | undefined): void {
     this.persistence.savePtSettingsDebounced(state);
   }
+
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    this.setGachaSettings(gachaId, undefined, options);
+  }
 }

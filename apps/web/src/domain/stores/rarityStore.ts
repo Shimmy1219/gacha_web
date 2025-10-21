@@ -173,6 +173,56 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
     }, options);
   }
 
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        const currentOrder = previous?.byGacha?.[gachaId];
+        if (!previous || !currentOrder) {
+          return previous;
+        }
+
+        const nextEntities = { ...(previous.entities ?? {}) };
+        currentOrder.forEach((rarityId) => {
+          delete nextEntities[rarityId];
+        });
+
+        const nextByGacha = { ...(previous.byGacha ?? {}) };
+        delete nextByGacha[gachaId];
+
+        let nextIndexByName = previous.indexByName ? { ...previous.indexByName } : undefined;
+        if (nextIndexByName && nextIndexByName[gachaId]) {
+          delete nextIndexByName[gachaId];
+          if (Object.keys(nextIndexByName).length === 0) {
+            nextIndexByName = undefined;
+          }
+        }
+
+        const timestamp = new Date().toISOString();
+        const hasEntities = Object.keys(nextEntities).length > 0;
+        const hasByGacha = Object.keys(nextByGacha).length > 0;
+
+        if (!hasEntities && !hasByGacha && !nextIndexByName) {
+          return undefined;
+        }
+
+        const nextState: GachaRarityStateV3 = {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: timestamp,
+          byGacha: nextByGacha,
+          entities: nextEntities,
+          ...(nextIndexByName ? { indexByName: nextIndexByName } : {})
+        };
+
+        return nextState;
+      },
+      options
+    );
+  }
+
   protected persistImmediate(state: GachaRarityStateV3 | undefined): void {
     this.persistence.saveRarityState(state);
   }

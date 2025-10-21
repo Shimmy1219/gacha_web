@@ -6,6 +6,8 @@ import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
+import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
+import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 
 interface RiaguDisplayEntry {
   id: string;
@@ -19,7 +21,6 @@ interface RiaguDisplayEntry {
 }
 
 type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
-type GachaTab = { id: string; label: string };
 
 function formatCost(cost?: number): string {
   if (cost == null) {
@@ -42,6 +43,7 @@ function formatStatus(stock?: number, notes?: string): string {
 export function RiaguSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const confirmDeleteGacha = useGachaDeletion();
 
   const { entriesByGacha, riaguGachaIds, totalEntryCount } = useMemo(() => {
     const grouped: RiaguEntriesByGacha = {};
@@ -98,7 +100,7 @@ export function RiaguSection(): JSX.Element {
     };
   }, [data]);
 
-  const gachaTabs = useMemo<GachaTab[]>(() => {
+  const gachaTabs = useMemo<GachaTabOption[]>(() => {
     const catalogByGacha = data?.catalogState?.byGacha ?? {};
     const baseOrder = data?.appState?.order ?? [];
     const orderedIds: string[] = [];
@@ -165,23 +167,13 @@ export function RiaguSection(): JSX.Element {
       footer="RiaguStoreのマーク/解除とAppStateStore.saveDebounced()を連携予定です。"
       contentClassName="riagu-section__content"
     >
-      <div className="riagu-section__tabs tab-scroll-area">
-        {gachaTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={clsx(
-              'riagu-section__tab tab-pill shrink-0 rounded-full border px-4 py-1.5',
-              activeGachaId === tab.id
-                ? 'border-accent/80 bg-accent text-accent-foreground shadow-[0_10px_28px_rgba(225,29,72,0.45)]'
-                : 'border-border/40 text-muted-foreground hover:border-accent/60'
-            )}
-            onClick={() => setActiveGachaId(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <GachaTabs
+        tabs={gachaTabs}
+        activeId={activeGachaId}
+        onSelect={(gachaId) => setActiveGachaId(gachaId)}
+        onDelete={(tab) => confirmDeleteGacha(tab)}
+        className="riagu-section__tabs"
+      />
 
       <div className="riagu-section__scroll section-scroll flex-1">
         <div className="riagu-section__scroll-content space-y-4">
