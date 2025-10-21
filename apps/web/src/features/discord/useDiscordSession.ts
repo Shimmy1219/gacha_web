@@ -26,7 +26,8 @@ async function fetchSession(): Promise<DiscordSessionData> {
   const response = await fetch('/api/discord/me?soft=1', {
     headers: {
       Accept: 'application/json'
-    }
+    },
+    credentials: 'include'
   });
 
   if (!response.ok) {
@@ -49,7 +50,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
   }, []);
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
   }, [queryClient]);
 
