@@ -6,10 +6,37 @@ import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDia
 import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
 import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
 import { LivePasteGachaPickerDialog } from '../features/realtime/dialogs/LivePasteGachaPickerDialog';
+import { LivePasteCatalogErrorDialog } from '../features/realtime/dialogs/LivePasteCatalogErrorDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
-import { applyLivePasteText, LivePasteGachaConflictError } from '../logic/livePaste';
+import {
+  applyLivePasteText,
+  LivePasteCatalogMismatchError,
+  LivePasteGachaConflictError,
+  type LivePasteCatalogIssue
+} from '../logic/livePaste';
 import { AppRoutes } from './routes/AppRoutes';
+
+function formatCatalogIssueMessage(issue?: LivePasteCatalogIssue): string | undefined {
+  if (!issue) {
+    return undefined;
+  }
+
+  switch (issue.type) {
+    case 'missing-gacha':
+      return `「${issue.gachaName}」のガチャが登録されていません。`;
+    case 'missing-rarity-index':
+      return `「${issue.gachaName}」のレアリティ情報が見つかりません。`;
+    case 'missing-rarity':
+      return `「${issue.gachaName}」にレアリティ「${issue.rarityLabel}」が登録されていません。`;
+    case 'missing-item':
+      return `「${issue.gachaName}」のレアリティ「${issue.rarityLabel}」にアイテム「${issue.itemName}」が登録されていません。`;
+    case 'rarity-mismatch':
+      return `「${issue.gachaName}」でアイテム「${issue.itemName}」のレアリティが一致しません（期待：${issue.rarityLabel}）。`;
+    default:
+      return undefined;
+  }
+}
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
@@ -123,6 +150,20 @@ export function App(): JSX.Element {
             console.info('リアルタイム結果を反映しました', result);
             return true;
           } catch (error) {
+            if (error instanceof LivePasteCatalogMismatchError) {
+              console.error('リアルタイム結果のカタログ整合性チェックで失敗しました', error);
+              const detail = formatCatalogIssueMessage(error.issue);
+              push(LivePasteCatalogErrorDialog, {
+                id: 'live-paste-catalog-error',
+                title: 'ガチャカタログの整合性エラー',
+                description: '登録済みのガチャカタログと結果の内容が一致しませんでした。',
+                size: 'sm',
+                payload: {
+                  detail
+                }
+              });
+              return false;
+            }
             if (error instanceof LivePasteGachaConflictError) {
               push(LivePasteGachaPickerDialog, {
                 id: 'live-paste-gacha-picker',
@@ -140,6 +181,20 @@ export function App(): JSX.Element {
                       dismissAll();
                       return false;
                     } catch (innerError) {
+                      if (innerError instanceof LivePasteCatalogMismatchError) {
+                        console.error('ガチャ選択後のカタログ整合性チェックで失敗しました', innerError);
+                        const detail = formatCatalogIssueMessage(innerError.issue);
+                        push(LivePasteCatalogErrorDialog, {
+                          id: 'live-paste-catalog-error',
+                          title: 'ガチャカタログの整合性エラー',
+                          description: '登録済みのガチャカタログと結果の内容が一致しませんでした。',
+                          size: 'sm',
+                          payload: {
+                            detail
+                          }
+                        });
+                        return false;
+                      }
                       console.error('ガチャ選択後の反映に失敗しました', innerError);
                       if (typeof window !== 'undefined' && typeof window.alert === 'function') {
                         const message =

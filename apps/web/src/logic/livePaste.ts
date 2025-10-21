@@ -11,24 +11,10 @@ import type {
   UserProfilesStateV3
 } from '@domain/app-persistence';
 import {
-  generateDeterministicGachaId,
   generateDeterministicInventoryId,
-  generateDeterministicItemId,
-  generateDeterministicRarityId,
   generateDeterministicUserId
 } from '@domain/idGenerators';
 import type { DomainStores } from '@domain/stores/createDomainStores';
-
-const DEFAULT_RARITY_COLORS: Record<string, string> = {
-  UR: '#f59e0b',
-  SSR: '#fde68a',
-  SR: '#a78bfa',
-  R: '#93c5fd',
-  N: '#a7f3d0',
-  はずれ: '#fca5a5'
-};
-
-const FALLBACK_RARITY_COLOR = '#cbd5f5';
 
 interface ParsedLiveBlock {
   gachaName: string;
@@ -68,6 +54,25 @@ export class LivePasteGachaConflictError extends Error {
     super('同名のガチャが複数見つかりました。対象のガチャを選択してください。');
     this.name = 'LivePasteGachaConflictError';
     this.conflicts = conflicts;
+  }
+}
+
+export type LivePasteCatalogIssue =
+  | { type: 'missing-gacha'; gachaName: string }
+  | { type: 'missing-rarity-index'; gachaName: string }
+  | { type: 'missing-rarity'; gachaName: string; rarityLabel: string }
+  | { type: 'missing-item'; gachaName: string; rarityLabel: string; itemName: string }
+  | { type: 'rarity-mismatch'; gachaName: string; rarityLabel: string; itemName: string };
+
+export class LivePasteCatalogMismatchError extends Error {
+  readonly issue: LivePasteCatalogIssue;
+
+  constructor(issue: LivePasteCatalogIssue) {
+    super(
+      '貼り付けた結果と登録済みカタログの内容が一致しません。外部ガチャサイトで最新のTXTを保存して「ガチャ登録」から読み込ませてください。'
+    );
+    this.name = 'LivePasteCatalogMismatchError';
+    this.issue = issue;
   }
 }
 
@@ -207,6 +212,7 @@ export function applyLivePasteText(
     const rarityIdMap = ensureRarities(
       nextRarityState,
       gachaId,
+      gachaName,
       Array.from(aggregate.rarityLabels.values()),
       nowIso
     );
@@ -215,6 +221,7 @@ export function applyLivePasteText(
     const itemIdMap = ensureCatalogItems(
       nextCatalogState,
       gachaId,
+      gachaName,
       aggregate.codesByRarity,
       rarityIdMap,
       nowIso
@@ -249,6 +256,7 @@ export function applyLivePasteText(
       inventoriesState: nextInventoriesState,
       userId,
       gachaId,
+      gachaName: block.gachaName,
       rarityIdMap,
       itemIdMap,
       counts: block.counts,
@@ -432,6 +440,10 @@ function resolveGachaId({
 }): string | null {
   const candidates = collectGachaCandidates(appState, displayName);
 
+  if (candidates.length === 0) {
+    throw new LivePasteCatalogMismatchError({ type: 'missing-gacha', gachaName: displayName });
+  }
+
   if (candidates.length === 1) {
     return candidates[0].id;
   }
@@ -446,8 +458,7 @@ function resolveGachaId({
     return null;
   }
 
-  const seed = displayName || `gacha-${Date.now()}`;
-  return generateDeterministicGachaId(seed);
+  return null;
 }
 
 function collectGachaCandidates(appState: GachaAppStateV3, displayName: string): LivePasteGachaCandidate[] {
@@ -486,21 +497,16 @@ function ensureGachaMeta(
   nowIso: string
 ): void {
   const existing = appState.meta[gachaId];
-  if (existing) {
-    appState.meta[gachaId] = {
-      ...existing,
-      id: gachaId,
-      displayName,
-      updatedAt: nowIso
-    };
-  } else {
-    appState.meta[gachaId] = {
-      id: gachaId,
-      displayName,
-      createdAt: nowIso,
-      updatedAt: nowIso
-    };
+  if (!existing) {
+    throw new LivePasteCatalogMismatchError({ type: 'missing-gacha', gachaName: displayName });
   }
+
+  appState.meta[gachaId] = {
+    ...existing,
+    id: gachaId,
+    displayName,
+    updatedAt: nowIso
+  };
 
   if (!appState.order.includes(gachaId)) {
     appState.order.push(gachaId);
@@ -510,48 +516,39 @@ function ensureGachaMeta(
 function ensureRarities(
   rarityState: GachaRarityStateV3,
   gachaId: string,
+  gachaName: string,
   rarityLabels: string[],
   nowIso: string
 ): Map<string, string> {
   const rarityIdMap = new Map<string, string>();
-  const existingIndex = { ...(rarityState.indexByName?.[gachaId] ?? {}) };
-  const existingOrder = Array.isArray(rarityState.byGacha?.[gachaId])
-    ? [...(rarityState.byGacha?.[gachaId] ?? [])]
-    : [];
-  const orderSet = new Set(existingOrder);
+  const existingIndex = rarityState.indexByName?.[gachaId];
+
+  if (!existingIndex) {
+    throw new LivePasteCatalogMismatchError({ type: 'missing-rarity-index', gachaName });
+  }
 
   rarityLabels.forEach((label) => {
     if (!label) {
       return;
     }
-    let rarityId = existingIndex[label];
+
+    const rarityId = existingIndex[label];
     if (!rarityId) {
-      rarityId = generateDeterministicRarityId(`${gachaId}-${label}`);
-      existingIndex[label] = rarityId;
-      if (!orderSet.has(rarityId)) {
-        existingOrder.push(rarityId);
-        orderSet.add(rarityId);
-      }
+      throw new LivePasteCatalogMismatchError({ type: 'missing-rarity', gachaName, rarityLabel: label });
     }
 
-    const entity: GachaRarityEntityV3 = {
-      ...(rarityState.entities?.[rarityId] ?? {}),
-      id: rarityId,
-      gachaId,
-      label,
-      color: rarityState.entities?.[rarityId]?.color ?? DEFAULT_RARITY_COLORS[label] ?? FALLBACK_RARITY_COLOR,
-      sortOrder: rarityState.entities?.[rarityId]?.sortOrder ?? existingOrder.indexOf(rarityId),
-      emitRate: rarityState.entities?.[rarityId]?.emitRate,
-      shortName: rarityState.entities?.[rarityId]?.shortName,
-      updatedAt: nowIso
-    };
+    const entity = rarityState.entities?.[rarityId];
+    if (!entity) {
+      throw new LivePasteCatalogMismatchError({ type: 'missing-rarity', gachaName, rarityLabel: label });
+    }
 
-    rarityState.entities[rarityId] = entity;
+    rarityState.entities[rarityId] = {
+      ...entity,
+      updatedAt: nowIso
+    } satisfies GachaRarityEntityV3;
+
     rarityIdMap.set(label, rarityId);
   });
-
-  rarityState.byGacha[gachaId] = existingOrder;
-  rarityState.indexByName[gachaId] = existingIndex;
 
   return rarityIdMap;
 }
@@ -559,50 +556,61 @@ function ensureRarities(
 function ensureCatalogItems(
   catalogState: GachaCatalogStateV3,
   gachaId: string,
+  gachaName: string,
   codesByRarity: Map<string, Set<string>>,
   rarityIdMap: Map<string, string>,
   nowIso: string
 ): Map<string, string> {
-  const gachaCatalog = catalogState.byGacha[gachaId] ?? { order: [], items: {} };
-  const nextItems: Record<string, GachaCatalogItemV3> = { ...(gachaCatalog.items ?? {}) };
-  const nextOrder = Array.isArray(gachaCatalog.order) ? [...gachaCatalog.order] : [];
-  const orderSet = new Set(nextOrder);
+  const gachaCatalog = catalogState.byGacha[gachaId];
+  if (!gachaCatalog) {
+    throw new LivePasteCatalogMismatchError({ type: 'missing-gacha', gachaName });
+  }
+
+  if (!gachaCatalog.items) {
+    gachaCatalog.items = {};
+  }
+
+  const items = gachaCatalog.items;
   const itemIdMap = new Map<string, string>();
 
   codesByRarity.forEach((codes, rarityLabel) => {
-    const rarityId = rarityIdMap.get(rarityLabel) ?? generateDeterministicRarityId(`${gachaId}-${rarityLabel}`);
+    const rarityId = rarityIdMap.get(rarityLabel);
+    if (!rarityId) {
+      throw new LivePasteCatalogMismatchError({ type: 'missing-rarity', gachaName, rarityLabel });
+    }
+
     codes.forEach((code) => {
       if (!code) {
         return;
       }
 
-      const existingItemId = findItemIdByName(nextItems, code);
-      const itemId = existingItemId ?? generateDeterministicItemId(`${gachaId}-${code}`);
-      const previousItem = nextItems[itemId];
-
-      const nextItem: GachaCatalogItemV3 = {
-        ...previousItem,
-        itemId,
-        rarityId,
-        name: code,
-        updatedAt: nowIso,
-        order: previousItem?.order
-      };
-
-      nextItems[itemId] = nextItem;
-      itemIdMap.set(code, itemId);
-
-      if (!orderSet.has(itemId)) {
-        nextOrder.push(itemId);
-        orderSet.add(itemId);
+      const itemId = findItemIdByName(items, code);
+      if (!itemId) {
+        throw new LivePasteCatalogMismatchError({ type: 'missing-item', gachaName, rarityLabel, itemName: code });
       }
+
+      const item = items[itemId];
+      if (!item) {
+        throw new LivePasteCatalogMismatchError({ type: 'missing-item', gachaName, rarityLabel, itemName: code });
+      }
+
+      if (item.rarityId !== rarityId) {
+        throw new LivePasteCatalogMismatchError({
+          type: 'rarity-mismatch',
+          gachaName,
+          rarityLabel,
+          itemName: code
+        });
+      }
+
+      gachaCatalog.items[itemId] = {
+        ...item,
+        updatedAt: nowIso
+      } satisfies GachaCatalogItemV3;
+
+      itemIdMap.set(code, itemId);
     });
   });
-
-  catalogState.byGacha[gachaId] = {
-    order: nextOrder,
-    items: nextItems
-  };
 
   return itemIdMap;
 }
@@ -611,12 +619,13 @@ function applyInventoryDelta(params: {
   inventoriesState: UserInventoriesStateV3;
   userId: string;
   gachaId: string;
+  gachaName: string;
   rarityIdMap: Map<string, string>;
   itemIdMap: Map<string, string>;
   counts: Map<string, Map<string, number>>;
   nowIso: string;
 }): void {
-  const { inventoriesState, userId, gachaId, rarityIdMap, itemIdMap, counts, nowIso } = params;
+  const { inventoriesState, userId, gachaId, gachaName, rarityIdMap, itemIdMap, counts, nowIso } = params;
 
   const inventoryId = generateDeterministicInventoryId(`${userId}-${gachaId}`);
   const existingInventories = inventoriesState.inventories[userId] ?? {};
@@ -633,11 +642,22 @@ function applyInventoryDelta(params: {
   const nextCounts: Record<string, Record<string, number>> = { ...previousCounts };
 
   counts.forEach((byCode, rarityLabel) => {
-    const rarityId = rarityIdMap.get(rarityLabel) ?? generateDeterministicRarityId(`${gachaId}-${rarityLabel}`);
+    const rarityId = rarityIdMap.get(rarityLabel);
+    if (!rarityId) {
+      throw new LivePasteCatalogMismatchError({ type: 'missing-rarity', gachaName, rarityLabel });
+    }
     const existingCounts = { ...(nextCounts[rarityId] ?? {}) };
 
     byCode.forEach((count, code) => {
-      const itemId = itemIdMap.get(code) ?? generateDeterministicItemId(`${gachaId}-${code}`);
+      const itemId = itemIdMap.get(code);
+      if (!itemId) {
+        throw new LivePasteCatalogMismatchError({
+          type: 'missing-item',
+          gachaName,
+          rarityLabel,
+          itemName: code
+        });
+      }
       const normalized = Math.max(0, Math.floor(count));
       if (normalized > 0) {
         existingCounts[itemId] = (existingCounts[itemId] ?? 0) + normalized;
