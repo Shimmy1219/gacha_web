@@ -18,7 +18,8 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   sm: 'max-w-lg',
   md: 'max-w-xl',
   lg: 'max-w-[55rem]',
-  xl: 'max-w-[64rem]'
+  xl: 'max-w-[64rem]',
+  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)] max-h-[96vh]'
 };
 
 interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof DialogBackdrop> {}
@@ -97,7 +98,7 @@ export function ModalFooter({ className, ...props }: ModalFooterProps): JSX.Elem
     <div
       {...props}
       className={clsx(
-        'modal-footer mt-8 flex flex-wrap items-center justify-end gap-3 border-t border-white/5 pt-4',
+        'modal-footer mt-8 flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-white/5 pt-4',
         className
       )}
     />

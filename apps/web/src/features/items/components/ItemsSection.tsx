@@ -2,11 +2,17 @@ import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
-import { ItemCard, type ItemCardModel, type RarityMeta } from '../../../components/cards/ItemCard';
+import {
+  ItemCard,
+  type ItemCardModel,
+  type ItemCardPreviewPayload,
+  type RarityMeta
+} from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../components/modal';
 import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
+import { ItemAssetPreviewDialog } from '../dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
@@ -438,6 +444,32 @@ export function ItemsSection(): JSX.Element {
     [catalogStore, data?.userInventories?.byItemId, flatItems, push, rarityOptionsByGacha, riaguStore, userInventoryStore]
   );
 
+  const handlePreviewAsset = useCallback(
+    (payload: ItemCardPreviewPayload) => {
+      const target = flatItems.find((entry) => entry.model.itemId === payload.itemId);
+      if (!target) {
+        return;
+      }
+
+      push(ItemAssetPreviewDialog, {
+        id: `item-preview-${payload.itemId}`,
+        title: payload.itemName,
+        description: payload.gachaDisplayName,
+        size: 'full',
+        payload: {
+          itemId: payload.itemId,
+          itemName: payload.itemName,
+          gachaName: payload.gachaDisplayName,
+          rarityLabel: target.rarity.label,
+          rarityColor: target.rarity.color,
+          assetHash: payload.assetHash,
+          thumbnailUrl: payload.thumbnailUrl
+        }
+      });
+    },
+    [flatItems, push]
+  );
+
   return (
     <SectionContainer
       id="items"
@@ -498,7 +530,13 @@ export function ItemsSection(): JSX.Element {
                     <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                   ) : null}
                   {items.map(({ model, rarity }) => (
-                    <ItemCard key={model.itemId} model={model} rarity={rarity} onEditImage={handleEditImage} />
+                    <ItemCard
+                      key={model.itemId}
+                      model={model}
+                      rarity={rarity}
+                      onEditImage={handleEditImage}
+                      onPreviewAsset={handlePreviewAsset}
+                    />
                   ))}
                 </div>
               ) : null}

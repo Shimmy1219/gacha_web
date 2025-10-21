@@ -1,11 +1,12 @@
 import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, FolderArrowDownIcon } from '@heroicons/react/24/outline';
+import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState, type FormEvent } from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -25,6 +26,18 @@ export interface UserInventoryEntry {
   pulls: UserInventoryEntryItem[];
 }
 
+export interface InventoryCatalogItemOption {
+  itemId: string;
+  name: string;
+  rarityId: string;
+}
+
+export interface InventoryRarityOption {
+  rarityId: string;
+  label: string;
+  color?: string;
+}
+
 export interface UserCardProps {
   userId: UserId;
   userName: string;
@@ -34,6 +47,8 @@ export interface UserCardProps {
   expandedByDefault?: boolean;
   onExport?: (userId: UserId) => void;
   showCounts?: boolean;
+  catalogItemsByGacha?: Record<string, InventoryCatalogItemOption[]>;
+  rarityOptionsByGacha?: Record<string, InventoryRarityOption[]>;
 }
 
 export function UserCard({
@@ -44,8 +59,13 @@ export function UserCard({
   onExport,
   totalSummary,
   memo,
-  showCounts = true
+  showCounts = true,
+  catalogItemsByGacha,
+  rarityOptionsByGacha
 }: UserCardProps): JSX.Element {
+  const catalogItemsMap = catalogItemsByGacha ?? {};
+  const rarityOptionsMap = rarityOptionsByGacha ?? {};
+
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
@@ -100,7 +120,14 @@ export function UserCard({
             >
               <div className="user-card__inventories space-y-4">
                 {inventories.map((inventory) => (
-                  <GachaInventoryCard key={inventory.inventoryId} inventory={inventory} showCounts={showCounts} />
+                  <GachaInventoryCard
+                    key={inventory.inventoryId}
+                    inventory={inventory}
+                    showCounts={showCounts}
+                    userId={userId}
+                    catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
+                    rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
+                  />
                 ))}
               </div>
             </Disclosure.Panel>
@@ -122,9 +149,21 @@ const RARITY_ORDER: Record<string, number> = {
 interface GachaInventoryCardProps {
   inventory: UserInventoryEntry;
   showCounts: boolean;
+  userId: UserId;
+  catalogItems: InventoryCatalogItemOption[];
+  rarityOptions: InventoryRarityOption[];
 }
 
-function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps): JSX.Element {
+type InventoryDraftMode = 'edit' | 'add';
+
+function GachaInventoryCard({
+  inventory,
+  showCounts,
+  userId,
+  catalogItems,
+  rarityOptions: _rarityOptions
+}: GachaInventoryCardProps): JSX.Element {
+  const { userInventories: userInventoryStore } = useDomainStores();
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
     [inventory.pulls]
@@ -155,6 +194,155 @@ function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps):
     });
   }, [inventory.pulls]);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [activeEditor, setActiveEditor] = useState<string | null>(null);
+  const [draftMode, setDraftMode] = useState<InventoryDraftMode | null>(null);
+  const [draftItemId, setDraftItemId] = useState('');
+  const [draftCount, setDraftCount] = useState('');
+  const [draftRarityId, setDraftRarityId] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const catalogItemMap = useMemo(() => {
+    return catalogItems.reduce<Map<string, InventoryCatalogItemOption>>((acc, item) => {
+      acc.set(item.itemId, item);
+      return acc;
+    }, new Map());
+  }, [catalogItems]);
+
+  const resetDraft = useCallback(() => {
+    setActiveEditor(null);
+    setDraftMode(null);
+    setDraftItemId('');
+    setDraftCount('');
+    setDraftRarityId('');
+    setErrorMessage(null);
+  }, []);
+
+  const handleToggleEditing = useCallback(() => {
+    setIsEditing((previous) => {
+      const next = !previous;
+      if (!next) {
+        resetDraft();
+      }
+      return next;
+    });
+  }, [resetDraft]);
+
+  const handleStartEdit = useCallback(
+    (rarityId: string, itemId: string, currentCount: number) => {
+      if (!isEditing) {
+        return;
+      }
+      setActiveEditor(`edit:${rarityId}:${itemId}`);
+      setDraftMode('edit');
+      setDraftItemId(itemId);
+      setDraftCount(String(currentCount));
+      setDraftRarityId(rarityId);
+      setErrorMessage(null);
+    },
+    [isEditing]
+  );
+
+  const handleStartAdd = useCallback(() => {
+      if (!isEditing) {
+        return;
+      }
+      setActiveEditor('add');
+      setDraftMode('add');
+      setDraftItemId('');
+      setDraftCount('1');
+      setDraftRarityId('');
+      setErrorMessage(null);
+    },
+    [isEditing]
+  );
+
+  const selectedCatalogItem = useMemo(() => {
+    if (!draftItemId) {
+      return null;
+    }
+    return catalogItemMap.get(draftItemId) ?? null;
+  }, [catalogItemMap, draftItemId]);
+
+  const handleSubmitDraft = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      const trimmedItemId = draftItemId.trim();
+      let rarityId = draftRarityId.trim();
+      const normalizedCount = Number.parseInt(draftCount, 10);
+
+      if (!trimmedItemId) {
+        setErrorMessage('景品を選択してください');
+        return;
+      }
+
+      if (draftMode === 'add') {
+        const matched = catalogItemMap.get(trimmedItemId);
+        if (!matched) {
+          setErrorMessage('選択した景品が見つかりませんでした');
+          return;
+        }
+        rarityId = matched.rarityId;
+        setDraftRarityId(rarityId);
+      }
+
+      if (!rarityId) {
+        setErrorMessage('レアリティ情報を取得できませんでした');
+        return;
+      }
+
+      if (!Number.isFinite(normalizedCount) || Number.isNaN(normalizedCount)) {
+        setErrorMessage('個数は整数で入力してください');
+        return;
+      }
+
+      if (normalizedCount < 0) {
+        setErrorMessage('個数は0以上で入力してください');
+        return;
+      }
+
+      userInventoryStore.setInventoryItemCount(
+        {
+          userId,
+          inventoryId: inventory.inventoryId,
+          itemId: trimmedItemId,
+          rarityId,
+          count: normalizedCount,
+          gachaId: inventory.gachaId
+        },
+        { persist: 'immediate' }
+      );
+
+      resetDraft();
+    },
+    [
+      draftMode,
+      draftCount,
+      draftItemId,
+      draftRarityId,
+      inventory.inventoryId,
+      inventory.gachaId,
+      resetDraft,
+      userId,
+      userInventoryStore
+    ]
+  );
+
+  const handleDraftItemIdChange = useCallback(
+    (value: string) => {
+      setDraftItemId(value);
+      if (draftMode === 'add') {
+        const matched = catalogItemMap.get(value);
+        if (matched) {
+          setDraftRarityId(matched.rarityId);
+        }
+      }
+      setErrorMessage(null);
+    },
+    [catalogItemMap, draftMode]
+  );
+
   return (
     <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[#15151b] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
@@ -162,18 +350,49 @@ function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps):
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
           <p className="user-card__inventory-id text-[11px] text-muted-foreground">{inventory.inventoryId}</p>
         </div>
-        {showCounts ? (
-          <span className="user-card__inventory-total chip border-accent/30 bg-accent/10 text-[11px] text-accent">
-            {totalPulls}連
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {showCounts ? (
+            <span className="user-card__inventory-total chip border-accent/30 bg-accent/10 text-[11px] text-accent">
+              {totalPulls}連
+            </span>
+          ) : null}
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-lg border border-dashed border-accent/50 bg-accent/10 px-2.5 py-1 text-xs font-semibold text-accent transition hover:border-accent/70 hover:bg-accent/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={handleStartAdd}
+              >
+                <PlusIcon className="h-4 w-4" />
+                追加
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-border/60 bg-[#1d1d25] px-3 py-1 text-xs font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={handleToggleEditing}
+              >
+                編集完了
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-[#1d1d25] text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              aria-label="インベントリを編集"
+              onClick={handleToggleEditing}
+            >
+              <EllipsisVerticalIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </header>
       <div className="user-card__rarity-groups space-y-3">
         {rarityGroups.map((group) => {
           const { className, style } = getRarityTextPresentation(group.rarity.color);
+          const rarityId = group.rarity.rarityId ?? group.rarity.label;
           return (
             <div
-              key={group.rarity.rarityId ?? group.rarity.label}
+              key={rarityId}
               className="user-card__rarity-row grid gap-2 sm:grid-cols-[minmax(5rem,auto),1fr] sm:items-start"
             >
               <div className="user-card__rarity-label flex items-center gap-2">
@@ -184,26 +403,144 @@ function GachaInventoryCard({ inventory, showCounts }: GachaInventoryCardProps):
                   {group.items.reduce((sum, item) => sum + item.count, 0)}件
                 </span>
               </div>
-              <div className="user-card__rarity-items flex flex-wrap gap-2">
-                {group.items.map((item) => (
-                  <span
-                    key={`${inventory.inventoryId}-${item.itemId}`}
-                    className={clsx(
-                      'user-card__item-chip inline-flex items-center gap-2',
-                      'rounded-full border border-border/60 bg-[#23232b]',
-                      'px-3 py-1 text-xs text-surface-foreground',
-                    )}
-                  >
-                    <span>{item.itemName}</span>
-                    {item.count > 1 ? (
-                      <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
-                    ) : null}
-                  </span>
-                ))}
+              <div className="user-card__rarity-items flex flex-wrap items-start gap-2">
+                {group.items.map((item) => {
+                  const editorKey = `edit:${rarityId}:${item.itemId}`;
+                  const isActive = activeEditor === editorKey && draftMode === 'edit';
+                  if (isEditing && isActive) {
+                    return (
+                      <form
+                        key={`${inventory.inventoryId}-${editorKey}`}
+                        className={clsx(
+                          'user-card__item-chip flex w-full flex-col gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+                          'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                        )}
+                        onSubmit={handleSubmitDraft}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{item.itemName}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-16 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                            value={draftCount}
+                            onChange={(event) => setDraftCount(event.target.value)}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="submit"
+                            className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white shadow hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            保存
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md border border-border/60 px-3 py-1 text-xs text-muted-foreground hover:border-border/40 hover:text-surface-foreground"
+                            onClick={resetDraft}
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                        {errorMessage && isActive ? (
+                          <p className="text-[10px] text-red-400">{errorMessage}</p>
+                        ) : null}
+                      </form>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={`${inventory.inventoryId}-${editorKey}`}
+                      type="button"
+                      className={clsx(
+                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-[#23232b]',
+                        'px-3 py-1 text-xs text-surface-foreground transition',
+                        isEditing && item.rarity.rarityId
+                          ? 'hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+                          : 'cursor-default'
+                      )}
+                      onClick={() => item.rarity.rarityId && handleStartEdit(rarityId, item.itemId, item.count)}
+                      disabled={!isEditing || !item.rarity.rarityId}
+                    >
+                      <span>{item.itemName}</span>
+                      {item.count > 1 ? (
+                        <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
         })}
+        {isEditing && activeEditor === 'add' && draftMode === 'add' ? (
+          <form
+            className={clsx(
+              'user-card__item-chip mt-1 flex w-full flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+              'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+            )}
+            onSubmit={handleSubmitDraft}
+          >
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground" htmlFor={`${inventory.inventoryId}-add-item`}>
+                景品
+              </label>
+              <select
+                id={`${inventory.inventoryId}-add-item`}
+                className="w-48 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                value={draftItemId}
+                onChange={(event) => handleDraftItemIdChange(event.target.value)}
+                autoFocus
+                disabled={catalogItems.length === 0}
+              >
+                <option value="" disabled>
+                  選択してください
+                </option>
+                {catalogItems.map((option) => (
+                  <option key={`${inventory.inventoryId}-${option.itemId}`} value={option.itemId}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground" htmlFor={`${inventory.inventoryId}-add-count`}>
+                個数
+              </label>
+              <input
+                id={`${inventory.inventoryId}-add-count`}
+                type="number"
+                min={0}
+                className="w-16 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                value={draftCount}
+                onChange={(event) => setDraftCount(event.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white shadow hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                保存
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-border/60 px-3 py-1 text-xs text-muted-foreground hover:border-border/40 hover:text-surface-foreground"
+                onClick={resetDraft}
+              >
+                キャンセル
+              </button>
+            </div>
+            {selectedCatalogItem ? (
+              <p className="w-full text-xs text-muted-foreground">{selectedCatalogItem.name}</p>
+            ) : null}
+            {errorMessage && activeEditor === 'add' ? (
+              <p className="w-full text-[10px] text-red-400">{errorMessage}</p>
+            ) : null}
+          </form>
+        ) : null}
       </div>
     </section>
   );
