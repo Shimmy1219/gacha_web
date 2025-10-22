@@ -314,14 +314,14 @@ export function RaritySection(): JSX.Element {
       const entry = emitRateInputs[rarityId];
       const value = entry?.value ?? '';
       const trimmed = value.trim();
-      const parsedRate = trimmed === '' ? null : parseRarityRateInput(value);
+      const parsedRate = trimmed === '' ? null : parseRarityRateInput(trimmed);
 
       if (trimmed !== '' && parsedRate == null) {
         revertEmitRateInput(rarityId);
         return;
       }
 
-      const nextRate = trimmed === '' ? undefined : parsedRate ?? undefined;
+      const nextRate = trimmed === '' ? 0 : parsedRate ?? undefined;
       const previousRow = rarityRows.find((row) => row.id === rarityId);
       const currentRate = previousRow?.emitRate;
       const sanitizedValue = formatRarityRate(nextRate);
