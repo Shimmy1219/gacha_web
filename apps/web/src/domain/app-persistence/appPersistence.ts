@@ -12,7 +12,8 @@ import {
   type UserProfilesStateV3,
   type GachaAppStateV3,
   type GachaRarityStateV3,
-  type HitCountsStateV3
+  type HitCountsStateV3,
+  type PullHistoryStateV1
 } from './types';
 
 export const GACHA_STORAGE_UPDATED_EVENT = 'gacha-storage:updated' as const;
@@ -28,7 +29,8 @@ export const STORAGE_KEYS = {
   ptSettings: 'gacha:pt-settings:v3',
   uiPreferences: 'gacha:ui-preferences:v3',
   receiveHistory: 'gacha:receive:history:v3',
-  receivePrefs: 'gacha:receive:prefs:v3'
+  receivePrefs: 'gacha:receive:prefs:v3',
+  pullHistory: 'gacha:pull-history:v1'
 } as const;
 
 type StorageKey = keyof typeof STORAGE_KEYS;
@@ -93,6 +95,7 @@ export class AppPersistence {
       uiPreferences: this.readJson<UiPreferencesStateV3>('uiPreferences'),
       receiveHistory: this.readJson<ReceiveHistoryStateV3>('receiveHistory'),
       receivePrefs: this.readJson<ReceivePrefsStateV3>('receivePrefs'),
+      pullHistory: this.readJson<PullHistoryStateV1>('pullHistory'),
       saveOptions: this.collectSaveOptions()
     };
   }
@@ -113,6 +116,7 @@ export class AppPersistence {
     this.persistValue('uiPreferences', snapshot.uiPreferences);
     this.persistValue('receiveHistory', snapshot.receiveHistory);
     this.persistValue('receivePrefs', snapshot.receivePrefs);
+    this.persistValue('pullHistory', snapshot.pullHistory);
 
     this.replaceSaveOptions(snapshot.saveOptions ?? null);
 
@@ -168,6 +172,10 @@ export class AppPersistence {
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'receivePrefs')) {
       this.persistValue('receivePrefs', partial.receivePrefs as ReceivePrefsStateV3 | undefined);
+      touched = true;
+    }
+    if (Object.prototype.hasOwnProperty.call(partial, 'pullHistory')) {
+      this.persistValue('pullHistory', partial.pullHistory as PullHistoryStateV1 | undefined);
       touched = true;
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'saveOptions')) {
@@ -266,6 +274,14 @@ export class AppPersistence {
 
   saveReceivePrefsDebounced(state: ReceivePrefsStateV3 | undefined): void {
     this.saveDebounced({ receivePrefs: state });
+  }
+
+  savePullHistory(state: PullHistoryStateV1 | undefined): void {
+    this.savePartial({ pullHistory: state });
+  }
+
+  savePullHistoryDebounced(state: PullHistoryStateV1 | undefined): void {
+    this.saveDebounced({ pullHistory: state });
   }
 
   saveDebounced(partial: PersistPartialSnapshot = {}): void {

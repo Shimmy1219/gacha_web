@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { type GachaLocalStorageSnapshot } from '@domain/app-persistence';
+import { type GachaLocalStorageSnapshot, type PullHistoryStateV1 } from '@domain/app-persistence';
 import {
   generateDeterministicGachaId,
   generateDeterministicInventoryId,
@@ -9,7 +9,8 @@ import {
   generateDeterministicPtGuaranteeId,
   generateDeterministicRarityId,
   generateDeterministicRiaguId,
-  generateDeterministicUserId
+  generateDeterministicUserId,
+  generateDeterministicPullId
 } from '@domain/idGenerators';
 import { useAppPersistence } from '../storage/AppPersistenceProvider';
 
@@ -544,6 +545,45 @@ function createMockSnapshot(): {
     }
   };
 
+  const pullHistoryEntries = GACHA_DEFINITIONS.slice(0, 3).map((gacha, index) => {
+    const entryId = generateDeterministicPullId(`${gacha.id}-pull-${index}`);
+    const assignedUserId = userIds[index % userIds.length];
+    const gachaItems = itemsByGacha[gacha.id] ?? [];
+    const selectedItems = gachaItems.slice(0, 3);
+    const itemCounts = selectedItems.reduce<Record<string, number>>((acc, item, itemIndex) => {
+      acc[item.itemId] = (itemIndex + 1) * (index + 1);
+      return acc;
+    }, {});
+    const rarityCounts = selectedItems.reduce<Record<string, number>>((acc, item, itemIndex) => {
+      const rarityId = item.rarityId;
+      acc[rarityId] = (acc[rarityId] ?? 0) + (itemIndex + 1);
+      return acc;
+    }, {});
+
+    return [
+      entryId,
+      {
+        id: entryId,
+        gachaId: gacha.id,
+        userId: assignedUserId,
+        executedAt: new Date(now.getTime() - (index + 1) * 60 * 60 * 1000).toISOString(),
+        pullCount: 10 * (index + 1),
+        currencyType: 'stone',
+        currencyUsed: 3000 * (index + 1),
+        itemCounts,
+        rarityCounts,
+        notes: `${gacha.displayName}のサンプル${10 * (index + 1)}連結果`
+      }
+    ] as const;
+  });
+
+  const pullHistoryState = {
+    version: 1 as const,
+    updatedAt: nowIso,
+    order: pullHistoryEntries.map(([entryId]) => entryId),
+    pulls: Object.fromEntries(pullHistoryEntries)
+  } satisfies PullHistoryStateV1;
+
   const snapshot: GachaLocalStorageSnapshot = {
     appState,
     catalogState,
@@ -556,7 +596,8 @@ function createMockSnapshot(): {
     uiPreferences,
     saveOptions: { [primaryUserId]: saveOptions },
     receiveHistory,
-    receivePrefs
+    receivePrefs,
+    pullHistory: pullHistoryState
   };
 
   return {

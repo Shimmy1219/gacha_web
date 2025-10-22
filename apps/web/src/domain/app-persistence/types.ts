@@ -186,6 +186,26 @@ export interface ReceivePrefsStateV3 {
   };
 }
 
+export interface PullHistoryEntryV1 {
+  id: string;
+  gachaId: string;
+  userId?: string;
+  executedAt: string;
+  pullCount: number;
+  currencyType?: string;
+  currencyUsed?: number;
+  itemCounts: Record<string, number>;
+  rarityCounts?: Record<string, number>;
+  notes?: string;
+}
+
+export interface PullHistoryStateV1 {
+  version: 1;
+  updatedAt: string;
+  order: string[];
+  pulls: Record<string, PullHistoryEntryV1 | undefined>;
+}
+
 export interface GachaLocalStorageSnapshot {
   appState?: GachaAppStateV3;
   catalogState?: GachaCatalogStateV3;
@@ -199,4 +219,5 @@ export interface GachaLocalStorageSnapshot {
   saveOptions?: Record<string, SaveOptionsSnapshotV3>;
   receiveHistory?: ReceiveHistoryStateV3;
   receivePrefs?: ReceivePrefsStateV3;
+  pullHistory?: PullHistoryStateV1;
 }
