@@ -1,5 +1,6 @@
 import { MusicalNoteIcon, PhotoIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
+import { forwardRef, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
@@ -52,9 +53,15 @@ export interface ItemCardProps {
   onToggleRiagu?: (itemId: ItemId) => void;
   onEditImage?: (itemId: ItemId) => void;
   onPreviewAsset?: (payload: ItemCardPreviewPayload) => void;
+  isSelected?: boolean;
+  onCardMouseDown?: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  onCardContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
-export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCardProps): JSX.Element {
+export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemCard(
+  { model, rarity, onEditImage, onPreviewAsset, isSelected = false, onCardMouseDown, onCardContextMenu },
+  ref
+): JSX.Element {
   const { imageAsset } = model;
   const preview = useAssetPreview(imageAsset?.assetHash ?? null);
   const isImageAsset = Boolean(preview.type?.startsWith('image/'));
@@ -85,10 +92,15 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
     <article
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
+      data-selected={isSelected ? 'true' : undefined}
       className={clsx(
         'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
-        model.isRiagu && 'ring-1 ring-inset ring-accent/60'
+        model.isRiagu && 'ring-1 ring-inset ring-accent/60',
+        isSelected && 'ring-2 ring-offset-2 ring-offset-[#09090f] ring-accent/70'
       )}
+      ref={ref}
+      onMouseDown={onCardMouseDown}
+      onContextMenu={onCardContextMenu}
     >
       <div
         className="absolute z-10 flex flex-col items-end gap-2"
@@ -139,4 +151,4 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
       </div>
     </article>
   );
-}
+});
