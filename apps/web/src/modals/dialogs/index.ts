@@ -8,6 +8,7 @@ export * from './LivePasteDialog';
 export * from './LivePasteGachaPickerDialog';
 export * from './PrizeSettingsDialog';
 export * from './RarityInUseDialog';
+export * from './RarityRateErrorDialog';
 export * from './RiaguConfigDialog';
 export * from './RiaguDisableConfirmDialog';
 export * from './SaveOptionsDialog';
