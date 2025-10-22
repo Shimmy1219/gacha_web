@@ -1,7 +1,15 @@
 import { CheckIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { createPortal } from 'react-dom';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
 
 interface RarityOption {
   id: string;
@@ -94,7 +102,15 @@ export function ItemContextMenu({
       }
     };
 
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const target = event.target as Node | null;
+      if (target) {
+        const isInsideMenu = menuRef.current?.contains(target) ?? false;
+        const isInsideRarityMenu = rarityMenuRef.current?.contains(target) ?? false;
+        if (isInsideMenu || isInsideRarityMenu) {
+          return;
+        }
+      }
       handleClose();
     };
 
@@ -149,6 +165,38 @@ export function ItemContextMenu({
     return `${selectedCount}件選択中`;
   }, [selectedCount]);
 
+  const handleMenuMouseLeave = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!nextTarget) {
+      setShowRarityList(false);
+      return;
+    }
+    if (rarityButtonRef.current?.contains(nextTarget) || rarityMenuRef.current?.contains(nextTarget)) {
+      return;
+    }
+    setShowRarityList(false);
+  }, []);
+
+  const handleRarityButtonMouseLeave = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && rarityMenuRef.current?.contains(nextTarget)) {
+      return;
+    }
+    setShowRarityList(false);
+  }, []);
+
+  const handleRarityMenuMouseLeave = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && rarityButtonRef.current?.contains(nextTarget)) {
+      return;
+    }
+    setShowRarityList(false);
+  }, []);
+
+  const handleSecondaryItemEnter = useCallback(() => {
+    setShowRarityList(false);
+  }, []);
+
   const content = (
     <div
       ref={menuRef}
@@ -158,6 +206,7 @@ export function ItemContextMenu({
       onContextMenu={(event) => {
         event.preventDefault();
       }}
+      onMouseLeave={handleMenuMouseLeave}
     >
       <div className="px-2 pb-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
         {rarityBadge ?? 'コンテキスト操作'}
@@ -168,6 +217,7 @@ export function ItemContextMenu({
           ref={rarityButtonRef}
           className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-accent/20"
           onMouseEnter={() => setShowRarityList(true)}
+          onMouseLeave={handleRarityButtonMouseLeave}
           onClick={() => setShowRarityList((previous) => !previous)}
         >
           <span>レアリティを選択</span>
@@ -182,6 +232,7 @@ export function ItemContextMenu({
               ? 'cursor-not-allowed text-muted-foreground/60'
               : 'hover:bg-accent/20'
           )}
+          onMouseEnter={handleSecondaryItemEnter}
           onClick={() => {
             if (disableEditImage) {
               return;
@@ -195,6 +246,7 @@ export function ItemContextMenu({
         <button
           type="button"
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
+          onMouseEnter={handleSecondaryItemEnter}
           onClick={() => {
             onToggleComplete();
             handleClose();
@@ -205,6 +257,7 @@ export function ItemContextMenu({
         <button
           type="button"
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
+          onMouseEnter={handleSecondaryItemEnter}
           onClick={() => {
             onTogglePickup();
             handleClose();
@@ -215,6 +268,7 @@ export function ItemContextMenu({
         <button
           type="button"
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
+          onMouseEnter={handleSecondaryItemEnter}
           onClick={() => {
             onToggleRiagu();
             handleClose();
@@ -226,6 +280,7 @@ export function ItemContextMenu({
         <button
           type="button"
           className="flex w-full items-center rounded-lg px-3 py-2 text-left text-red-300 hover:bg-red-500/20"
+          onMouseEnter={handleSecondaryItemEnter}
           onClick={() => {
             onDelete();
             handleClose();
@@ -247,6 +302,7 @@ export function ItemContextMenu({
               className="fixed z-[1001] max-h-48 min-w-[200px] max-w-[260px] space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-black/80 p-1 backdrop-blur"
               style={{ top: rarityMenuPosition.y, left: rarityMenuPosition.x }}
               role="menu"
+              onMouseLeave={handleRarityMenuMouseLeave}
             >
               {rarityOptions.length === 0 ? (
                 <p className="px-2 py-1 text-xs text-muted-foreground">設定可能なレアリティがありません</p>
