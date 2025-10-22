@@ -404,6 +404,7 @@ export function RaritySection(): JSX.Element {
           const detail = `他のレアリティの合計が${formatRarityRate(result.error.total)}%になっています。`;
           push(RarityRateErrorDialog, {
             id: 'rarity-rate-error',
+            title: '排出率エラー',
             size: 'sm',
             payload: { detail }
           });
