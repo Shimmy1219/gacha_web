@@ -551,7 +551,56 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     }, options);
   }
 
-    removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+  removeInventory(
+    params: { userId: string; inventoryId: string; updatedAt?: string },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const { userId, inventoryId, updatedAt } = params;
+
+    if (!userId || !inventoryId) {
+      console.warn('UserInventoryStore.removeInventory called with insufficient identifiers', params);
+      return;
+    }
+
+    const timestamp = updatedAt ?? new Date().toISOString();
+
+    this.update((previous) => {
+      const baseState = previous ?? this.loadLatestState();
+
+      if (!baseState?.inventories) {
+        console.warn('UserInventoryStore.removeInventory could not access inventories state');
+        return previous;
+      }
+
+      const existingUserInventories = baseState.inventories[userId];
+      if (!existingUserInventories || !existingUserInventories[inventoryId]) {
+        return previous;
+      }
+
+      const nextInventories: UserInventoriesStateV3['inventories'] = { ...baseState.inventories };
+      const nextUserInventories = { ...existingUserInventories };
+      delete nextUserInventories[inventoryId];
+
+      if (Object.keys(nextUserInventories).length > 0) {
+        nextInventories[userId] = nextUserInventories;
+      } else {
+        delete nextInventories[userId];
+      }
+
+      if (Object.keys(nextInventories).length === 0) {
+        return undefined;
+      }
+
+      return {
+        version: typeof baseState.version === 'number' ? baseState.version : 3,
+        updatedAt: timestamp,
+        inventories: nextInventories,
+        byItemId: rebuildByItemId(nextInventories)
+      } satisfies UserInventoriesStateV3;
+    }, options);
+  }
+
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
     if (!gachaId) {
       return;
     }

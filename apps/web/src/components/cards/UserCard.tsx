@@ -7,6 +7,7 @@ import { Fragment, useCallback, useMemo, useState, type FormEvent } from 'react'
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { ConfirmDialog, useModal } from '../../modals';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -163,7 +164,8 @@ function GachaInventoryCard({
   catalogItems,
   rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
-  const { userInventories: userInventoryStore } = useDomainStores();
+  const { userInventories: userInventoryStore, pullHistory: pullHistoryStore } = useDomainStores();
+  const { push } = useModal();
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
     [inventory.pulls]
@@ -236,11 +238,31 @@ function GachaInventoryCard({
   }, [inventory.inventoryId, userId]);
 
   const handleDeleteInventory = useCallback(() => {
-    console.info('インベントリ削除は未実装です', {
-      userId,
-      inventoryId: inventory.inventoryId
+    push(ConfirmDialog, {
+      id: `inventory-delete-${inventory.inventoryId}`,
+      title: 'インベントリを削除',
+      payload: {
+        message: `ユーザー「${userId}」の「${inventory.gachaName}」インベントリと関連するガチャ履歴を削除します。この操作は元に戻せません。よろしいですか？`,
+        confirmLabel: '削除する',
+        cancelLabel: 'キャンセル',
+        onConfirm: () => {
+          resetDraft();
+          setIsEditing(false);
+          userInventoryStore.removeInventory({ userId, inventoryId: inventory.inventoryId });
+          pullHistoryStore.deletePullsForInventory({ gachaId: inventory.gachaId, userId });
+        }
+      }
     });
-  }, [inventory.inventoryId, userId]);
+  }, [
+    inventory.gachaId,
+    inventory.gachaName,
+    inventory.inventoryId,
+    pullHistoryStore,
+    push,
+    resetDraft,
+    userId,
+    userInventoryStore
+  ]);
 
   const handleStartEdit = useCallback(
     (rarityId: string, itemId: string, currentCount: number) => {
