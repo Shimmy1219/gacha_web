@@ -38,13 +38,6 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
-type SelectionBox = { left: number; top: number; width: number; height: number };
-interface SelectionDragState {
-  startClientX: number;
-  startClientY: number;
-  containerRect: DOMRect;
-  hasMoved: boolean;
-}
 
 function getSequentialItemName(position: number): string {
   if (Number.isNaN(position) || !Number.isFinite(position)) {
@@ -72,10 +65,6 @@ export function ItemsSection(): JSX.Element {
   const [isCondensedGrid, setIsCondensedGrid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
-  const selectionSurfaceRef = useRef<HTMLDivElement | null>(null);
-  const selectionDragRef = useRef<SelectionDragState | null>(null);
-  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
 
@@ -229,74 +218,6 @@ export function ItemsSection(): JSX.Element {
     setContextMenuState(null);
   }, [activeGachaId]);
 
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      const drag = selectionDragRef.current;
-      if (!drag) {
-        return;
-      }
-
-      event.preventDefault();
-
-      const { containerRect, startClientX, startClientY } = drag;
-      const currentX = event.clientX;
-      const currentY = event.clientY;
-
-      if (!drag.hasMoved) {
-        const deltaX = Math.abs(currentX - startClientX);
-        const deltaY = Math.abs(currentY - startClientY);
-        if (deltaX > 2 || deltaY > 2) {
-          drag.hasMoved = true;
-        }
-      }
-
-      const left = Math.min(startClientX, currentX) - containerRect.left;
-      const top = Math.min(startClientY, currentY) - containerRect.top;
-      const width = Math.abs(currentX - startClientX);
-      const height = Math.abs(currentY - startClientY);
-      setSelectionBox({ left, top, width, height });
-    };
-
-    const handleMouseUp = (event: MouseEvent) => {
-      const drag = selectionDragRef.current;
-      if (!drag) {
-        return;
-      }
-
-      selectionDragRef.current = null;
-      const { startClientX, startClientY } = drag;
-      const left = Math.min(startClientX, event.clientX);
-      const right = Math.max(startClientX, event.clientX);
-      const top = Math.min(startClientY, event.clientY);
-      const bottom = Math.max(startClientY, event.clientY);
-      setSelectionBox(null);
-
-      if (!drag.hasMoved) {
-        return;
-      }
-
-      const nextIds: string[] = [];
-      itemRefs.current.forEach((element, itemId) => {
-        const rect = element.getBoundingClientRect();
-        if (rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom) {
-          return;
-        }
-        nextIds.push(itemId);
-      });
-
-      setSelectedItemIds(nextIds);
-      setContextMenuState(null);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
-
   const closeContextMenu = useCallback(() => {
     setContextMenuState(null);
   }, []);
@@ -351,11 +272,6 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
-      const surface = selectionSurfaceRef.current;
-      if (!surface) {
-        return;
-      }
-
       const target = event.target as HTMLElement | null;
       if (target) {
         if (target.closest('[data-item-id]')) {
@@ -366,24 +282,10 @@ export function ItemsSection(): JSX.Element {
         }
       }
 
-      event.preventDefault();
       closeContextMenu();
-
-      const rect = surface.getBoundingClientRect();
-      selectionDragRef.current = {
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        containerRect: rect,
-        hasMoved: false
-      };
-
-      setSelectionBox({
-        left: event.clientX - rect.left,
-        top: event.clientY - rect.top,
-        width: 0,
-        height: 0
-      });
-      setSelectedItemIds([]);
+      if (!event.ctrlKey && !event.metaKey) {
+        setSelectedItemIds([]);
+      }
     },
     [closeContextMenu]
   );
@@ -448,8 +350,6 @@ export function ItemsSection(): JSX.Element {
         targetIds: nextIds,
         anchorId: itemId
       });
-      selectionDragRef.current = null;
-      setSelectionBox(null);
     },
     [selectedItemIds]
   );
@@ -969,18 +869,7 @@ export function ItemsSection(): JSX.Element {
               ) : null}
 
               {showAddCard || items.length > 0 ? (
-                <div ref={selectionSurfaceRef} className="relative" onMouseDown={handleSurfaceMouseDown}>
-                  {selectionBox ? (
-                    <div
-                      className="pointer-events-none absolute z-10 rounded-md border border-accent/60 bg-accent/20"
-                      style={{
-                        left: selectionBox.left,
-                        top: selectionBox.top,
-                        width: selectionBox.width,
-                        height: selectionBox.height
-                      }}
-                    />
-                  ) : null}
+                <div onMouseDown={handleSurfaceMouseDown}>
                   <div ref={gridRef} className={gridClassName}>
                     {showAddCard ? (
                       <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
@@ -988,13 +877,6 @@ export function ItemsSection(): JSX.Element {
                     {items.map(({ model, rarity }) => (
                       <ItemCard
                         key={model.itemId}
-                        ref={(element) => {
-                          if (element) {
-                            itemRefs.current.set(model.itemId, element);
-                          } else {
-                            itemRefs.current.delete(model.itemId);
-                          }
-                        }}
                         model={model}
                         rarity={rarity}
                         onEditImage={handleEditImage}
