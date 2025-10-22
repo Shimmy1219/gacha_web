@@ -35,6 +35,8 @@ type StorageKey = keyof typeof STORAGE_KEYS;
 
 const SAVE_OPTIONS_PREFIX = 'gacha:save-options:last-upload:v3:';
 
+const TRACKED_STORAGE_KEYS = new Set<string>(Object.values(STORAGE_KEYS));
+
 export interface StorageLike {
   readonly length: number;
   key(index: number): string | null;
@@ -67,6 +69,8 @@ export class AppPersistence {
 
   private timer: ReturnType<typeof setTimeout> | null = null;
 
+  private readonly updateListeners = new Set<() => void>();
+
   constructor(options: AppPersistenceOptions = {}) {
     const fallbackStorage =
       typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -78,6 +82,8 @@ export class AppPersistence {
     this.eventTarget = options.eventTarget ?? fallbackEventTarget;
 
     this.debounceMs = typeof options.debounceMs === 'number' ? options.debounceMs : 250;
+
+    this.bindStorageEvents();
   }
 
   loadSnapshot(): GachaLocalStorageSnapshot {
@@ -266,6 +272,13 @@ export class AppPersistence {
 
   saveReceivePrefsDebounced(state: ReceivePrefsStateV3 | undefined): void {
     this.saveDebounced({ receivePrefs: state });
+  }
+
+  onUpdated(listener: () => void): () => void {
+    this.updateListeners.add(listener);
+    return () => {
+      this.updateListeners.delete(listener);
+    };
   }
 
   saveDebounced(partial: PersistPartialSnapshot = {}): void {
@@ -497,6 +510,8 @@ export class AppPersistence {
   }
 
   private emitUpdated(): void {
+    this.notifyUpdateListeners();
+
     if (!this.eventTarget) {
       return;
     }
@@ -504,6 +519,49 @@ export class AppPersistence {
     if (typeof Event === 'function') {
       this.eventTarget.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
     }
+  }
+
+  private notifyUpdateListeners(): void {
+    if (this.updateListeners.size === 0) {
+      return;
+    }
+
+    for (const listener of Array.from(this.updateListeners)) {
+      try {
+        listener();
+      } catch (error) {
+        console.warn('Failed to handle persistence update listener', error);
+      }
+    }
+  }
+
+  private bindStorageEvents(): void {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+      return;
+    }
+
+    if (!this.storage || this.storage !== window.localStorage) {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent): void => {
+      if (event.storageArea && event.storageArea !== window.localStorage) {
+        return;
+      }
+
+      const { key } = event;
+      if (key && !TRACKED_STORAGE_KEYS.has(key) && !key.startsWith(SAVE_OPTIONS_PREFIX)) {
+        return;
+      }
+
+      this.notifyUpdateListeners();
+
+      if (this.eventTarget && typeof Event === 'function') {
+        this.eventTarget.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
   }
 
   private mergePending(
