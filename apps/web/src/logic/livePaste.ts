@@ -363,13 +363,16 @@ export function applyLivePasteText(
   nextInventoriesState.updatedAt = nowIso;
   nextInventoriesState.byItemId = rebuildInventoryIndex(nextInventoriesState.inventories);
 
+  const pullHistoryState = context.stores.pullHistory.getState();
+
   const nextSnapshot: GachaLocalStorageSnapshot = {
     ...snapshot,
     appState: nextAppState,
     rarityState: nextRarityState,
     catalogState: nextCatalogState,
     userProfiles: nextProfilesState,
-    userInventories: nextInventoriesState
+    userInventories: nextInventoriesState,
+    pullHistory: pullHistoryState ?? snapshot.pullHistory
   };
 
   context.persistence.saveSnapshot(nextSnapshot);

@@ -104,6 +104,11 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     super(persistence);
   }
 
+  override hydrate(initialState: PullHistoryStateV1 | undefined): void {
+    const normalized = initialState ? normalizeState(initialState) : undefined;
+    super.hydrate(normalized);
+  }
+
   getPull(pullId: string): PullHistoryEntryV1 | undefined {
     return this.state?.pulls?.[pullId];
   }
