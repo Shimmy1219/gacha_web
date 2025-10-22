@@ -2,9 +2,9 @@ import { useCallback } from 'react';
 
 import { deleteAsset } from '@domain/assets/assetStorage';
 
-import { useModal } from '../../../components/modal';
+import { useModal } from '../../../modals';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
-import { GachaDeleteConfirmDialog } from '../dialogs/GachaDeleteConfirmDialog';
+import { GachaDeleteConfirmDialog } from '../../../modals/dialogs/GachaDeleteConfirmDialog';
 import type { GachaTabOption } from '../components/GachaTabs';
 
 interface DeleteTarget {

@@ -5,7 +5,7 @@ import {
   ModalBody,
   ModalFooter,
   type ModalComponentProps
-} from '../../../components/modal';
+} from '..';
 import { GuideInfoDialog } from './GuideInfoDialog';
 
 export interface StartWizardDialogPayload {

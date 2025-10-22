@@ -1,6 +1,6 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface ItemDeleteConfirmDialogPayload {
   itemId: string;

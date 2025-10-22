@@ -1,4 +1,4 @@
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface RiaguDisableConfirmDialogPayload {
   itemName: string;

@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
 
 import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
-import { useModal } from '../components/modal';
-import { StartWizardDialog } from '../features/onboarding/dialogs/StartWizardDialog';
-import { GuideInfoDialog } from '../features/onboarding/dialogs/GuideInfoDialog';
-import { CreateGachaWizardDialog } from '../features/onboarding/dialogs/CreateGachaWizardDialog';
-import { LivePasteDialog } from '../features/realtime/dialogs/LivePasteDialog';
-import { LivePasteGachaPickerDialog } from '../features/realtime/dialogs/LivePasteGachaPickerDialog';
-import { LivePasteCatalogErrorDialog } from '../features/realtime/dialogs/LivePasteCatalogErrorDialog';
+import { useModal } from '../modals';
+import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
+import { GuideInfoDialog } from '../modals/dialogs/GuideInfoDialog';
+import { CreateGachaWizardDialog } from '../modals/dialogs/CreateGachaWizardDialog';
+import { LivePasteDialog } from '../modals/dialogs/LivePasteDialog';
+import { LivePasteGachaPickerDialog } from '../modals/dialogs/LivePasteGachaPickerDialog';
+import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogErrorDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
 import {

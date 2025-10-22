@@ -1,11 +1,7 @@
 import { useState } from 'react';
 
-import {
-  ModalBody,
-  ModalFooter,
-  type ModalComponentProps
-} from '../../../components/modal';
-import { type LivePasteGachaConflict } from '../../../logic/livePaste';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { type LivePasteGachaConflict } from '../../features/realtime/logic/livePaste';
 
 export interface LivePasteGachaPickerDialogPayload {
   conflicts: LivePasteGachaConflict[];
