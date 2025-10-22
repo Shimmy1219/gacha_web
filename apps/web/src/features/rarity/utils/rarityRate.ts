@@ -1,3 +1,5 @@
+import { clampRate } from '../../../logic/rarityTable';
+
 export const MAX_RATE_FRACTION_DIGITS = 12;
 
 export function formatRarityRate(rate?: number): string {
@@ -39,6 +41,6 @@ export function parseRarityRateInput(value: string): number | null {
     return null;
   }
 
-  const clamped = Math.min(Math.max(parsed, 0), 100);
-  return clamped / 100;
+  const clampedPercent = Math.min(Math.max(parsed, 0), 100);
+  return clampRate(clampedPercent / 100);
 }
