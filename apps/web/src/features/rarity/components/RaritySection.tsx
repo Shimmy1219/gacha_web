@@ -361,6 +361,7 @@ export function RaritySection(): JSX.Element {
           push(RarityRateErrorDialog, {
             id: 'rarity-rate-error',
             size: 'sm',
+            title: '排出率エラー',
             payload: { detail }
           });
         }
