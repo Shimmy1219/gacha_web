@@ -1,3 +1,7 @@
+import { clampRate } from '../../../logic/rarityTable';
+
+export const MAX_RATE_FRACTION_DIGITS = 12;
+
 export function formatRarityRate(rate?: number): string {
   if (rate == null || Number.isNaN(rate)) {
     return '';
@@ -12,26 +16,23 @@ export function formatRarityRate(rate?: number): string {
     return '0';
   }
 
-  const absPercent = Math.abs(percent);
-  let maximumFractionDigits = 2;
-  if (absPercent < 0.0001) {
-    maximumFractionDigits = 8;
-  } else if (absPercent < 0.01) {
-    maximumFractionDigits = 6;
-  } else if (absPercent < 1) {
-    maximumFractionDigits = 6;
-  } else if (absPercent < 10) {
-    maximumFractionDigits = 4;
-  } else if (absPercent < 100) {
-    maximumFractionDigits = 2;
-  } else {
-    maximumFractionDigits = 0;
+  let formatted = percent.toFixed(MAX_RATE_FRACTION_DIGITS);
+
+  if (formatted.includes('.')) {
+    while (formatted.endsWith('0')) {
+      formatted = formatted.slice(0, -1);
+    }
+
+    if (formatted.endsWith('.')) {
+      formatted = formatted.slice(0, -1);
+    }
   }
 
-  return new Intl.NumberFormat('ja-JP', {
-    useGrouping: false,
-    maximumFractionDigits
-  }).format(percent);
+  if (formatted === '-0') {
+    return '0';
+  }
+
+  return formatted;
 }
 
 export function parseRarityRateInput(value: string): number | null {
@@ -40,6 +41,6 @@ export function parseRarityRateInput(value: string): number | null {
     return null;
   }
 
-  const clamped = Math.min(Math.max(parsed, 0), 100);
-  return clamped / 100;
+  const clampedPercent = Math.min(Math.max(parsed, 0), 100);
+  return clampRate(clampedPercent / 100);
 }

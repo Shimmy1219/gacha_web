@@ -10,6 +10,8 @@ export interface RarityTableRow {
   emitRateInput: string;
   placeholder?: string;
   ariaLabel?: string;
+  emitRateAriaLabel?: string;
+  isEmitRateReadOnly?: boolean;
 }
 
 interface RarityTableProps {
@@ -17,6 +19,7 @@ interface RarityTableProps {
   onLabelChange?: (rarityId: string, label: string) => void;
   onColorChange?: (rarityId: string, color: string) => void;
   onEmitRateChange?: (rarityId: string, value: string) => void;
+  onEmitRateCommit?: (rarityId: string) => void;
   onDelete?: (rarityId: string) => void;
   onAdd?: () => void;
   canDeleteRow?: (rarityId: string) => boolean;
@@ -27,6 +30,7 @@ export function RarityTable({
   onLabelChange,
   onColorChange,
   onEmitRateChange,
+  onEmitRateCommit,
   onDelete,
   onAdd,
   canDeleteRow
@@ -89,7 +93,17 @@ export function RarityTable({
                       step="any"
                       value={row.emitRateInput}
                       onChange={(event) => onEmitRateChange?.(row.id, event.target.value)}
-                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                      onBlur={() => onEmitRateCommit?.(row.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label={row.emitRateAriaLabel ?? `${label || row.id} の排出率`}
+                      title={row.isEmitRateReadOnly ? '排出率は自動で調整されます' : undefined}
+                      disabled={row.isEmitRateReadOnly}
                     />
                     <span className="rarity-section__rate-unit text-xs text-muted-foreground">%</span>
                   </div>
