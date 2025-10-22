@@ -8,7 +8,8 @@ export const ID_PREFIXES = {
   inventory: 'inv-',
   riagu: 'riagu-',
   ptBundle: 'bndl-',
-  ptGuarantee: 'ptg-'
+  ptGuarantee: 'ptg-',
+  pull: 'pull-'
 } as const;
 
 export function generateBase62IdSuffix(length = 10): string {
@@ -121,4 +122,12 @@ export function generatePtGuaranteeId(): string {
 
 export function generateDeterministicPtGuaranteeId(seed: string, length = 10): string {
   return generateDeterministicPrefixedId(ID_PREFIXES.ptGuarantee, seed, length);
+}
+
+export function generatePullId(): string {
+  return generatePrefixedId(ID_PREFIXES.pull);
+}
+
+export function generateDeterministicPullId(seed: string, length = 10): string {
+  return generateDeterministicPrefixedId(ID_PREFIXES.pull, seed, length);
 }

@@ -304,6 +304,52 @@ export function applyLivePasteText(
       counts: block.counts,
       nowIso
     });
+
+    const itemCounts: Record<string, number> = {};
+    const rarityCounts: Record<string, number> = {};
+
+    block.counts.forEach((byCode, rarityLabel) => {
+      const rarityId = rarityIdMap.get(rarityLabel);
+      if (!rarityId) {
+        return;
+      }
+
+      let rarityTotal = 0;
+
+      byCode.forEach((count, code) => {
+        const itemId = itemIdMap.get(code);
+        if (!itemId) {
+          return;
+        }
+
+        const normalized = Math.max(0, Math.floor(count));
+        if (normalized <= 0) {
+          return;
+        }
+
+        itemCounts[itemId] = (itemCounts[itemId] ?? 0) + normalized;
+        rarityTotal += normalized;
+      });
+
+      if (rarityTotal > 0) {
+        rarityCounts[rarityId] = (rarityCounts[rarityId] ?? 0) + rarityTotal;
+      }
+    });
+
+    if (Object.keys(itemCounts).length > 0) {
+      const totalPulledItems = Object.values(itemCounts).reduce((sum, count) => sum + count, 0);
+      const declaredPulls = Number.isFinite(block.pulls) ? Math.floor(block.pulls) : 0;
+      const normalizedPulls = Math.max(1, totalPulledItems, declaredPulls);
+      context.stores.pullHistory.appendPull({
+        gachaId,
+        userId,
+        executedAt: new Date().toISOString(),
+        pullCount: normalizedPulls,
+        itemCounts,
+        rarityCounts: Object.keys(rarityCounts).length > 0 ? rarityCounts : undefined,
+        notes: 'リアルタイム入力から追加'
+      });
+    }
   });
 
   if (lastGachaId) {
@@ -317,13 +363,16 @@ export function applyLivePasteText(
   nextInventoriesState.updatedAt = nowIso;
   nextInventoriesState.byItemId = rebuildInventoryIndex(nextInventoriesState.inventories);
 
+  const pullHistoryState = context.stores.pullHistory.getState();
+
   const nextSnapshot: GachaLocalStorageSnapshot = {
     ...snapshot,
     appState: nextAppState,
     rarityState: nextRarityState,
     catalogState: nextCatalogState,
     userProfiles: nextProfilesState,
-    userInventories: nextInventoriesState
+    userInventories: nextInventoriesState,
+    pullHistory: pullHistoryState ?? snapshot.pullHistory
   };
 
   context.persistence.saveSnapshot(nextSnapshot);
