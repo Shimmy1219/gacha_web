@@ -1,4 +1,4 @@
-export const RATE_TOLERANCE = 1e-6;
+export const RATE_TOLERANCE = 1e-12;
 
 export interface RarityRateRow {
   id: string;
@@ -40,7 +40,8 @@ export function clampRate(value: number): number {
     return 0;
   }
   const clamped = Math.min(1, Math.max(0, value));
-  return Math.round(clamped * 1e8) / 1e8;
+  const precision = 1e12;
+  return Math.round(clamped * precision) / precision;
 }
 
 export function sortRarityRows<T extends RarityRateRow>(rows: ReadonlyArray<T>): T[] {
