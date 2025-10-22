@@ -18,7 +18,8 @@ import {
 } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
-import { ConfirmDialog, useModal } from '../../../modals';
+import { useModal } from '../../../modals';
+import { ItemDeleteConfirmDialog } from '../../../modals/dialogs/ItemDeleteConfirmDialog';
 import { PrizeSettingsDialog } from '../../../modals/dialogs/PrizeSettingsDialog';
 import { ItemAssetPreviewDialog } from '../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
@@ -335,8 +336,6 @@ export function ItemsSection(): JSX.Element {
         if (nextSet.size > 1) {
           nextSet.delete(itemId);
         }
-      } else if (previousSet.size > 1) {
-        nextSet = new Set([itemId]);
       }
 
       if (!nextSet.has(itemId)) {
@@ -476,30 +475,71 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
-      const itemNames = targetIds
-        .map((itemId) => itemEntryById.get(itemId)?.model.name)
-        .filter((name): name is string => Boolean(name));
+      const baseEntries = targetIds
+        .map((itemId) => itemEntryById.get(itemId))
+        .filter((entry): entry is ItemEntry => Boolean(entry));
 
-      const message =
+      if (baseEntries.length === 0) {
+        return;
+      }
+
+      const itemNames = baseEntries.map((entry) => entry.model.name).filter(Boolean);
+      const uniqueGachaNames = new Set(
+        baseEntries
+          .map((entry) => entry.model.gachaDisplayName?.trim())
+          .filter((name): name is string => Boolean(name))
+      );
+
+      const assignmentRecords = targetIds
+        .flatMap((itemId) => data?.userInventories?.byItemId?.[itemId] ?? [])
+        .filter((record) => Boolean(record?.userId));
+
+      const userProfiles = data?.userProfiles?.users ?? {};
+      const winnerMap = new Map<string, string>();
+      assignmentRecords.forEach((record) => {
+        if (!record?.userId || winnerMap.has(record.userId)) {
+          return;
+        }
+
+        const profile = userProfiles[record.userId];
+        const displayName = profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        winnerMap.set(record.userId, displayName);
+      });
+
+      const winnerNames = Array.from(winnerMap.values());
+      const hasUserReferences = winnerNames.length > 0;
+
+      const displayItemName =
         targetIds.length === 1 && itemNames[0]
-          ? `「${itemNames[0]}」を削除しますか？削除するとユーザーの獲得履歴からも取り除かれます。`
-          : `選択した${targetIds.length}件のアイテムを削除しますか？削除するとユーザーの獲得履歴からも取り除かれます。`;
+          ? itemNames[0]
+          : `選択した${targetIds.length}件のアイテム`;
 
-      push(ConfirmDialog, {
+      push(ItemDeleteConfirmDialog, {
         id: `items-delete-${targetIds[0]}`,
-        title: 'アイテムを削除',
-        size: 'sm',
         payload: {
-          message,
-          confirmLabel: '削除する',
-          cancelLabel: 'キャンセル',
+          itemId: targetIds[0],
+          itemName: displayItemName,
+          gachaName:
+            uniqueGachaNames.size === 1
+              ? Array.from(uniqueGachaNames)[0]
+              : targetIds.length === 1
+              ? baseEntries[0].model.gachaDisplayName
+              : undefined,
+          hasUserReferences,
+          winnerNames,
           onConfirm: () => {
             deleteItems(targetIds);
           }
         }
       });
     },
-    [deleteItems, itemEntryById, push]
+    [
+      data?.userInventories?.byItemId,
+      data?.userProfiles?.users,
+      deleteItems,
+      itemEntryById,
+      push
+    ]
   );
 
   const canAddItems = useMemo(() => {

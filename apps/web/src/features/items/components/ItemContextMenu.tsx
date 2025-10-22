@@ -1,7 +1,7 @@
 import { CheckIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { createPortal } from 'react-dom';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 
 interface RarityOption {
   id: string;
@@ -28,6 +28,8 @@ export interface ItemContextMenuProps {
 
 const MENU_WIDTH = 248;
 const MENU_HEIGHT_GUESS = 320;
+const RARITY_MENU_WIDTH = 220;
+const RARITY_MENU_HEIGHT_GUESS = 260;
 
 export function ItemContextMenu({
   anchor,
@@ -47,8 +49,16 @@ export function ItemContextMenu({
   disableEditImage = false
 }: ItemContextMenuProps): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const rarityButtonRef = useRef<HTMLButtonElement | null>(null);
+  const rarityMenuRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState(anchor);
   const [showRarityList, setShowRarityList] = useState(false);
+  const [rarityMenuPosition, setRarityMenuPosition] = useState<{ x: number; y: number } | null>(null);
+
+  const handleClose = useCallback(() => {
+    setShowRarityList(false);
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     setPosition((previous) => {
@@ -70,20 +80,22 @@ export function ItemContextMenu({
         return;
       }
       const target = event.target as Node | null;
-      if (target && menuRef.current.contains(target)) {
+      const isInsideMenu = target ? menuRef.current.contains(target) : false;
+      const isInsideRarityMenu = target ? rarityMenuRef.current?.contains(target) ?? false : false;
+      if (isInsideMenu || isInsideRarityMenu) {
         return;
       }
-      onClose();
+      handleClose();
     };
 
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        handleClose();
       }
     };
 
     const handleScroll = () => {
-      onClose();
+      handleClose();
     };
 
     window.addEventListener('mousedown', handlePointerDown);
@@ -97,7 +109,35 @@ export function ItemContextMenu({
       window.removeEventListener('resize', handleScroll);
       window.removeEventListener('scroll', handleScroll, true);
     };
-  }, [onClose]);
+  }, [handleClose]);
+
+  useLayoutEffect(() => {
+    if (!showRarityList) {
+      setRarityMenuPosition(null);
+      return;
+    }
+
+    const buttonRect = rarityButtonRef.current?.getBoundingClientRect();
+    if (!buttonRect) {
+      return;
+    }
+
+    const margin = 8;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let x = buttonRect.right + margin;
+    if (x + RARITY_MENU_WIDTH + margin > viewportWidth) {
+      x = Math.max(margin, buttonRect.left - RARITY_MENU_WIDTH - margin);
+    }
+
+    let y = buttonRect.top;
+    if (y + RARITY_MENU_HEIGHT_GUESS + margin > viewportHeight) {
+      y = Math.max(margin, viewportHeight - RARITY_MENU_HEIGHT_GUESS - margin);
+    }
+
+    setRarityMenuPosition({ x, y });
+  }, [showRarityList]);
 
   const rarityBadge = useMemo(() => {
     if (selectedCount <= 0) {
@@ -125,40 +165,14 @@ export function ItemContextMenu({
       <div className="space-y-1">
         <button
           type="button"
+          ref={rarityButtonRef}
           className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-accent/20"
+          onMouseEnter={() => setShowRarityList(true)}
           onClick={() => setShowRarityList((previous) => !previous)}
         >
           <span>レアリティを選択</span>
           <ChevronRightIcon className={clsx('h-4 w-4 transition-transform', showRarityList && 'rotate-90')} />
         </button>
-        {showRarityList ? (
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-black/20 p-1">
-            {rarityOptions.length === 0 ? (
-              <p className="px-2 py-1 text-xs text-muted-foreground">設定可能なレアリティがありません</p>
-            ) : (
-              rarityOptions.map((option) => {
-                const isCurrent = option.id === currentRarityId;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={clsx(
-                      'flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs hover:bg-accent/15',
-                      isCurrent && 'bg-accent/20 text-accent'
-                    )}
-                    onClick={() => {
-                      onSelectRarity(option.id);
-                      onClose();
-                    }}
-                  >
-                    <span className="truncate">{option.label}</span>
-                    {isCurrent ? <CheckIcon className="h-4 w-4" /> : null}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        ) : null}
         <button
           type="button"
           disabled={disableEditImage}
@@ -173,7 +187,7 @@ export function ItemContextMenu({
               return;
             }
             onEditImage();
-            onClose();
+            handleClose();
           }}
         >
           画像を設定
@@ -183,7 +197,7 @@ export function ItemContextMenu({
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
           onClick={() => {
             onToggleComplete();
-            onClose();
+            handleClose();
           }}
         >
           {completeLabel}
@@ -193,7 +207,7 @@ export function ItemContextMenu({
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
           onClick={() => {
             onTogglePickup();
-            onClose();
+            handleClose();
           }}
         >
           {pickupLabel}
@@ -203,7 +217,7 @@ export function ItemContextMenu({
           className="flex w-full items-center rounded-lg px-3 py-2 text-left hover:bg-accent/20"
           onClick={() => {
             onToggleRiagu();
-            onClose();
+            handleClose();
           }}
         >
           {riaguLabel}
@@ -214,7 +228,7 @@ export function ItemContextMenu({
           className="flex w-full items-center rounded-lg px-3 py-2 text-left text-red-300 hover:bg-red-500/20"
           onClick={() => {
             onDelete();
-            onClose();
+            handleClose();
           }}
         >
           削除
@@ -223,5 +237,45 @@ export function ItemContextMenu({
     </div>
   );
 
-  return createPortal(content, document.body);
+  return (
+    <>
+      {createPortal(content, document.body)}
+      {showRarityList && rarityMenuPosition
+        ? createPortal(
+            <div
+              ref={rarityMenuRef}
+              className="fixed z-[1001] max-h-48 min-w-[200px] max-w-[260px] space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-black/80 p-1 backdrop-blur"
+              style={{ top: rarityMenuPosition.y, left: rarityMenuPosition.x }}
+              role="menu"
+            >
+              {rarityOptions.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-muted-foreground">設定可能なレアリティがありません</p>
+              ) : (
+                rarityOptions.map((option) => {
+                  const isCurrent = option.id === currentRarityId;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={clsx(
+                        'flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs hover:bg-accent/15',
+                        isCurrent && 'bg-accent/20 text-accent'
+                      )}
+                      onClick={() => {
+                        onSelectRarity(option.id);
+                        handleClose();
+                      }}
+                    >
+                      <span className="truncate">{option.label}</span>
+                      {isCurrent ? <CheckIcon className="h-4 w-4" /> : null}
+                    </button>
+                  );
+                })
+              )}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
 }
