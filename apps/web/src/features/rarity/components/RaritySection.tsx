@@ -15,7 +15,11 @@ import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityInUseDialog } from '../../../modals/dialogs/RarityInUseDialog';
 import { RarityRateErrorDialog } from '../../../modals/dialogs/RarityRateErrorDialog';
-import { formatRarityRate, parseRarityRateInput } from '../utils/rarityRate';
+import {
+  MAX_RATE_FRACTION_DIGITS,
+  formatRarityRate,
+  parseRarityRateInput
+} from '../utils/rarityRate';
 import {
   RATE_TOLERANCE,
   buildEmitRateUpdates,
@@ -40,6 +44,31 @@ interface RarityRow extends RarityRateRow {
 interface EmitRateInputStateEntry {
   value: string;
   lastSyncedRate: number | undefined;
+}
+
+function countFractionDigits(value: string): number | null {
+  const normalized = value.replace(/,/g, '').trim();
+
+  if (normalized === '') {
+    return null;
+  }
+
+  const exponentIndex = normalized.toLowerCase().indexOf('e');
+  if (exponentIndex !== -1) {
+    return null;
+  }
+
+  let unsigned = normalized;
+  if (unsigned.startsWith('-') || unsigned.startsWith('+')) {
+    unsigned = unsigned.slice(1);
+  }
+
+  const decimalPointIndex = unsigned.indexOf('.');
+  if (decimalPointIndex === -1) {
+    return 0;
+  }
+
+  return unsigned.slice(decimalPointIndex + 1).length;
 }
 
 export function RaritySection(): JSX.Element {
@@ -314,6 +343,21 @@ export function RaritySection(): JSX.Element {
       const entry = emitRateInputs[rarityId];
       const value = entry?.value ?? '';
       const trimmed = value.trim();
+      if (trimmed !== '') {
+        const fractionDigits = countFractionDigits(trimmed);
+        if (fractionDigits != null && fractionDigits > MAX_RATE_FRACTION_DIGITS) {
+          revertEmitRateInput(rarityId);
+          push(RarityRateErrorDialog, {
+            id: 'rarity-rate-error',
+            size: 'sm',
+            payload: {
+              reason: 'precision-exceeded',
+              detail: `入力値「${trimmed}」は小数点以下が${fractionDigits}桁あります。`
+            }
+          });
+          return;
+        }
+      }
       const parsedRate = trimmed === '' ? null : parseRarityRateInput(trimmed);
 
       if (trimmed !== '' && parsedRate == null) {

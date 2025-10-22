@@ -1,3 +1,5 @@
+export const MAX_RATE_FRACTION_DIGITS = 12;
+
 export function formatRarityRate(rate?: number): string {
   if (rate == null || Number.isNaN(rate)) {
     return '';
@@ -12,8 +14,7 @@ export function formatRarityRate(rate?: number): string {
     return '0';
   }
 
-  const maxFractionDigits = 12;
-  let formatted = percent.toFixed(maxFractionDigits);
+  let formatted = percent.toFixed(MAX_RATE_FRACTION_DIGITS);
 
   if (formatted.includes('.')) {
     while (formatted.endsWith('0')) {
