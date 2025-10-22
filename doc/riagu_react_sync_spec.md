@@ -19,11 +19,18 @@ interface RiaguState {
 ### 2.2 UserInventoryStore
 ```ts
 interface UserInventoryState {
-  inventories: Record<UserId, Record<GachaId, InventoryByRarity>>;
+  inventories: Record<UserId, Record<InventoryId, UserInventorySnapshot>>;
   byItemId: Record<ItemId, Array<{ userId: UserId; gachaId: GachaId; rarityId: RarityId; count: number }>>;
 }
+
+interface UserInventorySnapshot {
+  inventoryId: InventoryId;
+  gachaId: GachaId;
+  items: Record<RarityId, ItemId[]>;
+  counts: Record<RarityId, Record<ItemId, number>>;
+}
 ```
-- `inventories[userId][gachaId][rarityId][itemId] = count` で在庫を保持。
+- `inventories[userId][inventoryId] = snapshot` で在庫スナップショットを保持。`snapshot.gachaId` で紐づくガチャを識別する。
 - `addItem`, `incrementCount`, `bulkReplaceItems` などのアクションが呼ばれると `byItemId` キャッシュも更新する。
 
 ### 2.3 HitCountStore

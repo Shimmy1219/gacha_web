@@ -1,6 +1,11 @@
 import { useCallback, useState } from 'react';
 
-import { type GachaLocalStorageSnapshot, type PullHistoryStateV1 } from '@domain/app-persistence';
+import {
+  type GachaLocalStorageSnapshot,
+  type PullHistoryStateV1,
+  type UserInventoriesStateV3,
+  type UserInventorySnapshotV3
+} from '@domain/app-persistence';
 import {
   generateDeterministicGachaId,
   generateDeterministicInventoryId,
@@ -329,8 +334,8 @@ function createMockSnapshot(): {
   });
 
   const userIds = Object.keys(userProfiles);
-  const inventories: Record<string, Record<string, unknown>> = {};
-  const reverseIndex: Record<string, Array<{ userId: string; gachaId: string; rarityId: string; count: number }>> = {};
+  const inventories: UserInventoriesStateV3['inventories'] = {};
+  const reverseIndex: UserInventoriesStateV3['byItemId'] = {};
 
   userIds.forEach((userId, userIndex) => {
     const assignedGachas = [
@@ -338,7 +343,7 @@ function createMockSnapshot(): {
       GACHA_DEFINITIONS[(userIndex + 1) % GACHA_DEFINITIONS.length]
     ];
 
-    const gachaInventories: Record<string, Record<string, unknown>> = {};
+    const userInventories: Record<string, UserInventorySnapshotV3> = {};
 
     assignedGachas.forEach((gacha, assignmentIndex) => {
       const gachaItems = itemsByGacha[gacha.id] ?? [];
@@ -367,8 +372,10 @@ function createMockSnapshot(): {
         countsMap[entry.rarityId][entry.itemId] = entry.count;
       });
 
-      gachaInventories[gacha.id] = {
-        inventoryId: generateDeterministicInventoryId(`${userId}-${gacha.id}`),
+      const inventoryId = generateDeterministicInventoryId(`${userId}-${gacha.id}`);
+
+      userInventories[inventoryId] = {
+        inventoryId,
         gachaId: gacha.id,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -391,7 +398,7 @@ function createMockSnapshot(): {
       });
     });
 
-    inventories[userId] = gachaInventories;
+    inventories[userId] = userInventories;
   });
 
   const userInventoriesState = {
