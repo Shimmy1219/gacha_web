@@ -73,7 +73,12 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const canPreviewAsset = Boolean(onPreviewAsset && (previewUrl || fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
 
-  const handlePreviewClick = () => {
+  const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      return;
+    }
+
     if (!canPreviewAsset) {
       return;
     }
@@ -122,6 +127,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in'
           )}
+          data-preview-button="true"
         >
           {isImageAsset && previewUrl ? (
             <img src={previewUrl} alt={model.name} className="h-full w-full object-contain" />

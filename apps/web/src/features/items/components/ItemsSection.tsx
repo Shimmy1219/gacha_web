@@ -298,14 +298,19 @@ export function ItemsSection(): JSX.Element {
       }
 
       const target = event.target as HTMLElement | null;
-      if (target?.closest('button')) {
-        return;
+      const clickedButton = target?.closest('button');
+      const isMulti = event.ctrlKey || event.metaKey;
+
+      if (clickedButton) {
+        const isPreviewButton = clickedButton.matches('[data-preview-button="true"]');
+        if (!isMulti || !isPreviewButton) {
+          return;
+        }
       }
 
       event.preventDefault();
       closeContextMenu();
 
-      const isMulti = event.ctrlKey || event.metaKey;
       setSelectedItemIds((previous) => {
         const next = new Set(previous);
         if (isMulti) {
