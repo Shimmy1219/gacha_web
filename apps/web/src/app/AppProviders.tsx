@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 
-import { ModalProvider } from '../components/modal';
+import { ModalProvider } from '../modals';
 import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
 import { AppPersistenceProvider } from '../features/storage/AppPersistenceProvider';
 

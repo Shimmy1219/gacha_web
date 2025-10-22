@@ -6,14 +6,14 @@ import { type PtSettingV3 } from '@domain/app-persistence';
 import { useStoreValue } from '@domain/stores';
 
 import { SectionContainer } from '../../../components/layout/SectionContainer';
-import { useModal } from '../../../components/modal';
+import { useModal } from '../../../modals';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { RarityTable, type RarityTableRow } from './RarityTable';
 import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
 import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 import { PtControlsPanel } from './PtControlsPanel';
-import { RarityInUseDialog } from '../dialogs/RarityInUseDialog';
+import { RarityInUseDialog } from '../../../modals/dialogs/RarityInUseDialog';
 import { formatRarityRate, parseRarityRateInput } from '../utils/rarityRate';
 import {
   FALLBACK_RARITY_COLOR,

@@ -8,10 +8,10 @@ import {
   type MouseEvent as ReactMouseEvent
 } from 'react';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
-import { type ItemId } from '../../../components/cards/ItemCard';
-import { useAssetPreview } from '../../assets/useAssetPreview';
-import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { type ItemId } from '../../components/cards/ItemCard';
+import { useAssetPreview } from '../../features/assets/useAssetPreview';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 
 export interface ItemAssetPreviewDialogPayload {
   itemId: ItemId;

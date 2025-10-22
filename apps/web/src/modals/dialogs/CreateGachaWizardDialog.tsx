@@ -11,18 +11,18 @@ import {
 import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
 import { generateGachaId, generateItemId, generateRarityId } from '@domain/idGenerators';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
-import { useDomainStores } from '../../storage/AppPersistenceProvider';
-import { PtControlsPanel } from '../../rarity/components/PtControlsPanel';
-import { RarityTable, type RarityTableRow } from '../../rarity/components/RarityTable';
-import { DEFAULT_PALETTE } from '../../rarity/components/color-picker/palette';
-import { formatRarityRate, parseRarityRateInput } from '../../rarity/utils/rarityRate';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { PtControlsPanel } from '../../features/rarity/components/PtControlsPanel';
+import { RarityTable, type RarityTableRow } from '../../features/rarity/components/RarityTable';
+import { DEFAULT_PALETTE } from '../../features/rarity/components/color-picker/palette';
+import { formatRarityRate, parseRarityRateInput } from '../../features/rarity/utils/rarityRate';
 import {
   FALLBACK_RARITY_COLOR,
   generateRandomRarityColor,
   generateRandomRarityEmitRate,
   generateRandomRarityLabel
-} from '../../rarity/utils/raritySeed';
+} from '../../features/rarity/utils/raritySeed';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 

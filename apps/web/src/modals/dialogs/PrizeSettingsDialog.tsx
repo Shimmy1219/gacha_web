@@ -2,15 +2,15 @@ import { MusicalNoteIcon, PhotoIcon, PlusCircleIcon, XMarkIcon } from '@heroicon
 import { clsx } from 'clsx';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
-import { SwitchField } from '../../../components/form/SwitchField';
-import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { SwitchField } from '../../components/form/SwitchField';
+import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { ItemDeleteConfirmDialog } from './ItemDeleteConfirmDialog';
-import { type RiaguConfigDialogPayload, RiaguConfigDialog } from '../../riagu/dialogs/RiaguConfigDialog';
-import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../rarity/components/color-picker/palette';
-import { getRarityTextPresentation } from '../../rarity/utils/rarityColorPresentation';
+import { type RiaguConfigDialogPayload, RiaguConfigDialog } from './RiaguConfigDialog';
+import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../../features/rarity/components/color-picker/palette';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { RiaguDisableConfirmDialog } from './RiaguDisableConfirmDialog';
 import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
-import { useAssetPreview } from '../../assets/useAssetPreview';
+import { useAssetPreview } from '../../features/assets/useAssetPreview';
 
 interface RarityOption {
   id: string;

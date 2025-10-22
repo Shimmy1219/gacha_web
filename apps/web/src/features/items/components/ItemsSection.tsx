@@ -10,9 +10,9 @@ import {
 } from '../../../components/cards/ItemCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
-import { useModal } from '../../../components/modal';
-import { PrizeSettingsDialog } from '../dialogs/PrizeSettingsDialog';
-import { ItemAssetPreviewDialog } from '../dialogs/ItemAssetPreviewDialog';
+import { useModal } from '../../../modals';
+import { PrizeSettingsDialog } from '../../../modals/dialogs/PrizeSettingsDialog';
+import { ItemAssetPreviewDialog } from '../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';

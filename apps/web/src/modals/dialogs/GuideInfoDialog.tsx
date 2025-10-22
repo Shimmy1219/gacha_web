@@ -1,7 +1,7 @@
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { useMemo } from 'react';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface GuideInfoDialogPayload {
   message?: string;

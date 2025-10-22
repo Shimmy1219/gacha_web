@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
-import { useDomainStores } from '../../storage/AppPersistenceProvider';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 
 export interface RiaguConfigDialogPayload {
   gachaId: string;

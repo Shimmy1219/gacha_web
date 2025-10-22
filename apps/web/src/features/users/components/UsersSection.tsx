@@ -8,8 +8,8 @@ import {
   type InventoryRarityOption
 } from '../../../components/cards/UserCard';
 import { SectionContainer } from '../../../components/layout/SectionContainer';
-import { useModal } from '../../../components/modal';
-import { SaveOptionsDialog } from '../dialogs/SaveOptionsDialog';
+import { useModal } from '../../../modals';
+import { SaveOptionsDialog } from '../../../modals/dialogs/SaveOptionsDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../logic/userFilters';

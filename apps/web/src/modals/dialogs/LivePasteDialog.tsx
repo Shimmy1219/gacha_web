@@ -1,7 +1,7 @@
 import { ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '../../../components/modal';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface LivePasteDialogPayload {
   defaultValue?: string;
