@@ -126,6 +126,7 @@ export function UserCard({
                     inventory={inventory}
                     showCounts={showCounts}
                     userId={userId}
+                    userName={userName}
                     catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
                     rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
                   />
@@ -151,6 +152,7 @@ interface GachaInventoryCardProps {
   inventory: UserInventoryEntry;
   showCounts: boolean;
   userId: UserId;
+  userName: string;
   catalogItems: InventoryCatalogItemOption[];
   rarityOptions: InventoryRarityOption[];
 }
@@ -161,6 +163,7 @@ function GachaInventoryCard({
   inventory,
   showCounts,
   userId,
+  userName,
   catalogItems,
   rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
@@ -242,7 +245,7 @@ function GachaInventoryCard({
       id: `inventory-delete-${inventory.inventoryId}`,
       title: 'インベントリを削除',
       payload: {
-        message: `ユーザー「${userId}」の「${inventory.gachaName}」インベントリと関連するガチャ履歴を削除します。この操作は元に戻せません。よろしいですか？`,
+        message: `ユーザー「${userName}」の「${inventory.gachaName}」インベントリと関連するガチャ履歴を削除します。この操作は元に戻せません。よろしいですか？`,
         confirmLabel: '削除する',
         cancelLabel: 'キャンセル',
         onConfirm: () => {
@@ -261,6 +264,7 @@ function GachaInventoryCard({
     push,
     resetDraft,
     userId,
+    userName,
     userInventoryStore
   ]);
 
