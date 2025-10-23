@@ -60,6 +60,12 @@ export function renderDiscordLoginButton({
     menu.className = "dlb-menu";
     menu.setAttribute("role", "menu");
 
+    const settingsBtn = document.createElement("button");
+    settingsBtn.type = "button";
+    settingsBtn.className = "dlb-menu__item";
+    settingsBtn.textContent = "設定";
+    settingsBtn.setAttribute("role", "menuitem");
+
     const logoutBtn = document.createElement("button");
     logoutBtn.type = "button";
     logoutBtn.className = "dlb-menu__item";
@@ -72,9 +78,17 @@ export function renderDiscordLoginButton({
     closeBtn.textContent = "閉じる";
     closeBtn.setAttribute("role", "menuitem");
 
+    menu.appendChild(settingsBtn);
     menu.appendChild(logoutBtn);
     menu.appendChild(closeBtn);
     mount.appendChild(menu);
+
+    settingsBtn.addEventListener("click", () => {
+      if (typeof window.showSettingsModal === "function") {
+        window.showSettingsModal();
+      }
+      menu.remove();
+    });
 
     logoutBtn.addEventListener("click", async () => {
       logoutBtn.disabled = true;

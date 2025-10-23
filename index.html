@@ -8,6 +8,21 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+<script>
+  (function() {
+    try {
+      var key = 'gacha_site_theme_pref_v1';
+      var pref = localStorage.getItem(key) || 'dark';
+      var root = document.documentElement;
+      var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+      var mode = pref === 'system' ? (mql && mql.matches ? 'dark' : 'light') : pref;
+      root.setAttribute('data-theme', mode);
+      root.setAttribute('data-theme-pref', pref);
+    } catch (e) {
+      /* noop */
+    }
+  })();
+</script>
 <link rel="stylesheet" href="./index.css">
 <link rel="stylesheet" href="./index_mobile.css">
 <!-- 画面幅固定＋ユーザズーム禁止） -->
@@ -87,6 +102,8 @@
   window.addEventListener("DOMContentLoaded", refreshDiscordLoginUI);
 </script>
 
+<script type="module" src="./src/settings-modal.js"></script>
+
 <script src="./src/pt-controls.js"></script>
 <!-- もしローカルに無ければ CDN で補う（任意） -->
 <script>
@@ -144,6 +161,40 @@
       <div id="drawerContent"></div>
     </div>
   </aside>
+
+  <div class="modal" id="settingsModal" aria-hidden="true">
+    <div class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="settings-head">
+        <h3 id="settingsTitle">設定</h3>
+        <button type="button" class="btn ghost small" data-settings-close>閉じる</button>
+      </div>
+      <div class="settings-body">
+        <nav class="settings-nav" aria-label="設定カテゴリー" role="tablist">
+          <button type="button" class="settings-nav__item is-active" data-settings-target="gacha" role="tab" aria-selected="true">ガチャ一覧</button>
+          <button type="button" class="settings-nav__item" data-settings-target="theme" role="tab" aria-selected="false">サイトカラー</button>
+          <button type="button" class="settings-nav__item" data-settings-target="misc" role="tab" aria-selected="false">その他の設定</button>
+        </nav>
+        <div class="settings-content">
+          <section class="settings-panel is-active" data-settings-view="gacha" aria-label="ガチャ一覧" role="tabpanel" tabindex="0">
+            <p class="muted">現在登録されているガチャの一覧です。選択・追加・削除は画面上部のタブから行えます。</p>
+            <ul class="settings-gacha-list" id="settingsGachaList" aria-live="polite"></ul>
+          </section>
+          <section class="settings-panel" data-settings-view="theme" aria-label="サイトカラー" role="tabpanel" aria-hidden="true" tabindex="0">
+            <p class="muted">サイト全体のカラーテーマを切り替えできます。設定はブラウザに保存されます。</p>
+            <fieldset class="settings-theme-fieldset">
+              <legend class="settings-theme-legend">テーマ</legend>
+              <label class="settings-theme-option"><input type="radio" name="siteTheme" value="dark">ダーク</label>
+              <label class="settings-theme-option"><input type="radio" name="siteTheme" value="light">ライト</label>
+              <label class="settings-theme-option"><input type="radio" name="siteTheme" value="system">システムに合わせる</label>
+            </fieldset>
+          </section>
+          <section class="settings-panel" data-settings-view="misc" aria-label="その他の設定" role="tabpanel" aria-hidden="true" tabindex="0">
+            <p class="muted">今後のアップデートで追加予定の設定項目です。ご要望があればフィードバックよりお知らせください。</p>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
 
     <!-- Splash -->
     <section id="splash" class="splash">

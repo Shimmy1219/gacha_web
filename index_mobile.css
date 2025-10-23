@@ -11,7 +11,8 @@
     html, body { overscroll-behavior: none; }
 
     body {
-      background: #000;
+      background: var(--bg);
+      color: var(--text);
       -webkit-text-size-adjust: 100%; /* iOSの自動文字拡大を抑止 */
       overscroll-behavior: none;   /* Androidの引っ張り更新/バウンス抑制（iOSは効果弱） */
     }
