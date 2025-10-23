@@ -39,13 +39,13 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
         classNames={{
           root: 'user-filter-panel__select-wrapper relative',
           button:
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm text-surface-foreground transition',
           buttonOpen: 'border-accent text-accent',
           buttonClosed: 'hover:border-accent/70',
           icon: 'user-filter-panel__select-icon h-4 w-4 transition-transform',
           iconOpen: 'rotate-180',
           menu:
-            'user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
+            'user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2',
           allButton:
             'user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5',
           divider: 'user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-white/10 to-transparent',
@@ -90,7 +90,7 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
         >
           <span
             className={clsx(
-              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white shadow transition-all',
+              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white transition-all',
               value ? 'translate-x-[22px]' : 'translate-x-[6px]'
             )}
           />
@@ -117,7 +117,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       aria-hidden={!open}
       data-state={open ? 'open' : 'closed'}
       className={clsx(
-        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)] transition-opacity duration-300 ease-linear',
+        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 transition-opacity duration-300 ease-linear',
         'data-[state=open]:opacity-100',
         'data-[state=closed]:pointer-events-none data-[state=closed]:select-none data-[state=closed]:opacity-0'
       )}

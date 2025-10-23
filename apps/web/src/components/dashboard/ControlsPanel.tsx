@@ -31,21 +31,21 @@ export function ControlsPanel(): JSX.Element {
         </div>
       </div>
       <div className="controls-panel__steps grid gap-3 md:grid-cols-3">
-        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4">
           <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">Step 1</p>
           <h2 className="mt-1 text-sm font-semibold text-surface-foreground">データを取り込む</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             TXT/JSONファイル、リアルタイム貼り付け、ZIP共有からデータを同期し、AppStateへ反映します。
           </p>
         </div>
-        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4">
           <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">Step 2</p>
           <h2 className="mt-1 text-sm font-semibold text-surface-foreground">セクションを整える</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
             レアリティ、アイテム画像、ユーザー内訳、リアグ設定を調整して、最新の抽選設定を保持します。
           </p>
         </div>
-        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4">
           <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">Step 3</p>
           <h2 className="mt-1 text-sm font-semibold text-surface-foreground">共有と公開</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">

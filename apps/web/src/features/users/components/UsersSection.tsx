@@ -130,7 +130,7 @@ export function UsersSection(): JSX.Element {
           className={clsx(
             'users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent transition-all duration-300 ease-linear',
             filtersOpen
-              ? 'border-accent/70 bg-accent/20 text-accent shadow-[0_18px_42px_rgba(225,29,72,0.2)]'
+              ? 'border-accent/70 bg-accent/20 text-accent'
               : 'hover:border-accent/60 hover:bg-accent/15'
           )}
           onClick={() => setFiltersOpen((open) => !open)}
