@@ -11,7 +11,6 @@ interface AppendPullParams {
   userId?: string;
   executedAt?: string;
   pullCount: number;
-  currencyType?: string;
   currencyUsed?: number;
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;
@@ -119,7 +118,6 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       userId,
       executedAt,
       pullCount,
-      currencyType,
       currencyUsed,
       itemCounts,
       rarityCounts,
@@ -154,7 +152,6 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         userId,
         executedAt: executedAtIso,
         pullCount: normalizedPullCount,
-        currencyType,
         currencyUsed,
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,

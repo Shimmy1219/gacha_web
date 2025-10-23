@@ -20,7 +20,6 @@ interface AppState {
 interface GachaMeta {
   id: GachaId;
   displayName: string;
-  iconAssetId: string | null;
   createdAt: number;
   updatedAt: number;
   lastImportedAt: number | null;
@@ -39,7 +38,6 @@ interface RegisterGachaPayload {
   source: 'manual' | 'import-txt' | 'import-json' | 'import-zip';
   importedAt?: number;              // 取り込み時刻。未指定は Date.now()
   legacyKey?: string | null;        // TXT の番号や旧 JS の ID（例: "1", "yami"）
-  iconAssetId?: string | null;      // 既存アイコンがあれば指定。null なら既定アイコン。
   summaryTag?: string | null;       // AppHeader のバッジ文言初期値。
 }
 ```
@@ -53,7 +51,7 @@ interface RegisterGachaPayload {
      - `aliasByName[displayName] = gachaId` を再設定。
      - `legacyKey` が指定されていれば `aliasByLegacyKey[legacyKey] = gachaId`。
      - `meta.updatedAt = now`、`meta.lastImportedAt = importedAt ?? now` を更新。
-     - `summaryTag`・`iconAssetId` が明示されていれば上書き。未指定は現状維持。
+    - `summaryTag` が明示されていれば上書き。未指定は現状維持。
      - 既存の場合は `order` の位置を維持し、戻り値 `isNew: false`。
 2. **新規登録**
    - `state.meta[gachaId]` が未登録の場合:
@@ -61,7 +59,7 @@ interface RegisterGachaPayload {
      - `order.push(gachaId)` で末尾に追加（取り込み順で表示）。JSON/TXT でソート情報がある場合は呼び出し側で `order.splice` を指定する。
      - `aliasByName[displayName] = gachaId`、`aliasByLegacyKey[legacyKey] = gachaId`（`legacyKey` があれば）。
      - `meta.createdAt = now`、`meta.updatedAt = now`、`meta.lastImportedAt = importedAt ?? now`。
-     - `summaryTag` が未指定の場合は `null`、`iconAssetId` も `null` をセット。
+    - `summaryTag` が未指定の場合は `null` をセット。
      - 戻り値 `isNew: true` を返し、呼び出し側が `RarityStore.ensureMany` や `UserInventoryStore.syncInventory` を新規ガチャとして扱えるようにする。
 3. **永続化・イベント**
    - いずれの場合も `AppStateStore.saveDebounced()` をスケジュールし、`AppHeaderShell`・`UserPanelFilter` 等の購読コンポーネントへ `state` 更新を通知する。

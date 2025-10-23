@@ -16,7 +16,6 @@ interface RiaguDisplayEntry {
   rarityLabel: string;
   rarityColor: string;
   costLabel: string;
-  status: string;
   winners: Array<{ name: string; count: number }>;
 }
 
@@ -27,17 +26,6 @@ function formatCost(cost?: number): string {
     return '価格未設定';
   }
   return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(cost);
-}
-
-function formatStatus(stock?: number, notes?: string): string {
-  const parts: string[] = [];
-  if (stock != null) {
-    parts.push(`在庫残り${stock}`);
-  }
-  if (notes) {
-    parts.push(notes);
-  }
-  return parts.join(' / ') || 'メモ未設定';
 }
 
 export function RiaguSection(): JSX.Element {
@@ -83,7 +71,6 @@ export function RiaguSection(): JSX.Element {
         rarityLabel,
         rarityColor,
         costLabel: formatCost(card.unitCost),
-        status: formatStatus(card.stock, card.notes),
         winners: winners.length > 0 ? winners : [{ name: '当選者なし', count: 0 }]
       };
 
@@ -209,7 +196,7 @@ export function RiaguSection(): JSX.Element {
                             </span>
                             <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
                             <p className="riagu-card__status text-xs text-muted-foreground">
-                              {entry.gachaName} / {entry.costLabel} / {entry.status}
+                              {entry.gachaName} / {entry.costLabel}
                             </p>
                           </div>
                           <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
