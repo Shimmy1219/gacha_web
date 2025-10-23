@@ -101,29 +101,27 @@ export const PageSettingsDialog: ModalComponent = () => {
                   }
                 >
                   {({ checked }) => (
-                    <>
-                      <div className="space-y-1.5">
-                        <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
-                          {option.label}
-                        </RadioGroup.Label>
-                        <RadioGroup.Description className="text-xs text-muted-foreground">
-                          {option.description}
-                        </RadioGroup.Description>
-                        {checked ? (
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                            適用中
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-end">
-                        <div className="grid grid-cols-3 gap-3">
+                    <div className="flex w-full flex-col gap-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1.5">
+                          <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
+                            {option.label}
+                          </RadioGroup.Label>
+                          <RadioGroup.Description className="text-xs text-muted-foreground">
+                            {option.description}
+                          </RadioGroup.Description>
+                          {checked ? (
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">適用中</p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-end gap-3 sm:flex-nowrap sm:justify-end">
                           {option.swatch.map((swatch) => {
                             const backgroundColor = swatch.sampleBackground ?? swatch.color;
                             const isText = swatch.role === 'text';
                             return (
                               <div
                                 key={`${option.id}-${swatch.role}`}
-                                className="flex flex-col items-center gap-1"
+                                className="flex flex-col items-center gap-2"
                               >
                                 <span
                                   className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/40 shadow-inner"
@@ -132,7 +130,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 >
                                   {isText ? <span className="text-sm font-semibold leading-none">Aa</span> : null}
                                 </span>
-                                <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                                <span className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground">
                                   {swatch.label}
                                 </span>
                               </div>
@@ -141,12 +139,10 @@ export const PageSettingsDialog: ModalComponent = () => {
                         </div>
                       </div>
                       {option.id === 'custom' ? (
-                        <div className="mt-6 space-y-3 rounded-xl border border-border/60 bg-surface/30 p-4">
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-4 rounded-xl border border-border/60 bg-surface/30 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
                             <p className="text-xs font-semibold text-muted-foreground">アクセントカラーを選択</p>
-                            <span
-                              className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
-                            >
+                            <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                               <span className="sr-only">現在のカラー</span>
                               <span
                                 className="h-4 w-4 rounded border border-border/50 shadow-inner"
@@ -199,7 +195,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                           </div>
                         </div>
                       ) : null}
-                    </>
+                    </div>
                   )}
                 </RadioGroup.Option>
               ))}
