@@ -1,6 +1,7 @@
 // /api/discord/me.js
-import { getCookies } from '../_lib/cookies.js';
+import { getCookies, setCookie } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
+import { SESSION_TTL_SEC } from '../_lib/sessionStore.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
 export default async function handler(req, res) {
@@ -20,11 +21,16 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok:false, error:'no session' });
   }
 
-  const sess = await getSessionWithRefresh(sid);
+  const sessionInfo = await getSessionWithRefresh(sid);
+  const sess = sessionInfo.session;
   if (!sess) {
     log.info('session not found or invalid');
     if (soft) return res.status(200).json({ ok:false, loggedIn:false });
     return res.status(401).json({ ok:false, error:'invalid session' });
+  }
+
+  if (sessionInfo.cookieUpdated && sessionInfo.cookieValue) {
+    setCookie(res, 'sid', sessionInfo.cookieValue, { maxAge: SESSION_TTL_SEC });
   }
 
   log.info('session resolved', { userId: sess.uid });

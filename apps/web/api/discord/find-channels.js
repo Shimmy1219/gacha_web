@@ -1,8 +1,9 @@
 // /api/discord/find-channel.js
-import { getCookies } from '../_lib/cookies.js';
+import { getCookies, setCookie } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { dFetch, assertGuildOwner, build1to1Overwrites } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
+import { SESSION_TTL_SEC } from '../_lib/sessionStore.js';
 
 const CATEGORY_NAME = '景品お渡し';
 
@@ -16,10 +17,15 @@ export default async function handler(req, res){
     return res.status(405).json({ ok:false, error:'Method Not Allowed' });
   }
   const { sid } = getCookies(req);
-  const sess = await getSessionWithRefresh(sid);
+  const sessionInfo = await getSessionWithRefresh(sid);
+  const sess = sessionInfo.session;
   if (!sess) {
     log.info('session missing or invalid');
     return res.status(401).json({ ok:false, error:'not logged in' });
+  }
+
+  if (sessionInfo.cookieUpdated && sessionInfo.cookieValue) {
+    setCookie(res, 'sid', sessionInfo.cookieValue, { maxAge: SESSION_TTL_SEC });
   }
 
   const guildId = String(req.query.guild_id || '');

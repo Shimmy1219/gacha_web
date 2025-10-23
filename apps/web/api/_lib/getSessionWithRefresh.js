@@ -1,7 +1,7 @@
 // /api/_lib/getSessionWithRefresh.js
 // APIごとに呼び出して、必要なら自動でDiscordトークンをリフレッシュ
-import { kv } from './kv.js';
-import { getSession, saveSession, touchSession } from './sessionStore.js';
+import { getKvClient } from './kv.js';
+import { SESSION_STORE_MODE, getSession, saveSession, touchSession } from './sessionStore.js';
 
 async function discordRefresh(refreshToken) {
   const body = new URLSearchParams({
@@ -22,30 +22,52 @@ async function discordRefresh(refreshToken) {
   return r.json();
 }
 
+const kv = SESSION_STORE_MODE === 'kv' ? getKvClient() : null;
+
 export async function getSessionWithRefresh(sid) {
   const sess = await getSession(sid);
-  if (!sess) return null;
+  if (!sess) {
+    return { session: null, cookieValue: null, cookieUpdated: false };
+  }
 
   const now = Date.now();
-  if (now > (sess.access_expires_at || 0) - 30_000) {
-    const lockKey = `lock:sess:${sid}`;
-    const got = await kv.set(lockKey, '1', { nx: true, ex: 5 });
+  let currentSession = sess;
+  let cookieValue = sid || null;
+  let cookieUpdated = false;
+
+  const needsRefresh = now > (sess.access_expires_at || 0) - 30_000;
+  if (needsRefresh) {
+    let lockKey = null;
+    let lockAcquired = false;
+    if (SESSION_STORE_MODE === 'kv' && sid) {
+      lockKey = `lock:sess:${sid}`;
+      const got = await kv.set(lockKey, '1', { nx: true, ex: 5 });
+      lockAcquired = Boolean(got);
+    }
     try {
       const latest = (await getSession(sid)) || sess;
-      if (got && now > (latest.access_expires_at || 0) - 30_000) {
+      const stillNeedsRefresh = now > (latest.access_expires_at || 0) - 30_000;
+      if (stillNeedsRefresh && (SESSION_STORE_MODE !== 'kv' || lockAcquired)) {
         const r = await discordRefresh(latest.refresh_token);
         latest.access_token = r.access_token;
         latest.refresh_token = r.refresh_token;
         latest.access_expires_at = now + (r.expires_in || 3600) * 1000;
         latest.ver = (latest.ver || 0) + 1;
-        await saveSession(sid, latest);
-        return latest;
+        const saveResult = await saveSession(sid, latest);
+        currentSession = latest;
+        cookieValue = saveResult.cookieValue;
+        cookieUpdated = saveResult.changed || cookieValue !== sid;
+      } else {
+        currentSession = latest;
       }
     } finally {
-      if (got) await kv.del(lockKey);
+      if (SESSION_STORE_MODE === 'kv' && lockAcquired && lockKey) {
+        await kv.del(lockKey);
+      }
     }
   }
-  await touchSession(sid);
-  return sess;
+
+  await touchSession(cookieValue || sid);
+  return { session: currentSession, cookieValue: cookieValue || sid || null, cookieUpdated };
 }
 
