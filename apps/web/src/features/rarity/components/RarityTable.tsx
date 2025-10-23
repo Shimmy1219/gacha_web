@@ -44,7 +44,7 @@ export function RarityTable({
           <col className="rarity-section__col rarity-section__col-rate" />
           <col className="rarity-section__col rarity-section__col-actions" />
         </colgroup>
-        <thead className="rarity-section__table-head bg-[#121218] text-xs uppercase tracking-[0.3em] text-muted-foreground">
+        <thead className="rarity-section__table-head bg-surface-deep text-xs uppercase tracking-[0.3em] text-muted-foreground">
           <tr>
             <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 font-semibold">
               レアリティ
@@ -68,7 +68,7 @@ export function RarityTable({
                     value={label}
                     onChange={(event) => onLabelChange?.(row.id, event.target.value)}
                     className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
                       presentation.className ?? 'text-surface-foreground'
                     )}
                     style={presentation.style}
@@ -100,7 +100,7 @@ export function RarityTable({
                           event.currentTarget.blur();
                         }
                       }}
-                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                       aria-label={row.emitRateAriaLabel ?? `${label || row.id} の排出率`}
                       title={row.isEmitRateReadOnly ? '排出率は自動で調整されます' : undefined}
                       disabled={row.isEmitRateReadOnly}

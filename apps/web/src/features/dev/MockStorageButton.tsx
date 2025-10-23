@@ -655,7 +655,7 @@ export function MockStorageButton(): JSX.Element {
       <button
         type="button"
         onClick={handleInsertMockData}
-        className="inline-flex items-center justify-center gap-2 rounded-full border border-border/50 bg-[#23232b] px-5 py-2 text-xs font-semibold text-surface-foreground transition hover:bg-[#2f2f39]"
+        className="inline-flex items-center justify-center gap-2 rounded-full border border-border/50 bg-muted px-5 py-2 text-xs font-semibold text-surface-foreground transition hover:bg-muted/80"
       >
         仮データを生成
       </button>

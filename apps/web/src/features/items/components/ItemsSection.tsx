@@ -591,7 +591,7 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
       type="button"
       aria-label="景品を追加"
       className={clsx(
-        'item-card item-card--add relative flex h-full flex-col overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition focus:outline-none',
+        'item-card item-card--add relative flex h-full flex-col overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none',
         disabled
           ? 'cursor-not-allowed opacity-60'
           : 'hover:border-accent/70 hover:bg-accent/5 focus-visible:ring-2 focus-visible:ring-accent/50'
@@ -601,7 +601,7 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
       aria-disabled={disabled}
     >
       <div className="flex flex-1 flex-col space-y-3">
-        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-[#1b1b22] text-5xl font-semibold text-accent">
+        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-panel-muted text-5xl font-semibold text-accent">
           +
         </div>
         <div className="space-y-1">

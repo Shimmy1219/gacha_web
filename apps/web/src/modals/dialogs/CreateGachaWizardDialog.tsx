@@ -514,7 +514,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 setShowNameError(false);
               }
             }}
-            className="w-full rounded-2xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground shadow-inner transition focus:border-accent focus:outline-none"
+            className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
           <p className="text-xs text-muted-foreground">ダッシュボードでの表示名として利用されます。</p>
@@ -572,9 +572,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 {items.map((item) => (
                   <li
                     key={item.assetId}
-                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-[#13131a] px-4 py-3"
+                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3"
                   >
-                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-[#0f0f14]">
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-surface-deep">
                       {item.previewUrl ? (
                         <img
                           src={item.previewUrl}

@@ -86,7 +86,7 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >
@@ -106,7 +106,7 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(
-            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f] disabled:cursor-default disabled:opacity-90',
+            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in'
           )}
