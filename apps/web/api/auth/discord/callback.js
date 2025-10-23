@@ -1,7 +1,7 @@
 // /api/auth/discord/callback.js
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
-import { newSid, saveSession } from '../../_lib/sessionStore.js';
+import { saveSession, SESSION_TTL_SEC } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
@@ -83,15 +83,18 @@ export default async function handler(req, res) {
     ver: 1,
   };
 
-  const sid = newSid();
-  await saveSession(sid, payload);
+  const { cookieValue: sessionCookie, sid } = await saveSession(null, payload);
 
   // sid をクッキーへ（30日）
-  setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+  setCookie(res, 'sid', sessionCookie, { maxAge: SESSION_TTL_SEC });
 
   // UX: ルートへ返す（必要なら /?loggedin=1 など）
   res.setHeader('Cache-Control', 'no-store');
-  const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
+  const previewSource = sid || sessionCookie;
+  const sessionIdPreview =
+    previewSource && previewSource.length > 8
+      ? `${previewSource.slice(0, 4)}...${previewSource.slice(-4)}`
+      : previewSource;
   log.info('login session issued', { userId: me.id, sessionIdPreview });
   return res.redirect('/');
 }
