@@ -35,6 +35,28 @@ const MENU_ITEMS: MenuItem[] = [
 ];
 
 const ACCENT_COLOR_OPTIONS = DEFAULT_PALETTE.filter((option) => option.value.startsWith('#'));
+const CUSTOM_BASE_TONE_OPTIONS = [
+  {
+    id: 'dark',
+    label: 'ダーク（黒）',
+    description: '背景が暗く、文字色は白で表示されます。',
+    previewBackground: '#0b0b0f',
+    previewForeground: '#f5f5f6'
+  },
+  {
+    id: 'light',
+    label: 'ライト（白）',
+    description: '背景が白く、文字色は黒で表示されます。',
+    previewBackground: '#ffffff',
+    previewForeground: '#1b1d28'
+  }
+] as const satisfies Array<{
+  id: 'dark' | 'light';
+  label: string;
+  description: string;
+  previewBackground: string;
+  previewForeground: string;
+}>;
 
 export const PageSettingsDialog: ModalComponent = () => {
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
@@ -42,7 +64,15 @@ export const PageSettingsDialog: ModalComponent = () => {
   const [groupBySeries, setGroupBySeries] = useState(false);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
-  const { theme, setTheme, options, customAccentColor, setCustomAccentColor } = useSiteTheme();
+  const {
+    theme,
+    setTheme,
+    options,
+    customAccentColor,
+    setCustomAccentColor,
+    customBaseTone,
+    setCustomBaseTone
+  } = useSiteTheme();
 
   const normalizedAccent = customAccentColor.toLowerCase();
   const accentChoices = useMemo(() => ACCENT_COLOR_OPTIONS, []);
@@ -139,9 +169,70 @@ export const PageSettingsDialog: ModalComponent = () => {
                         </div>
                       </div>
                       {option.id === 'custom' ? (
-                        <div className="space-y-4 rounded-xl border border-border/60 bg-surface/30 p-4">
+                        <div className="space-y-5 rounded-xl border border-border/60 bg-surface/30 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                                メインカラー
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                サイト全体の背景色と文字色を切り替えます。
+                              </p>
+                            </div>
+                            <RadioGroup
+                              value={customBaseTone}
+                              onChange={(nextTone) => {
+                                setCustomBaseTone(nextTone);
+                                if (theme !== 'custom') {
+                                  setTheme('custom');
+                                }
+                              }}
+                              className="flex flex-col gap-2 sm:flex-row"
+                            >
+                              {CUSTOM_BASE_TONE_OPTIONS.map((baseOption) => (
+                                <RadioGroup.Option
+                                  key={baseOption.id}
+                                  value={baseOption.id}
+                                  className={({ checked, active }) =>
+                                    clsx(
+                                      'flex w-full min-w-[200px] items-center gap-3 rounded-xl border px-3 py-2 text-left transition focus:outline-none sm:w-auto',
+                                      checked
+                                        ? 'border-accent bg-accent/15 shadow-[0_12px_28px_rgba(0,0,0,0.2)]'
+                                        : 'border-border/60 bg-surface/40 hover:border-accent/40',
+                                      active && !checked ? 'ring-2 ring-accent/40' : undefined
+                                    )
+                                  }
+                                >
+                                  <div
+                                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-border/50 shadow-inner"
+                                    style={{
+                                      backgroundColor: baseOption.previewBackground,
+                                      color: baseOption.previewForeground
+                                    }}
+                                  >
+                                    <span className="text-xs font-semibold leading-none">Aa</span>
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    <RadioGroup.Label className="text-xs font-semibold text-surface-foreground">
+                                      {baseOption.label}
+                                    </RadioGroup.Label>
+                                    <RadioGroup.Description className="text-[11px] text-muted-foreground">
+                                      {baseOption.description}
+                                    </RadioGroup.Description>
+                                  </div>
+                                </RadioGroup.Option>
+                              ))}
+                            </RadioGroup>
+                          </div>
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <p className="text-xs font-semibold text-muted-foreground">アクセントカラーを選択</p>
+                            <div className="space-y-1">
+                              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                                アクセントカラー
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                ボタンや強調表示に使用される差し色です。
+                              </p>
+                            </div>
                             <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                               <span className="sr-only">現在のカラー</span>
                               <span
@@ -152,46 +243,42 @@ export const PageSettingsDialog: ModalComponent = () => {
                               {customAccentColor.toUpperCase()}
                             </span>
                           </div>
-                          <div className="relative -mx-2">
-                            <div className="overflow-x-auto px-2">
-                              <div className="flex min-w-max items-center gap-2 py-1">
-                                {accentChoices.map((entry) => {
-                                  const normalizedValue = entry.value.toLowerCase();
-                                  const isSelected = normalizedValue === normalizedAccent;
-                                  return (
-                                    <button
-                                      key={entry.id}
-                                      type="button"
-                                      className={clsx(
-                                        'group rounded-lg border border-border/60 bg-surface/40 p-1 transition hover:border-accent/50 hover:bg-surface/60',
-                                        isSelected
-                                          ? 'border-accent bg-accent/15 shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
-                                          : undefined
-                                      )}
-                                      onClick={() => {
-                                        if (!isSelected) {
-                                          setCustomAccentColor(entry.value);
-                                        }
-                                        if (theme !== 'custom') {
-                                          setTheme('custom');
-                                        }
-                                      }}
-                                      aria-pressed={isSelected}
-                                    >
-                                      <span className="sr-only">{entry.name}</span>
-                                      <span
-                                        className="block h-10 w-10 rounded-md border border-border/50 shadow-inner transition"
-                                        style={{
-                                          backgroundColor: entry.value,
-                                          boxShadow: isSelected ? `0 0 0 2px ${entry.value}` : undefined
-                                        }}
-                                        aria-hidden="true"
-                                      />
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                          <div className="flex flex-wrap gap-2">
+                            {accentChoices.map((entry) => {
+                              const normalizedValue = entry.value.toLowerCase();
+                              const isSelected = normalizedValue === normalizedAccent;
+                              return (
+                                <button
+                                  key={entry.id}
+                                  type="button"
+                                  className={clsx(
+                                    'group rounded-lg border border-border/60 bg-surface/40 p-1 transition hover:border-accent/50 hover:bg-surface/60',
+                                    isSelected
+                                      ? 'border-accent bg-accent/15 shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
+                                      : undefined
+                                  )}
+                                  onClick={() => {
+                                    if (!isSelected) {
+                                      setCustomAccentColor(entry.value);
+                                    }
+                                    if (theme !== 'custom') {
+                                      setTheme('custom');
+                                    }
+                                  }}
+                                  aria-pressed={isSelected}
+                                >
+                                  <span className="sr-only">{entry.name}</span>
+                                  <span
+                                    className="block h-10 w-10 rounded-md border border-border/50 shadow-inner transition"
+                                    style={{
+                                      backgroundColor: entry.value,
+                                      boxShadow: isSelected ? `0 0 0 2px ${entry.value}` : undefined
+                                    }}
+                                    aria-hidden="true"
+                                  />
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : null}

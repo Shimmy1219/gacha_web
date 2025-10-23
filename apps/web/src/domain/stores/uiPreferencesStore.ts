@@ -22,6 +22,10 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
 export const SITE_THEME_VALUES = ['dark', 'light', 'custom'] as const;
 
 export const DEFAULT_SITE_ACCENT = '#e11d48';
+export const CUSTOM_BASE_TONE_VALUES = ['dark', 'light'] as const;
+export type CustomBaseTone = (typeof CUSTOM_BASE_TONE_VALUES)[number];
+const CUSTOM_BASE_TONE_SET = new Set<string>(CUSTOM_BASE_TONE_VALUES);
+export const DEFAULT_CUSTOM_BASE_TONE: CustomBaseTone = 'dark';
 const LEGACY_TWILIGHT_ACCENT = '#8b5cf6';
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -88,6 +92,16 @@ function normalizeHexColor(value: unknown): string | null {
   return lower;
 }
 
+function normalizeCustomBaseTone(value: unknown): CustomBaseTone | null {
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase();
+    if (CUSTOM_BASE_TONE_SET.has(lower)) {
+      return lower as CustomBaseTone;
+    }
+  }
+  return null;
+}
+
 function normalizeSiteTheme(value: unknown): SiteTheme | null {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
@@ -139,6 +153,17 @@ function readCustomAccentColorFromState(state: UiPreferencesStateV3 | undefined)
     return LEGACY_TWILIGHT_ACCENT;
   }
   return null;
+}
+
+function readCustomBaseToneFromState(state: UiPreferencesStateV3 | undefined): CustomBaseTone | null {
+  if (!state) {
+    return null;
+  }
+  const appearance = state.appearance;
+  if (!isRecord(appearance)) {
+    return null;
+  }
+  return normalizeCustomBaseTone(appearance.customBaseTone);
 }
 
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
@@ -310,6 +335,36 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           appearance: {
             ...previousAppearance,
             customAccentColor: normalized
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getCustomBaseTone(): CustomBaseTone {
+    return readCustomBaseToneFromState(this.state) ?? DEFAULT_CUSTOM_BASE_TONE;
+  }
+
+  setCustomBaseTone(tone: CustomBaseTone, options: UpdateOptions = { persist: 'debounced' }): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readCustomBaseToneFromState(previous) ?? DEFAULT_CUSTOM_BASE_TONE;
+        if (current === tone) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousAppearance = base.appearance && isRecord(base.appearance) ? base.appearance : {};
+
+        return {
+          ...base,
+          appearance: {
+            ...previousAppearance,
+            customBaseTone: tone
           }
         };
       },

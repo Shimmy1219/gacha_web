@@ -8,7 +8,7 @@ import {
   type PropsWithChildren
 } from 'react';
 
-import { DEFAULT_SITE_ACCENT, type SiteTheme } from '@domain/stores/uiPreferencesStore';
+import { DEFAULT_SITE_ACCENT, type CustomBaseTone, type SiteTheme } from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
 
@@ -34,6 +34,8 @@ interface SiteThemeContextValue {
   options: SiteThemeOption[];
   customAccentColor: string;
   setCustomAccentColor(next: string): void;
+  customBaseTone: CustomBaseTone;
+  setCustomBaseTone(next: CustomBaseTone): void;
 }
 
 const DARK_MAIN_HEX = '#0b0b0f';
@@ -55,7 +57,7 @@ const BASE_THEME_OPTIONS: Array<Omit<SiteThemeOption, 'swatch'>> = [
   {
     id: 'custom',
     label: 'カスタムカラー',
-    description: 'アクセントカラーを自由に選べるダークベースのテーマです。'
+    description: 'アクセントカラーと背景の明るさを自由に選べるテーマです。'
   }
 ];
 
@@ -122,10 +124,52 @@ function resolveAccentHex(theme: SiteTheme, customAccentHex: string): string {
   return DEFAULT_SITE_ACCENT;
 }
 
-function createThemeSwatches(theme: SiteTheme, customAccentHex: string): ThemeSwatchSample[] {
+const SURFACE_TONE_CONFIG: Record<CustomBaseTone, { colorScheme: 'dark' | 'light'; vars: Record<string, string> }> = {
+  dark: {
+    colorScheme: 'dark',
+    vars: {
+      '--color-surface': '11 11 15',
+      '--color-surface-foreground': '245 245 246',
+      '--color-surface-alt': '17 17 25',
+      '--color-surface-deep': '9 9 15',
+      '--color-panel': '21 21 27',
+      '--color-panel-muted': '27 27 34',
+      '--color-panel-contrast': '31 31 39',
+      '--color-border': '42 42 54',
+      '--color-muted': '35 35 43',
+      '--color-muted-foreground': '179 179 189',
+      '--color-overlay': '17 17 26'
+    }
+  },
+  light: {
+    colorScheme: 'light',
+    vars: {
+      '--color-surface': '255 255 255',
+      '--color-surface-foreground': '27 29 40',
+      '--color-surface-alt': '248 249 252',
+      '--color-surface-deep': '240 242 247',
+      '--color-panel': '255 255 255',
+      '--color-panel-muted': '247 248 252',
+      '--color-panel-contrast': '233 236 244',
+      '--color-border': '210 214 224',
+      '--color-muted': '238 240 246',
+      '--color-muted-foreground': '104 112 130',
+      '--color-overlay': '252 253 255'
+    }
+  }
+};
+
+const SURFACE_VARIABLE_NAMES = Object.keys(SURFACE_TONE_CONFIG.dark.vars);
+
+function createThemeSwatches(
+  theme: SiteTheme,
+  customAccentHex: string,
+  customBaseTone: CustomBaseTone
+): ThemeSwatchSample[] {
   const accentHex = theme === 'custom' ? normalizeAccentHex(customAccentHex) : DEFAULT_SITE_ACCENT;
-  const main = theme === 'light' ? LIGHT_MAIN_HEX : DARK_MAIN_HEX;
-  const text = theme === 'light' ? LIGHT_TEXT_HEX : DARK_TEXT_HEX;
+  const isLight = theme === 'light' || (theme === 'custom' && customBaseTone === 'light');
+  const main = isLight ? LIGHT_MAIN_HEX : DARK_MAIN_HEX;
+  const text = isLight ? LIGHT_TEXT_HEX : DARK_TEXT_HEX;
 
   return [
     { role: 'main', label: 'メイン', color: main },
@@ -162,7 +206,7 @@ function computeAccentPalette(hex: string, scheme: 'dark' | 'light') {
   };
 }
 
-function applyDocumentTheme(theme: SiteTheme, accentHex: string): void {
+function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone: CustomBaseTone): void {
   if (typeof document === 'undefined') {
     return;
   }
@@ -170,7 +214,8 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string): void {
   const root = document.documentElement;
   root.dataset.siteTheme = theme;
 
-  const scheme = theme === 'light' ? 'light' : 'dark';
+  const scheme: 'dark' | 'light' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
+  root.dataset.siteThemeScheme = scheme;
   const palette = computeAccentPalette(accentHex, scheme);
 
   root.style.setProperty('--color-accent', palette.accent);
@@ -180,6 +225,20 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string): void {
   root.style.setProperty('--color-accent-foreground', palette.accentForeground);
   root.style.setProperty('--background-gradient-1', palette.gradient1);
   root.style.setProperty('--background-gradient-2', palette.gradient2);
+
+  if (theme === 'custom') {
+    const toneConfig = SURFACE_TONE_CONFIG[customBaseTone];
+    root.style.setProperty('color-scheme', toneConfig.colorScheme);
+    for (const name of SURFACE_VARIABLE_NAMES) {
+      root.style.setProperty(name, toneConfig.vars[name]);
+    }
+  } else {
+    root.style.removeProperty('color-scheme');
+    for (const name of SURFACE_VARIABLE_NAMES) {
+      root.style.removeProperty(name);
+    }
+    root.dataset.siteThemeScheme = scheme;
+  }
 }
 
 export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element {
@@ -188,18 +247,23 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
   const [customAccentColor, setCustomAccentColorState] = useState<string>(() =>
     uiPreferences.getCustomAccentColor()
   );
+  const [customBaseTone, setCustomBaseToneState] = useState<CustomBaseTone>(() =>
+    uiPreferences.getCustomBaseTone()
+  );
 
   useEffect(() => {
-    applyDocumentTheme(theme, resolveAccentHex(theme, customAccentColor));
-  }, [theme, customAccentColor]);
+    applyDocumentTheme(theme, resolveAccentHex(theme, customAccentColor), customBaseTone);
+  }, [theme, customAccentColor, customBaseTone]);
 
   useEffect(() => {
     const unsubscribe = uiPreferences.subscribe(() => {
       const nextTheme = uiPreferences.getSiteTheme();
       const nextAccent = uiPreferences.getCustomAccentColor();
+      const nextBaseTone = uiPreferences.getCustomBaseTone();
 
       setThemeState((previous) => (previous === nextTheme ? previous : nextTheme));
       setCustomAccentColorState((previous) => (previous === nextAccent ? previous : nextAccent));
+      setCustomBaseToneState((previous) => (previous === nextBaseTone ? previous : nextBaseTone));
     });
     return unsubscribe;
   }, [uiPreferences]);
@@ -221,12 +285,20 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
     [uiPreferences]
   );
 
+  const handleSetCustomBaseTone = useCallback(
+    (next: CustomBaseTone) => {
+      setCustomBaseToneState((previous) => (previous === next ? previous : next));
+      uiPreferences.setCustomBaseTone(next, { persist: 'debounced' });
+    },
+    [uiPreferences]
+  );
+
   const options = useMemo<SiteThemeOption[]>(() => {
     return BASE_THEME_OPTIONS.map((option) => ({
       ...option,
-      swatch: createThemeSwatches(option.id, customAccentColor)
+      swatch: createThemeSwatches(option.id, customAccentColor, customBaseTone)
     }));
-  }, [customAccentColor]);
+  }, [customAccentColor, customBaseTone]);
 
   const value = useMemo<SiteThemeContextValue>(
     () => ({
@@ -234,9 +306,11 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
       setTheme,
       options,
       customAccentColor,
-      setCustomAccentColor: handleSetCustomAccentColor
+      setCustomAccentColor: handleSetCustomAccentColor,
+      customBaseTone,
+      setCustomBaseTone: handleSetCustomBaseTone
     }),
-    [theme, setTheme, options, customAccentColor, handleSetCustomAccentColor]
+    [theme, setTheme, options, customAccentColor, handleSetCustomAccentColor, customBaseTone, handleSetCustomBaseTone]
   );
 
   return <SiteThemeContext.Provider value={value}>{children}</SiteThemeContext.Provider>;
