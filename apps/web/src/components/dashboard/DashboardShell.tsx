@@ -56,7 +56,9 @@ export function DashboardShell({ sections, controlsSlot }: DashboardShellProps):
     <DashboardContext.Provider value={value}>
       <div className="dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-16">
         {controlsSlot ? (
-          <aside className="dashboard-shell__controls rounded-[1.5rem] border border-border/70 bg-[#15151b]/95 p-6 shadow-panel ring-1 ring-inset ring-white/5">
+          <aside
+            className="dashboard-shell__controls absolute right-4 top-4 z-20 w-60 max-w-full rounded-2xl border border-border/70 bg-[#15151b]/95 p-4 text-xs shadow-panel ring-1 ring-inset ring-white/5"
+          >
             {controlsSlot}
           </aside>
         ) : null}
