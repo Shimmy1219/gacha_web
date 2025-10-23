@@ -1,12 +1,13 @@
-import { Disclosure } from '@headlessui/react';
+import { Disclosure, Menu, Transition } from '@headlessui/react';
 import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
-import { useCallback, useMemo, useState, type FormEvent } from 'react';
+import { Fragment, useCallback, useMemo, useState, type FormEvent } from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { ConfirmDialog, useModal } from '../../modals';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -125,6 +126,7 @@ export function UserCard({
                     inventory={inventory}
                     showCounts={showCounts}
                     userId={userId}
+                    userName={userName}
                     catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
                     rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
                   />
@@ -150,6 +152,7 @@ interface GachaInventoryCardProps {
   inventory: UserInventoryEntry;
   showCounts: boolean;
   userId: UserId;
+  userName: string;
   catalogItems: InventoryCatalogItemOption[];
   rarityOptions: InventoryRarityOption[];
 }
@@ -160,10 +163,12 @@ function GachaInventoryCard({
   inventory,
   showCounts,
   userId,
+  userName,
   catalogItems,
   rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
-  const { userInventories: userInventoryStore } = useDomainStores();
+  const { userInventories: userInventoryStore, pullHistory: pullHistoryStore } = useDomainStores();
+  const { push } = useModal();
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
     [inventory.pulls]
@@ -228,6 +233,41 @@ function GachaInventoryCard({
     });
   }, [resetDraft]);
 
+  const handleOpenHistory = useCallback(() => {
+    console.info('インベントリ履歴の表示は未実装です', {
+      userId,
+      inventoryId: inventory.inventoryId
+    });
+  }, [inventory.inventoryId, userId]);
+
+  const handleDeleteInventory = useCallback(() => {
+    push(ConfirmDialog, {
+      id: `inventory-delete-${inventory.inventoryId}`,
+      title: 'インベントリを削除',
+      payload: {
+        message: `ユーザー「${userName}」の「${inventory.gachaName}」インベントリと関連するガチャ履歴を削除します。この操作は元に戻せません。よろしいですか？`,
+        confirmLabel: '削除する',
+        cancelLabel: 'キャンセル',
+        onConfirm: () => {
+          resetDraft();
+          setIsEditing(false);
+          userInventoryStore.removeInventory({ userId, inventoryId: inventory.inventoryId });
+          pullHistoryStore.deletePullsForInventory({ gachaId: inventory.gachaId, userId });
+        }
+      }
+    });
+  }, [
+    inventory.gachaId,
+    inventory.gachaName,
+    inventory.inventoryId,
+    pullHistoryStore,
+    push,
+    resetDraft,
+    userId,
+    userName,
+    userInventoryStore
+  ]);
+
   const handleStartEdit = useCallback(
     (rarityId: string, itemId: string, currentCount: number) => {
       if (!isEditing) {
@@ -244,18 +284,16 @@ function GachaInventoryCard({
   );
 
   const handleStartAdd = useCallback(() => {
-      if (!isEditing) {
-        return;
-      }
-      setActiveEditor('add');
-      setDraftMode('add');
-      setDraftItemId('');
-      setDraftCount('1');
-      setDraftRarityId('');
-      setErrorMessage(null);
-    },
-    [isEditing]
-  );
+    if (!isEditing) {
+      return;
+    }
+    setActiveEditor('add');
+    setDraftMode('add');
+    setDraftItemId('');
+    setDraftCount('1');
+    setDraftRarityId('');
+    setErrorMessage(null);
+  }, [isEditing]);
 
   const selectedCatalogItem = useMemo(() => {
     if (!draftItemId) {
@@ -375,14 +413,69 @@ function GachaInventoryCard({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-[#1d1d25] text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              aria-label="インベントリを編集"
-              onClick={handleToggleEditing}
-            >
-              <EllipsisVerticalIcon className="h-4 w-4" />
-            </button>
+            <Menu as="div" className="relative">
+              <Menu.Button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-[#1d1d25] text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                aria-label="インベントリメニューを開く"
+              >
+                <EllipsisVerticalIcon className="h-4 w-4" />
+              </Menu.Button>
+              <Transition
+                as={Fragment}
+                enter="transition ease-out duration-100"
+                enterFrom="transform opacity-0 scale-95"
+                enterTo="transform opacity-100 scale-100"
+                leave="transition ease-in duration-75"
+                leaveFrom="transform opacity-100 scale-100"
+                leaveTo="transform opacity-0 scale-95"
+              >
+                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-[#15151b]/95 shadow-[0_16px_40px_rgba(0,0,0,0.55)] focus:outline-none">
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={handleToggleEditing}
+                        className={clsx(
+                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
+                          active ? 'bg-surface/40 text-accent' : undefined
+                        )}
+                      >
+                        編集
+                      </button>
+                    )}
+                  </Menu.Item>
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={handleOpenHistory}
+                        className={clsx(
+                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
+                          active ? 'bg-surface/40 text-accent' : undefined
+                        )}
+                      >
+                        履歴
+                      </button>
+                    )}
+                  </Menu.Item>
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        onClick={handleDeleteInventory}
+                        className={clsx(
+                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
+                          active ? 'bg-surface/40 text-accent' : undefined
+                        )}
+                      >
+                        削除
+                      </button>
+                    )}
+                  </Menu.Item>
+                </Menu.Items>
+              </Transition>
+            </Menu>
           )}
         </div>
       </header>

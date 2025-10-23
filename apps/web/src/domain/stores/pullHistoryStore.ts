@@ -242,6 +242,92 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     }, options);
   }
 
+  deletePullsForInventory(
+    params: { gachaId: string; userId?: string },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedUserId = typeof params.userId === 'string' && params.userId.length > 0 ? params.userId : undefined;
+    const { gachaId } = params;
+
+    if (!gachaId) {
+      console.warn('PullHistoryStore.deletePullsForInventory called without gachaId', params);
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+
+      const shouldRemove = (entry: PullHistoryEntryV1 | undefined): boolean => {
+        if (!entry) {
+          return true;
+        }
+        if (entry.gachaId !== gachaId) {
+          return false;
+        }
+        if (normalizedUserId && entry.userId !== normalizedUserId) {
+          return false;
+        }
+        return true;
+      };
+
+      let removed = false;
+      const nextPulls: Record<string, PullHistoryEntryV1 | undefined> = {};
+      const nextOrder: string[] = [];
+      const seen = new Set<string>();
+
+      base.order.forEach((entryId) => {
+        const entry = base.pulls[entryId];
+        if (shouldRemove(entry)) {
+          removed = true;
+          return;
+        }
+        if (!entry) {
+          removed = true;
+          return;
+        }
+
+        nextPulls[entryId] = entry;
+        nextOrder.push(entryId);
+        seen.add(entryId);
+      });
+
+      Object.entries(base.pulls).forEach(([entryId, entry]) => {
+        if (seen.has(entryId)) {
+          return;
+        }
+
+        if (shouldRemove(entry)) {
+          removed = true;
+          return;
+        }
+        if (!entry) {
+          removed = true;
+          return;
+        }
+
+        nextPulls[entryId] = entry;
+        nextOrder.push(entryId);
+      });
+
+      if (!removed) {
+        return previous;
+      }
+
+      if (nextOrder.length === 0) {
+        return undefined;
+      }
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+  }
+
   reorder(pullIds: string[], options: UpdateOptions = { persist: 'immediate' }): void {
     const uniqueIds = pullIds.filter((id, index, array) => typeof id === 'string' && array.indexOf(id) === index);
     this.update((previous) => {
