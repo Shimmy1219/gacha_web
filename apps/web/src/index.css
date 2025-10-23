@@ -246,31 +246,19 @@
     border-radius: 0.75rem 0.75rem 0 0;
     border: 1px solid rgb(var(--color-border) / 0.45);
     border-bottom: 0;
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-panel-contrast) / 0.85),
-      rgb(var(--color-surface-deep) / 0.82)
-    );
-    opacity: 0.85;
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+    background-color: rgb(var(--color-panel-contrast) / 0.88);
+    opacity: 0.9;
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
   }
 
   .gacha-tab--active::before {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-accent) / 0.95),
-      rgb(var(--color-accent) / 0.75)
-    );
+    background-color: rgb(var(--color-accent) / 0.92);
     border-color: rgb(var(--color-accent) / 0.95);
     opacity: 1;
   }
 
   .gacha-tab--inactive:hover::before {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-panel-contrast) / 0.92),
-      rgb(var(--color-surface-deep) / 0.82)
-    );
+    background-color: rgb(var(--color-panel-contrast) / 0.95);
     border-color: rgba(255, 63, 102, 0.55);
     opacity: 1;
   }
