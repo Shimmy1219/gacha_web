@@ -141,43 +141,61 @@ export const PageSettingsDialog: ModalComponent = () => {
                         </div>
                       </div>
                       {option.id === 'custom' ? (
-                        <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-surface/30 p-4">
-                          <p className="text-xs font-semibold text-muted-foreground">アクセントカラーを選択</p>
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-                            {accentChoices.map((entry) => {
-                              const normalizedValue = entry.value.toLowerCase();
-                              const isSelected = normalizedValue === normalizedAccent;
-                              return (
-                                <button
-                                  key={entry.id}
-                                  type="button"
-                                  className={clsx(
-                                    'group flex flex-col items-center gap-1 rounded-lg border p-2 text-center transition',
-                                    isSelected
-                                      ? 'border-accent bg-accent/15 text-surface-foreground shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
-                                      : 'border-border/60 bg-surface/40 text-muted-foreground hover:border-accent/50 hover:bg-surface/60'
-                                  )}
-                                  onClick={() => {
-                                    if (!isSelected) {
-                                      setCustomAccentColor(entry.value);
-                                    }
-                                    if (theme !== 'custom') {
-                                      setTheme('custom');
-                                    }
-                                  }}
-                                  aria-pressed={isSelected}
-                                >
-                                  <span
-                                    className="h-8 w-full rounded-md border border-border/50 shadow-inner"
-                                    style={{ backgroundColor: entry.value }}
-                                    aria-hidden="true"
-                                  />
-                                  <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">
-                                    {entry.name}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                        <div className="mt-6 space-y-3 rounded-xl border border-border/60 bg-surface/30 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-semibold text-muted-foreground">アクセントカラーを選択</p>
+                            <span
+                              className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+                            >
+                              <span className="sr-only">現在のカラー</span>
+                              <span
+                                className="h-4 w-4 rounded border border-border/50 shadow-inner"
+                                style={{ backgroundColor: customAccentColor }}
+                                aria-hidden="true"
+                              />
+                              {customAccentColor.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="relative -mx-2">
+                            <div className="overflow-x-auto px-2">
+                              <div className="flex min-w-max items-center gap-2 py-1">
+                                {accentChoices.map((entry) => {
+                                  const normalizedValue = entry.value.toLowerCase();
+                                  const isSelected = normalizedValue === normalizedAccent;
+                                  return (
+                                    <button
+                                      key={entry.id}
+                                      type="button"
+                                      className={clsx(
+                                        'group rounded-lg border border-border/60 bg-surface/40 p-1 transition hover:border-accent/50 hover:bg-surface/60',
+                                        isSelected
+                                          ? 'border-accent bg-accent/15 shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
+                                          : undefined
+                                      )}
+                                      onClick={() => {
+                                        if (!isSelected) {
+                                          setCustomAccentColor(entry.value);
+                                        }
+                                        if (theme !== 'custom') {
+                                          setTheme('custom');
+                                        }
+                                      }}
+                                      aria-pressed={isSelected}
+                                    >
+                                      <span className="sr-only">{entry.name}</span>
+                                      <span
+                                        className="block h-10 w-10 rounded-md border border-border/50 shadow-inner transition"
+                                        style={{
+                                          backgroundColor: entry.value,
+                                          boxShadow: isSelected ? `0 0 0 2px ${entry.value}` : undefined
+                                        }}
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ) : null}
