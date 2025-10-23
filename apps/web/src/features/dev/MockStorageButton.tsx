@@ -22,7 +22,6 @@ import { useAppPersistence } from '../storage/AppPersistenceProvider';
 type GachaSeed = {
   slug: string;
   displayName: string;
-  iconAssetId: string;
 };
 
 type GachaDefinition = GachaSeed & {
@@ -31,7 +30,6 @@ type GachaDefinition = GachaSeed & {
 
 type ItemSeed = {
   name: string;
-  series: string;
   riagu?: boolean;
 };
 
@@ -45,13 +43,11 @@ type ItemDefinition = {
   pickupTarget: boolean;
   imageAssetId: string;
   riagu: boolean;
-  series: string;
 };
 
 type GachaMetaSnapshot = {
   id: string;
   displayName: string;
-  iconAssetId: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -65,7 +61,6 @@ type CatalogItemSnapshot = {
   completeTarget: boolean;
   imageAssetId: string;
   riagu: boolean;
-  series: string;
   updatedAt: string;
 };
 
@@ -76,30 +71,25 @@ type CatalogGachaSnapshot = {
 
 type UserSeed = {
   displayName: string;
-  handle: string;
-  team: string;
+  slug: string;
 };
 
 const GACHA_SEEDS: GachaSeed[] = [
   {
     slug: 'aurora-arc',
-    displayName: 'オーロラアーク',
-    iconAssetId: 'asset-aurora'
+    displayName: 'オーロラアーク'
   },
   {
     slug: 'cosmos-diva',
-    displayName: 'コスモスディーヴァ',
-    iconAssetId: 'asset-cosmos'
+    displayName: 'コスモスディーヴァ'
   },
   {
     slug: 'echo-tide',
-    displayName: 'エコータイド',
-    iconAssetId: 'asset-echo'
+    displayName: 'エコータイド'
   },
   {
     slug: 'mistral-note',
-    displayName: 'ミストラルノート',
-    iconAssetId: 'asset-mistral'
+    displayName: 'ミストラルノート'
   }
 ];
 
@@ -109,85 +99,73 @@ const GACHA_DEFINITIONS: GachaDefinition[] = GACHA_SEEDS.map((seed) => ({
 }));
 
 const RARITY_TEMPLATES = [
-  { code: 'legend', label: 'レジェンド', color: '#facc15', emitRate: 0.02, shortName: 'LEG' },
-  { code: 'premium', label: 'プレミア', color: '#a855f7', emitRate: 0.18, shortName: 'PRE' },
-  { code: 'standard', label: 'スタンダード', color: '#38bdf8', emitRate: 0.8, shortName: 'STD' }
+  { code: 'legend', label: 'レジェンド', color: '#facc15', emitRate: 0.02 },
+  { code: 'premium', label: 'プレミア', color: '#a855f7', emitRate: 0.18 },
+  { code: 'standard', label: 'スタンダード', color: '#38bdf8', emitRate: 0.8 }
 ] as const;
 
 const ITEM_SETS: Record<string, ItemSeed[]> = {
   'aurora-arc': [
     {
       name: '極光のティアラ',
-      series: 'AURORA JEWELRY',
       riagu: true
     },
     {
-      name: '氷晶の羽飾り',
-      series: 'AURORA ACCESSORY'
+      name: '氷晶の羽飾り'
     },
     {
-      name: '夜明けの手紙',
-      series: 'AURORA POST'
+      name: '夜明けの手紙'
     }
   ],
   'cosmos-diva': [
     {
       name: '星雲ステージパス',
-      series: 'COSMOS LIVE',
       riagu: true
     },
     {
-      name: '流星のピアス',
-      series: 'COSMOS JEWELRY'
+      name: '流星のピアス'
     },
     {
-      name: '銀河レコード',
-      series: 'COSMOS RECORDS'
+      name: '銀河レコード'
     }
   ],
   'echo-tide': [
     {
-      name: '潮騒サウンドボックス',
-      series: 'ECHO MUSIC'
+      name: '潮騒サウンドボックス'
     },
     {
       name: '泡沫のミニキーホルダー',
-      series: 'ECHO GOODS',
       riagu: true
     },
     {
-      name: '浜辺のポラロイド',
-      series: 'ECHO PHOTO'
+      name: '浜辺のポラロイド'
     }
   ],
   'mistral-note': [
     {
-      name: '風歌マイクロフォン',
-      series: 'MISTRAL AUDIO'
+      name: '風歌マイクロフォン'
     },
     {
       name: '空渡りのブレスレット',
-      series: 'MISTRAL ACCESSORY',
       riagu: true
     },
     {
-      name: '木漏れ日のスコア',
-      series: 'MISTRAL SCORE'
+      name: '木漏れ日のスコア'
     }
   ]
 };
 
 const USER_SEEDS: UserSeed[] = [
-  { displayName: '綾瀬 ひかり', handle: 'ayase', team: '北ブロック' },
-  { displayName: '南雲 遼', handle: 'nagumo', team: '南ブロック' },
-  { displayName: '東雲 澪', handle: 'shinonome', team: '東ブロック' },
-  { displayName: '西園 迅', handle: 'saionji', team: '西ブロック' },
-  { displayName: '真白 こはく', handle: 'mashiro', team: '管理チーム' },
-  { displayName: '久遠 つばさ', handle: 'kuon', team: '北ブロック' },
-  { displayName: '朝霧 颯太', handle: 'asagiri', team: '南ブロック' },
-  { displayName: '氷室 朱音', handle: 'himuro', team: '東ブロック' },
-  { displayName: '燈矢 陽', handle: 'touya', team: 'PRチーム' },
-  { displayName: '霧島 柚葉', handle: 'kirishima', team: 'サポート' }
+  { displayName: '綾瀬 ひかり', slug: 'ayase' },
+  { displayName: '南雲 遼', slug: 'nagumo' },
+  { displayName: '東雲 澪', slug: 'shinonome' },
+  { displayName: '西園 迅', slug: 'saionji' },
+  { displayName: '真白 こはく', slug: 'mashiro' },
+  { displayName: '久遠 つばさ', slug: 'kuon' },
+  { displayName: '朝霧 颯太', slug: 'asagiri' },
+  { displayName: '氷室 朱音', slug: 'himuro' },
+  { displayName: '燈矢 陽', slug: 'touya' },
+  { displayName: '霧島 柚葉', slug: 'kirishima' }
 ];
 
 function createMockSnapshot(): {
@@ -207,7 +185,6 @@ function createMockSnapshot(): {
       acc[gacha.id] = {
         id: gacha.id,
         displayName: gacha.displayName,
-        iconAssetId: gacha.iconAssetId,
         createdAt: nowIso,
         updatedAt: nowIso
       };
@@ -228,7 +205,6 @@ function createMockSnapshot(): {
         id: rarityId,
         gachaId: gacha.id,
         label: template.label,
-        shortName: template.shortName,
         color: template.color,
         emitRate: template.emitRate,
         sortOrder: templateIndex,
@@ -241,7 +217,6 @@ function createMockSnapshot(): {
     rarityIndexByName[gacha.id] = RARITY_TEMPLATES.reduce<Record<string, string>>((acc, template, templateIndex) => {
       const rarityId = rarityIds[templateIndex];
       acc[template.label] = rarityId;
-      acc[template.shortName] = rarityId;
       return acc;
     }, {});
   });
@@ -267,9 +242,8 @@ function createMockSnapshot(): {
         name: seed.name,
         completeTarget: index === 0,
         pickupTarget: index < 2,
-        imageAssetId: `${gacha.iconAssetId}-${index + 1}`,
-        riagu: Boolean(seed.riagu),
-        series: seed.series
+        imageAssetId: `${gacha.slug}-item-${index + 1}`,
+        riagu: Boolean(seed.riagu)
       };
     });
   });
@@ -291,7 +265,6 @@ function createMockSnapshot(): {
             completeTarget: item.completeTarget,
             imageAssetId: item.imageAssetId,
             riagu: item.riagu,
-            series: item.series,
             updatedAt: nowIso
           };
           return itemsAcc;
@@ -301,18 +274,13 @@ function createMockSnapshot(): {
     }, {})
   };
 
-  const userAccentPalette = ['#4f46e5', '#f97316', '#14b8a6', '#facc15', '#ec4899', '#0ea5e9'];
-
-  const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed, index) => {
-    const id = generateDeterministicUserId(seed.handle);
+  const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed) => {
+    const id = generateDeterministicUserId(seed.slug);
     acc[id] = {
       id,
       displayName: seed.displayName,
-      handle: seed.handle,
-      team: seed.team,
-      role: index % 3 === 0 ? 'STAFF' : 'PLAYER',
-      accentColor: userAccentPalette[index % userAccentPalette.length],
-      joinedAt: nowIso
+      joinedAt: nowIso,
+      updatedAt: nowIso
     };
     return acc;
   }, {});
@@ -381,8 +349,7 @@ function createMockSnapshot(): {
         updatedAt: nowIso,
         totalCount,
         items: itemsMap,
-        counts: countsMap,
-        notes: `${gacha.displayName}のサンプル在庫`
+        counts: countsMap
       };
 
       selections.forEach((entry) => {
@@ -433,8 +400,6 @@ function createMockSnapshot(): {
         unitCost: 1200 + index * 150,
         typeLabel: index % 2 === 0 ? 'ぬいぐるみ' : 'アクリルスタンド',
         orderHint: index + 1,
-        stock: 48 - index * 2,
-        notes: 'React移行用のダミーリアグデータ',
         updatedAt: nowIso
       }
     ] as const;
@@ -575,7 +540,6 @@ function createMockSnapshot(): {
         userId: assignedUserId,
         executedAt: new Date(now.getTime() - (index + 1) * 60 * 60 * 1000).toISOString(),
         pullCount: 10 * (index + 1),
-        currencyType: 'stone',
         currencyUsed: 3000 * (index + 1),
         itemCounts,
         rarityCounts,

@@ -1,4 +1,3 @@
-import { GiftIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -12,32 +11,37 @@ import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 interface RiaguDisplayEntry {
   id: string;
   itemName: string;
-  gachaName: string;
+  typeLabel?: string;
   rarityLabel: string;
   rarityColor: string;
-  costLabel: string;
-  status: string;
+  unitCost?: number;
+  requiredQuantity: number;
+  totalCost?: number;
   winners: Array<{ name: string; count: number }>;
 }
 
 type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
 
-function formatCost(cost?: number): string {
-  if (cost == null) {
-    return '価格未設定';
+const currencyFormatter = new Intl.NumberFormat('ja-JP', {
+  style: 'currency',
+  currency: 'JPY',
+  maximumFractionDigits: 0
+});
+
+const numberFormatter = new Intl.NumberFormat('ja-JP');
+
+function formatCurrency(value: number | undefined): string {
+  if (value == null) {
+    return '未設定';
   }
-  return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }).format(cost);
+  return currencyFormatter.format(value);
 }
 
-function formatStatus(stock?: number, notes?: string): string {
-  const parts: string[] = [];
-  if (stock != null) {
-    parts.push(`在庫残り${stock}`);
+function formatQuantity(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0';
   }
-  if (notes) {
-    parts.push(notes);
-  }
-  return parts.join(' / ') || 'メモ未設定';
+  return numberFormatter.format(value);
 }
 
 export function RiaguSection(): JSX.Element {
@@ -61,13 +65,18 @@ export function RiaguSection(): JSX.Element {
       count += 1;
 
       const catalogItem = catalogByGacha[gachaId]?.items?.[card.itemId];
-      const gachaName = data?.appState?.meta?.[card.gachaId]?.displayName ?? card.gachaId;
       const rarityEntity = catalogItem?.rarityId ? data?.rarityState?.entities?.[catalogItem.rarityId] : undefined;
       const itemName = catalogItem?.name ?? card.itemId;
       const rarityLabel = rarityEntity?.label ?? '未分類';
       const rarityColor = rarityEntity?.color ?? '#a855f7';
+      const typeLabel = card.typeLabel ?? undefined;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
+      const sanitizedUnitCost =
+        typeof card.unitCost === 'number' && Number.isFinite(card.unitCost) ? card.unitCost : undefined;
+
+      const requiredQuantity = reverseEntries.reduce((sum, record) => sum + Math.max(record.count ?? 0, 0), 0);
+
       const winners = reverseEntries
         .map((record) => ({
           name: userProfiles[record.userId]?.displayName ?? record.userId,
@@ -79,11 +88,12 @@ export function RiaguSection(): JSX.Element {
       const entry: RiaguDisplayEntry = {
         id: card.id,
         itemName,
-        gachaName,
+        typeLabel,
         rarityLabel,
         rarityColor,
-        costLabel: formatCost(card.unitCost),
-        status: formatStatus(card.stock, card.notes),
+        unitCost: sanitizedUnitCost,
+        requiredQuantity,
+        totalCost: sanitizedUnitCost != null ? sanitizedUnitCost * requiredQuantity : undefined,
         winners: winners.length > 0 ? winners : [{ name: '当選者なし', count: 0 }]
       };
 
@@ -203,32 +213,40 @@ export function RiaguSection(): JSX.Element {
                         className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                       >
                         <header className="riagu-card__header flex items-start justify-between gap-3">
-                          <div className="riagu-card__meta space-y-1">
+                          <div className="riagu-card__meta space-y-2">
                             <span className={clsx('riagu-card__rarity badge', className)} style={style}>
                               {entry.rarityLabel}
                             </span>
                             <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
-                            <p className="riagu-card__status text-xs text-muted-foreground">
-                              {entry.gachaName} / {entry.costLabel} / {entry.status}
-                            </p>
+                            <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
+                              <div className="riagu-card__summary-item space-y-1">
+                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                  原価
+                                </dt>
+                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                  {formatCurrency(entry.unitCost)}
+                                </dd>
+                              </div>
+                              <div className="riagu-card__summary-item space-y-1">
+                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                  必要個数
+                                </dt>
+                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                  {formatQuantity(entry.requiredQuantity)}
+                                </dd>
+                              </div>
+                              <div className="riagu-card__summary-item space-y-1">
+                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                  合計金額
+                                </dt>
+                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                  {formatCurrency(entry.totalCost)}
+                                </dd>
+                              </div>
+                            </dl>
                           </div>
-                          <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
-                            <button
-                              type="button"
-                              className="riagu-card__detail-button chip"
-                              onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
-                            >
-                              <GiftIcon className="h-4 w-4" />
-                              詳細
-                            </button>
-                            <button
-                              type="button"
-                              className="riagu-card__share-button chip"
-                              onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
-                            >
-                              <GlobeAltIcon className="h-4 w-4" />
-                              共有
-                            </button>
+                          <div className="riagu-card__type chip text-xs text-muted-foreground">
+                            {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
                           </div>
                         </header>
                         <div className="riagu-card__winners space-y-2">
