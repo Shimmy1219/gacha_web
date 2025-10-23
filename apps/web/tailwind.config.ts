@@ -38,10 +38,6 @@ const config: Config = {
           active: '#3C45A5'
         }
       },
-      boxShadow: {
-        header: '0 10px 32px rgba(0, 0, 0, 0.45)',
-        panel: '0 6px 24px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.5)'
-      },
       fontFamily: {
         sans: ['"Noto Sans JP"', 'system-ui', 'sans-serif']
       },

@@ -396,7 +396,7 @@ export function ContextMenu({
       ref={menuRef}
       role="menu"
       className={clsx(
-        'fixed z-[1000] min-w-[220px] max-w-[280px] rounded-xl border border-white/10 bg-[#14141c] p-2 text-sm shadow-lg shadow-black/60',
+        'fixed z-[1000] min-w-[220px] max-w-[280px] rounded-xl border border-white/10 bg-[#14141c] p-2 text-sm',
         classNames?.menu
       )}
       style={{ top: position.y, left: position.x, width, ...style }}
