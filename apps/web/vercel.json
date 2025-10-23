@@ -6,7 +6,7 @@
     { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/sw.js", "destination": "/sw.js" },
     { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
