@@ -95,7 +95,7 @@ export function UserCard({
             <div className="user-card__actions flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-accent to-accent-dark px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-accent-bright hover:to-accent-bright-dark"
+                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
                 onClick={() => onExport?.(userId)}
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
