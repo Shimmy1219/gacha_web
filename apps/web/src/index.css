@@ -303,19 +303,19 @@
 }
 
 .rarity-section__col-label {
-  width: 37%;
+  width: 25%;
 }
 
 .rarity-section__col-color {
-  width: 24%;
+  width: 1%;
 }
 
 .rarity-section__col-rate {
-  width: 21%;
+  width: 30%;
 }
 
 .rarity-section__col-actions {
-  width: 18%;
+  width: 1%;
 }
 
 .rarity-section__cell-label,
