@@ -73,7 +73,7 @@ export function DiscordLoginButton({
         onClick={handleLoginClick}
         data-placement={placement}
         className={clsx(
-          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70',
+          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70',
           className
         )}
         aria-label="Discordでログイン"
@@ -104,7 +104,7 @@ export function DiscordLoginButton({
       data-placement={placement}
     >
       <Menu.Button
-        className="discord-login-button__trigger inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        className="discord-login-button__trigger inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
         aria-label={`${displayName} のメニューを開く`}
       >
         <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
@@ -129,7 +129,7 @@ export function DiscordLoginButton({
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
       >
-        <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95">
+        <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
           <Menu.Item>
             {({ active }) => (
               <button

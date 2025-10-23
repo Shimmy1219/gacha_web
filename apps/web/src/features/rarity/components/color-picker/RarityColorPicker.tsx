@@ -331,7 +331,7 @@ export function RarityColorPicker({
             id={popoverId}
             role="dialog"
             aria-modal="false"
-            className="rarity-color-picker__popover fixed z-[4000] max-w-[240px] rounded-xl border border-border/70 bg-[#11111a] p-3 text-sm text-surface-foreground"
+            className="rarity-color-picker__popover fixed z-[4000] max-w-[240px] rounded-xl border border-border/70 bg-[#11111a] p-3 text-sm text-surface-foreground shadow-[0_12px_40px_rgba(10,10,16,0.65)]"
             style={{ left: `${position.left}px`, top: `${position.top}px` }}
           >
             <div className="grid grid-cols-6 gap-2">

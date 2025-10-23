@@ -210,7 +210,7 @@ export function RiaguSection(): JSX.Element {
                     return (
                       <article
                         key={entry.id}
-                        className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5"
+                        className="riagu-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
                       >
                         <header className="riagu-card__header flex items-start justify-between gap-3">
                           <div className="riagu-card__meta space-y-2">
