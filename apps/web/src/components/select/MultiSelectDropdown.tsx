@@ -233,7 +233,7 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
           role="listbox"
           aria-multiselectable
           className={clsx(classNames?.menu)}
-          style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS }}
+          style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS, overflowY: 'auto' }}
         >
           {showSelectAll ? (
             <button
