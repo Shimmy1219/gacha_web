@@ -106,7 +106,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         key={tile.key}
         type="button"
         onClick={tile.onSelect}
-        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-border/60 bg-surface/80 p-6 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-border/60 bg-surface/80 p-6 text-left shadow-lg shadow-black/20 transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <div className="start-wizard__tile-content space-y-3">
           <h3 className="start-wizard__tile-title text-lg font-semibold text-surface-foreground">
@@ -126,12 +126,12 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
   return (
     <>
       <ModalBody className="start-wizard__body space-y-6 text-sm leading-relaxed">
-        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl bg-surface/80 p-6 backdrop-blur">
+        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl bg-surface/80 p-6 shadow-2xl shadow-black/30 backdrop-blur">
           <div className="start-wizard__grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {tiles.map((tile) => renderTile(tile))}
           </div>
         </section>
-        <div className="start-wizard__guide-note flex items-start gap-3 rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/15 via-surface/60 to-surface/80 px-5 py-4 text-sm text-muted-foreground">
+        <div className="start-wizard__guide-note flex items-start gap-3 rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/15 via-surface/60 to-surface/80 px-5 py-4 text-sm text-muted-foreground shadow-lg shadow-black/20">
           <InformationCircleIcon className="mt-0.5 h-5 w-5 text-accent" aria-hidden="true" />
           <div className="space-y-2">
             <p className="text-[13px] leading-relaxed">

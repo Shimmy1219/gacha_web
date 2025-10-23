@@ -71,7 +71,7 @@ export function LivePasteGachaPickerDialog({
                       <label
                         key={candidate.id}
                         htmlFor={inputId}
-                        className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 bg-panel/60 px-4 py-3 text-sm transition hover:border-accent/40 hover:bg-panel/80"
+                        className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/60 bg-panel/60 px-4 py-3 text-sm shadow transition hover:border-accent/40 hover:bg-panel/80"
                       >
                         <input
                           id={inputId}
