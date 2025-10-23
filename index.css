@@ -1,8 +1,56 @@
 
   :root{
-    --bg:#0b0b0f;--panel:#15151b;--panel-2:#1b1b22;--text:#f5f5f6;--muted:#b3b3bd;
-    --accent:#e11d48;--accent-2:#9f1239;--border:#2a2a36;
-    --shadow:0 6px 24px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5)
+    --bg:#0b0b0f;
+    --panel:#15151b;
+    --panel-2:#1b1b22;
+    --text:#f5f5f6;
+    --muted:#b3b3bd;
+    --accent:#e11d48;
+    --accent-2:#9f1239;
+    --border:#2a2a36;
+    --shadow:0 6px 24px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5);
+    --surface-strong:#0f1016;
+    --surface-muted:#121218;
+    --surface-hover:#191922;
+    --chip-bg:#23232b;
+    --chip-text:#9aa;
+    --thumb-bg:#0e0f14;
+    --badge-bg:#0e0f14;
+    --badge-text:#a6a6b3;
+    --icon-surface:#2a2a36;
+    --icon-text:#cbd5e1;
+    --info-btn-bg:#0f1016;
+    --info-btn-text:#cbd5e1;
+    --hint-text:#a1a1aa;
+    --input-text:#f5f5f6;
+    --switch-knob:#9ca3af;
+  }
+
+  :root[data-theme="light"]{
+    --bg:#f5f7fb;
+    --panel:#ffffff;
+    --panel-2:#f0f3fb;
+    --text:#1f2937;
+    --muted:#4b5563;
+    --accent:#e11d48;
+    --accent-2:#b21c3b;
+    --border:#c9d3e3;
+    --shadow:0 12px 32px rgba(15,23,42,.12),0 3px 12px rgba(15,23,42,.08);
+    --surface-strong:#ffffff;
+    --surface-muted:#e9edf7;
+    --surface-hover:#dfe5f4;
+    --chip-bg:#e7ecf8;
+    --chip-text:#3f4a63;
+    --thumb-bg:#e9edf7;
+    --badge-bg:#e8ecf7;
+    --badge-text:#425169;
+    --icon-surface:#d2daeb;
+    --icon-text:#475161;
+    --info-btn-bg:#e7ebf6;
+    --info-btn-text:#3f4a63;
+    --hint-text:#5b6472;
+    --input-text:#1f2937;
+    --switch-knob:#ffffff;
   }
   *{box-sizing:border-box}html,body{height:100%}
   body{
@@ -43,7 +91,7 @@ button, a, [role="button"] {
   .btn.small{min-height:32px;padding:.45rem .7rem;font-size:.9rem}
   .btn[disabled]{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
-  .tag{display:inline-flex;align-items:center;gap:.45rem;background:#23232b;border:1px solid var(--border);color:#9aa;font-size:.85rem;padding:.2rem .55rem;border-radius:999px}
+  .tag{display:inline-flex;align-items:center;gap:.45rem;background:var(--chip-bg);border:1px solid var(--border);color:var(--chip-text);font-size:.85rem;padding:.2rem .55rem;border-radius:999px}
   .toolbar{background:linear-gradient(180deg, rgba(225,29,72,.12), rgba(225,29,72,.04) 40%, transparent);border:1px solid var(--border);border-radius:16px;padding:16px;display:grid;gap:12px;box-shadow:var(--shadow)}
   .toolbar{
   max-width:1200px;
@@ -58,7 +106,7 @@ button, a, [role="button"] {
   .file-drop.dragover{background:rgba(225,29,72,.12)}
   input[type="file"]::file-selector-button{appearance:none;border:1px solid var(--accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));color:#fff;padding:.55rem .9rem;border-radius:10px;cursor:pointer;font-weight:700;line-height:1;margin-right:.6rem}
   input[type="file"]{color:var(--muted)}
-  select{appearance:none;background:#0f1016;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:.55rem 2rem .55rem .7rem;font-weight:600;line-height:1;min-height:42px;
+  select{appearance:none;background:var(--surface-strong);color:var(--input-text);border:1px solid var(--border);border-radius:10px;padding:.55rem 2rem .55rem .7rem;font-weight:600;line-height:1;min-height:42px;
     background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="%23b3b3bd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 14 8"/></svg>');
     background-repeat:no-repeat;background-position:right .6rem center;background-size:12px}
   select:focus{outline:2px solid rgba(225,29,72,.4);outline-offset:2px}
@@ -67,23 +115,23 @@ button, a, [role="button"] {
 
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
   .grid{display:grid;gap:16px}.two-col{grid-template-columns:1fr}@media(min-width:980px){.two-col{grid-template-columns:1fr 1fr;align-items:start;}}
-  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f1014;padding:.1rem .35rem;border-radius:6px;border:1px solid var(--border);color:#d1d5db}
+  .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface-strong);padding:.1rem .35rem;border-radius:6px;border:1px solid var(--border);color:var(--muted)}
   .muted{color:var(--muted)}.sep{height:1px;background:var(--border);margin:.75rem 0 1rem}
   .visually-hidden{position:absolute!important;inset:0 auto auto 0;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
   /* Tabs + item grid */
   .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap}
-  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:#121218;color:var(--muted);cursor:pointer;user-select:none; touch-action: manipulation; position: relative; }
-  .tab.active{background:#191922;color:#fff;border-color:var(--accent)}
-  .tab:hover{ background:#1f1f27; color:#fff; border-color: var(--accent); }
+  .tab{padding:.45rem .75rem;border:1px solid var(--border);border-bottom:none;border-top-left-radius:10px;border-top-right-radius:10px;background:var(--surface-muted);color:var(--muted);cursor:pointer;user-select:none; touch-action: manipulation; position: relative; }
+  .tab.active{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
+  .tab:hover{ background:var(--surface-hover); color:var(--text); border-color: var(--accent); }
   .item-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
   .item-card{background:var(--panel-2);border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:190px;position:relative}
-  .item-thumb{aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .item-thumb{aspect-ratio:1/1;background:var(--thumb-bg);border:1px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
   .item-thumb img{width:100%;height:100%;object-fit:contain;display:block}
   .item-code{font-weight:800;font-size:1.15rem;letter-spacing:.03em}
   .rarity{font-weight:700}
   .card-actions{display:flex;gap:8px;flex-wrap:wrap}
   .card-actions .btn[data-action="primary"]{width:100%}
-  .badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.5rem;border:1px solid var(--border);background:#0e0f14;color:#a6a6b3}
+  .badge{font-size:.75rem;padding:.1rem .4rem;border-radius:.5rem;border:1px solid var(--border);background:var(--badge-bg);color:var(--badge-text)}
   .flag{position:absolute;top:8px;right:10px;display:flex;gap:6px}
   .flag .skip{border-color:#e11d48;color:#fff;background:linear-gradient(180deg,#e11d48,#9f1239)}
 
@@ -92,7 +140,7 @@ button, a, [role="button"] {
   .user-header{display:flex; align-items:center; justify-content:space-between; padding:16px; margin:0; border-bottom:1px solid var(--border);}
   /* 見出し全体を“押せる”感じに */
   .user-header.clickable{ cursor:pointer; user-select:none; border-radius:10px }
-  .user-header.clickable:hover{ background:#191922 }
+  .user-header.clickable:hover{ background:var(--surface-hover) }
   .user-actions{ display:flex; gap:8px; align-items:center }
   .user-actions .btn.small{ min-width:110px }
 
@@ -100,7 +148,7 @@ button, a, [role="button"] {
   .rarity-row{ display:grid; grid-template-columns:3.6rem 1fr; column-gap:.6rem; align-items:start; margin-top:.25rem }
   .rarity-label{ display:flex; align-items:center; font-weight:800; line-height:1.2; min-height:32px }
   .rarity-items{ display:flex; flex-wrap:wrap; gap:.3rem .45rem }
-  .item-pill{ display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .6rem; border-radius:999px; background:#23232b; border:1px solid var(--border) }
+  .item-pill{ display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .6rem; border-radius:999px; background:var(--chip-bg); border:1px solid var(--border); color:var(--chip-text) }
   .item-pill img{ width:20px; height:20px; object-fit:contain; border-radius:4px; display:block }
   .item-pill.no-img{ justify-content:center; padding:.25rem .8rem }
 
@@ -128,33 +176,70 @@ button, a, [role="button"] {
   .dialog h3{margin:0 0 .5rem}
   .dialog .grid-2{display:grid;gap:12px;grid-template-columns:1fr}@media(min-width:860px){.dialog .grid-2{grid-template-columns:1fr 1fr}}
 
+  .settings-dialog{width:min(960px,96vw);}
+  .settings-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;}
+  .settings-body{display:flex;gap:16px;align-items:flex-start;}
+  .settings-nav{display:flex;flex-direction:column;gap:8px;min-width:200px;flex:0 0 200px;}
+  .settings-nav__item{border:1px solid var(--border);border-radius:12px;padding:.75rem 1rem;background:var(--panel-2);color:var(--muted);font-weight:700;text-align:left;cursor:pointer;transition:background .15s,border-color .15s,color .15s;}
+  .settings-nav__item.is-active{background:var(--surface-hover);color:var(--text);border-color:var(--accent);box-shadow:0 0 0 1px rgba(225,29,72,.35);}
+  .settings-nav__item:focus-visible{outline:2px solid rgba(225,29,72,.35);outline-offset:2px;}
+
+  @supports (outline: 2px solid color-mix(in srgb, red 50%, transparent)){
+    .settings-nav__item:focus-visible{outline:2px solid color-mix(in srgb, var(--accent) 55%, transparent);}
+  }
+  .settings-content{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:16px;}
+  .settings-panel{display:none;flex-direction:column;gap:12px;}
+  .settings-panel.is-active{display:flex;}
+  .settings-gacha-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  .settings-gacha-item{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--panel-2);}
+  .settings-gacha-item.is-active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(225,29,72,.35);}
+  .settings-gacha-name{font-weight:700;color:var(--text);}
+  .settings-gacha-id{font-size:.85rem;color:var(--muted);}
+  .settings-gacha-count{margin-left:auto;font-weight:700;color:var(--text);}
+  .settings-gacha-empty{padding:12px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2);text-align:center;}
+  .settings-theme-fieldset{border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;background:var(--panel-2);}
+  .settings-theme-legend{font-weight:800;margin:0 0 4px;}
+  .settings-theme-option{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--text);}
+  .settings-theme-option input{width:18px;height:18px;}
+
+  @media (max-width: 860px){
+    .settings-body{flex-direction:column;}
+    .settings-nav{flex-direction:row;flex-wrap:wrap;min-width:0;}
+    .settings-nav__item{flex:1 1 calc(33% - 8px);text-align:center;}
+    .settings-content{width:100%;}
+  }
+
+  @media (max-width: 520px){
+    .settings-nav__item{flex:1 1 100%;}
+  }
+
   /* Start splash */
   .splash{display:grid;place-items:center;min-height:60vh}
-  .info-btn{width:26px;height:26px;border-radius:999px;border:1px solid var(--border);background:#0f1016;color:#cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer}
-  .hint{color:#a1a1aa;font-size:.95rem}
+  .info-btn{width:26px;height:26px;border-radius:999px;border:1px solid var(--border);background:var(--info-btn-bg);color:var(--info-btn-text);display:inline-flex;align-items:center;justify-content:center;font-weight:800;cursor:pointer}
+  .hint{color:var(--hint-text);font-size:.95rem}
 
   /* Paste areas */
-  textarea{width:100%;min-height:180px;background:#0f1016;color:#f5f5f6;border:1px solid var(--border);border-radius:12px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  input[type="text"]{width:100%;padding:.6rem .7rem;border-radius:10px;border:1px solid var(--border);background:#0f1016;color:#f5f5f6}
+  textarea{width:100%;min-height:180px;background:var(--surface-strong);color:var(--input-text);border:1px solid var(--border);border-radius:12px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  input[type="text"]{width:100%;padding:.6rem .7rem;border-radius:10px;border:1px solid var(--border);background:var(--surface-strong);color:var(--input-text)}
 
   /* 画像プレビューの収まりを強制（モーダル） */
   #modalPreview{width:100%;height:100%; object-fit:contain;image-rendering:auto;}
 
   /* ユーザー内訳の個数表示 */
-  .item-pill .count{font-weight:700;color:#e5e7eb;margin-left:.15rem;}
+  .item-pill .count{font-weight:700;color:var(--text);margin-left:.15rem;}
 
   /* タブ右上の×ボタン */
-  .tab .close{position:absolute; top:-8px; right:-8px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#2a2a36; color:#cbd5e1; border:1px solid var(--border); font-weight:800; cursor:pointer;}
+  .tab .close{position:absolute; top:-8px; right:-8px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:var(--icon-surface); color:var(--icon-text); border:1px solid var(--border); font-weight:800; cursor:pointer;}
   .tab .close:hover{ background:#e11d48; color:#fff; border-color:#e11d48; }
   .tab { position: relative; }
   .tab .close{opacity: 0; pointer-events: none; transition: opacity .15s ease;}
   .tab:hover .close{ opacity: 1; pointer-events: auto; }
 
   /* アイテムカード右上の×ボタン */
-.item-card .close{
+  .item-card .close{
   position:absolute; top:-8px; right:-8px;
   width:22px; height:22px; display:flex; align-items:center; justify-content:center;
-  border-radius:999px; background:#2a2a36; color:#cbd5e1;
+  border-radius:999px; background:var(--icon-surface); color:var(--icon-text);
   border:1px solid var(--border); font-weight:800; cursor:pointer;
   opacity:0; pointer-events:none; transition:opacity .15s ease;
 }
@@ -163,11 +248,11 @@ button, a, [role="button"] {
 
   /* 再設計トグル（スライド式） */
   .toggle{display:inline-flex; align-items:center;gap:.5rem; padding: 0; background: transparent; border-radius: 0; box-shadow: none; }
-  .toggle input.switch{appearance:none; width:44px; height:24px; border-radius:999px;background:#0f1016; border:1px solid var(--border);position:relative; outline:none; cursor:pointer;transition:background .2s,border-color .2s;}
-  .toggle input.switch::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;border-radius:50%; background:#9ca3af; transition:left .2s, background .2s;}
+  .toggle input.switch{appearance:none; width:44px; height:24px; border-radius:999px;background:var(--surface-strong); border:1px solid var(--border);position:relative; outline:none; cursor:pointer;transition:background .2s,border-color .2s;}
+  .toggle input.switch::after{content:""; position:absolute; top:2px; left:2px; width:18px; height:18px;border-radius:50%; background:var(--switch-knob); transition:left .2s, background .2s;}
   .toggle input.switch:checked{ background:#e11d48; border-color:#e11d48; }
   .toggle input.switch:checked::after{ left:24px; background:#fff; }
-  .toggle .label{ font-weight:700; color:#cbd5e1; }
+  .toggle .label{ font-weight:700; color:var(--muted); }
 
   /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
   /* JS が #mainUI に .mobile-views を付与した時だけモバイルUIにする */
@@ -183,11 +268,11 @@ button, a, [role="button"] {
   /* --- ハンバーガー（モバイルのみ表示） --- */
   .menu-btn{display:none; align-items:center; justify-content:center;
     width:40px; height:40px; border:1px solid var(--border); border-radius:10px;
-    background:#15151b; color:#cbd5e1; margin-right:8px;
+    background:var(--panel); color:var(--muted); margin-right:8px;
   }
   #mainUI.mobile-views .menu-btn, body.mobile-views .menu-btn{display:inline-flex;}
   .menu-btn .menu-icon{ display:inline-block; width:20px; height:16px; position:relative; }
-  .menu-btn .menu-icon span{ position:absolute; left:0; right:0; height:2px; background:#cbd5e1; }
+  .menu-btn .menu-icon span{ position:absolute; left:0; right:0; height:2px; background:var(--muted); }
   .menu-btn .menu-icon span:nth-child(1){ top:0; }
   .menu-btn .menu-icon span:nth-child(2){ top:7px; }
   .menu-btn .menu-icon span:nth-child(3){ bottom:0; }
@@ -198,7 +283,7 @@ button, a, [role="button"] {
   .drawer .drawer-panel{
     position:absolute; left:0; top:0; bottom:0; width:min(86vw, 360px);
     transform:translateX(-100%); transition:transform .2s ease;
-    background:#0f1016; border-right:1px solid var(--border);
+    background:var(--surface-strong); border-right:1px solid var(--border);
     padding:16px 12px 12px; padding-bottom:calc(12px + env(safe-area-inset-bottom));
     overflow:auto;
   }
@@ -233,14 +318,16 @@ button, a, [role="button"] {
   #mainUI.mobile-views .mobile-tabs{
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
     display:flex; gap:8px; padding:10px env(safe-area-inset-right) calc(10px + env(safe-area-inset-bottom)) env(safe-area-inset-left);
-    background: rgba(10,10,14,.9); backdrop-filter: blur(6px);
+    background: var(--panel);
+    background: color-mix(in srgb, var(--panel) 80%, transparent);
+    backdrop-filter: blur(6px);
     border-top: 1px solid var(--border);
   }
   #mainUI.mobile-views .mobile-tabs button{
     flex:1 1 0; min-height:56px; border-radius:12px; border:1px solid var(--border);
-    background:#15151b; color:#cbd5e1; font-weight:700;
+    background:var(--panel); color:var(--muted); font-weight:700;
   }
-  #mainUI.mobile-views .mobile-tabs button.active{ border-color: var(--accent); color:#fff; }
+  #mainUI.mobile-views .mobile-tabs button.active{ border-color: var(--accent); color:var(--text); }
 
   /* --- モバイル時：アイテムカードを横長に --- */
   #mainUI.mobile-views #itemGrid{ grid-template-columns: 1fr; gap:12px; }
@@ -346,15 +433,15 @@ button, a, [role="button"] {
   .gacha-filter.open .gf-popover, .rarity-filter.open .gf-popover{ display:block; animation:gfFade .12s ease-out; }
   @keyframes gfFade{ from{opacity:0; transform:translateY(-4px)} to{opacity:1; transform:none} }
   .gf-item{ display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; cursor:pointer; user-select:none; }
-  .gf-item:hover{ background:#1b1b22; }
+  .gf-item:hover{ background:var(--panel-2); }
   .gf-item[aria-selected="true"]{ background:rgba(225,29,72,.12); border:1px solid var(--border); }
-  .gf-check{ width:20px; height:20px; border-radius:6px; flex:0 0 20px; border:1px solid var(--border); background:#0f1016; display:inline-grid; place-items:center; font-weight:900; color:#fff; font-size:.85rem; }
+  .gf-check{ width:20px; height:20px; border-radius:6px; flex:0 0 20px; border:1px solid var(--border); background:var(--surface-strong); display:inline-grid; place-items:center; font-weight:900; color:var(--text); font-size:.85rem; }
   .gf-item[aria-selected="true"] .gf-check{ background:linear-gradient(180deg,#ef335d,#9f1239); border-color:#e11d48; }
   .gf-name{ flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .gf-all{ font-weight:800; color:#f5f5f6; }
+  .gf-all{ font-weight:800; color:var(--text); }
   .gf-popover{ scrollbar-width:thin; }
   .gf-popover::-webkit-scrollbar{ height:8px; width:8px }
-  .gf-popover::-webkit-scrollbar-thumb{ background:#2a2a36; border-radius:999px }
+  .gf-popover::-webkit-scrollbar-thumb{ background:var(--icon-surface); border-radius:999px }
   .gf-popover.floating{position: fixed;/* 祖先の overflow を無視 */ left: 0; top: 0;/* JavaScriptで配置を上書き */ width: auto; max-width: min(420px, 92vw); max-height: min(320px, 70vh); display: block;/* JSで開閉制御 */ z-index: 999; /* 他UIより上 */}
 
   /* Users サブコントロール行 */
@@ -402,13 +489,13 @@ button, a, [role="button"] {
   #riaguSummary{ display:grid; gap:12px; }
   .riagu-group{ border:1px solid var(--border); border-radius:12px; padding:12px; background:var(--panel-2); }
   .riagu-group h3{ margin:0 0 .5rem; font-size:1.05rem; }
-  .riagu-item{ border:1px solid var(--border); border-radius:10px; padding:10px; background:#121218; margin-top:8px; }
+  .riagu-item{ border:1px solid var(--border); border-radius:10px; padding:10px; background:var(--surface-muted); margin-top:8px; }
   .riagu-head{ display:flex; gap:8px; align-items:center; justify-content:space-between; }
   .riagu-title{ display:flex; gap:8px; align-items:center; font-weight:800; }
-  .riagu-meta{ display:flex; gap:6px; flex-wrap:wrap; color:#cbd5e1; }
+  .riagu-meta{ display:flex; gap:6px; flex-wrap:wrap; color:var(--muted); }
   .riagu-stats{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
   .riagu-winners{ display:flex; gap:.35rem .45rem; flex-wrap:wrap; margin-top:6px; }
-  .riagu-chip{ background:#23232b; border:1px solid var(--border); border-radius:999px; padding:.2rem .55rem; }
+  .riagu-chip{ background:var(--chip-bg); border:1px solid var(--border); border-radius:999px; padding:.2rem .55rem; color:var(--chip-text); }
   .riagu-actions{ display:flex; gap:6px; justify-content:flex-end; margin-top:6px; }
   .riagu-total{ text-align:right; margin-top:10px; padding-top:8px; border-top:1px solid var(--border); font-weight:800; }
 
@@ -470,17 +557,17 @@ button, a, [role="button"] {
   .rarity-wrap{ overflow:auto; }
   .rarity-table{ width:100%; border-collapse:collapse; }
   .rarity-table th, .rarity-table td{ padding:8px 3px; border-bottom:1px solid var(--border); text-align:left; }
-  .rarity-table thead th{ font-size:.9rem; color:#cbd5e1; font-weight:700; }
+  .rarity-table thead th{ font-size:.9rem; color:var(--muted); font-weight:700; }
   .rarity-table .emit-cell{ white-space:nowrap; }
-  .rarity-table .emit-cell .unit{ margin-left:4px; color:#9ca3af; }
+  .rarity-table .emit-cell .unit{ margin-left:4px; color:var(--muted); }
   .rarity-table .ops{ width:1%; }
     /* NEW: number入力をダークUIに統一 */
   .rarity-table input[type="number"]{
     width:100%;
     max-width:120px;
     /* ルック&フィール */
-    background:#0f1016;
-    color:#f5f5f6;
+    background:var(--surface-strong);
+    color:var(--input-text);
     border:1px solid var(--border);
     border-radius:10px;
     padding:.4rem .6rem;
@@ -542,7 +629,7 @@ button, a, [role="button"] {
 
   /* 左右のラベルをやや強調（既存Muted上に乗せる） */
   #imageModal #modalSubtitle .inline-label{
-    font-weight:700; color:#cbd5e1;
+    font-weight:700; color:var(--muted);
   }
 
   /* 対象名のテキスト入力は可変幅（モバイルで折返し優先） */
