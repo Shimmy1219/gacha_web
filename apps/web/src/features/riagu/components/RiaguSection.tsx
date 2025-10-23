@@ -1,4 +1,3 @@
-import { GiftIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -12,7 +11,7 @@ import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
 interface RiaguDisplayEntry {
   id: string;
   itemName: string;
-  gachaName: string;
+  typeLabel?: string;
   rarityLabel: string;
   rarityColor: string;
   unitCost?: number;
@@ -66,11 +65,11 @@ export function RiaguSection(): JSX.Element {
       count += 1;
 
       const catalogItem = catalogByGacha[gachaId]?.items?.[card.itemId];
-      const gachaName = data?.appState?.meta?.[card.gachaId]?.displayName ?? card.gachaId;
       const rarityEntity = catalogItem?.rarityId ? data?.rarityState?.entities?.[catalogItem.rarityId] : undefined;
       const itemName = catalogItem?.name ?? card.itemId;
       const rarityLabel = rarityEntity?.label ?? '未分類';
       const rarityColor = rarityEntity?.color ?? '#a855f7';
+      const typeLabel = card.typeLabel ?? undefined;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const sanitizedUnitCost =
@@ -89,7 +88,7 @@ export function RiaguSection(): JSX.Element {
       const entry: RiaguDisplayEntry = {
         id: card.id,
         itemName,
-        gachaName,
+        typeLabel,
         rarityLabel,
         rarityColor,
         unitCost: sanitizedUnitCost,
@@ -219,7 +218,6 @@ export function RiaguSection(): JSX.Element {
                               {entry.rarityLabel}
                             </span>
                             <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
-                            <p className="riagu-card__gacha text-xs text-muted-foreground">{entry.gachaName}</p>
                             <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
                               <div className="riagu-card__summary-item space-y-1">
                                 <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
@@ -247,23 +245,8 @@ export function RiaguSection(): JSX.Element {
                               </div>
                             </dl>
                           </div>
-                          <div className="riagu-card__actions flex flex-wrap gap-2 text-xs">
-                            <button
-                              type="button"
-                              className="riagu-card__detail-button chip"
-                              onClick={() => console.info('リアグ詳細モーダルは未実装です', entry.id)}
-                            >
-                              <GiftIcon className="h-4 w-4" />
-                              詳細
-                            </button>
-                            <button
-                              type="button"
-                              className="riagu-card__share-button chip"
-                              onClick={() => console.info('共有リンク生成は未実装です', entry.id)}
-                            >
-                              <GlobeAltIcon className="h-4 w-4" />
-                              共有
-                            </button>
+                          <div className="riagu-card__type chip text-xs text-muted-foreground">
+                            {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
                           </div>
                         </header>
                         <div className="riagu-card__winners space-y-2">
