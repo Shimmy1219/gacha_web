@@ -129,7 +129,7 @@ export function DiscordLoginButton({
         leaveFrom="transform opacity-100 scale-100"
         leaveTo="transform opacity-0 scale-95"
       >
-        <Menu.Items className="discord-login-button__menu absolute right-0 z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
+        <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-[#15151b]/95 shadow-[0_24px_72px_rgba(0,0,0,0.65)]">
           <Menu.Item>
             {({ active }) => (
               <button
