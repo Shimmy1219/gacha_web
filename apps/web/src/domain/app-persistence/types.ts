@@ -58,10 +58,6 @@ export interface GachaRarityStateV3 {
 export interface UserProfileCardV3 {
   id: string;
   displayName: string;
-  handle?: string;
-  team?: string;
-  role?: string;
-  accentColor?: string;
   joinedAt?: string;
 }
 

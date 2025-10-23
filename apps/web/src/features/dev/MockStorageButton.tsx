@@ -71,8 +71,7 @@ type CatalogGachaSnapshot = {
 
 type UserSeed = {
   displayName: string;
-  handle: string;
-  team: string;
+  slug: string;
 };
 
 const GACHA_SEEDS: GachaSeed[] = [
@@ -157,16 +156,16 @@ const ITEM_SETS: Record<string, ItemSeed[]> = {
 };
 
 const USER_SEEDS: UserSeed[] = [
-  { displayName: '綾瀬 ひかり', handle: 'ayase', team: '北ブロック' },
-  { displayName: '南雲 遼', handle: 'nagumo', team: '南ブロック' },
-  { displayName: '東雲 澪', handle: 'shinonome', team: '東ブロック' },
-  { displayName: '西園 迅', handle: 'saionji', team: '西ブロック' },
-  { displayName: '真白 こはく', handle: 'mashiro', team: '管理チーム' },
-  { displayName: '久遠 つばさ', handle: 'kuon', team: '北ブロック' },
-  { displayName: '朝霧 颯太', handle: 'asagiri', team: '南ブロック' },
-  { displayName: '氷室 朱音', handle: 'himuro', team: '東ブロック' },
-  { displayName: '燈矢 陽', handle: 'touya', team: 'PRチーム' },
-  { displayName: '霧島 柚葉', handle: 'kirishima', team: 'サポート' }
+  { displayName: '綾瀬 ひかり', slug: 'ayase' },
+  { displayName: '南雲 遼', slug: 'nagumo' },
+  { displayName: '東雲 澪', slug: 'shinonome' },
+  { displayName: '西園 迅', slug: 'saionji' },
+  { displayName: '真白 こはく', slug: 'mashiro' },
+  { displayName: '久遠 つばさ', slug: 'kuon' },
+  { displayName: '朝霧 颯太', slug: 'asagiri' },
+  { displayName: '氷室 朱音', slug: 'himuro' },
+  { displayName: '燈矢 陽', slug: 'touya' },
+  { displayName: '霧島 柚葉', slug: 'kirishima' }
 ];
 
 function createMockSnapshot(): {
@@ -275,18 +274,13 @@ function createMockSnapshot(): {
     }, {})
   };
 
-  const userAccentPalette = ['#4f46e5', '#f97316', '#14b8a6', '#facc15', '#ec4899', '#0ea5e9'];
-
-  const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed, index) => {
-    const id = generateDeterministicUserId(seed.handle);
+  const userProfiles = USER_SEEDS.reduce<Record<string, Record<string, unknown>>>((acc, seed) => {
+    const id = generateDeterministicUserId(seed.slug);
     acc[id] = {
       id,
       displayName: seed.displayName,
-      handle: seed.handle,
-      team: seed.team,
-      role: index % 3 === 0 ? 'STAFF' : 'PLAYER',
-      accentColor: userAccentPalette[index % userAccentPalette.length],
-      joinedAt: nowIso
+      joinedAt: nowIso,
+      updatedAt: nowIso
     };
     return acc;
   }, {});

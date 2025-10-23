@@ -291,7 +291,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
     }
 
     if (hasKeyword) {
-      const haystack = [profile.displayName, profile.handle, profile.team, profile.role, userId]
+      const haystack = [profile.displayName, userId]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join(' ')
         .toLowerCase();
@@ -394,7 +394,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       userId,
       userName: profile.displayName || userId,
       totalSummary: `${totalPulls}連`,
-      memo: [profile.team, profile.role].filter(Boolean).join(' / ') || undefined,
       inventories,
       expandedByDefault: users.length === 0
     });

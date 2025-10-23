@@ -78,7 +78,7 @@ interface RarityState {
 
 ### 3.3 useUserChip(userId)
 1. `const user = useUserStore(userId);`
-2. `return { displayName: user.displayName, accentColor: user.themeColor, avatarUrl: user.avatarUrl };`
+2. `return { displayName: user.displayName, avatarUrl: user.avatarUrl };`
 - `UserChip` はこの hook を利用し、`userId` を渡すだけでレンダーに必要な表示情報を得る。
 
 ## 4. 同期フロー

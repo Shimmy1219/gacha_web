@@ -373,8 +373,7 @@ export function ItemsSection(): JSX.Element {
         }
 
         const profile = userProfiles[record.userId];
-        const displayName =
-          profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        const displayName = profile?.displayName?.trim() || record.userId;
         assignmentUsersMap.set(record.userId, { userId: record.userId, displayName });
       });
       const assignmentUsers = Array.from(assignmentUsersMap.values());
