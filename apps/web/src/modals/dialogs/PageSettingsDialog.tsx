@@ -319,8 +319,8 @@ export const PageSettingsDialog: ModalComponent = () => {
   };
 
   return (
-    <ModalBody className="mt-6 space-y-0">
-      <div className="flex flex-col gap-6 lg:flex-row">
+    <ModalBody className="mt-6 space-y-0 max-h-[calc(100vh-12rem)] overflow-hidden">
+      <div className="flex h-full flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
         <nav className="w-full max-w-[220px] shrink-0">
           <ul className="space-y-2">
             {menuItems.map((item) => {
@@ -347,7 +347,7 @@ export const PageSettingsDialog: ModalComponent = () => {
             })}
           </ul>
         </nav>
-        <div className="flex-1 rounded-2xl border border-border/60 bg-surface/20 p-6">
+        <div className="flex-1 max-h-full overflow-y-auto rounded-2xl border border-border/60 bg-surface/20 p-6 pr-4">
           {renderMenuContent()}
         </div>
       </div>
