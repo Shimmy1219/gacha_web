@@ -52,6 +52,14 @@ export function DiscordLoginButton({
     );
   }
 
+  const handleOpenPageSettings = () => {
+    if (onOpenPageSettings) {
+      onOpenPageSettings();
+    } else {
+      console.info('ページ設定ダイアログは未実装です');
+    }
+  };
+
   if (!user) {
     const handleLoginClick = () => {
       if (isLoggingIn) {
@@ -68,34 +76,35 @@ export function DiscordLoginButton({
     };
 
     return (
-      <button
-        type="button"
-        onClick={handleLoginClick}
-        data-placement={placement}
-        className={clsx(
-          'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70',
-          className
-        )}
-        aria-label="Discordでログイン"
-        disabled={isLoggingIn}
-        aria-busy={isLoggingIn}
-      >
-        <ShieldCheckIcon className="h-5 w-5" />
-        Discordでログイン
-      </button>
+      <div className={clsx('discord-login-button__container relative inline-block', className)}>
+        <button
+          type="button"
+          onClick={handleLoginClick}
+          data-placement={placement}
+          className={clsx(
+            'discord-login-button inline-flex h-11 items-center gap-2 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white shadow-[0_16px_40px_rgba(88,101,242,0.45)] transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70',
+            className
+          )}
+          aria-label="Discordでログイン"
+          disabled={isLoggingIn}
+          aria-busy={isLoggingIn}
+        >
+          <ShieldCheckIcon className="h-5 w-5" />
+          Discordでログイン
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenPageSettings}
+          className="discord-login-button__settings absolute left-1/2 top-full mt-3 -translate-x-1/2 whitespace-nowrap rounded-full border border-border/60 bg-panel px-4 py-1.5 text-xs font-medium text-surface-foreground shadow-[0_14px_32px_rgba(0,0,0,0.35)] transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        >
+          設定モーダルを開く
+        </button>
+      </div>
     );
   }
 
   const avatarUrl = getAvatarUrl(user.id, user.avatar);
   const displayName = user.name ?? 'Discord ユーザー';
-
-  const handleOpenPageSettings = () => {
-    if (onOpenPageSettings) {
-      onOpenPageSettings();
-    } else {
-      console.info('ページ設定ダイアログは未実装です');
-    }
-  };
 
   return (
     <Menu
