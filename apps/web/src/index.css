@@ -28,41 +28,32 @@
 
 [data-site-theme='light'] {
   color-scheme: light;
-  --color-surface: 248 248 250;
+  --color-surface: 255 255 255;
   --color-surface-foreground: 27 29 40;
-  --color-surface-alt: 255 255 255;
-  --color-surface-deep: 235 238 246;
+  --color-surface-alt: 248 249 252;
+  --color-surface-deep: 240 242 247;
   --color-panel: 255 255 255;
-  --color-panel-muted: 245 246 252;
-  --color-panel-contrast: 230 234 247;
-  --color-border: 206 212 224;
-  --color-muted: 232 235 244;
+  --color-panel-muted: 247 248 252;
+  --color-panel-contrast: 233 236 244;
+  --color-border: 210 214 224;
+  --color-muted: 238 240 246;
   --color-muted-foreground: 104 112 130;
-  --color-overlay: 246 247 254;
-  --background-gradient-1: rgba(253, 164, 175, 0.35);
-  --background-gradient-2: rgba(129, 140, 248, 0.25);
+  --color-overlay: 252 253 255;
 }
 
-[data-site-theme='twilight'] {
+[data-site-theme='custom'] {
   color-scheme: dark;
-  --color-surface: 18 12 31;
-  --color-surface-foreground: 237 230 255;
-  --color-surface-alt: 27 21 48;
-  --color-surface-deep: 16 12 32;
-  --color-panel: 36 28 61;
-  --color-panel-muted: 46 34 79;
-  --color-panel-contrast: 58 44 108;
-  --color-border: 76 60 124;
-  --color-muted: 43 33 70;
-  --color-muted-foreground: 194 182 246;
-  --color-overlay: 30 22 55;
-  --color-accent: 139 92 246;
-  --color-accent-dark: 109 40 217;
-  --color-accent-bright: 165 107 255;
-  --color-accent-bright-dark: 94 33 188;
-  --color-accent-foreground: 255 255 255;
-  --background-gradient-1: rgba(139, 92, 246, 0.24);
-  --background-gradient-2: rgba(244, 114, 182, 0.22);
+  --color-surface: 11 11 15;
+  --color-surface-foreground: 245 245 246;
+  --color-surface-alt: 17 17 25;
+  --color-surface-deep: 9 9 15;
+  --color-panel: 21 21 27;
+  --color-panel-muted: 27 27 34;
+  --color-panel-contrast: 31 31 39;
+  --color-border: 42 42 54;
+  --color-muted: 35 35 43;
+  --color-muted-foreground: 179 179 189;
+  --color-overlay: 17 17 26;
 }
 
 @layer base {

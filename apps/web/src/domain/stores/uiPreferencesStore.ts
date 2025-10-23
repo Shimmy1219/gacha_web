@@ -19,7 +19,12 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   keyword: ''
 };
 
-export const SITE_THEME_VALUES = ['dark', 'light', 'twilight'] as const;
+export const SITE_THEME_VALUES = ['dark', 'light', 'custom'] as const;
+
+export const DEFAULT_SITE_ACCENT = '#e11d48';
+const LEGACY_TWILIGHT_ACCENT = '#8b5cf6';
+
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export type SiteTheme = (typeof SITE_THEME_VALUES)[number];
 
@@ -62,9 +67,33 @@ function normalizeKeyword(value: unknown): string {
   return '';
 }
 
+function normalizeHexColor(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!HEX_COLOR_PATTERN.test(trimmed)) {
+    return null;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower.length === 4) {
+    const r = lower[1];
+    const g = lower[2];
+    const b = lower[3];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+
+  return lower;
+}
+
 function normalizeSiteTheme(value: unknown): SiteTheme | null {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
+    if (lower === 'twilight') {
+      return 'custom';
+    }
     if (SITE_THEME_SET.has(lower)) {
       return lower as SiteTheme;
     }
@@ -92,6 +121,24 @@ function readSiteThemeFromState(state: UiPreferencesStateV3 | undefined): SiteTh
     return null;
   }
   return normalizeSiteTheme(appearance.siteTheme);
+}
+
+function readCustomAccentColorFromState(state: UiPreferencesStateV3 | undefined): string | null {
+  if (!state) {
+    return null;
+  }
+  const appearance = state.appearance;
+  if (!isRecord(appearance)) {
+    return null;
+  }
+  const accent = normalizeHexColor(appearance.customAccentColor);
+  if (accent) {
+    return accent;
+  }
+  if (typeof appearance.siteTheme === 'string' && appearance.siteTheme.toLowerCase() === 'twilight') {
+    return LEGACY_TWILIGHT_ACCENT;
+  }
+  return null;
 }
 
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
@@ -232,6 +279,37 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           appearance: {
             ...previousAppearance,
             siteTheme: theme
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getCustomAccentColor(): string {
+    return readCustomAccentColorFromState(this.state) ?? DEFAULT_SITE_ACCENT;
+  }
+
+  setCustomAccentColor(color: string, options: UpdateOptions = { persist: 'debounced' }): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeHexColor(color) ?? DEFAULT_SITE_ACCENT;
+
+    this.update(
+      (previous) => {
+        const current = readCustomAccentColorFromState(previous) ?? DEFAULT_SITE_ACCENT;
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousAppearance = base.appearance && isRecord(base.appearance) ? base.appearance : {};
+
+        return {
+          ...base,
+          appearance: {
+            ...previousAppearance,
+            customAccentColor: normalized
           }
         };
       },

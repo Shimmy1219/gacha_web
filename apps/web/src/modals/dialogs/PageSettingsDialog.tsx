@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 
 import { SwitchField } from '../../components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
+import { DEFAULT_PALETTE } from '../../features/rarity/components/color-picker/palette';
 import { ModalBody } from '../ModalComponents';
 import { type ModalComponent } from '../ModalTypes';
 
@@ -33,13 +34,18 @@ const MENU_ITEMS: MenuItem[] = [
   }
 ];
 
+const ACCENT_COLOR_OPTIONS = DEFAULT_PALETTE.filter((option) => option.value.startsWith('#'));
+
 export const PageSettingsDialog: ModalComponent = () => {
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
   const [groupBySeries, setGroupBySeries] = useState(false);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
-  const { theme, setTheme, options } = useSiteTheme();
+  const { theme, setTheme, options, customAccentColor, setCustomAccentColor } = useSiteTheme();
+
+  const normalizedAccent = customAccentColor.toLowerCase();
+  const accentChoices = useMemo(() => ACCENT_COLOR_OPTIONS, []);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
@@ -109,16 +115,72 @@ export const PageSettingsDialog: ModalComponent = () => {
                           </p>
                         ) : null}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {option.swatch.map((color, index) => (
-                          <span
-                            key={`${option.id}-${index}`}
-                            className="h-10 w-10 rounded-xl border border-border/40 shadow-inner"
-                            style={{ backgroundColor: color }}
-                            aria-hidden="true"
-                          />
-                        ))}
+                      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-end">
+                        <div className="grid grid-cols-3 gap-3">
+                          {option.swatch.map((swatch) => {
+                            const backgroundColor = swatch.sampleBackground ?? swatch.color;
+                            const isText = swatch.role === 'text';
+                            return (
+                              <div
+                                key={`${option.id}-${swatch.role}`}
+                                className="flex flex-col items-center gap-1"
+                              >
+                                <span
+                                  className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/40 shadow-inner"
+                                  style={{ backgroundColor, color: isText ? swatch.color : undefined }}
+                                  aria-hidden="true"
+                                >
+                                  {isText ? <span className="text-sm font-semibold leading-none">Aa</span> : null}
+                                </span>
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                                  {swatch.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
+                      {option.id === 'custom' ? (
+                        <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-surface/30 p-4">
+                          <p className="text-xs font-semibold text-muted-foreground">アクセントカラーを選択</p>
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+                            {accentChoices.map((entry) => {
+                              const normalizedValue = entry.value.toLowerCase();
+                              const isSelected = normalizedValue === normalizedAccent;
+                              return (
+                                <button
+                                  key={entry.id}
+                                  type="button"
+                                  className={clsx(
+                                    'group flex flex-col items-center gap-1 rounded-lg border p-2 text-center transition',
+                                    isSelected
+                                      ? 'border-accent bg-accent/15 text-surface-foreground shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
+                                      : 'border-border/60 bg-surface/40 text-muted-foreground hover:border-accent/50 hover:bg-surface/60'
+                                  )}
+                                  onClick={() => {
+                                    if (!isSelected) {
+                                      setCustomAccentColor(entry.value);
+                                    }
+                                    if (theme !== 'custom') {
+                                      setTheme('custom');
+                                    }
+                                  }}
+                                  aria-pressed={isSelected}
+                                >
+                                  <span
+                                    className="h-8 w-full rounded-md border border-border/50 shadow-inner"
+                                    style={{ backgroundColor: entry.value }}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">
+                                    {entry.name}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </RadioGroup.Option>
