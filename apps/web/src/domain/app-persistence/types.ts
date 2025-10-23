@@ -142,6 +142,7 @@ export interface PtSettingsStateV3 {
 export interface UiPreferencesStateV3 {
   version: number;
   updatedAt: string;
+  appearance?: Record<string, unknown>;
   dashboard?: {
     desktop?: string;
     mobile?: string;

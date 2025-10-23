@@ -27,12 +27,12 @@ export function SwitchField({ label, description, checked, onChange, name }: Swi
         onChange={onChange}
         className={clsx(
           'relative inline-flex h-6 w-11 items-center rounded-full border border-transparent transition-colors duration-150',
-          checked ? 'bg-accent shadow-[0_8px_18px_rgba(225,29,72,0.35)]' : 'bg-muted/40'
+          checked ? 'bg-accent' : 'bg-muted/40'
         )}
       >
         <span
           className={clsx(
-            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-150',
+            'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white transition duration-150',
             checked ? 'translate-x-5' : 'translate-x-1'
           )}
         />

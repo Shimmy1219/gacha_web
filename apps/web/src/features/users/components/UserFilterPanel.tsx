@@ -83,14 +83,14 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
           type="button"
           onClick={toggle}
           className={clsx(
-            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-[#1b1b22] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1016]',
+            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-panel-muted transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
             value && 'border-accent bg-accent/30'
           )}
           aria-pressed={value}
         >
           <span
             className={clsx(
-              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white shadow transition-all',
+              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white transition-all',
               value ? 'translate-x-[22px]' : 'translate-x-[6px]'
             )}
           />
@@ -117,7 +117,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       aria-hidden={!open}
       data-state={open ? 'open' : 'closed'}
       className={clsx(
-        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)] transition-opacity duration-300 ease-linear',
+        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 transition-opacity duration-300 ease-linear',
         'data-[state=open]:opacity-100',
         'data-[state=closed]:pointer-events-none data-[state=closed]:select-none data-[state=closed]:opacity-0'
       )}
@@ -144,7 +144,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
           <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
             ユーザー検索
           </span>
-          <label className="user-filter-panel__search-input flex items-center gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-3 py-2 text-sm text-muted-foreground">
+          <label className="user-filter-panel__search-input flex items-center gap-3 rounded-xl border border-border/60 bg-panel-muted px-3 py-2 text-sm text-muted-foreground">
             <MagnifyingGlassIcon className="h-4 w-4" />
             <input
               type="search"
@@ -160,7 +160,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
         <button
           type="button"
           onClick={reset}
-          className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+          className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
         >
           フィルタをリセット
         </button>

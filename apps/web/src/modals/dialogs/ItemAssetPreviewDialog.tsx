@@ -191,7 +191,7 @@ export function ItemAssetPreviewDialog({
           <p className="text-sm text-muted-foreground">{assetName}</p>
         ) : null}
         <div
-          className="relative flex h-[min(70vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#0d0d14] p-4"
+          className="relative flex h-[min(70vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-surface-deep p-4"
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onMouseEnter={handleMouseEnter}

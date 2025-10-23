@@ -101,7 +101,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
                 href={result.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="truncate rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 font-mono text-xs text-surface-foreground"
+                className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
               >
                 {result.label ?? result.url}
               </a>
@@ -152,7 +152,7 @@ interface SaveOptionCardProps {
 
 function SaveOptionCard({ title, description, actionLabel, icon, onClick, disabled }: SaveOptionCardProps): JSX.Element {
   return (
-    <div className="save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+    <div className="save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5">
       <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
         {icon}
       </div>

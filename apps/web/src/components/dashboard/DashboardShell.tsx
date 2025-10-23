@@ -262,7 +262,7 @@ export function DashboardShell({ sections, controlsSlot }: DashboardShellProps):
             ref={controlsRef}
             onPointerDown={handleControlsPointerDown}
             className={clsx(
-              'dashboard-shell__controls absolute z-20 w-60 max-w-full rounded-2xl border border-border/70 bg-[#15151b]/95 p-4 text-xs shadow-panel ring-1 ring-inset ring-white/5',
+              'dashboard-shell__controls absolute z-20 w-60 max-w-full rounded-[1.5rem] border border-border/70 bg-panel/95 p-6 ring-1 ring-inset ring-white/5',
               controlsPosition ? undefined : 'top-4 right-4',
               isDraggingControls ? 'cursor-grabbing' : 'cursor-grab'
             )}

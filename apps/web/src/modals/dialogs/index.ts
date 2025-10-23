@@ -6,6 +6,7 @@ export * from './ItemDeleteConfirmDialog';
 export * from './LivePasteCatalogErrorDialog';
 export * from './LivePasteDialog';
 export * from './LivePasteGachaPickerDialog';
+export * from './PageSettingsDialog';
 export * from './PrizeSettingsDialog';
 export * from './RarityInUseDialog';
 export * from './RarityRateErrorDialog';

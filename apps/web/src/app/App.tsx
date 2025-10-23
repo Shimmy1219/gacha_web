@@ -8,6 +8,7 @@ import { CreateGachaWizardDialog } from '../modals/dialogs/CreateGachaWizardDial
 import { LivePasteDialog } from '../modals/dialogs/LivePasteDialog';
 import { LivePasteGachaPickerDialog } from '../modals/dialogs/LivePasteGachaPickerDialog';
 import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogErrorDialog';
+import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
 import {
@@ -276,6 +277,15 @@ export function App(): JSX.Element {
     console.info('全体エクスポート処理は未実装です');
   };
 
+  const handleOpenPageSettings = () => {
+    push(PageSettingsDialog, {
+      id: 'page-settings',
+      title: 'サイト設定',
+      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
+      size: 'xl'
+    });
+  };
+
   return (
     <div className="app min-h-screen bg-transparent text-surface-foreground">
       <AppHeaderShell
@@ -288,6 +298,7 @@ export function App(): JSX.Element {
         onRegisterGacha={handleRegisterGacha}
         onOpenRealtime={handleOpenRealtime}
         onExportAll={handleExportAll}
+        onOpenPageSettings={handleOpenPageSettings}
       />
       <main ref={mainRef} className="app__main px-4 pb-[5px] pt-4">
         <AppRoutes />
