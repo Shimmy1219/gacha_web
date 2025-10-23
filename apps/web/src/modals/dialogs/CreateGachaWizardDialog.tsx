@@ -514,7 +514,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 setShowNameError(false);
               }
             }}
-            className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground shadow-inner transition focus:border-accent focus:outline-none"
+            className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
           <p className="text-xs text-muted-foreground">ダッシュボードでの表示名として利用されます。</p>

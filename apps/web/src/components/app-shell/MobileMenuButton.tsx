@@ -11,7 +11,7 @@ export function MobileMenuButton({ open, onToggle, controlsId }: MobileMenuButto
     <button
       type="button"
       onClick={onToggle}
-      className="mobile-menu-button inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/50 bg-surface/40 text-surface-foreground shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60 hover:text-accent lg:hidden"
+      className="mobile-menu-button inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/50 bg-surface/40 text-surface-foreground transition hover:border-accent/60 hover:text-accent lg:hidden"
       aria-label="ツールバーを開閉"
       aria-expanded={open}
       aria-controls={controlsId}

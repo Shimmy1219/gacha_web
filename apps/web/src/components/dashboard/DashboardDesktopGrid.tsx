@@ -308,7 +308,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
               role="separator"
               aria-orientation="vertical"
               aria-label="列幅の調整"
-              className="dashboard-desktop-grid__handle absolute top-0 bottom-0 w-4 -translate-x-1/2 cursor-col-resize touch-none select-none rounded-full bg-panel/95 text-white/60 shadow-panel transition-colors hover:text-white/80 z-10"
+              className="dashboard-desktop-grid__handle absolute top-0 bottom-0 w-4 -translate-x-1/2 cursor-col-resize touch-none select-none rounded-full bg-panel/95 text-white/60 transition-colors hover:text-white/80 z-10"
               style={{ left }}
               onPointerDown={handlePointerDown(index)}
               onPointerMove={handlePointerMove}

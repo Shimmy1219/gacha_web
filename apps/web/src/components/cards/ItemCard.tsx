@@ -86,7 +86,7 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
       data-item-id={model.itemId}
       data-riagu={model.isRiagu}
       className={clsx(
-        'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] shadow-[0_12px_32px_rgba(0,0,0,0.5)] transition hover:border-accent/60',
+        'item-card group relative overflow-visible rounded-2xl border border-white/5 bg-surface/20 p-[10px] transition hover:border-accent/60',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60'
       )}
     >

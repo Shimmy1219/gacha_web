@@ -70,7 +70,7 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5">
           <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <Disclosure.Button
               type="button"
@@ -95,7 +95,7 @@ export function UserCard({
             <div className="user-card__actions flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-accent to-accent-dark px-3 py-1 text-base font-semibold text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-accent-bright hover:to-accent-bright-dark"
+                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-accent to-accent-dark px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-accent-bright hover:to-accent-bright-dark"
                 onClick={() => onExport?.(userId)}
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
@@ -382,7 +382,7 @@ function GachaInventoryCard({
   );
 
   return (
-    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-panel p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
+    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-panel p-5">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
         <div className="user-card__inventory-meta space-y-1">
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
@@ -430,7 +430,7 @@ function GachaInventoryCard({
                 leaveFrom="transform opacity-100 scale-100"
                 leaveTo="transform opacity-0 scale-95"
               >
-                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-panel/95 shadow-[0_16px_40px_rgba(0,0,0,0.55)] focus:outline-none">
+                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-panel/95 focus:outline-none">
                   <Menu.Item>
                     {({ active }) => (
                       <button
@@ -506,7 +506,7 @@ function GachaInventoryCard({
                         key={`${inventory.inventoryId}-${editorKey}`}
                         className={clsx(
                           'user-card__item-chip flex w-full flex-col gap-2 rounded-lg border border-accent/40 bg-panel-contrast',
-                          'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+                          'px-3 py-2 text-xs text-surface-foreground'
                         )}
                         onSubmit={handleSubmitDraft}
                       >
@@ -524,7 +524,7 @@ function GachaInventoryCard({
                         <div className="flex items-center gap-2">
                           <button
                             type="submit"
-                            className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white shadow hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                            className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                           >
                             保存
                           </button>
@@ -572,7 +572,7 @@ function GachaInventoryCard({
           <form
             className={clsx(
               'user-card__item-chip mt-1 flex w-full flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-panel-contrast',
-              'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+              'px-3 py-2 text-xs text-surface-foreground'
             )}
             onSubmit={handleSubmitDraft}
           >
@@ -614,7 +614,7 @@ function GachaInventoryCard({
             <div className="flex items-center gap-2">
               <button
                 type="submit"
-                className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white shadow hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 保存
               </button>

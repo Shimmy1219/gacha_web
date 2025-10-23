@@ -124,7 +124,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                     clsx(
                       'flex items-start justify-between gap-4 rounded-2xl border px-4 py-4 transition',
                       checked
-                        ? 'border-accent bg-accent/10 shadow-[0_14px_38px_rgba(225,29,72,0.12)]'
+                        ? 'border-accent bg-accent/10'
                         : 'border-border/60 bg-surface/30 hover:border-accent/40 hover:bg-surface/40',
                       active && !checked ? 'ring-2 ring-accent/40' : undefined
                     )
@@ -154,7 +154,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 className="flex flex-col items-center gap-2"
                               >
                                 <span
-                                  className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/40 shadow-inner"
+                                  className="flex h-12 w-12 items-center justify-center rounded-xl border border-border/40"
                                   style={{ backgroundColor, color: isText ? swatch.color : undefined }}
                                   aria-hidden="true"
                                 >
@@ -197,14 +197,14 @@ export const PageSettingsDialog: ModalComponent = () => {
                                     clsx(
                                       'flex w-full min-w-[200px] items-center gap-3 rounded-xl border px-3 py-2 text-left transition focus:outline-none sm:w-auto',
                                       checked
-                                        ? 'border-accent bg-accent/15 shadow-[0_12px_28px_rgba(0,0,0,0.2)]'
+                                        ? 'border-accent bg-accent/15'
                                         : 'border-border/60 bg-surface/40 hover:border-accent/40',
                                       active && !checked ? 'ring-2 ring-accent/40' : undefined
                                     )
                                   }
                                 >
                                   <div
-                                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-border/50 shadow-inner"
+                                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-border/50"
                                     style={{
                                       backgroundColor: baseOption.previewBackground,
                                       color: baseOption.previewForeground
@@ -236,7 +236,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                             <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                               <span className="sr-only">現在のカラー</span>
                               <span
-                                className="h-4 w-4 rounded border border-border/50 shadow-inner"
+                                className="h-4 w-4 rounded border border-border/50"
                                 style={{ backgroundColor: customAccentColor }}
                                 aria-hidden="true"
                               />
@@ -254,7 +254,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                   className={clsx(
                                     'group rounded-lg border border-border/60 bg-surface/40 p-1 transition hover:border-accent/50 hover:bg-surface/60',
                                     isSelected
-                                      ? 'border-accent bg-accent/15 shadow-[0_12px_32px_rgba(0,0,0,0.28)]'
+                                      ? 'border-accent bg-accent/15'
                                       : undefined
                                   )}
                                   onClick={() => {
@@ -269,7 +269,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 >
                                   <span className="sr-only">{entry.name}</span>
                                   <span
-                                    className="block h-10 w-10 rounded-md border border-border/50 shadow-inner transition"
+                                    className="block h-10 w-10 rounded-md border border-border/50 transition"
                                     style={{
                                       backgroundColor: entry.value,
                                       boxShadow: isSelected ? `0 0 0 2px ${entry.value}` : undefined
@@ -333,7 +333,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                     className={clsx(
                       'w-full rounded-xl border px-4 py-3 text-left transition',
                       isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-[0_12px_36px_rgba(225,29,72,0.16)]'
+                        ? 'border-accent bg-accent/10 text-surface-foreground'
                         : 'border-transparent text-muted-foreground hover:border-border/60 hover:bg-surface/20'
                     )}
                   >

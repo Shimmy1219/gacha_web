@@ -93,7 +93,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
           id={id}
           type="button"
           className={clsx(
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm text-surface-foreground transition',
             open ? 'border-accent text-accent' : 'hover:border-accent/70'
           )}
           aria-haspopup="listbox"
@@ -107,7 +107,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
           <div
             role="listbox"
             aria-multiselectable
-            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]"
+            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2"
           >
             <button
               type="button"
@@ -189,7 +189,7 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
         >
           <span
             className={clsx(
-              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white shadow transition-all',
+              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white transition-all',
               value ? 'translate-x-[22px]' : 'translate-x-[6px]'
             )}
           />
@@ -216,7 +216,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       aria-hidden={!open}
       data-state={open ? 'open' : 'closed'}
       className={clsx(
-        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.45)] transition-opacity duration-300 ease-linear',
+        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 transition-opacity duration-300 ease-linear',
         'data-[state=open]:opacity-100',
         'data-[state=closed]:pointer-events-none data-[state=closed]:select-none data-[state=closed]:opacity-0'
       )}
