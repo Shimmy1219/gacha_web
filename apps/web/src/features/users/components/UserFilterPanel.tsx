@@ -1,10 +1,8 @@
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  MagnifyingGlassIcon
-} from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+
+import { MultiSelectDropdown } from '../../../components/select/MultiSelectDropdown';
 
 import {
   type UserFilterOption,
@@ -21,142 +19,45 @@ interface MultiSelectFilterProps {
 }
 
 function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectFilterProps): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  const allValues = useMemo(() => options.map((option) => option.value), [options]);
-  const selectedSet = useMemo(() => {
-    if (value === '*') {
-      return new Set(allValues);
-    }
-    return new Set(value);
-  }, [allValues, value]);
-
-  const buttonLabel = useMemo(() => {
-    if (value === '*' || selectedSet.size === allValues.length) {
-      return 'すべて';
-    }
-    if (selectedSet.size === 0) {
-      return '未選択';
-    }
-    if (selectedSet.size === 1) {
-      const [single] = Array.from(selectedSet);
-      return options.find((option) => option.value === single)?.label ?? '1項目';
-    }
-    return `${selectedSet.size}項目`;
-  }, [allValues.length, options, selectedSet, value]);
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent): void {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, []);
-
-  const toggleAll = (): void => {
-    if (value === '*' || selectedSet.size === allValues.length) {
-      onChange([]);
-      return;
-    }
-    onChange('*');
-  };
-
-  const toggleValue = (nextValue: string): void => {
-    const baseSet = value === '*' ? new Set(allValues) : new Set(value);
-    if (baseSet.has(nextValue)) {
-      baseSet.delete(nextValue);
-    } else {
-      baseSet.add(nextValue);
-    }
-
-    if (baseSet.size === 0 || baseSet.size === allValues.length) {
-      onChange('*');
-      return;
-    }
-    onChange(Array.from(baseSet));
-  };
+  const dropdownOptions = useMemo(() => options.map((option) => ({ ...option })), [options]);
 
   return (
-    <div
-      className="user-filter-panel__multi-select grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center"
-      ref={containerRef}
-    >
+    <div className="user-filter-panel__multi-select grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
       <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
         {label}
       </span>
-      <div className="user-filter-panel__select-wrapper relative">
-        <button
-          id={id}
-          type="button"
-          className={clsx(
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm text-surface-foreground transition',
-            open ? 'border-accent text-accent' : 'hover:border-accent/70'
-          )}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={() => setOpen((prev) => !prev)}
-        >
-          <span>{buttonLabel}</span>
-          <ChevronDownIcon className={clsx('user-filter-panel__select-icon h-4 w-4 transition-transform', open && 'rotate-180')} />
-        </button>
-        {open ? (
-          <div
-            role="listbox"
-            aria-multiselectable
-            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2"
-          >
-            <button
-              type="button"
-              className="user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5"
-              onClick={toggleAll}
-            >
-              <span>すべて</span>
-              <CheckIcon
-                className={clsx(
-                  'user-filter-panel__option-check h-4 w-4',
-                  selectedSet.size === allValues.length ? 'opacity-100' : 'opacity-0'
-                )}
-              />
-            </button>
-            <div className="user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-            {options.map((option) => {
-              const active = selectedSet.has(option.value);
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  className={clsx(
-                    'user-filter-panel__option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
-                    active ? 'bg-accent/10 text-surface-foreground' : 'text-muted-foreground hover:bg-white/5'
-                  )}
-                  onClick={() => toggleValue(option.value)}
-                >
-                  <span className="flex flex-col">
-                    <span>{option.label}</span>
-                    {option.description ? (
-                      <span className="user-filter-panel__option-description text-[10px] text-muted-foreground/80">
-                        {option.description}
-                      </span>
-                    ) : null}
-                  </span>
-                  <CheckIcon
-                    className={clsx(
-                      'user-filter-panel__option-check h-4 w-4 transition',
-                      active ? 'opacity-100 text-accent' : 'opacity-0'
-                    )}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
+      <MultiSelectDropdown
+        id={id}
+        value={value}
+        options={dropdownOptions}
+        onChange={onChange}
+        labels={{
+          all: 'すべて',
+          none: '未選択',
+          multiple: (count) => `${count}項目`
+        }}
+        classNames={{
+          root: 'user-filter-panel__select-wrapper relative',
+          button:
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+          buttonOpen: 'border-accent text-accent',
+          buttonClosed: 'hover:border-accent/70',
+          icon: 'user-filter-panel__select-icon h-4 w-4 transition-transform',
+          iconOpen: 'rotate-180',
+          menu:
+            'user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
+          allButton:
+            'user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5',
+          divider: 'user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-white/10 to-transparent',
+          option:
+            'user-filter-panel__option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
+          optionActive: 'bg-accent/10 text-surface-foreground',
+          optionInactive: 'text-muted-foreground hover:bg-white/5',
+          optionLabel: 'flex flex-col',
+          optionDescription: 'user-filter-panel__option-description text-[10px] text-muted-foreground/80',
+          checkIcon: 'user-filter-panel__option-check h-4 w-4 transition text-accent'
+        }}
+      />
     </div>
   );
 }

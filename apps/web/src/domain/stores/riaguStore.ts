@@ -8,8 +8,6 @@ interface UpsertRiaguCardInput {
   unitCost?: number | null;
   typeLabel?: string | null;
   orderHint?: number | null;
-  stock?: number | null;
-  notes?: string | null;
 }
 
 export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
@@ -64,10 +62,6 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
       const sanitizedType = trimmedType ? trimmedType : undefined;
       const sanitizedOrderHint =
         typeof input.orderHint === 'number' && Number.isFinite(input.orderHint) ? input.orderHint : undefined;
-      const sanitizedStock =
-        typeof input.stock === 'number' && Number.isFinite(input.stock) ? Math.max(0, Math.floor(input.stock)) : undefined;
-      const sanitizedNotes = input.notes?.trim() ? input.notes.trim() : undefined;
-
       const next: RiaguStateV3 = {
         ...base,
         updatedAt: nowIso
@@ -83,8 +77,6 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
           unitCost: sanitizedUnitCost,
           typeLabel: sanitizedType,
           orderHint: sanitizedOrderHint,
-          stock: sanitizedStock,
-          notes: sanitizedNotes,
           updatedAt: nowIso
         };
 
@@ -99,8 +91,6 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
           unitCost: sanitizedUnitCost,
           typeLabel: sanitizedType,
           orderHint: sanitizedOrderHint,
-          stock: sanitizedStock,
-          notes: sanitizedNotes,
           updatedAt: nowIso
         };
 

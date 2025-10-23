@@ -6,7 +6,6 @@ export interface GachaAppStateV3 {
     {
       id: string;
       displayName: string;
-      iconAssetId?: string;
       createdAt?: string;
       updatedAt?: string;
     }
@@ -24,7 +23,6 @@ export interface GachaCatalogItemV3 {
   completeTarget?: boolean;
   imageAssetId?: string;
   riagu?: boolean;
-  series?: string;
   updatedAt?: string;
 }
 
@@ -43,7 +41,6 @@ export interface GachaRarityEntityV3 {
   id: string;
   gachaId: string;
   label: string;
-  shortName?: string;
   color?: string;
   emitRate?: number;
   sortOrder?: number;
@@ -61,10 +58,6 @@ export interface GachaRarityStateV3 {
 export interface UserProfileCardV3 {
   id: string;
   displayName: string;
-  handle?: string;
-  team?: string;
-  role?: string;
-  accentColor?: string;
   joinedAt?: string;
 }
 
@@ -82,7 +75,6 @@ export interface UserInventorySnapshotV3 {
   totalCount?: number;
   items: Record<string, string[]>;
   counts: Record<string, Record<string, number>>;
-  notes?: string;
 }
 
 export interface UserInventoriesStateV3 {
@@ -105,8 +97,6 @@ export interface RiaguCardModelV3 {
   unitCost?: number;
   typeLabel?: string;
   orderHint?: number;
-  stock?: number;
-  notes?: string;
   updatedAt?: string;
 }
 
@@ -193,7 +183,6 @@ export interface PullHistoryEntryV1 {
   userId?: string;
   executedAt: string;
   pullCount: number;
-  currencyType?: string;
   currencyUsed?: number;
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;

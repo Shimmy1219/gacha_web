@@ -1,6 +1,14 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
 
 import {
   ItemCard,
@@ -11,6 +19,7 @@ import {
 import { SectionContainer } from '../../../components/layout/SectionContainer';
 import { useTabMotion } from '../../../hooks/useTabMotion';
 import { useModal } from '../../../modals';
+import { ItemDeleteConfirmDialog } from '../../../modals/dialogs/ItemDeleteConfirmDialog';
 import { PrizeSettingsDialog } from '../../../modals/dialogs/PrizeSettingsDialog';
 import { ItemAssetPreviewDialog } from '../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../storage/useGachaLocalStorage';
@@ -20,6 +29,7 @@ import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/a
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
 import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
+import { ItemContextMenu } from './ItemContextMenu';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -27,6 +37,8 @@ const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
 type ItemsByGacha = Record<string, ItemEntry[]>;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
 
 function getSequentialItemName(position: number): string {
   if (Number.isNaN(position) || !Number.isFinite(position)) {
@@ -54,6 +66,8 @@ export function ItemsSection(): JSX.Element {
   const [isCondensedGrid, setIsCondensedGrid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -164,6 +178,14 @@ export function ItemsSection(): JSX.Element {
     return { itemsByGacha: entries, flatItems: flat };
   }, [data]);
 
+  const itemEntryById = useMemo(() => {
+    const map = new Map<string, ItemEntry>();
+    flatItems.forEach((entry) => {
+      map.set(entry.model.itemId, entry);
+    });
+    return map;
+  }, [flatItems]);
+
   useEffect(() => {
     if (!gachaTabs.length) {
       setActiveGachaId(null);
@@ -185,6 +207,346 @@ export function ItemsSection(): JSX.Element {
   }, [data?.appState?.selectedGachaId, gachaTabs]);
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
+
+  const visibleIdSet = useMemo(() => new Set(items.map((entry) => entry.model.itemId)), [items]);
+
+  useEffect(() => {
+    setSelectedItemIds((previous) => previous.filter((id) => visibleIdSet.has(id)));
+  }, [visibleIdSet]);
+
+  useEffect(() => {
+    setSelectedItemIds([]);
+    setContextMenuState(null);
+  }, [activeGachaId]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenuState(null);
+  }, []);
+
+  const selectedIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+
+  const selectedEntries = useMemo(
+    () => items.filter((entry) => selectedIdSet.has(entry.model.itemId)),
+    [items, selectedIdSet]
+  );
+
+  const rarityOptionsForActiveGacha = useMemo(
+    () => (activeGachaId ? rarityOptionsByGacha[activeGachaId] ?? [] : []),
+    [activeGachaId, rarityOptionsByGacha]
+  );
+
+  const selectionSummary = useMemo(() => {
+    if (selectedEntries.length === 0) {
+      return {
+        allPickup: false,
+        anyPickup: false,
+        allComplete: false,
+        anyComplete: false,
+        allRiagu: false,
+        anyRiagu: false,
+        currentRarityId: null as string | null
+      };
+    }
+
+    const allPickup = selectedEntries.every((entry) => entry.model.pickupTarget);
+    const anyPickup = selectedEntries.some((entry) => entry.model.pickupTarget);
+    const allComplete = selectedEntries.every((entry) => entry.model.completeTarget);
+    const anyComplete = selectedEntries.some((entry) => entry.model.completeTarget);
+    const allRiagu = selectedEntries.every((entry) => entry.model.isRiagu);
+    const anyRiagu = selectedEntries.some((entry) => entry.model.isRiagu);
+    const uniqueRarity = new Set(selectedEntries.map((entry) => entry.model.rarityId));
+
+    return {
+      allPickup,
+      anyPickup,
+      allComplete,
+      anyComplete,
+      allRiagu,
+      anyRiagu,
+      currentRarityId: uniqueRarity.size === 1 ? selectedEntries[0].model.rarityId : null
+    };
+  }, [selectedEntries]);
+
+  const handleSurfaceMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        if (target.closest('[data-item-id]')) {
+          return;
+        }
+        if (target.closest('[data-add-item-card]')) {
+          return;
+        }
+      }
+
+      closeContextMenu();
+      if (!event.ctrlKey && !event.metaKey) {
+        setSelectedItemIds([]);
+      }
+    },
+    [closeContextMenu]
+  );
+
+  const handleCardMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>, itemId: string) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const clickedButton = target?.closest('button');
+      const isMulti = event.ctrlKey || event.metaKey;
+
+      if (clickedButton) {
+        const isPreviewButton = clickedButton.matches('[data-preview-button="true"]');
+        if (!isMulti || !isPreviewButton) {
+          return;
+        }
+      }
+
+      event.preventDefault();
+      closeContextMenu();
+
+      setSelectedItemIds((previous) => {
+        const next = new Set(previous);
+        if (isMulti) {
+          if (next.has(itemId)) {
+            next.delete(itemId);
+          } else {
+            next.add(itemId);
+          }
+          return Array.from(next);
+        }
+        return [itemId];
+      });
+    },
+    [closeContextMenu]
+  );
+
+  const handleCardContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>, itemId: string) => {
+      event.preventDefault();
+
+      const isMulti = event.ctrlKey || event.metaKey;
+      const previousSet = new Set(selectedItemIds);
+      let nextSet = new Set(previousSet);
+
+      if (!previousSet.has(itemId)) {
+        nextSet = isMulti ? new Set([...previousSet, itemId]) : new Set([itemId]);
+      } else if (isMulti) {
+        if (nextSet.size > 1) {
+          nextSet.delete(itemId);
+        }
+      }
+
+      if (!nextSet.has(itemId)) {
+        nextSet.add(itemId);
+      }
+
+      const nextIds = Array.from(nextSet);
+      setSelectedItemIds(nextIds);
+      setContextMenuState({
+        anchor: { x: event.clientX, y: event.clientY },
+        targetIds: nextIds,
+        anchorId: itemId
+      });
+    },
+    [selectedItemIds]
+  );
+
+  const applyRarityToItems = useCallback(
+    (targetIds: string[], rarityId: string) => {
+      if (!rarityId) {
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+
+      targetIds.forEach((itemId) => {
+        const entry = itemEntryById.get(itemId);
+        if (!entry || entry.model.rarityId === rarityId) {
+          return;
+        }
+
+        const patch: Partial<GachaCatalogItemV3> = { rarityId };
+        catalogStore.updateItem({
+          gachaId: entry.model.gachaId,
+          itemId: entry.model.itemId,
+          patch,
+          updatedAt: timestamp
+        });
+
+        userInventoryStore.updateItemRarity({
+          gachaId: entry.model.gachaId,
+          itemId: entry.model.itemId,
+          previousRarityId: entry.model.rarityId,
+          nextRarityId: rarityId,
+          updatedAt: timestamp
+        });
+      });
+    },
+    [catalogStore, itemEntryById, userInventoryStore]
+  );
+
+  const applyFlagToItems = useCallback(
+    (targetIds: string[], field: 'pickupTarget' | 'completeTarget', nextValue: boolean) => {
+      const timestamp = new Date().toISOString();
+
+      targetIds.forEach((itemId) => {
+        const entry = itemEntryById.get(itemId);
+        if (!entry) {
+          return;
+        }
+
+        const currentValue = field === 'pickupTarget' ? entry.model.pickupTarget : entry.model.completeTarget;
+        if (currentValue === nextValue) {
+          return;
+        }
+
+        const patch: Partial<GachaCatalogItemV3> =
+          field === 'pickupTarget' ? { pickupTarget: nextValue } : { completeTarget: nextValue };
+
+        catalogStore.updateItem({
+          gachaId: entry.model.gachaId,
+          itemId: entry.model.itemId,
+          patch,
+          updatedAt: timestamp
+        });
+      });
+    },
+    [catalogStore, itemEntryById]
+  );
+
+  const applyRiaguToItems = useCallback(
+    (targetIds: string[], nextValue: boolean) => {
+      const timestamp = new Date().toISOString();
+
+      targetIds.forEach((itemId) => {
+        const entry = itemEntryById.get(itemId);
+        if (!entry || entry.model.isRiagu === nextValue) {
+          return;
+        }
+
+        const patch: Partial<GachaCatalogItemV3> = { riagu: nextValue };
+        catalogStore.updateItem({
+          gachaId: entry.model.gachaId,
+          itemId: entry.model.itemId,
+          patch,
+          updatedAt: timestamp
+        });
+
+        if (nextValue) {
+          riaguStore.upsertCard({ itemId, gachaId: entry.model.gachaId }, { persist: 'debounced' });
+        } else {
+          riaguStore.removeByItemId(itemId, { persist: 'debounced' });
+        }
+      });
+    },
+    [catalogStore, itemEntryById, riaguStore]
+  );
+
+  const deleteItems = useCallback(
+    (targetIds: string[]) => {
+      if (targetIds.length === 0) {
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+
+      targetIds.forEach((itemId) => {
+        const entry = itemEntryById.get(itemId);
+        if (!entry) {
+          return;
+        }
+
+        catalogStore.removeItem({ gachaId: entry.model.gachaId, itemId, updatedAt: timestamp });
+        userInventoryStore.removeItemReferences({ itemId, gachaId: entry.model.gachaId, updatedAt: timestamp });
+        riaguStore.removeByItemId(itemId, { persist: 'immediate' });
+      });
+
+      setSelectedItemIds([]);
+      closeContextMenu();
+    },
+    [catalogStore, closeContextMenu, itemEntryById, riaguStore, userInventoryStore]
+  );
+
+  const handleDeleteRequest = useCallback(
+    (targetIds: string[]) => {
+      if (targetIds.length === 0) {
+        return;
+      }
+
+      const baseEntries = targetIds
+        .map((itemId) => itemEntryById.get(itemId))
+        .filter((entry): entry is ItemEntry => Boolean(entry));
+
+      if (baseEntries.length === 0) {
+        return;
+      }
+
+      const itemNames = baseEntries.map((entry) => entry.model.name).filter(Boolean);
+      const uniqueGachaNames = new Set(
+        baseEntries
+          .map((entry) => entry.model.gachaDisplayName?.trim())
+          .filter((name): name is string => Boolean(name))
+      );
+
+      const assignmentRecords = targetIds
+        .flatMap((itemId) => data?.userInventories?.byItemId?.[itemId] ?? [])
+        .filter((record) => Boolean(record?.userId));
+
+      const userProfiles = data?.userProfiles?.users ?? {};
+      const winnerMap = new Map<string, string>();
+      assignmentRecords.forEach((record) => {
+        if (!record?.userId || winnerMap.has(record.userId)) {
+          return;
+        }
+
+        const profile = userProfiles[record.userId];
+        const displayName = profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        winnerMap.set(record.userId, displayName);
+      });
+
+      const winnerNames = Array.from(winnerMap.values());
+      const hasUserReferences = winnerNames.length > 0;
+
+      const displayItemName =
+        targetIds.length === 1 && itemNames[0]
+          ? itemNames[0]
+          : `選択した${targetIds.length}件のアイテム`;
+
+      push(ItemDeleteConfirmDialog, {
+        id: `items-delete-${targetIds[0]}`,
+        title: 'アイテムを削除',
+        payload: {
+          itemId: targetIds[0],
+          itemName: displayItemName,
+          gachaName:
+            uniqueGachaNames.size === 1
+              ? Array.from(uniqueGachaNames)[0]
+              : targetIds.length === 1
+              ? baseEntries[0].model.gachaDisplayName
+              : undefined,
+          hasUserReferences,
+          winnerNames,
+          onConfirm: () => {
+            deleteItems(targetIds);
+          }
+        }
+      });
+    },
+    [
+      data?.userInventories?.byItemId,
+      data?.userProfiles?.users,
+      deleteItems,
+      itemEntryById,
+      push
+    ]
+  );
 
   const canAddItems = useMemo(() => {
     if (status !== 'ready' || !activeGachaId) {
@@ -373,8 +735,7 @@ export function ItemsSection(): JSX.Element {
         }
 
         const profile = userProfiles[record.userId];
-        const displayName =
-          profile?.displayName?.trim() || profile?.handle?.trim() || record.userId;
+        const displayName = profile?.displayName?.trim() || record.userId;
         assignmentUsersMap.set(record.userId, { userId: record.userId, displayName });
       });
       const assignmentUsers = Array.from(assignmentUsersMap.values());
@@ -504,6 +865,10 @@ export function ItemsSection(): JSX.Element {
     [flatItems, push]
   );
 
+  const pickupActionLabel = selectionSummary.allPickup ? 'ピックアップを解除' : 'ピックアップに設定';
+  const completeActionLabel = selectionSummary.allComplete ? 'コンプ対象から除外' : 'コンプ対象に設定';
+  const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
+
   return (
     <SectionContainer
       id="items"
@@ -549,19 +914,24 @@ export function ItemsSection(): JSX.Element {
               ) : null}
 
               {showAddCard || items.length > 0 ? (
-                <div ref={gridRef} className={gridClassName}>
-                  {showAddCard ? (
-                    <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
-                  ) : null}
-                  {items.map(({ model, rarity }) => (
-                    <ItemCard
-                      key={model.itemId}
-                      model={model}
-                      rarity={rarity}
-                      onEditImage={handleEditImage}
-                      onPreviewAsset={handlePreviewAsset}
-                    />
-                  ))}
+                <div onMouseDown={handleSurfaceMouseDown}>
+                  <div ref={gridRef} className={gridClassName}>
+                    {showAddCard ? (
+                      <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
+                    ) : null}
+                    {items.map(({ model, rarity }) => (
+                      <ItemCard
+                        key={model.itemId}
+                        model={model}
+                        rarity={rarity}
+                        onEditImage={handleEditImage}
+                        onPreviewAsset={handlePreviewAsset}
+                        isSelected={selectedIdSet.has(model.itemId)}
+                        onCardMouseDown={(event) => handleCardMouseDown(event, model.itemId)}
+                        onCardContextMenu={(event) => handleCardContextMenu(event, model.itemId)}
+                      />
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -576,6 +946,29 @@ export function ItemsSection(): JSX.Element {
         className="hidden"
         onChange={handleFileInputChange}
       />
+      {contextMenuState ? (
+        <ItemContextMenu
+          anchor={contextMenuState.anchor}
+          selectedCount={contextMenuState.targetIds.length}
+          rarityOptions={rarityOptionsForActiveGacha}
+          currentRarityId={selectionSummary.currentRarityId}
+          pickupLabel={pickupActionLabel}
+          completeLabel={completeActionLabel}
+          riaguLabel={riaguActionLabel}
+          onSelectRarity={(rarityId) => applyRarityToItems(contextMenuState.targetIds, rarityId)}
+          onEditImage={() => handleEditImage(contextMenuState.anchorId)}
+          onTogglePickup={() =>
+            applyFlagToItems(contextMenuState.targetIds, 'pickupTarget', !selectionSummary.allPickup)
+          }
+          onToggleComplete={() =>
+            applyFlagToItems(contextMenuState.targetIds, 'completeTarget', !selectionSummary.allComplete)
+          }
+          onToggleRiagu={() => applyRiaguToItems(contextMenuState.targetIds, !selectionSummary.allRiagu)}
+          onDelete={() => handleDeleteRequest(contextMenuState.targetIds)}
+          onClose={closeContextMenu}
+          disableEditImage={contextMenuState.targetIds.length !== 1}
+        />
+      ) : null}
     </SectionContainer>
   );
 }
@@ -590,6 +983,7 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
     <button
       type="button"
       aria-label="景品を追加"
+      data-add-item-card="true"
       className={clsx(
         'item-card item-card--add relative flex h-full flex-col overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none',
         disabled

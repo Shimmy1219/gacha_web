@@ -65,7 +65,6 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
           id: rarityId,
           gachaId,
           label: initial.label ?? '',
-          ...(initial.shortName ? { shortName: initial.shortName } : {}),
           ...(initial.color ? { color: initial.color } : {}),
           ...(typeof initial.emitRate === 'number' ? { emitRate: initial.emitRate } : {}),
           ...(typeof initial.sortOrder === 'number' ? { sortOrder: initial.sortOrder } : { sortOrder: nextOrder.length - 1 }),
@@ -75,15 +74,9 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
 
       let nextIndexByName = previous?.indexByName ? { ...previous.indexByName } : undefined;
       const label = initial.label ?? '';
-      const shortName = initial.shortName;
-      if (label || shortName) {
+      if (label) {
         const gachaIndex = { ...(nextIndexByName?.[gachaId] ?? {}) };
-        if (label) {
-          gachaIndex[label] = rarityId;
-        }
-        if (shortName) {
-          gachaIndex[shortName] = rarityId;
-        }
+        gachaIndex[label] = rarityId;
         nextIndexByName = {
           ...(nextIndexByName ?? {}),
           [gachaId]: gachaIndex
@@ -135,10 +128,6 @@ export class RarityStore extends PersistedStore<GachaRarityStateV3 | undefined> 
         let mutated = false;
         if (entity.label && gachaIndex[entity.label] === rarityId) {
           delete gachaIndex[entity.label];
-          mutated = true;
-        }
-        if (entity.shortName && gachaIndex[entity.shortName] === rarityId) {
-          delete gachaIndex[entity.shortName];
           mutated = true;
         }
         if (mutated) {

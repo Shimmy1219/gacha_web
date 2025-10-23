@@ -1,11 +1,11 @@
-import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 
 import { type PtBundleV3, type PtGuaranteeV3, type PtSettingV3 } from '@domain/app-persistence';
 import { generatePtBundleId, generatePtGuaranteeId } from '@domain/idGenerators';
 
 import { getRarityTextPresentation } from '../utils/rarityColorPresentation';
+import { SingleSelectDropdown } from '../../../components/select/SingleSelectDropdown';
 
 interface PtBundleRowState {
   id: string;
@@ -128,87 +128,50 @@ function InlineSelectField({
   onChange: (value: string) => void;
   options: RarityOption[];
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    function handlePointerDown(event: PointerEvent): void {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, []);
-
-  const resolvedValue = value || options[0]?.value || '';
-  const selectedOption = options.find((option) => option.value === resolvedValue);
-  const selectedPresentation = getRarityTextPresentation(selectedOption?.color);
-
-  const handleSelect = (nextValue: string): void => {
-    onChange(nextValue);
-    setOpen(false);
-  };
+  const formattedOptions = useMemo(
+    () =>
+      options.map((option) => {
+        const presentation = getRarityTextPresentation(option.color);
+        return {
+          value: option.value,
+          label: (
+            <span
+              className={clsx('pt-controls-panel__select-option-label', presentation.className)}
+              style={presentation.style}
+            >
+              {option.label}
+            </span>
+          )
+        };
+      }),
+    [options]
+  );
 
   return (
-    <div className="pt-controls-panel__select-wrapper relative" ref={containerRef}>
-      <button
-        type="button"
-        className={clsx(
-          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-muted px-3 py-2 text-xs font-semibold text-surface-foreground transition',
-          open ? 'border-accent text-accent' : 'hover:border-accent/70'
-        )}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <span
-          className={clsx('pt-controls-panel__select-label flex-1 text-left', selectedPresentation.className)}
-          style={selectedPresentation.style}
-        >
-          {selectedOption?.label ?? '未選択'}
-        </span>
-        <ChevronDownIcon className={clsx('pt-controls-panel__select-icon h-4 w-4 transition-transform', open && 'rotate-180')} />
-      </button>
-      {open ? (
-        <div
-          role="listbox"
-          className="pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 text-xs"
-        >
-          {options.map((option) => {
-            const active = option.value === resolvedValue;
-            const presentation = getRarityTextPresentation(option.color);
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={active}
-                className={clsx(
-                  'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
-                  active ? 'bg-accent/10 text-surface-foreground' : 'text-muted-foreground hover:bg-white/5'
-                )}
-                onClick={() => handleSelect(option.value)}
-              >
-                <span
-                  className={clsx('pt-controls-panel__select-option-label', presentation.className)}
-                  style={presentation.style}
-                >
-                  {option.label}
-                </span>
-                <CheckIcon
-                  className={clsx(
-                    'pt-controls-panel__select-check h-4 w-4 transition',
-                    active ? 'opacity-100 text-accent' : 'opacity-0'
-                  )}
-                />
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+    <SingleSelectDropdown
+      value={value}
+      onChange={onChange}
+      options={formattedOptions}
+      placeholder="未選択"
+      classNames={{
+        root: 'pt-controls-panel__select-wrapper relative',
+        button:
+          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-[#1b1b22] px-3 py-2 text-xs font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+        buttonOpen: 'border-accent text-accent',
+        buttonClosed: 'hover:border-accent/70',
+        icon: 'pt-controls-panel__select-icon h-4 w-4 transition-transform',
+        iconOpen: 'rotate-180',
+        menu:
+          'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
+        option:
+          'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
+        optionActive: 'bg-accent/10 text-surface-foreground',
+        optionInactive: 'text-muted-foreground hover:bg-white/5',
+        optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left',
+        checkIcon: 'pt-controls-panel__select-check h-4 w-4 transition text-accent'
+      }}
+      renderButtonLabel={({ selectedOption }) => selectedOption?.label ?? '未選択'}
+    />
   );
 }
 

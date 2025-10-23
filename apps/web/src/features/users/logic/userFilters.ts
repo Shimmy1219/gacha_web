@@ -82,7 +82,7 @@ function buildRarityOptions(appState?: GachaAppStateV3, rarityState?: GachaRarit
   }
 
   const gachaOrder = appState?.order ?? Object.keys(rarityState.byGacha ?? {});
-  const rarityMap = new Map<string, { id: string; label: string; description?: string }>();
+  const rarityMap = new Map<string, { id: string; label: string }>();
 
   gachaOrder.forEach((gachaId) => {
     const rarityIds = rarityState.byGacha?.[gachaId] ?? [];
@@ -94,8 +94,7 @@ function buildRarityOptions(appState?: GachaAppStateV3, rarityState?: GachaRarit
       if (!rarityMap.has(rarityId)) {
         rarityMap.set(rarityId, {
           id: rarityId,
-          label: entity.label ?? rarityId,
-          description: entity.shortName && entity.shortName !== entity.label ? entity.shortName : undefined
+          label: entity.label ?? rarityId
         });
       }
     });
@@ -118,8 +117,7 @@ function buildRarityOptions(appState?: GachaAppStateV3, rarityState?: GachaRarit
 
   return ordered.map((entry) => ({
     value: entry.id,
-    label: entry.label,
-    description: entry.description
+    label: entry.label
   }));
 }
 
@@ -293,7 +291,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
     }
 
     if (hasKeyword) {
-      const haystack = [profile.displayName, profile.handle, profile.team, profile.role, userId]
+      const haystack = [profile.displayName, userId]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join(' ')
         .toLowerCase();
@@ -396,7 +394,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       userId,
       userName: profile.displayName || userId,
       totalSummary: `${totalPulls}連`,
-      memo: [profile.team, profile.role].filter(Boolean).join(' / ') || undefined,
       inventories,
       expandedByDefault: users.length === 0
     });
