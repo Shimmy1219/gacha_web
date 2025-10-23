@@ -235,7 +235,7 @@ export function RiaguSection(): JSX.Element {
                           {entry.winners.map((winner) => (
                             <div
                               key={`${entry.id}-${winner.name}`}
-                              className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-[#15151b] px-4 py-3 text-sm text-surface-foreground"
+                              className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground"
                             >
                               <span>{winner.name}</span>
                               <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>

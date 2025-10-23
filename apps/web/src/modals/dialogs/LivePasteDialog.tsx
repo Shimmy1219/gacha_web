@@ -47,7 +47,7 @@ export function LivePasteDialog({ payload, close }: ModalComponentProps<LivePast
           value={value}
           onChange={(event) => setValue(event.currentTarget.value)}
           placeholder="ここに結果テキストを貼り付け（複数ブロック可）"
-          className="min-h-[220px] w-full rounded-xl border border-border/60 bg-[#111119] px-3 py-3 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+          className="min-h-[220px] w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-3 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
         />
       </ModalBody>
       <ModalFooter>

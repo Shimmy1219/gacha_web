@@ -19,6 +19,12 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   keyword: ''
 };
 
+export const SITE_THEME_VALUES = ['dark', 'light', 'twilight'] as const;
+
+export type SiteTheme = (typeof SITE_THEME_VALUES)[number];
+
+const SITE_THEME_SET = new Set<string>(SITE_THEME_VALUES);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -54,6 +60,38 @@ function normalizeKeyword(value: unknown): string {
     return value;
   }
   return '';
+}
+
+function normalizeSiteTheme(value: unknown): SiteTheme | null {
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase();
+    if (SITE_THEME_SET.has(lower)) {
+      return lower as SiteTheme;
+    }
+  }
+  return null;
+}
+
+function detectPreferredSiteTheme(): SiteTheme {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    try {
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    } catch (error) {
+      console.warn('Failed to detect prefers-color-scheme', error);
+    }
+  }
+  return 'dark';
+}
+
+function readSiteThemeFromState(state: UiPreferencesStateV3 | undefined): SiteTheme | null {
+  if (!state) {
+    return null;
+  }
+  const appearance = state.appearance;
+  if (!isRecord(appearance)) {
+    return null;
+  }
+  return normalizeSiteTheme(appearance.siteTheme);
 }
 
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
@@ -152,6 +190,7 @@ function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesS
   }
   return {
     ...previous,
+    appearance: previous.appearance && isRecord(previous.appearance) ? { ...previous.appearance } : undefined,
     version: typeof previous.version === 'number' ? previous.version : 3,
     updatedAt: nowIso
   };
@@ -168,6 +207,36 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
 
   protected persistDebounced(state: UiPreferencesStateV3 | undefined): void {
     this.persistence.saveUiPreferencesDebounced(state);
+  }
+
+  getSiteTheme(): SiteTheme {
+    return readSiteThemeFromState(this.state) ?? detectPreferredSiteTheme();
+  }
+
+  setSiteTheme(theme: SiteTheme, options: UpdateOptions = { persist: 'debounced' }): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readSiteThemeFromState(previous);
+        if (current === theme) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousAppearance = base.appearance && isRecord(base.appearance) ? base.appearance : {};
+
+        return {
+          ...base,
+          appearance: {
+            ...previousAppearance,
+            siteTheme: theme
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
   }
 
   getUserFilterPreferences(): UserFilterPreferences {

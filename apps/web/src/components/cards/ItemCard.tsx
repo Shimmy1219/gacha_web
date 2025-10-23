@@ -106,7 +106,7 @@ export function ItemCard({ model, rarity, onEditImage, onPreviewAsset }: ItemCar
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(
-            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-[#1b1b22] text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090f] disabled:cursor-default disabled:opacity-90',
+            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in'
           )}

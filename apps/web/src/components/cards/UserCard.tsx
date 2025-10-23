@@ -95,7 +95,7 @@ export function UserCard({
             <div className="user-card__actions flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-[#e11d48] to-[#9f1239] px-3 py-1 text-base font-semibold text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-[#f31f55] hover:to-[#b3123f]"
+                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-gradient-to-b from-accent to-accent-dark px-3 py-1 text-base font-semibold text-white shadow-[0_10px_24px_rgba(225,29,72,0.35)] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:from-accent-bright hover:to-accent-bright-dark"
                 onClick={() => onExport?.(userId)}
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
@@ -382,7 +382,7 @@ function GachaInventoryCard({
   );
 
   return (
-    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[#15151b] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
+    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-panel p-5 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
         <div className="user-card__inventory-meta space-y-1">
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
@@ -406,7 +406,7 @@ function GachaInventoryCard({
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-border/60 bg-[#1d1d25] px-3 py-1 text-xs font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="rounded-lg border border-border/60 bg-panel-muted px-3 py-1 text-xs font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 onClick={handleToggleEditing}
               >
                 編集完了
@@ -416,7 +416,7 @@ function GachaInventoryCard({
             <Menu as="div" className="relative">
               <Menu.Button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-[#1d1d25] text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-panel-muted text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="インベントリメニューを開く"
               >
                 <EllipsisVerticalIcon className="h-4 w-4" />
@@ -430,7 +430,7 @@ function GachaInventoryCard({
                 leaveFrom="transform opacity-100 scale-100"
                 leaveTo="transform opacity-0 scale-95"
               >
-                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-[#15151b]/95 shadow-[0_16px_40px_rgba(0,0,0,0.55)] focus:outline-none">
+                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-panel/95 shadow-[0_16px_40px_rgba(0,0,0,0.55)] focus:outline-none">
                   <Menu.Item>
                     {({ active }) => (
                       <button
@@ -505,7 +505,7 @@ function GachaInventoryCard({
                       <form
                         key={`${inventory.inventoryId}-${editorKey}`}
                         className={clsx(
-                          'user-card__item-chip flex w-full flex-col gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+                          'user-card__item-chip flex w-full flex-col gap-2 rounded-lg border border-accent/40 bg-panel-contrast',
                           'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
                         )}
                         onSubmit={handleSubmitDraft}
@@ -515,7 +515,7 @@ function GachaInventoryCard({
                           <input
                             type="number"
                             min={0}
-                            className="w-16 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                            className="w-16 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                             value={draftCount}
                             onChange={(event) => setDraftCount(event.target.value)}
                             autoFocus
@@ -548,7 +548,7 @@ function GachaInventoryCard({
                       key={`${inventory.inventoryId}-${editorKey}`}
                       type="button"
                       className={clsx(
-                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-[#23232b]',
+                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted',
                         'px-3 py-1 text-xs text-surface-foreground transition',
                         isEditing && item.rarity.rarityId
                           ? 'hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
@@ -571,7 +571,7 @@ function GachaInventoryCard({
         {isEditing && activeEditor === 'add' && draftMode === 'add' ? (
           <form
             className={clsx(
-              'user-card__item-chip mt-1 flex w-full flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-[#1f1f27]',
+              'user-card__item-chip mt-1 flex w-full flex-wrap items-center gap-2 rounded-lg border border-accent/40 bg-panel-contrast',
               'px-3 py-2 text-xs text-surface-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
             )}
             onSubmit={handleSubmitDraft}
@@ -582,7 +582,7 @@ function GachaInventoryCard({
               </label>
               <select
                 id={`${inventory.inventoryId}-add-item`}
-                className="w-48 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                className="w-48 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                 value={draftItemId}
                 onChange={(event) => handleDraftItemIdChange(event.target.value)}
                 autoFocus
@@ -606,7 +606,7 @@ function GachaInventoryCard({
                 id={`${inventory.inventoryId}-add-count`}
                 type="number"
                 min={0}
-                className="w-16 rounded-md border border-border/60 bg-[#15151b] px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                className="w-16 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                 value={draftCount}
                 onChange={(event) => setDraftCount(event.target.value)}
               />

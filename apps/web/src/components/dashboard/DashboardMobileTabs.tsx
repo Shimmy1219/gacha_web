@@ -15,7 +15,7 @@ export function DashboardMobileTabs({ sections }: DashboardMobileTabsProps): JSX
   }
 
   return (
-    <nav className="dashboard-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-[#0b0b0f]/95 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_64px_rgba(0,0,0,0.6)]">
+    <nav className="dashboard-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-surface/95 px-4 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-24px_64px_rgba(0,0,0,0.6)]">
       <div className="dashboard-mobile-tabs__list grid grid-cols-4 gap-2">
         {sections.map((section) => {
           const active = activeView === section.id;

@@ -101,7 +101,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
                 href={result.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="truncate rounded-xl border border-border/60 bg-[#15151b] px-3 py-2 font-mono text-xs text-surface-foreground"
+                className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
               >
                 {result.label ?? result.url}
               </a>

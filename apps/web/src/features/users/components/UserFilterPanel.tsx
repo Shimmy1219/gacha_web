@@ -93,7 +93,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
           id={id}
           type="button"
           className={clsx(
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
             open ? 'border-accent text-accent' : 'hover:border-accent/70'
           )}
           aria-haspopup="listbox"
@@ -107,7 +107,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
           <div
             role="listbox"
             aria-multiselectable
-            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]"
+            className="user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]"
           >
             <button
               type="button"
@@ -182,7 +182,7 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
           type="button"
           onClick={toggle}
           className={clsx(
-            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-[#1b1b22] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f1016]',
+            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-panel-muted transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
             value && 'border-accent bg-accent/30'
           )}
           aria-pressed={value}
@@ -243,7 +243,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
           <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
             ユーザー検索
           </span>
-          <label className="user-filter-panel__search-input flex items-center gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-3 py-2 text-sm text-muted-foreground">
+          <label className="user-filter-panel__search-input flex items-center gap-3 rounded-xl border border-border/60 bg-panel-muted px-3 py-2 text-sm text-muted-foreground">
             <MagnifyingGlassIcon className="h-4 w-4" />
             <input
               type="search"
@@ -259,7 +259,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
         <button
           type="button"
           onClick={reset}
-          className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+          className="user-filter-panel__reset-button inline-flex items-center rounded-xl border border-border/60 bg-panel-muted px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
         >
           フィルタをリセット
         </button>

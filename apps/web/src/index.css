@@ -6,17 +6,74 @@
   color-scheme: dark;
   --app-header-height: 0px;
   --app-main-vertical-padding: 0px;
+  --color-surface: 11 11 15;
+  --color-surface-foreground: 245 245 246;
+  --color-surface-alt: 17 17 25;
+  --color-surface-deep: 9 9 15;
+  --color-panel: 21 21 27;
+  --color-panel-muted: 27 27 34;
+  --color-panel-contrast: 31 31 39;
+  --color-border: 42 42 54;
+  --color-muted: 35 35 43;
+  --color-muted-foreground: 179 179 189;
+  --color-overlay: 17 17 26;
+  --color-accent: 225 29 72;
+  --color-accent-dark: 159 18 57;
+  --color-accent-bright: 243 31 85;
+  --color-accent-bright-dark: 179 18 63;
+  --color-accent-foreground: 255 255 255;
+  --background-gradient-1: rgba(225, 29, 72, 0.08);
+  --background-gradient-2: rgba(225, 29, 72, 0.08);
+}
+
+[data-site-theme='light'] {
+  color-scheme: light;
+  --color-surface: 248 248 250;
+  --color-surface-foreground: 27 29 40;
+  --color-surface-alt: 255 255 255;
+  --color-surface-deep: 235 238 246;
+  --color-panel: 255 255 255;
+  --color-panel-muted: 245 246 252;
+  --color-panel-contrast: 230 234 247;
+  --color-border: 206 212 224;
+  --color-muted: 232 235 244;
+  --color-muted-foreground: 104 112 130;
+  --color-overlay: 246 247 254;
+  --background-gradient-1: rgba(253, 164, 175, 0.35);
+  --background-gradient-2: rgba(129, 140, 248, 0.25);
+}
+
+[data-site-theme='twilight'] {
+  color-scheme: dark;
+  --color-surface: 18 12 31;
+  --color-surface-foreground: 237 230 255;
+  --color-surface-alt: 27 21 48;
+  --color-surface-deep: 16 12 32;
+  --color-panel: 36 28 61;
+  --color-panel-muted: 46 34 79;
+  --color-panel-contrast: 58 44 108;
+  --color-border: 76 60 124;
+  --color-muted: 43 33 70;
+  --color-muted-foreground: 194 182 246;
+  --color-overlay: 30 22 55;
+  --color-accent: 139 92 246;
+  --color-accent-dark: 109 40 217;
+  --color-accent-bright: 165 107 255;
+  --color-accent-bright-dark: 94 33 188;
+  --color-accent-foreground: 255 255 255;
+  --background-gradient-1: rgba(139, 92, 246, 0.24);
+  --background-gradient-2: rgba(244, 114, 182, 0.22);
 }
 
 @layer base {
   body {
     min-height: 100vh;
-    background-color: #0b0b0f;
+    background-color: rgb(var(--color-surface) / 1);
     background-image:
-      radial-gradient(1200px 600px at 20% -10%, rgba(225, 29, 72, 0.08), transparent 60%),
-      radial-gradient(800px 500px at 100% 0%, rgba(225, 29, 72, 0.08), transparent 55%);
+      radial-gradient(1200px 600px at 20% -10%, var(--background-gradient-1), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, var(--background-gradient-2), transparent 55%);
     background-attachment: fixed;
-    color: theme('colors.surface.foreground');
+    color: rgb(var(--color-surface-foreground) / 1);
     font-family: theme('fontFamily.sans');
     letter-spacing: 0.01em;
   }
@@ -27,15 +84,15 @@
   }
 
   ::selection {
-    background-color: theme('colors.accent.DEFAULT');
-    color: theme('colors.accent.foreground');
+    background-color: rgb(var(--color-accent) / 1);
+    color: rgb(var(--color-accent-foreground) / 1);
   }
 
   button:focus-visible,
   input:focus-visible,
   select:focus-visible,
   textarea:focus-visible {
-    outline: 2px solid theme('colors.accent.DEFAULT');
+    outline: 2px solid rgb(var(--color-accent) / 1);
     outline-offset: 2px;
   }
 
@@ -72,11 +129,19 @@
 
   .btn-primary {
     @apply btn border-accent text-white shadow-panel focus-visible:ring-2 focus-visible:ring-accent/60;
-    background-image: linear-gradient(180deg, #e11d48, #9f1239);
+    background-image: linear-gradient(
+      180deg,
+      rgb(var(--color-accent) / 1),
+      rgb(var(--color-accent-dark) / 1)
+    );
   }
 
   .btn-primary:hover {
-    background-image: linear-gradient(180deg, #f31f55, #b3123f);
+    background-image: linear-gradient(
+      180deg,
+      rgb(var(--color-accent-bright) / 1),
+      rgb(var(--color-accent-bright-dark) / 1)
+    );
   }
 
   .btn-muted {
@@ -88,7 +153,7 @@
     @apply h-full overflow-y-auto pr-3;
     max-height: inherit;
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.accent.DEFAULT') transparent;
+    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
     scroll-padding-right: 0.75rem;
   }
 
@@ -101,19 +166,27 @@
   }
 
   .section-scroll::-webkit-scrollbar-track {
-    background: rgba(8, 8, 14, 0.7);
+    background: rgb(var(--color-surface-deep) / 0.7);
     border-radius: 9999px;
   }
 
   .section-scroll::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(255, 47, 93, 0.55), rgba(255, 110, 150, 0.4));
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-accent) / 0.55),
+      rgb(var(--color-accent-bright) / 0.4)
+    );
     border-radius: 9999px;
-    border: 2px solid rgba(11, 11, 19, 0.9);
-    box-shadow: 0 8px 18px rgba(255, 47, 93, 0.25);
+    border: 2px solid rgb(var(--color-surface-deep) / 0.9);
+    box-shadow: 0 8px 18px rgb(var(--color-accent) / 0.25);
   }
 
   .section-scroll::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(255, 71, 119, 0.75), rgba(255, 132, 170, 0.55));
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-accent-bright) / 0.75),
+      rgb(var(--color-accent-bright) / 0.55)
+    );
   }
 
   .badge {
@@ -159,7 +232,7 @@
   .tab-scroll-area {
     @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.accent.DEFAULT') transparent;
+    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
 
   .gacha-tabs {
@@ -181,23 +254,35 @@
     position: absolute;
     inset: 0;
     border-radius: 0.75rem 0.75rem 0 0;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgb(var(--color-border) / 0.45);
     border-bottom: 0;
-    background: linear-gradient(180deg, rgba(36, 36, 52, 0.85), rgba(16, 16, 24, 0.8));
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-panel-contrast) / 0.85),
+      rgb(var(--color-surface-deep) / 0.82)
+    );
     opacity: 0.85;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
   }
 
   .gacha-tab--active::before {
-    background: linear-gradient(180deg, rgba(255, 63, 102, 0.95), rgba(255, 63, 102, 0.75));
-    border-color: rgba(255, 81, 122, 0.95);
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-accent) / 0.95),
+      rgb(var(--color-accent) / 0.75)
+    );
+    border-color: rgb(var(--color-accent) / 0.95);
     opacity: 1;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 18px 36px rgba(255, 63, 102, 0.35);
   }
 
   .gacha-tab--inactive:hover::before {
-    background: linear-gradient(180deg, rgba(52, 52, 72, 0.92), rgba(20, 20, 30, 0.82));
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-panel-contrast) / 0.92),
+      rgb(var(--color-surface-deep) / 0.82)
+    );
     border-color: rgba(255, 63, 102, 0.55);
     opacity: 1;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);

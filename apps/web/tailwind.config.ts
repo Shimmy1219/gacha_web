@@ -18,20 +18,29 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#0b0b0f',
-          foreground: '#f5f5f6'
+          DEFAULT: 'rgb(var(--color-surface) / <alpha-value>)',
+          foreground: 'rgb(var(--color-surface-foreground) / <alpha-value>)',
+          alt: 'rgb(var(--color-surface-alt) / <alpha-value>)',
+          deep: 'rgb(var(--color-surface-deep) / <alpha-value>)'
         },
-        border: '#2a2a36',
-        panel: '#15151b',
+        border: 'rgb(var(--color-border) / <alpha-value>)',
+        panel: {
+          DEFAULT: 'rgb(var(--color-panel) / <alpha-value>)',
+          muted: 'rgb(var(--color-panel-muted) / <alpha-value>)',
+          contrast: 'rgb(var(--color-panel-contrast) / <alpha-value>)'
+        },
         accent: {
-          DEFAULT: '#e11d48',
-          dark: '#9f1239',
-          foreground: '#ffffff'
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          dark: 'rgb(var(--color-accent-dark) / <alpha-value>)',
+          bright: 'rgb(var(--color-accent-bright) / <alpha-value>)',
+          'bright-dark': 'rgb(var(--color-accent-bright-dark) / <alpha-value>)',
+          foreground: 'rgb(var(--color-accent-foreground) / <alpha-value>)'
         },
         muted: {
-          DEFAULT: '#23232b',
-          foreground: '#b3b3bd'
+          DEFAULT: 'rgb(var(--color-muted) / <alpha-value>)',
+          foreground: 'rgb(var(--color-muted-foreground) / <alpha-value>)'
         },
+        overlay: 'rgb(var(--color-overlay) / <alpha-value>)',
         discord: {
           primary: '#5865F2',
           hover: '#4752C4',

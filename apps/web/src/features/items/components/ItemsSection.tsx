@@ -601,7 +601,7 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
       aria-disabled={disabled}
     >
       <div className="flex flex-1 flex-col space-y-3">
-        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-[#1b1b22] text-5xl font-semibold text-accent">
+        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-panel-muted text-5xl font-semibold text-accent">
           +
         </div>
         <div className="space-y-1">
