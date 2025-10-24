@@ -55,13 +55,13 @@ const DEFAULT_MENU_HEIGHT_GUESS = 260;
 const DEFAULT_CLASS_NAMES: SingleSelectDropdownClassNames = {
   root: 'relative',
   button:
-    'inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel px-3 py-2 text-sm font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+    'inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel px-3 py-2 text-sm font-semibold text-surface-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
   buttonOpen: 'border-accent text-accent',
   buttonClosed: 'hover:border-accent/70',
   icon: 'h-4 w-4 text-muted-foreground transition-transform',
   iconOpen: 'rotate-180 text-accent',
   menu:
-    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm backdrop-blur-sm',
   option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
   optionActive: 'bg-accent/10 text-surface-foreground',
   optionInactive: 'text-muted-foreground hover:bg-surface/40',
