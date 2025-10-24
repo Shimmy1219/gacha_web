@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { useLockBodyScroll } from '../../hooks/dom/useLockBodyScroll';
 
@@ -19,6 +20,13 @@ export function ResponsiveToolbarRail({
   labelledBy
 }: ResponsiveToolbarRailProps): JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
   useEffect(() => {
     if (!open) {
       return;
@@ -48,7 +56,7 @@ export function ResponsiveToolbarRail({
     };
   }, [open]);
 
-  return (
+  const content = (
     <div className="responsive-toolbar-rail lg:hidden" aria-hidden={!open}>
       {open ? (
         <>
@@ -73,4 +81,10 @@ export function ResponsiveToolbarRail({
       ) : null}
     </div>
   );
+
+  if (mounted && typeof document !== 'undefined') {
+    return createPortal(content, document.body);
+  }
+
+  return content;
 }
