@@ -74,6 +74,18 @@ function openDiscordAppWithFallback(appAuthorizeUrl: string, webAuthorizeUrl: st
   window.location.assign(appAuthorizeUrl);
 }
 
+function resolveLoginContext(): 'browser' | 'pwa' {
+  if (typeof window === 'undefined') {
+    return 'browser';
+  }
+
+  const mediaStandalone = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
+  const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
+  const isIosStandalone = typeof navigatorWithStandalone.standalone === 'boolean' && navigatorWithStandalone.standalone;
+
+  return mediaStandalone || isIosStandalone ? 'pwa' : 'browser';
+}
+
 async function fetchSession(): Promise<DiscordSessionData> {
   const response = await fetch('/api/discord/me?soft=1', {
     headers: {
@@ -98,7 +110,9 @@ export function useDiscordSession(): UseDiscordSessionResult {
   });
 
   const login = useCallback(async () => {
-    const loginUrl = '/api/auth/discord/start';
+    const baseLoginUrl = '/api/auth/discord/start';
+    const loginContext = resolveLoginContext();
+    const loginUrl = `${baseLoginUrl}?context=${encodeURIComponent(loginContext)}`;
 
     try {
       const response = await fetch(loginUrl, {
