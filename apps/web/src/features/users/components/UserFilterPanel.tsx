@@ -39,20 +39,20 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
         classNames={{
           root: 'user-filter-panel__select-wrapper relative',
           button:
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-[#1b1b22] px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
           buttonOpen: 'border-accent text-accent',
           buttonClosed: 'hover:border-accent/70',
           icon: 'user-filter-panel__select-icon h-4 w-4 transition-transform',
           iconOpen: 'rotate-180',
           menu:
-            'user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
+            'user-filter-panel__options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
           allButton:
-            'user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-white/5',
-          divider: 'user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-white/10 to-transparent',
+            'user-filter-panel__options-all flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-surface/40',
+          divider: 'user-filter-panel__options-divider h-px bg-gradient-to-r from-transparent via-border/60 to-transparent',
           option:
             'user-filter-panel__option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
           optionActive: 'bg-accent/10 text-surface-foreground',
-          optionInactive: 'text-muted-foreground hover:bg-white/5',
+          optionInactive: 'text-muted-foreground hover:bg-surface/40',
           optionLabel: 'flex flex-col',
           optionDescription: 'user-filter-panel__option-description text-[10px] text-muted-foreground/80',
           checkIcon: 'user-filter-panel__option-check h-4 w-4 transition text-accent'

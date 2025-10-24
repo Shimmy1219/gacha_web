@@ -52,6 +52,24 @@ export interface SingleSelectDropdownProps<Value extends string = string> {
 
 const DEFAULT_MENU_HEIGHT_GUESS = 260;
 
+const DEFAULT_CLASS_NAMES: SingleSelectDropdownClassNames = {
+  root: 'relative',
+  button:
+    'inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel px-3 py-2 text-sm font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+  buttonOpen: 'border-accent text-accent',
+  buttonClosed: 'hover:border-accent/70',
+  icon: 'h-4 w-4 text-muted-foreground transition-transform',
+  iconOpen: 'rotate-180 text-accent',
+  menu:
+    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+  option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
+  optionActive: 'bg-accent/10 text-surface-foreground',
+  optionInactive: 'text-muted-foreground hover:bg-surface/40',
+  optionLabel: 'flex-1 text-left',
+  optionDescription: 'text-[10px] text-muted-foreground/80',
+  checkIcon: 'h-4 w-4 text-accent transition'
+};
+
 export function SingleSelectDropdown<Value extends string = string>({
   id,
   value,
@@ -68,6 +86,25 @@ export function SingleSelectDropdown<Value extends string = string>({
 }: SingleSelectDropdownProps<Value>): JSX.Element {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const classes = useMemo(
+    () => ({
+      root: clsx(DEFAULT_CLASS_NAMES.root, classNames?.root),
+      button: clsx(DEFAULT_CLASS_NAMES.button, classNames?.button),
+      buttonOpen: clsx(DEFAULT_CLASS_NAMES.buttonOpen, classNames?.buttonOpen),
+      buttonClosed: clsx(DEFAULT_CLASS_NAMES.buttonClosed, classNames?.buttonClosed),
+      icon: clsx(DEFAULT_CLASS_NAMES.icon, classNames?.icon),
+      iconOpen: clsx(DEFAULT_CLASS_NAMES.iconOpen, classNames?.iconOpen),
+      menu: clsx(DEFAULT_CLASS_NAMES.menu, classNames?.menu),
+      option: clsx(DEFAULT_CLASS_NAMES.option, classNames?.option),
+      optionActive: clsx(DEFAULT_CLASS_NAMES.optionActive, classNames?.optionActive),
+      optionInactive: clsx(DEFAULT_CLASS_NAMES.optionInactive, classNames?.optionInactive),
+      optionLabel: clsx(DEFAULT_CLASS_NAMES.optionLabel, classNames?.optionLabel),
+      optionDescription: clsx(DEFAULT_CLASS_NAMES.optionDescription, classNames?.optionDescription),
+      checkIcon: clsx(DEFAULT_CLASS_NAMES.checkIcon, classNames?.checkIcon)
+    }),
+    [classNames]
+  );
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent): void {
@@ -129,13 +166,13 @@ export function SingleSelectDropdown<Value extends string = string>({
   };
 
   return (
-    <div ref={containerRef} className={clsx(classNames?.root)}>
+    <div ref={containerRef} className={clsx(classes.root)}>
       <button
         id={id}
         type="button"
         className={clsx(
-          classNames?.button,
-          open ? classNames?.buttonOpen : classNames?.buttonClosed,
+          classes.button,
+          open ? classes.buttonOpen : classes.buttonClosed,
           disabled && 'pointer-events-none opacity-60'
         )}
         aria-haspopup="listbox"
@@ -143,11 +180,11 @@ export function SingleSelectDropdown<Value extends string = string>({
         onClick={toggleOpen}
         disabled={disabled}
       >
-        <span className={classNames?.optionLabel}>{buttonLabel}</span>
-        <ChevronDownIcon className={clsx(classNames?.icon, open && classNames?.iconOpen)} aria-hidden />
+        <span className={classes.optionLabel}>{buttonLabel}</span>
+        <ChevronDownIcon className={clsx(classes.icon, open && classes.iconOpen)} aria-hidden />
       </button>
       {open ? (
-        <div role="listbox" className={clsx(classNames?.menu)} style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS }}>
+        <div role="listbox" className={clsx(classes.menu)} style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS }}>
           {options.map((option) => {
             const active = option.value === resolvedValue;
             return (
@@ -158,8 +195,8 @@ export function SingleSelectDropdown<Value extends string = string>({
                 aria-selected={active}
                 disabled={option.disabled}
                 className={clsx(
-                  classNames?.option,
-                  active ? classNames?.optionActive : classNames?.optionInactive,
+                  classes.option,
+                  active ? classes.optionActive : classes.optionInactive,
                   option.disabled && 'cursor-not-allowed opacity-60'
                 )}
                 onClick={() => {
@@ -170,15 +207,15 @@ export function SingleSelectDropdown<Value extends string = string>({
                   setOpen(false);
                 }}
               >
-                <span className={classNames?.optionLabel}>
+                <span className={classes.optionLabel}>
                   {renderOptionContent ? renderOptionContent(option, active) : option.label}
                   {option.description ? (
-                    <span className={clsx(classNames?.optionDescription)}>{option.description}</span>
+                    <span className={clsx(classes.optionDescription)}>{option.description}</span>
                   ) : null}
                 </span>
                 {showCheckIndicator ? (
                   <CheckIcon
-                    className={clsx(classNames?.checkIcon, active ? 'opacity-100' : 'opacity-0')}
+                    className={clsx(classes.checkIcon, active ? 'opacity-100' : 'opacity-0')}
                     aria-hidden
                   />
                 ) : null}

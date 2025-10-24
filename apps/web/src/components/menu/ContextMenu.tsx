@@ -311,7 +311,7 @@ export function ContextMenu({
           return (
             <div
               key={entry.id ?? `separator-${options.menuId}-${index}`}
-              className={clsx('my-1 border-t border-border/40', classNames?.separator, entry.className)}
+              className={clsx('my-1 border-t border-border/60', classNames?.separator, entry.className)}
             />
           );
         }
@@ -319,7 +319,10 @@ export function ContextMenu({
         if (entry.type === 'submenu') {
           const key = entry.id;
           const disabled = entry.disabled ?? false;
-          const toneClass = entry.tone === 'danger' ? classNames?.itemDanger : undefined;
+          const toneClass =
+            entry.tone === 'danger'
+              ? clsx('text-rose-400 hover:bg-rose-500/10', classNames?.itemDanger)
+              : undefined;
           return (
             <button
               key={key}
@@ -367,7 +370,10 @@ export function ContextMenu({
 
         const key = entry.id ?? `item-${options.menuId}-${index}`;
         const disabled = entry.disabled ?? false;
-        const toneClass = entry.tone === 'danger' ? classNames?.itemDanger : undefined;
+        const toneClass =
+          entry.tone === 'danger'
+            ? clsx('text-rose-400 hover:bg-rose-500/10', classNames?.itemDanger)
+            : undefined;
         return (
           <button
             key={key}
@@ -491,7 +497,7 @@ export function ContextMenu({
       ref={menuRef}
       role="menu"
       className={clsx(
-        'fixed z-[1000] min-w-[220px] max-w-[280px] rounded-xl border border-white/10 bg-[#14141c] p-2 text-sm shadow-lg shadow-black/60',
+        'fixed z-[1000] min-w-[220px] max-w-[280px] rounded-xl border border-border/60 bg-panel/95 p-2 text-sm shadow-xl shadow-black/60 backdrop-blur-sm',
         classNames?.menu
       )}
       style={{ top: position.y, left: position.x, width, ...style }}
@@ -520,7 +526,7 @@ export function ContextMenu({
           ref={submenuRef}
           role="menu"
           className={clsx(
-            'fixed z-[1001] max-h-48 min-w-[200px] max-w-[260px] space-y-1 overflow-y-auto rounded-lg border border-border/40 bg-black/80 p-1 backdrop-blur',
+            'fixed z-[1001] max-h-48 min-w-[200px] max-w-[260px] space-y-1 overflow-y-auto rounded-lg border border-border/60 bg-panel/95 p-1 shadow-xl shadow-black/60 backdrop-blur-sm',
             classNames?.menu
           )}
           style={{ top: submenu.anchor.y, left: submenu.anchor.x, width: submenu.width }}
