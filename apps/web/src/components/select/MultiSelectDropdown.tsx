@@ -66,6 +66,29 @@ export interface MultiSelectDropdownProps<
 
 const DEFAULT_MENU_HEIGHT_GUESS = 320;
 
+const DEFAULT_CLASS_NAMES: MultiSelectDropdownClassNames = {
+  root: 'relative',
+  button:
+    'inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+  buttonOpen: 'border-accent text-accent',
+  buttonClosed: 'hover:border-accent/70',
+  icon: 'h-4 w-4 text-muted-foreground transition-transform',
+  iconOpen: 'rotate-180 text-accent',
+  menu:
+    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+  option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
+  optionActive: 'bg-accent/10 text-surface-foreground',
+  optionInactive: 'text-muted-foreground hover:bg-surface/40',
+  optionDescription: 'text-[10px] text-muted-foreground/80',
+  optionLabel: 'flex flex-col gap-1 text-left',
+  checkIcon: 'h-4 w-4 text-accent transition',
+  allButton:
+    'flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground transition hover:bg-surface/40',
+  allButtonActive: 'text-accent',
+  allButtonInactive: 'text-muted-foreground',
+  divider: 'h-px bg-gradient-to-r from-transparent via-border/60 to-transparent'
+};
+
 export function MultiSelectDropdown<Value extends string = string, AllValue extends string = '*'>({
   id,
   value,
@@ -84,6 +107,29 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const classes = useMemo(
+    () => ({
+      root: clsx(DEFAULT_CLASS_NAMES.root, classNames?.root),
+      button: clsx(DEFAULT_CLASS_NAMES.button, classNames?.button),
+      buttonOpen: clsx(DEFAULT_CLASS_NAMES.buttonOpen, classNames?.buttonOpen),
+      buttonClosed: clsx(DEFAULT_CLASS_NAMES.buttonClosed, classNames?.buttonClosed),
+      icon: clsx(DEFAULT_CLASS_NAMES.icon, classNames?.icon),
+      iconOpen: clsx(DEFAULT_CLASS_NAMES.iconOpen, classNames?.iconOpen),
+      menu: clsx(DEFAULT_CLASS_NAMES.menu, classNames?.menu),
+      option: clsx(DEFAULT_CLASS_NAMES.option, classNames?.option),
+      optionActive: clsx(DEFAULT_CLASS_NAMES.optionActive, classNames?.optionActive),
+      optionInactive: clsx(DEFAULT_CLASS_NAMES.optionInactive, classNames?.optionInactive),
+      optionDescription: clsx(DEFAULT_CLASS_NAMES.optionDescription, classNames?.optionDescription),
+      optionLabel: clsx(DEFAULT_CLASS_NAMES.optionLabel, classNames?.optionLabel),
+      checkIcon: clsx(DEFAULT_CLASS_NAMES.checkIcon, classNames?.checkIcon),
+      allButton: clsx(DEFAULT_CLASS_NAMES.allButton, classNames?.allButton),
+      allButtonActive: clsx(DEFAULT_CLASS_NAMES.allButtonActive, classNames?.allButtonActive),
+      allButtonInactive: clsx(DEFAULT_CLASS_NAMES.allButtonInactive, classNames?.allButtonInactive),
+      divider: clsx(DEFAULT_CLASS_NAMES.divider, classNames?.divider)
+    }),
+    [classNames]
+  );
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent): void {
@@ -207,13 +253,13 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
   };
 
   return (
-    <div ref={containerRef} className={clsx(classNames?.root)}>
+    <div ref={containerRef} className={clsx(classes.root)}>
       <button
         id={id}
         type="button"
         className={clsx(
-          classNames?.button,
-          open ? classNames?.buttonOpen : classNames?.buttonClosed,
+          classes.button,
+          open ? classes.buttonOpen : classes.buttonClosed,
           disabled && 'pointer-events-none opacity-60'
         )}
         aria-haspopup="listbox"
@@ -223,7 +269,7 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
       >
         <span>{buttonLabel}</span>
         <ChevronDownIcon
-          className={clsx(classNames?.icon, open && classNames?.iconOpen)}
+          className={clsx(classes.icon, open && classes.iconOpen)}
           aria-hidden
         />
       </button>
@@ -232,29 +278,29 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
           ref={menuRef}
           role="listbox"
           aria-multiselectable
-          className={clsx(classNames?.menu)}
+          className={clsx(classes.menu)}
           style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS, overflowY: 'auto' }}
         >
           {showSelectAll ? (
             <button
               type="button"
               className={clsx(
-                classNames?.allButton,
-                allSelected ? classNames?.allButtonActive : classNames?.allButtonInactive
+                classes.allButton,
+                allSelected ? classes.allButtonActive : classes.allButtonInactive
               )}
               onClick={handleToggleAll}
             >
               <span>{resolvedLabels.all}</span>
               <CheckIcon
                 className={clsx(
-                  classNames?.checkIcon,
+                  classes.checkIcon,
                   allSelected ? 'opacity-100' : 'opacity-0'
                 )}
               />
             </button>
           ) : null}
           {showSelectAll ? (
-            <div className={clsx(classNames?.divider)} aria-hidden />
+            <div className={clsx(classes.divider)} aria-hidden />
           ) : null}
           {options.map((option) => {
             const active = selectedSet.has(option.value);
@@ -266,8 +312,8 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
                 aria-selected={active}
                 disabled={option.disabled}
                 className={clsx(
-                  classNames?.option,
-                  active ? classNames?.optionActive : classNames?.optionInactive,
+                  classes.option,
+                  active ? classes.optionActive : classes.optionInactive,
                   option.disabled && 'cursor-not-allowed opacity-60'
                 )}
                 onClick={() => {
@@ -277,15 +323,15 @@ export function MultiSelectDropdown<Value extends string = string, AllValue exte
                   handleToggleValue(option.value);
                 }}
               >
-                <span className={classNames?.optionLabel}>
+                <span className={classes.optionLabel}>
                   {renderOptionContent ? renderOptionContent(option, active) : option.label}
                   {option.description ? (
-                    <span className={clsx(classNames?.optionDescription)}>{option.description}</span>
+                    <span className={clsx(classes.optionDescription)}>{option.description}</span>
                   ) : null}
                 </span>
                 <CheckIcon
                   className={clsx(
-                    classNames?.checkIcon,
+                    classes.checkIcon,
                     active ? 'opacity-100' : 'opacity-0'
                   )}
                 />
