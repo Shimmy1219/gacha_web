@@ -290,7 +290,7 @@ export function App(): JSX.Element {
     <div className="app min-h-screen bg-transparent text-surface-foreground">
       <AppHeaderShell
         title="四遊楽ガチャツール"
-        tagline="SETTING · GACHA · UPLOAD · SHARE"
+        tagline="Integrated Gacha Management Tool"
         summaryLabel="TXT/JSON未読込"
         summaryVariant="warning"
         summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
