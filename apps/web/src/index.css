@@ -137,7 +137,7 @@
   }
 
   .section-scroll {
-    @apply h-full overflow-y-auto pr-3;
+    @apply h-full overflow-y-auto pr-0 md:pr-3;
     max-height: inherit;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;

@@ -21,16 +21,20 @@ export function ToolbarActions({
       ? 'hidden items-center gap-3 lg:flex'
       : 'flex w-full flex-col gap-3 lg:hidden';
 
+  const showDrawGachaButton = mode !== 'mobile';
+
   return (
     <div className={clsx('toolbar-actions', containerClass)}>
-      <button
-        type="button"
-        onClick={() => onDrawGacha?.()}
-        className="toolbar-actions__draw-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
-      >
-        <SparklesIcon className="h-4 w-4" />
-        ガチャを引く
-      </button>
+      {showDrawGachaButton ? (
+        <button
+          type="button"
+          onClick={() => onDrawGacha?.()}
+          className="toolbar-actions__draw-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
+        >
+          <SparklesIcon className="h-4 w-4" />
+          ガチャを引く
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => onRegisterGacha?.()}

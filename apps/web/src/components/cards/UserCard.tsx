@@ -72,7 +72,7 @@ export function UserCard({
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
         <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-panel p-5">
-          <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
             <Disclosure.Button
               type="button"
               className="user-card__toggle flex min-w-0 flex-1 items-start gap-2 text-left transition-colors duration-200 ease-linear"
