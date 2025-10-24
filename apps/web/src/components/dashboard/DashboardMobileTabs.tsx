@@ -73,7 +73,7 @@ export function DashboardMobileTabs({ sections, onDrawGacha }: DashboardMobileTa
                 data-view="gacha"
                 className={clsx(
                   baseTabClass,
-                  'border-accent/80 bg-accent text-accent-foreground hover:bg-accent-bright'
+                  'border-accent/70 bg-surface/40 text-accent hover:bg-accent hover:text-accent-foreground hover:border-transparent'
                 )}
               >
                 <span>ガチャ</span>
