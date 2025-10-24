@@ -609,13 +609,7 @@ export function MockStorageButton(): JSX.Element {
   }, [appPersistence]);
 
   return (
-    <div className="mock-storage-button flex flex-col gap-4 text-sm">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold text-surface-foreground">ローカルストレージ仮データ</h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          React移行用のv3スキーマに沿ったダミーデータをローカルストレージへ保存します。既存のデータは上書きされます。
-        </p>
-      </div>
+    <div className="mock-storage-button flex flex-col gap-2 text-sm">
       <button
         type="button"
         onClick={handleInsertMockData}
