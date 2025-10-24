@@ -28,6 +28,8 @@ export function SectionContainer({
   className,
   contentClassName
 }: SectionContainerProps): JSX.Element {
+  const sectionRef = useRef<HTMLElement>(null);
+  const headerWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
   const { isMobile } = useResponsiveDashboard();
@@ -70,8 +72,43 @@ export function SectionContainer({
     updateScrollbarState();
   }, [children, updateScrollbarState]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const sectionEl = sectionRef.current;
+    const headerEl = headerWrapperRef.current;
+
+    if (!sectionEl || !headerEl) {
+      return;
+    }
+
+    const updateHeaderHeight = () => {
+      const { height } = headerEl.getBoundingClientRect();
+      sectionEl.style.setProperty('--section-header-height', `${height}px`);
+    };
+
+    updateHeaderHeight();
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateHeaderHeight);
+      resizeObserver.observe(headerEl);
+    }
+
+    window.addEventListener('resize', updateHeaderHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateHeaderHeight);
+      resizeObserver?.disconnect();
+      sectionEl.style.removeProperty('--section-header-height');
+    };
+  }, []);
+
   return (
     <section
+      ref={sectionRef}
       id={id}
       className={clsx(
         'section-container group relative flex min-h-0 flex-col overflow-hidden bg-panel/95 p-4 text-sm ring-1 ring-inset ring-white/5',
@@ -83,27 +120,32 @@ export function SectionContainer({
       )}
     >
       <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-6">
-        <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
-          <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
-            {accentLabel ? (
-              <span className="section-container__accent badge">{accentLabel}</span>
-            ) : null}
-            <div className="section-container__title-block space-y-1 sm:max-w-none">
-              <div className="section-container__title-row flex items-center gap-3">
-                <h2 className="section-container__title flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
-                {filterButton ? (
-                  <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
-                    {filterButton}
-                  </div>
+        <div
+          ref={headerWrapperRef}
+          className="section-container__header-wrapper"
+        >
+          <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
+            <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
+              {accentLabel ? (
+                <span className="section-container__accent badge">{accentLabel}</span>
+              ) : null}
+              <div className="section-container__title-block space-y-1 sm:max-w-none">
+                <div className="section-container__title-row flex items-center gap-3">
+                  <h2 className="section-container__title flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+                  {filterButton ? (
+                    <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
+                      {filterButton}
+                    </div>
+                  ) : null}
+                </div>
+                {description ? (
+                  <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
                 ) : null}
               </div>
-              {description ? (
-                <p className="section-container__description text-xs text-muted-foreground sm:w-full">{description}</p>
-              ) : null}
             </div>
-          </div>
-          {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
-        </header>
+            {actions ? <div className="section-container__actions flex shrink-0 items-center gap-2">{actions}</div> : null}
+          </header>
+        </div>
         <div
           className={clsx(
             'section-container__content-wrapper min-h-0',
