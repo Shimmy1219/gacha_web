@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   const cookies = getCookies(req);
   const expectedState = cookies['d_state'];
   const verifier = cookies['d_verifier'];
+  const loginContextCookie = cookies['d_login_context'];
 
   if (!code || !state || !expectedState || !verifier || state !== expectedState) {
     log.warn('state or verifier mismatch', {
@@ -89,9 +90,91 @@ export default async function handler(req, res) {
   // sid をクッキーへ（30日）
   setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
 
+  const loginContext = loginContextCookie === 'pwa' ? 'pwa' : 'browser';
+
+  const formatParam = Array.isArray(req.query?.format) ? req.query?.format[0] : req.query?.format;
+  const acceptsJson =
+    formatParam === 'json' ||
+    (req.headers.accept || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .some((value) => value === 'application/json' || value.endsWith('+json'));
+
   // UX: ルートへ返す（必要なら /?loggedin=1 など）
   res.setHeader('Cache-Control', 'no-store');
   const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
-  log.info('login session issued', { userId: me.id, sessionIdPreview });
-  return res.redirect('/');
+  log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
+
+  // 後続リクエストで誤検知しないようにクッキーを破棄
+  setCookie(res, 'd_state', '', { maxAge: 0 });
+  setCookie(res, 'd_verifier', '', { maxAge: 0 });
+  setCookie(res, 'd_login_context', '', { maxAge: 0 });
+
+  if (acceptsJson) {
+    log.info('returning login completion payload as json response', { loginContext });
+    return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
+  }
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+
+  const guidanceMessage =
+    loginContext === 'pwa'
+      ? 'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。'
+      : 'ログインが完了しました。まもなくホームへ移動します。';
+
+  const redirectTarget = '/';
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ログイン処理中...</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #050813; color: #f9fafb; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+      main { max-width: 480px; text-align: center; background: rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 32px 28px; box-shadow: 0 18px 38px rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px); }
+      h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+      p { line-height: 1.6; margin-bottom: 1rem; }
+      a { color: #60a5fa; }
+      @media (max-width: 480px) {
+        main { padding: 24px 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ログインしました</h1>
+      <p>${guidanceMessage}</p>
+      <p><a href="${redirectTarget}">トップページに移動する</a></p>
+    </main>
+    <script>
+      (function () {
+        var target = ${JSON.stringify(redirectTarget)};
+        var navigate = function () {
+          try {
+            window.location.replace(target);
+          } catch (error) {
+            window.location.href = target;
+          }
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          navigate();
+        } else {
+          document.addEventListener('DOMContentLoaded', navigate, { once: true });
+        }
+        window.setTimeout(function () {
+          try {
+            window.location.href = target;
+          } catch (error) {
+            // no-op
+          }
+        }, 4000);
+      })();
+    </script>
+    <noscript>
+      <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
+    </noscript>
+  </body>
+</html>`;
+
+  return res.status(200).send(html);
 }

@@ -28,6 +28,10 @@ export default async function handler(req, res) {
   setCookie(res, 'd_state', state, { maxAge: 600 });
   setCookie(res, 'd_verifier', verifier, { maxAge: 600 });
 
+  const contextParam = Array.isArray(req.query.context) ? req.query.context[0] : req.query.context;
+  const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
+  setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
+
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.DISCORD_CLIENT_ID,
