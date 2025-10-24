@@ -287,7 +287,7 @@ export function App(): JSX.Element {
   };
 
   return (
-    <div className="app min-h-screen bg-transparent text-surface-foreground">
+    <div className="app min-h-screen bg-[rgb(var(--site-color-10)_/_0.95)] text-surface-foreground">
       <AppHeaderShell
         title="四遊楽ガチャツール"
         tagline="Integrated Gacha Management Tool"
@@ -300,7 +300,7 @@ export function App(): JSX.Element {
         onExportAll={handleExportAll}
         onOpenPageSettings={handleOpenPageSettings}
       />
-      <main ref={mainRef} className="app__main px-4 pb-[5px] pt-4">
+      <main ref={mainRef} className="app__main bg-[rgb(var(--site-color-10)_/_0.9)] px-4 pb-[5px] pt-4">
         <AppRoutes />
       </main>
     </div>

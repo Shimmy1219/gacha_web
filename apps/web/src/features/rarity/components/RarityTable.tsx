@@ -54,7 +54,7 @@ export function RarityTable({
             <th className="rarity-section__column rarity-section__column-actions py-2.5" />
           </tr>
         </thead>
-        <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
+        <tbody className="rarity-section__table-body divide-y divide-border/40 bg-[rgb(var(--site-color-8)_/_0.6)]">
           {rows.map((row) => {
             const presentation = getRarityTextPresentation(row.color);
             const deletable = onDelete && (canDeleteRow ? canDeleteRow(row.id) : true);
@@ -111,7 +111,7 @@ export function RarityTable({
                 <td className="rarity-section__cell rarity-section__cell-actions px-1 py-2 text-right">
                   <button
                     type="button"
-                    className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-[rgb(var(--site-color-8)_/_0.4)] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => onDelete?.(row.id)}
                     disabled={!deletable}
                   >
@@ -125,7 +125,7 @@ export function RarityTable({
             <td className="rarity-section__cell px-1 py-3" colSpan={4}>
               <button
                 type="button"
-                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-[rgb(var(--site-color-8)_/_0.4)] px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={onAdd}
                 disabled={!onAdd}
               >

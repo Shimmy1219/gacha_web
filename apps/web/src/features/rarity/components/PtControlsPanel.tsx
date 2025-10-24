@@ -112,7 +112,7 @@ function InlineNumberField({
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
       className={clsx(
-        'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-surface/70 px-3 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-[rgb(var(--site-color-8)_/_0.7)] px-3 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
         className
       )}
     />
@@ -156,13 +156,13 @@ function InlineSelectField({
       classNames={{
         root: 'pt-controls-panel__select-wrapper relative',
         button:
-          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-[#1b1b22] px-3 py-2 text-xs font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-[rgb(var(--site-color-8)_/_0.92)] px-3 py-2 text-xs font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
         buttonOpen: 'border-accent text-accent',
         buttonClosed: 'hover:border-accent/70',
         icon: 'pt-controls-panel__select-icon h-4 w-4 transition-transform',
         iconOpen: 'rotate-180',
         menu:
-          'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[#15151b]/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
+          'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-[rgb(var(--site-color-8)_/_0.95)] p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)]',
         option:
           'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
         optionActive: 'bg-accent/10 text-surface-foreground',
@@ -193,7 +193,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="pt-controls-panel__remove-button inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-surface/70 text-sm font-bold leading-none text-muted-foreground transition hover:border-accent/70 hover:text-surface-foreground"
+      className="pt-controls-panel__remove-button inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-[rgb(var(--site-color-8)_/_0.7)] text-sm font-bold leading-none text-muted-foreground transition hover:border-accent/70 hover:text-surface-foreground"
       aria-label="行を削除"
     >
       －
@@ -373,7 +373,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
   }, [perPull, complete, bundles, guarantees, emitSettingsChange]);
 
   return (
-    <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl p-3">
+    <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl bg-[rgb(var(--site-color-8)_/_0.85)] p-3">
       <ControlsRow label="1回の消費pt">
         <InlineNumberField
           value={perPull}
@@ -414,7 +414,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
         {bundles.map((bundle, index) => (
           <div
             key={bundle.id}
-            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-[rgb(var(--site-color-8)_/_0.8)] px-3 py-2"
           >
             <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
@@ -475,7 +475,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
         {guarantees.map((guarantee, index) => (
           <div
             key={guarantee.id}
-            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-panel/80 px-3 py-2"
+            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/40 bg-[rgb(var(--site-color-8)_/_0.8)] px-3 py-2"
           >
             <div className="pt-controls-panel__guarantee-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField

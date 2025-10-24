@@ -71,7 +71,7 @@ export function SectionContainer({
     <section
       id={id}
       className={clsx(
-        'section-container group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-panel/95 p-4 text-sm ring-1 ring-inset ring-white/5',
+        'section-container group relative flex h-full min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-border/70 bg-[rgb(var(--site-color-9)_/_0.95)] p-4 text-sm ring-1 ring-inset ring-white/5',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
         'after:pointer-events-none after:absolute after:-inset-x-px after:-inset-y-px after:bg-panel-overlay after:opacity-0 after:transition-opacity after:duration-300 group-hover:after:opacity-100',
         className
