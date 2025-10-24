@@ -69,13 +69,13 @@ const DEFAULT_MENU_HEIGHT_GUESS = 320;
 const DEFAULT_CLASS_NAMES: MultiSelectDropdownClassNames = {
   root: 'relative',
   button:
-    'inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+    'inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
   buttonOpen: 'border-accent text-accent',
   buttonClosed: 'hover:border-accent/70',
   icon: 'h-4 w-4 text-muted-foreground transition-transform',
   iconOpen: 'rotate-180 text-accent',
   menu:
-    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 backdrop-blur-sm',
   option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
   optionActive: 'bg-accent/10 text-surface-foreground',
   optionInactive: 'text-muted-foreground hover:bg-surface/40',
