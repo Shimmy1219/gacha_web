@@ -22,6 +22,7 @@ export default async function handler(req, res) {
   const cookies = getCookies(req);
   const expectedState = cookies['d_state'];
   const verifier = cookies['d_verifier'];
+  const loginContext = cookies['d_login_context'];
 
   if (!code || !state || !expectedState || !verifier || state !== expectedState) {
     log.warn('state or verifier mismatch', {
@@ -91,7 +92,81 @@ export default async function handler(req, res) {
 
   // UX: ルートへ返す（必要なら /?loggedin=1 など）
   res.setHeader('Cache-Control', 'no-store');
+  if (loginContext) {
+    setCookie(res, 'd_login_context', '', { maxAge: 0 });
+  }
+
   const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
-  log.info('login session issued', { userId: me.id, sessionIdPreview });
+  log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext: loginContext || null });
+
+  if (loginContext === 'pwa') {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.end(`<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Discordログイン完了</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #1f2933;
+        color: #f8fafc;
+        display: flex;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+      }
+      main {
+        max-width: 480px;
+        width: 100%;
+        background: rgba(15, 23, 42, 0.8);
+        border-radius: 16px;
+        padding: 32px 24px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 16px;
+      }
+      p {
+        line-height: 1.6;
+        margin: 0 0 16px;
+      }
+      button {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 24px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #0f172a;
+        background: #38bdf8;
+        cursor: pointer;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      .note {
+        font-size: 0.85rem;
+        color: #cbd5f5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>認証が完了しました</h1>
+      <p>インストール済みのアプリに戻ってご利用を続けてください。</p>
+      <button type="button" onclick="window.close()">この画面を閉じる</button>
+      <p class="note">自動で閉じない場合は、手動でブラウザを閉じてアプリに戻ってください。</p>
+    </main>
+  </body>
+</html>`);
+  }
+
   return res.redirect('/');
 }

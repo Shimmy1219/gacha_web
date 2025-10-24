@@ -43,6 +43,24 @@ function isProbablyMobileDevice(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(userAgent);
 }
 
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const mediaStandalone = typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
+  if (mediaStandalone) {
+    return true;
+  }
+
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+  return Boolean(navigatorWithStandalone?.standalone);
+}
+
 function openDiscordAppWithFallback(appAuthorizeUrl: string, webAuthorizeUrl: string): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('Discord deep link is not available in this environment');
@@ -98,7 +116,8 @@ export function useDiscordSession(): UseDiscordSessionResult {
   });
 
   const login = useCallback(async () => {
-    const loginUrl = '/api/auth/discord/start';
+    const baseLoginUrl = '/api/auth/discord/start';
+    const loginUrl = isStandalonePwa() ? `${baseLoginUrl}?context=pwa` : baseLoginUrl;
 
     try {
       const response = await fetch(loginUrl, {

@@ -28,6 +28,12 @@ export default async function handler(req, res) {
   setCookie(res, 'd_state', state, { maxAge: 600 });
   setCookie(res, 'd_verifier', verifier, { maxAge: 600 });
 
+  const rawContext = Array.isArray(req.query.context) ? req.query.context[0] : req.query.context;
+  const loginContext = typeof rawContext === 'string' && rawContext.length > 0 ? rawContext.slice(0, 32) : undefined;
+  if (loginContext) {
+    setCookie(res, 'd_login_context', loginContext, { maxAge: 600 });
+  }
+
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.DISCORD_CLIENT_ID,
@@ -42,6 +48,7 @@ export default async function handler(req, res) {
   log.info('issuing discord authorize redirect', {
     statePreview: `${state.slice(0, 4)}...`,
     hasVerifier: Boolean(verifier),
+    loginContext: loginContext || null,
   });
 
   const authorizeQuery = params.toString();
