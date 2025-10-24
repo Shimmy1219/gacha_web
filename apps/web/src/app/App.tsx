@@ -77,6 +77,32 @@ export function App(): JSX.Element {
       return;
     }
 
+    const preventGestureZoom = (event: Event) => {
+      if (typeof event.preventDefault === 'function') {
+        event.preventDefault();
+      }
+    };
+
+    const gestureEvents = ['gesturestart', 'gesturechange', 'gestureend'] as const;
+
+    gestureEvents.forEach((eventName) => {
+      document.addEventListener(eventName as any, preventGestureZoom as EventListener, {
+        passive: false
+      });
+    });
+
+    return () => {
+      gestureEvents.forEach((eventName) => {
+        document.removeEventListener(eventName as any, preventGestureZoom as EventListener);
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
     const mainEl = mainRef.current;
     if (!mainEl) {
       return;

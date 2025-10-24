@@ -57,6 +57,10 @@
 }
 
 @layer base {
+  html {
+    overscroll-behavior: none;
+  }
+
   body {
     min-height: 100vh;
     background-color: rgb(var(--color-surface) / 1);
@@ -67,6 +71,8 @@
     color: rgb(var(--color-surface-foreground) / 1);
     font-family: theme('fontFamily.sans');
     letter-spacing: 0.01em;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
   }
 
   a {
