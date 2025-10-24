@@ -61,14 +61,14 @@ export function DiscordLoginButton({
   };
 
   if (!user) {
-    const handleLoginClick = () => {
+    const handleLoginClick = async () => {
       if (isLoggingIn) {
         return;
       }
 
       setIsLoggingIn(true);
       try {
-        login();
+        await login();
       } catch (error) {
         console.error('Discordログインの開始に失敗しました', error);
         setIsLoggingIn(false);
