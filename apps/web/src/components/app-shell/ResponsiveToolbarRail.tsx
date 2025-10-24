@@ -53,7 +53,7 @@ export function ResponsiveToolbarRail({
       {open ? (
         <>
           <div
-            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgba(11,11,15,0.78)]"
+            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgb(11,11,15)]"
             onClick={onClose}
           />
           <aside

@@ -103,6 +103,10 @@
     max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
   }
 
+  .section-container--mobile {
+    max-height: none;
+  }
+
   .section-container__body,
   .section-container__content-wrapper,
   .section-container__content {
