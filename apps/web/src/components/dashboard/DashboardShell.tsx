@@ -24,6 +24,7 @@ export interface DashboardSectionConfig {
 interface DashboardShellProps {
   sections: DashboardSectionConfig[];
   controlsSlot?: ReactNode;
+  onDrawGacha?: () => void;
 }
 
 interface DashboardContextValue {
@@ -61,7 +62,7 @@ export function useDashboardShell(): DashboardContextValue {
   return context;
 }
 
-export function DashboardShell({ sections, controlsSlot }: DashboardShellProps): JSX.Element {
+export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -292,7 +293,7 @@ export function DashboardShell({ sections, controlsSlot }: DashboardShellProps):
           ))}
         </div>
 
-        <DashboardMobileTabs sections={sections} />
+      <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} />
       </div>
     </DashboardContext.Provider>
   );
