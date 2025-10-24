@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode
 } from 'react';
@@ -129,6 +130,37 @@ export function ContextMenu({
 
   closeCallback.current = onClose;
 
+  const getFocusableButtons = useCallback((container: HTMLDivElement | null) => {
+    if (!container) {
+      return [] as HTMLButtonElement[];
+    }
+    return Array.from(
+      container.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')
+    );
+  }, []);
+
+  const focusFirstItem = useCallback(
+    (container: HTMLDivElement | null) => {
+      const buttons = getFocusableButtons(container);
+      if (buttons.length === 0) {
+        return;
+      }
+      buttons[0].focus();
+    },
+    [getFocusableButtons]
+  );
+
+  const focusLastItem = useCallback(
+    (container: HTMLDivElement | null) => {
+      const buttons = getFocusableButtons(container);
+      if (buttons.length === 0) {
+        return;
+      }
+      buttons[buttons.length - 1].focus();
+    },
+    [getFocusableButtons]
+  );
+
   const handleClose = useCallback(() => {
     setSubmenu(null);
     closeCallback.current();
@@ -140,6 +172,10 @@ export function ContextMenu({
     }
     setPosition(clampPosition({ anchor, width, height: DEFAULT_MENU_HEIGHT_GUESS }));
   }, [anchor, targetContainer, width]);
+
+  useEffect(() => {
+    focusFirstItem(menuRef.current);
+  }, [anchor, items, focusFirstItem]);
 
   useEffect(() => {
     if (!targetContainer) {
@@ -387,6 +423,65 @@ export function ContextMenu({
     [closeOnSelect, handleClose]
   );
 
+  const handleMenuKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const container = event.currentTarget as HTMLDivElement | null;
+      const buttons = getFocusableButtons(container);
+      if (buttons.length === 0) {
+        return;
+      }
+
+      const activeElement = document.activeElement as HTMLButtonElement | null;
+      const currentIndex = activeElement ? buttons.indexOf(activeElement) : -1;
+
+      const focusByIndex = (index: number) => {
+        const normalized = (index + buttons.length) % buttons.length;
+        buttons[normalized]?.focus();
+      };
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          focusByIndex(currentIndex + 1);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          if (currentIndex === -1) {
+            focusLastItem(container);
+          } else {
+            focusByIndex(currentIndex - 1);
+          }
+          break;
+        case 'Home':
+          event.preventDefault();
+          focusFirstItem(container);
+          break;
+        case 'End':
+          event.preventDefault();
+          focusLastItem(container);
+          break;
+        case 'Tab':
+          event.preventDefault();
+          if (event.shiftKey) {
+            focusByIndex(currentIndex === -1 ? buttons.length - 1 : currentIndex - 1);
+          } else {
+            focusByIndex(currentIndex + 1);
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [focusFirstItem, focusLastItem, getFocusableButtons]
+  );
+
+  useEffect(() => {
+    if (!submenu) {
+      return;
+    }
+    focusFirstItem(submenuRef.current);
+  }, [submenu, focusFirstItem]);
+
   if (!targetContainer) {
     return null;
   }
@@ -401,6 +496,7 @@ export function ContextMenu({
       )}
       style={{ top: position.y, left: position.x, width, ...style }}
       onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={handleMenuKeyDown}
       onMouseLeave={handleMenuMouseLeave}
     >
       {header ? (
@@ -428,6 +524,7 @@ export function ContextMenu({
             classNames?.menu
           )}
           style={{ top: submenu.anchor.y, left: submenu.anchor.x, width: submenu.width }}
+          onKeyDown={handleMenuKeyDown}
           onMouseLeave={handleSubmenuMouseLeave}
         >
           {renderItems(submenu.items, {
