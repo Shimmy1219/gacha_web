@@ -44,9 +44,32 @@ export default async function handler(req, res) {
     hasVerifier: Boolean(verifier),
   });
 
+  const authorizeQuery = params.toString();
+  const webAuthorizeUrl = `https://discord.com/oauth2/authorize?${authorizeQuery}`;
+  // Discordモバイルアプリに直接遷移するためのディープリンク。
+  // スキームだけではなくホスト名(discord.com)を含めないと、アプリ側で認可画面が表示されない。
+  const appAuthorizeUrl = `discord://discord.com/oauth2/authorize?${authorizeQuery}`;
+
   res.setHeader('Cache-Control', 'no-store');
-  const location = `https://discord.com/oauth2/authorize?${params.toString()}`;
-  res.writeHead(302, { Location: location });
-  log.info('redirect response sent', { location });
+
+  const formatParam = Array.isArray(req.query.format) ? req.query.format[0] : req.query.format;
+  const acceptsJson =
+    formatParam === 'json' ||
+    (req.headers.accept || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .some((value) => value === 'application/json' || value.endsWith('+json'));
+
+  if (acceptsJson) {
+    log.info('returning authorize urls as json response');
+    return res.status(200).json({
+      ok: true,
+      authorizeUrl: webAuthorizeUrl,
+      appAuthorizeUrl,
+    });
+  }
+
+  res.writeHead(302, { Location: webAuthorizeUrl });
+  log.info('redirect response sent', { location: webAuthorizeUrl });
   return res.end();
 }
