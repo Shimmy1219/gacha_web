@@ -1,13 +1,14 @@
-import { Disclosure, Menu, Transition } from '@headlessui/react';
+import { Disclosure } from '@headlessui/react';
 import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
-import { Fragment, useCallback, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ConfirmDialog, useModal } from '../../modals';
+import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -206,6 +207,8 @@ function GachaInventoryCard({
   const [draftCount, setDraftCount] = useState('');
   const [draftRarityId, setDraftRarityId] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const catalogItemMap = useMemo(() => {
     return catalogItems.reduce<Map<string, InventoryCatalogItemOption>>((acc, item) => {
@@ -224,6 +227,7 @@ function GachaInventoryCard({
   }, []);
 
   const handleToggleEditing = useCallback(() => {
+    setMenuAnchor(null);
     setIsEditing((previous) => {
       const next = !previous;
       if (!next) {
@@ -267,6 +271,41 @@ function GachaInventoryCard({
     userName,
     userInventoryStore
   ]);
+
+  const handleOpenMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMenuAnchor({ x: rect.left, y: rect.bottom + 8 });
+  }, []);
+
+  const handleCloseMenu = useCallback(() => {
+    setMenuAnchor(null);
+  }, []);
+
+  const inventoryMenuItems = useMemo<ContextMenuEntry[]>(
+    () => [
+      {
+        type: 'item',
+        id: 'inventory-edit',
+        label: '編集',
+        onSelect: handleToggleEditing
+      },
+      {
+        type: 'item',
+        id: 'inventory-history',
+        label: '履歴',
+        onSelect: handleOpenHistory
+      },
+      { type: 'separator', id: 'inventory-menu-separator' },
+      {
+        type: 'item',
+        id: 'inventory-delete',
+        label: '削除',
+        tone: 'danger',
+        onSelect: handleDeleteInventory
+      }
+    ],
+    [handleDeleteInventory, handleOpenHistory, handleToggleEditing]
+  );
 
   const handleStartEdit = useCallback(
     (rarityId: string, itemId: string, currentCount: number) => {
@@ -413,69 +452,26 @@ function GachaInventoryCard({
               </button>
             </>
           ) : (
-            <Menu as="div" className="relative">
-              <Menu.Button
+            <>
+              <button
+                ref={menuButtonRef}
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-panel-muted text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="インベントリメニューを開く"
+                onClick={handleOpenMenu}
               >
                 <EllipsisVerticalIcon className="h-4 w-4" />
-              </Menu.Button>
-              <Transition
-                as={Fragment}
-                enter="transition ease-out duration-100"
-                enterFrom="transform opacity-0 scale-95"
-                enterTo="transform opacity-100 scale-100"
-                leave="transition ease-in duration-75"
-                leaveFrom="transform opacity-100 scale-100"
-                leaveTo="transform opacity-0 scale-95"
-              >
-                <Menu.Items className="absolute right-0 z-20 mt-2 w-32 origin-top-right overflow-hidden rounded-xl border border-border/60 bg-panel/95 focus:outline-none">
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        type="button"
-                        onClick={handleToggleEditing}
-                        className={clsx(
-                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
-                          active ? 'bg-surface/40 text-accent' : undefined
-                        )}
-                      >
-                        編集
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        type="button"
-                        onClick={handleOpenHistory}
-                        className={clsx(
-                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
-                          active ? 'bg-surface/40 text-accent' : undefined
-                        )}
-                      >
-                        履歴
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        type="button"
-                        onClick={handleDeleteInventory}
-                        className={clsx(
-                          'flex w-full items-center justify-start px-4 py-2 text-left text-xs text-surface-foreground transition',
-                          active ? 'bg-surface/40 text-accent' : undefined
-                        )}
-                      >
-                        削除
-                      </button>
-                    )}
-                  </Menu.Item>
-                </Menu.Items>
-              </Transition>
-            </Menu>
+              </button>
+              {menuAnchor ? (
+                <ContextMenu
+                  anchor={menuAnchor}
+                  header="インベントリ操作"
+                  items={inventoryMenuItems}
+                  onClose={handleCloseMenu}
+                  width={220}
+                />
+              ) : null}
+            </>
           )}
         </div>
       </header>
