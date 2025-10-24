@@ -46,8 +46,9 @@ export default async function handler(req, res) {
 
   const authorizeQuery = params.toString();
   const webAuthorizeUrl = `https://discord.com/oauth2/authorize?${authorizeQuery}`;
-  // Discord公式ドキュメントで案内されているモバイルアプリ向けのディープリンクスキーム
-  const appAuthorizeUrl = `discord://oauth2/authorize?${authorizeQuery}`;
+  // Discordモバイルアプリに直接遷移するためのディープリンク。
+  // スキームだけではなくホスト名(discord.com)を含めないと、アプリ側で認可画面が表示されない。
+  const appAuthorizeUrl = `discord://discord.com/oauth2/authorize?${authorizeQuery}`;
 
   res.setHeader('Cache-Control', 'no-store');
 
