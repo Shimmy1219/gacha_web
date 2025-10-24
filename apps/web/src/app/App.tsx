@@ -307,7 +307,7 @@ export function App(): JSX.Element {
         ref={mainRef}
         className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}
       >
-        <AppRoutes />
+        <AppRoutes onDrawGacha={handleDrawGacha} />
       </main>
     </div>
   );

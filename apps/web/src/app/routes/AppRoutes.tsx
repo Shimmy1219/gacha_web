@@ -7,7 +7,11 @@ import { RaritySection } from '../../features/rarity/components/RaritySection';
 import { RiaguSection } from '../../features/riagu/components/RiaguSection';
 import { UsersSection } from '../../features/users/components/UsersSection';
 
-function DashboardPage(): JSX.Element {
+interface DashboardPageProps {
+  onDrawGacha?: () => void;
+}
+
+function DashboardPage({ onDrawGacha }: DashboardPageProps): JSX.Element {
   const sections = [
     {
       id: 'rarity',
@@ -35,12 +39,16 @@ function DashboardPage(): JSX.Element {
     }
   ];
 
-  return <DashboardShell sections={sections} controlsSlot={<MockStorageButton />} />;
+  return <DashboardShell sections={sections} controlsSlot={<MockStorageButton />} onDrawGacha={onDrawGacha} />;
 }
 
-export function AppRoutes(): JSX.Element | null {
+interface AppRoutesProps {
+  onDrawGacha?: () => void;
+}
+
+export function AppRoutes({ onDrawGacha }: AppRoutesProps = {}): JSX.Element | null {
   return useRoutes([
-    { path: '/', element: <DashboardPage /> },
+    { path: '/', element: <DashboardPage onDrawGacha={onDrawGacha} /> },
     { path: '*', element: <Navigate to="/" replace /> }
   ]);
 }
