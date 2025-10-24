@@ -106,28 +106,7 @@
 
 @layer components {
   .section-container {
-    --section-header-height: 0px;
     max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
-  }
-
-  .section-container__header-wrapper {
-    position: sticky;
-    top: var(--app-sticky-top, 0px);
-    z-index: 30;
-    margin: -1rem -1rem 0;
-    padding: 1rem 1rem 0.75rem;
-    flex-shrink: 0;
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-panel) / 0.98) 0%,
-      rgb(var(--color-panel) / 0.94) 100%
-    );
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgb(var(--color-border) / 0.45);
-  }
-
-  .section-container__header-wrapper .section-container__header {
-    margin-bottom: 0.25rem;
   }
 
   .section-container--mobile {
@@ -247,23 +226,6 @@
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
-
-  .section-container .tab-scroll-area {
-    position: sticky;
-    top: calc(var(--app-sticky-top, 0px) + var(--section-header-height, 0px));
-    z-index: 20;
-    margin-left: -1rem;
-    margin-right: -1rem;
-    padding: 0.9rem 1rem 0.75rem;
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-panel) / 0.98) 0%,
-      rgb(var(--color-panel) / 0.9) 100%
-    );
-    backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgb(var(--color-border) / 0.45);
-  }
-
 
   .gacha-tabs {
     @apply flex flex-nowrap items-end gap-0;
