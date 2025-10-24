@@ -11,13 +11,25 @@ function getKey(state) {
   return `discord:auth:${state}`;
 }
 
+function normalizeRecord(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const verifier = typeof raw.verifier === 'string' ? raw.verifier : null;
+  if (!verifier) {
+    return null;
+  }
+  return {
+    verifier,
+    loginContext: typeof raw.loginContext === 'string' ? raw.loginContext : undefined,
+  };
+}
+
 export async function saveDiscordAuthState(state, payload) {
-  if (!payload?.verifier) {
+  if (!payload || typeof payload.verifier !== 'string' || !payload.verifier) {
     throw new Error('Discord auth verifier is required to store state');
   }
   const record = {
     verifier: payload.verifier,
-    loginContext: payload.loginContext,
+    loginContext: typeof payload.loginContext === 'string' ? payload.loginContext : undefined,
   };
   await kv.set(getKey(state), record, { ex: DISCORD_AUTH_TTL_SEC });
   return record;
@@ -30,11 +42,30 @@ export async function getDiscordAuthState(state) {
     return null;
   }
   if (typeof value === 'object') {
-    return value;
+    return normalizeRecord(value);
   }
   if (typeof value === 'string') {
     try {
-      return JSON.parse(value);
+      return normalizeRecord(JSON.parse(value));
+    } catch (error) {
+      throw new Error('Failed to parse discord auth state from kv');
+    }
+  }
+  return null;
+}
+
+export async function consumeDiscordAuthState(state) {
+  if (!state) return null;
+  const value = await kv.getdel(getKey(state));
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'object') {
+    return normalizeRecord(value);
+  }
+  if (typeof value === 'string') {
+    try {
+      return normalizeRecord(JSON.parse(value));
     } catch (error) {
       throw new Error('Failed to parse discord auth state from kv');
     }

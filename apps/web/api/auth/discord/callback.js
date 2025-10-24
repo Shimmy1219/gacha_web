@@ -1,7 +1,11 @@
 // /api/auth/discord/callback.js
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
-import { deleteDiscordAuthState, getDiscordAuthState } from '../../_lib/discordAuthStore.js';
+import {
+  consumeDiscordAuthState,
+  deleteDiscordAuthState,
+  getDiscordAuthState,
+} from '../../_lib/discordAuthStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
@@ -34,8 +38,9 @@ export default async function handler(req, res) {
   const loginContextCookie = cookies['d_login_context'];
 
   let loginContext = normalizeLoginContext(loginContextCookie);
-  let verifierToUse = cookieVerifier;
-  const shouldCleanupState = Boolean(stateParam);
+  let verifierToUse = typeof cookieVerifier === 'string' ? cookieVerifier : null;
+  let shouldCleanupState = Boolean(stateParam);
+  let stateRecordConsumed = false;
 
   try {
     if (!codeParam || !stateParam) {
@@ -48,8 +53,9 @@ export default async function handler(req, res) {
       return res.status(400).send('Invalid state or verifier');
     }
 
-    const cookieValid =
-      Boolean(expectedState) && Boolean(cookieVerifier) && stateParam === expectedState;
+    const cookieStateMatches = Boolean(expectedState) && stateParam === expectedState;
+    const cookieHasVerifier = typeof cookieVerifier === 'string' && cookieVerifier.length > 0;
+    const cookieValid = cookieStateMatches && cookieHasVerifier;
 
     if (!cookieValid) {
       log.warn('state or verifier mismatch', {
@@ -58,13 +64,14 @@ export default async function handler(req, res) {
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
       });
-      const storedState = await getDiscordAuthState(stateParam);
+      const storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
         log.warn('state record missing in kv store', {
           hasStoredState: Boolean(storedState),
         });
         return res.status(400).send('Invalid state or verifier');
       }
+      stateRecordConsumed = true;
       verifierToUse = storedState.verifier;
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
@@ -76,7 +83,13 @@ export default async function handler(req, res) {
       log.info('state restored from kv store', {
         statePreview,
         hasLoginContext: Boolean(loginContext),
+        hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
       });
+    } else if (!loginContext) {
+      const storedState = await getDiscordAuthState(stateParam);
+      if (storedState?.loginContext) {
+        loginContext = normalizeLoginContext(storedState.loginContext) || loginContext;
+      }
     }
 
     if (!verifierToUse) {
@@ -251,6 +264,9 @@ export default async function handler(req, res) {
 
     return res.status(200).send(html);
   } finally {
+    if (stateRecordConsumed) {
+      shouldCleanupState = false;
+    }
     if (shouldCleanupState) {
       try {
         await deleteDiscordAuthState(stateParam);
