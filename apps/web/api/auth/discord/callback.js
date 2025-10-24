@@ -117,12 +117,54 @@ export default async function handler(req, res) {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-  const guidanceMessage =
-    loginContext === 'pwa'
-      ? 'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。'
-      : 'ログインが完了しました。まもなくホームへ移動します。';
-
   const redirectTarget = '/';
+  const redirectScript = `
+      (function () {
+        var target = ${JSON.stringify(redirectTarget)};
+        var navigate = function () {
+          try {
+            window.location.replace(target);
+          } catch (error) {
+            window.location.href = target;
+          }
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          navigate();
+        } else {
+          document.addEventListener('DOMContentLoaded', navigate, { once: true });
+        }
+        window.setTimeout(function () {
+          try {
+            window.location.href = target;
+          } catch (error) {
+            // no-op
+          }
+        }, 4000);
+      })();
+  `;
+
+  if (loginContext === 'browser') {
+    const html = `<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ログイン処理中...</title>
+  </head>
+  <body>
+    <script>${redirectScript}</script>
+    <noscript>
+      <p>自動で移動しない場合は、<a href="${redirectTarget}">こちら</a>をクリックしてください。</p>
+    </noscript>
+  </body>
+</html>`;
+
+    return res.status(200).send(html);
+  }
+
+  const guidanceMessage =
+    'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。';
+
   const html = `<!DOCTYPE html>
 <html lang="ja">
   <head>
@@ -146,30 +188,7 @@ export default async function handler(req, res) {
       <p>${guidanceMessage}</p>
       <p><a href="${redirectTarget}">トップページに移動する</a></p>
     </main>
-    <script>
-      (function () {
-        var target = ${JSON.stringify(redirectTarget)};
-        var navigate = function () {
-          try {
-            window.location.replace(target);
-          } catch (error) {
-            window.location.href = target;
-          }
-        };
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-          navigate();
-        } else {
-          document.addEventListener('DOMContentLoaded', navigate, { once: true });
-        }
-        window.setTimeout(function () {
-          try {
-            window.location.href = target;
-          } catch (error) {
-            // no-op
-          }
-        }, 4000);
-      })();
-    </script>
+    <script>${redirectScript}</script>
     <noscript>
       <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
     </noscript>
