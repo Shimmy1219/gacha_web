@@ -2,6 +2,7 @@
 // PKCE + state を発行して Discord 認可画面へ 302
 import crypto from 'crypto';
 import { setCookie } from '../../_lib/cookies.js';
+import { saveDiscordAuthState } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
@@ -31,6 +32,11 @@ export default async function handler(req, res) {
   const contextParam = Array.isArray(req.query.context) ? req.query.context[0] : req.query.context;
   const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
+
+  await saveDiscordAuthState(state, {
+    verifier,
+    loginContext: normalizedContext,
+  });
 
   const params = new URLSearchParams({
     response_type: 'code',

@@ -1,8 +1,15 @@
 // /api/auth/discord/callback.js
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
+import { deleteDiscordAuthState, getDiscordAuthState } from '../../_lib/discordAuthStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
+
+function normalizeLoginContext(value) {
+  if (value === 'pwa') return 'pwa';
+  if (value === 'browser') return 'browser';
+  return null;
+}
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/callback', req);
@@ -15,110 +22,157 @@ export default async function handler(req, res) {
   }
 
   const { code, state, error } = req.query || {};
+  const codeParam = Array.isArray(code) ? code[0] : code;
+  const stateParam = Array.isArray(state) ? state[0] : state;
   if (error) {
     log.warn('oauth error reported', { error });
     return res.status(400).send(`OAuth error: ${error}`);
   }
   const cookies = getCookies(req);
   const expectedState = cookies['d_state'];
-  const verifier = cookies['d_verifier'];
+  const cookieVerifier = cookies['d_verifier'];
   const loginContextCookie = cookies['d_login_context'];
 
-  if (!code || !state || !expectedState || !verifier || state !== expectedState) {
-    log.warn('state or verifier mismatch', {
-      hasCode: Boolean(code),
-      hasState: Boolean(state),
-      hasExpectedState: Boolean(expectedState),
-      hasVerifier: Boolean(verifier),
+  let loginContext = normalizeLoginContext(loginContextCookie);
+  let verifierToUse = cookieVerifier;
+  const shouldCleanupState = Boolean(stateParam);
+
+  try {
+    if (!codeParam || !stateParam) {
+      log.warn('state or verifier mismatch', {
+        hasCode: Boolean(codeParam),
+        hasState: Boolean(stateParam),
+        hasExpectedState: Boolean(expectedState),
+        hasVerifier: Boolean(cookieVerifier),
+      });
+      return res.status(400).send('Invalid state or verifier');
+    }
+
+    const cookieValid =
+      Boolean(expectedState) && Boolean(cookieVerifier) && stateParam === expectedState;
+
+    if (!cookieValid) {
+      log.warn('state or verifier mismatch', {
+        hasCode: Boolean(codeParam),
+        hasState: Boolean(stateParam),
+        hasExpectedState: Boolean(expectedState),
+        hasVerifier: Boolean(cookieVerifier),
+      });
+      const storedState = await getDiscordAuthState(stateParam);
+      if (!storedState?.verifier) {
+        log.warn('state record missing in kv store', {
+          hasStoredState: Boolean(storedState),
+        });
+        return res.status(400).send('Invalid state or verifier');
+      }
+      verifierToUse = storedState.verifier;
+      if (!loginContext) {
+        loginContext = normalizeLoginContext(storedState.loginContext);
+      }
+      const statePreview =
+        typeof stateParam === 'string' && stateParam.length > 8
+          ? `${stateParam.slice(0, 4)}...`
+          : stateParam;
+      log.info('state restored from kv store', {
+        statePreview,
+        hasLoginContext: Boolean(loginContext),
+      });
+    }
+
+    if (!verifierToUse) {
+      log.warn('verifier missing after validation', {
+        hasCookieVerifier: Boolean(cookieVerifier),
+      });
+      return res.status(400).send('Invalid state or verifier');
+    }
+
+    if (!loginContext) {
+      loginContext = 'browser';
+    }
+
+    // トークン交換
+    const body = new URLSearchParams({
+      client_id: process.env.DISCORD_CLIENT_ID,
+      client_secret: process.env.DISCORD_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: codeParam,
+      redirect_uri: process.env.DISCORD_REDIRECT_URI,
+      code_verifier: verifierToUse,
     });
-    return res.status(400).send('Invalid state or verifier');
-  }
 
-  // トークン交換
-  const body = new URLSearchParams({
-    client_id: process.env.DISCORD_CLIENT_ID,
-    client_secret: process.env.DISCORD_CLIENT_SECRET,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: process.env.DISCORD_REDIRECT_URI,
-    code_verifier: verifier,
-  });
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
 
-  const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text();
+      log.error('token exchange failed', { status: tokenRes.status, body: t });
+      return res.status(401).send(`Token exchange failed: ${t}`);
+    }
 
-  if (!tokenRes.ok) {
-    const t = await tokenRes.text();
-    log.error('token exchange failed', { status: tokenRes.status, body: t });
-    return res.status(401).send(`Token exchange failed: ${t}`);
-  }
+    const token = await tokenRes.json();
 
-  const token = await tokenRes.json();
+    // プロフィール
+    const meRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${token.access_token}` },
+    });
+    if (!meRes.ok) {
+      const t = await meRes.text();
+      log.error('fetch /users/@me failed', { status: meRes.status, body: t });
+      return res.status(401).send(`Fetch /users/@me failed: ${t}`);
+    }
+    const me = await meRes.json();
 
-  // プロフィール
-  const meRes = await fetch('https://discord.com/api/users/@me', {
-    headers: { Authorization: `Bearer ${token.access_token}` },
-  });
-  if (!meRes.ok) {
-    const t = await meRes.text();
-    log.error('fetch /users/@me failed', { status: meRes.status, body: t });
-    return res.status(401).send(`Fetch /users/@me failed: ${t}`);
-  }
-  const me = await meRes.json();
+    const now = Date.now();
+    const payload = {
+      uid: me.id,
+      name: me.username,
+      avatar: me.avatar,
+      access_token: token.access_token,
+      refresh_token: token.refresh_token, // 長期ログインの要
+      scope: token.scope,
+      token_type: token.token_type,
+      access_expires_at: now + (token.expires_in || 3600) * 1000,
+      created_at: now,
+      last_seen_at: now,
+      ver: 1,
+    };
 
-  const now = Date.now();
-  const payload = {
-    uid: me.id,
-    name: me.username,
-    avatar: me.avatar,
-    access_token: token.access_token,
-    refresh_token: token.refresh_token, // 長期ログインの要
-    scope: token.scope,
-    token_type: token.token_type,
-    access_expires_at: now + (token.expires_in || 3600) * 1000,
-    created_at: now,
-    last_seen_at: now,
-    ver: 1,
-  };
+    const sid = newSid();
+    await saveSession(sid, payload);
 
-  const sid = newSid();
-  await saveSession(sid, payload);
+    // sid をクッキーへ（30日）
+    setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
 
-  // sid をクッキーへ（30日）
-  setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    const formatParam = Array.isArray(req.query?.format) ? req.query?.format[0] : req.query?.format;
+    const acceptsJson =
+      formatParam === 'json' ||
+      (req.headers.accept || '')
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .some((value) => value === 'application/json' || value.endsWith('+json'));
 
-  const loginContext = loginContextCookie === 'pwa' ? 'pwa' : 'browser';
+    // UX: ルートへ返す（必要なら /?loggedin=1 など）
+    res.setHeader('Cache-Control', 'no-store');
+    const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
+    log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
 
-  const formatParam = Array.isArray(req.query?.format) ? req.query?.format[0] : req.query?.format;
-  const acceptsJson =
-    formatParam === 'json' ||
-    (req.headers.accept || '')
-      .split(',')
-      .map((value) => value.trim().toLowerCase())
-      .some((value) => value === 'application/json' || value.endsWith('+json'));
+    // 後続リクエストで誤検知しないようにクッキーを破棄
+    setCookie(res, 'd_state', '', { maxAge: 0 });
+    setCookie(res, 'd_verifier', '', { maxAge: 0 });
+    setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
-  // UX: ルートへ返す（必要なら /?loggedin=1 など）
-  res.setHeader('Cache-Control', 'no-store');
-  const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
-  log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
+    if (acceptsJson) {
+      log.info('returning login completion payload as json response', { loginContext });
+      return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
+    }
 
-  // 後続リクエストで誤検知しないようにクッキーを破棄
-  setCookie(res, 'd_state', '', { maxAge: 0 });
-  setCookie(res, 'd_verifier', '', { maxAge: 0 });
-  setCookie(res, 'd_login_context', '', { maxAge: 0 });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-  if (acceptsJson) {
-    log.info('returning login completion payload as json response', { loginContext });
-    return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
-  }
-
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-
-  const redirectTarget = '/';
-  const redirectScript = `
+    const redirectTarget = '/';
+    const redirectScript = `
       (function () {
         var target = ${JSON.stringify(redirectTarget)};
         var navigate = function () {
@@ -141,10 +195,10 @@ export default async function handler(req, res) {
           }
         }, 4000);
       })();
-  `;
+    `;
 
-  if (loginContext === 'browser') {
-    const html = `<!DOCTYPE html>
+    if (loginContext === 'browser') {
+      const html = `<!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
@@ -159,13 +213,13 @@ export default async function handler(req, res) {
   </body>
 </html>`;
 
-    return res.status(200).send(html);
-  }
+      return res.status(200).send(html);
+    }
 
-  const guidanceMessage =
-    'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。';
+    const guidanceMessage =
+      'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。';
 
-  const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="utf-8" />
@@ -195,5 +249,16 @@ export default async function handler(req, res) {
   </body>
 </html>`;
 
-  return res.status(200).send(html);
+    return res.status(200).send(html);
+  } finally {
+    if (shouldCleanupState) {
+      try {
+        await deleteDiscordAuthState(stateParam);
+      } catch (error) {
+        log.error('failed to delete discord auth state from kv', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 }
