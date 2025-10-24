@@ -29,6 +29,7 @@ import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/a
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../../gacha/components/GachaTabs';
 import { useGachaDeletion } from '../../gacha/hooks/useGachaDeletion';
+import { useResponsiveDashboard } from '../../../components/dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
@@ -979,13 +980,15 @@ interface AddItemCardProps {
 }
 
 function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
+  const { isMobile } = useResponsiveDashboard();
+
   return (
     <button
       type="button"
       aria-label="景品を追加"
       data-add-item-card="true"
       className={clsx(
-        'item-card item-card--add relative flex h-full flex-col overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none',
+        'item-card item-card--add relative flex h-full overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none',
         disabled
           ? 'cursor-not-allowed opacity-60'
           : 'hover:border-accent/70 hover:bg-accent/5 focus-visible:ring-2 focus-visible:ring-accent/50'
@@ -994,11 +997,16 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
       disabled={disabled}
       aria-disabled={disabled}
     >
-      <div className="flex flex-1 flex-col space-y-3">
-        <div className="flex aspect-square items-center justify-center rounded-xl border border-dashed border-accent/40 bg-panel-muted text-5xl font-semibold text-accent">
+      <div className={clsx('flex w-full gap-3', isMobile ? 'flex-row items-start' : 'flex-col')}>
+        <div
+          className={clsx(
+            'flex items-center justify-center rounded-xl border border-dashed border-accent/40 bg-panel-muted text-5xl font-semibold text-accent',
+            isMobile ? 'h-24 w-24 flex-shrink-0' : 'aspect-square w-full'
+          )}
+        >
           +
         </div>
-        <div className="space-y-1">
+        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-1')}>
           <h3 className="text-sm font-semibold text-surface-foreground">景品を追加</h3>
           <p className="text-xs text-muted-foreground">画像・動画・音声ファイルを登録</p>
         </div>

@@ -72,10 +72,10 @@ export function UserCard({
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
         <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5">
-          <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <header className="user-card__header flex items-start gap-3 sm:justify-between">
             <Disclosure.Button
               type="button"
-              className="user-card__toggle flex w-full items-start gap-2 text-left transition-colors duration-200 ease-linear"
+              className="user-card__toggle flex min-w-0 flex-1 items-start gap-2 text-left transition-colors duration-200 ease-linear"
             >
               <ChevronRightIcon
                 className={clsx(
@@ -83,7 +83,7 @@ export function UserCard({
                   open && 'rotate-90 text-accent'
                 )}
               />
-              <div className="user-card__summary space-y-1">
+              <div className="user-card__summary min-w-0 space-y-1">
                 <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
                 {memo ? (
                   <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
@@ -93,7 +93,7 @@ export function UserCard({
                 ) : null}
               </div>
             </Disclosure.Button>
-            <div className="user-card__actions flex flex-wrap items-center gap-2">
+            <div className="user-card__actions flex shrink-0 items-center gap-2">
               <button
                 type="button"
                 className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"

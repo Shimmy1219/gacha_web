@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { clsx } from 'clsx';
 
 import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
+import { useResponsiveDashboard } from '../components/dashboard/useResponsiveDashboard';
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../modals/dialogs/GuideInfoDialog';
@@ -65,6 +67,7 @@ function formatCatalogIssueMessage(issue?: LivePasteCatalogIssue): string | unde
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
+  const { isMobile } = useResponsiveDashboard();
   const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
@@ -300,7 +303,10 @@ export function App(): JSX.Element {
         onExportAll={handleExportAll}
         onOpenPageSettings={handleOpenPageSettings}
       />
-      <main ref={mainRef} className="app__main px-4 pb-[5px] pt-4">
+      <main
+        ref={mainRef}
+        className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}
+      >
         <AppRoutes />
       </main>
     </div>
