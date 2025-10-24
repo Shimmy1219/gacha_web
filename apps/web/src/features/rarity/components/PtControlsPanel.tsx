@@ -156,7 +156,7 @@ function InlineSelectField({
       classNames={{
         root: 'pt-controls-panel__select-wrapper relative',
         button:
-          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel px-3 py-2 text-xs font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+          'pt-controls-panel__select-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-xs font-semibold text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition hover:bg-panel-contrast/90',
         buttonOpen: 'border-accent text-accent',
         buttonClosed: 'hover:border-accent/70',
         icon: 'pt-controls-panel__select-icon h-4 w-4 transition-transform',
@@ -193,7 +193,7 @@ function RemoveButton({ onClick }: { onClick: () => void }): JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="pt-controls-panel__remove-button inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-panel-muted text-sm font-bold leading-none text-muted-foreground transition hover:border-accent/70 hover:bg-panel hover:text-surface-foreground"
+      className="pt-controls-panel__remove-button inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-panel-contrast text-sm font-bold leading-none text-muted-foreground transition hover:border-accent/70 hover:bg-panel-contrast/90 hover:text-surface-foreground"
       aria-label="行を削除"
     >
       －

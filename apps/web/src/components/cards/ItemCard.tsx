@@ -99,7 +99,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       data-riagu={model.isRiagu}
       data-selected={isSelected ? 'true' : undefined}
       className={clsx(
-        'item-card group relative overflow-visible rounded-2xl border border-border/60 bg-panel p-[10px] shadow-sm transition hover:border-accent/60 hover:bg-panel-muted/80',
+        'item-card group relative overflow-visible rounded-2xl border border-border/60 bg-panel p-[10px] shadow-sm transition hover:border-accent/60 hover:bg-panel-muted',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60',
         isSelected && 'ring-2 ring-offset-2 ring-offset-[rgb(var(--color-surface-deep)/1)] ring-accent/70'
       )}
@@ -123,7 +123,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(
-            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
+            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition hover:bg-panel-contrast focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in'
           )}

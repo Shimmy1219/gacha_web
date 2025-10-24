@@ -421,7 +421,7 @@ function GachaInventoryCard({
   );
 
   return (
-    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-panel p-5">
+    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-panel-muted p-5">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
         <div className="user-card__inventory-meta space-y-1">
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
@@ -445,7 +445,7 @@ function GachaInventoryCard({
               </button>
               <button
                 type="button"
-                className="rounded-lg border border-border/60 bg-panel-muted px-3 py-1 text-xs font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="rounded-lg border border-border/60 bg-panel-contrast px-3 py-1 text-xs font-semibold text-surface-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 onClick={handleToggleEditing}
               >
                 編集完了
@@ -456,7 +456,7 @@ function GachaInventoryCard({
               <button
                 ref={menuButtonRef}
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-panel-muted text-muted-foreground transition hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="インベントリメニューを開く"
                 onClick={handleOpenMenu}
               >
@@ -511,7 +511,7 @@ function GachaInventoryCard({
                           <input
                             type="number"
                             min={0}
-                            className="w-16 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                            className="w-16 rounded-md border border-border/60 bg-panel-contrast px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                             value={draftCount}
                             onChange={(event) => setDraftCount(event.target.value)}
                             autoFocus
@@ -578,7 +578,7 @@ function GachaInventoryCard({
               </label>
               <select
                 id={`${inventory.inventoryId}-add-item`}
-                className="w-48 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                className="w-48 rounded-md border border-border/60 bg-panel-contrast px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                 value={draftItemId}
                 onChange={(event) => handleDraftItemIdChange(event.target.value)}
                 autoFocus
@@ -602,7 +602,7 @@ function GachaInventoryCard({
                 id={`${inventory.inventoryId}-add-count`}
                 type="number"
                 min={0}
-                className="w-16 rounded-md border border-border/60 bg-panel px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
+                className="w-16 rounded-md border border-border/60 bg-panel-contrast px-2 py-1 text-xs text-surface-foreground focus:border-accent focus:outline-none"
                 value={draftCount}
                 onChange={(event) => setDraftCount(event.target.value)}
               />

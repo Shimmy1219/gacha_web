@@ -125,7 +125,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                       'flex items-start justify-between gap-4 rounded-2xl border px-4 py-4 transition',
                       checked
                         ? 'border-accent bg-accent/10'
-                        : 'border-border/60 bg-panel-muted/80 hover:border-accent/40 hover:bg-panel',
+                        : 'border-border/60 bg-panel-muted/80 hover:border-accent/40 hover:bg-panel-contrast/90',
                       active && !checked ? 'ring-2 ring-accent/40' : undefined
                     )
                   }
@@ -169,7 +169,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                         </div>
                       </div>
                       {option.id === 'custom' ? (
-                        <div className="space-y-5 rounded-xl border border-border/60 bg-panel p-4">
+                        <div className="space-y-5 rounded-xl border border-border/60 bg-panel-contrast p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="space-y-1">
                               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
@@ -198,7 +198,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                       'flex w-full min-w-[200px] items-center gap-3 rounded-xl border px-3 py-2 text-left transition focus:outline-none sm:w-auto',
                                       checked
                                         ? 'border-accent bg-accent/15'
-                                        : 'border-border/60 bg-panel-muted hover:border-accent/40 hover:bg-panel',
+                                        : 'border-border/60 bg-panel-contrast hover:border-accent/40 hover:bg-panel-contrast/90',
                                       active && !checked ? 'ring-2 ring-accent/40' : undefined
                                     )
                                   }
@@ -233,7 +233,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 ボタンや強調表示に使用される差し色です。
                               </p>
                             </div>
-                            <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-panel-muted px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                            <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                               <span className="sr-only">現在のカラー</span>
                               <span
                                 className="h-4 w-4 rounded border border-border/50"
@@ -252,7 +252,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                   key={entry.id}
                                   type="button"
                                   className={clsx(
-                                    'group rounded-lg border border-border/60 bg-panel-muted p-1 transition hover:border-accent/50 hover:bg-panel',
+                                    'group rounded-lg border border-border/60 bg-panel-contrast p-1 transition hover:border-accent/50 hover:bg-panel-contrast/90',
                                     isSelected
                                       ? 'border-accent bg-accent/15'
                                       : undefined
