@@ -103,11 +103,6 @@ function rgbToCss([r, g, b]: RgbTuple): string {
   return `${r} ${g} ${b}`;
 }
 
-function rgbToRgba([r, g, b]: RgbTuple, alpha: number): string {
-  const clamped = Math.min(Math.max(alpha, 0), 1);
-  return `rgba(${r}, ${g}, ${b}, ${clamped.toFixed(2)})`;
-}
-
 function getLuminance([r, g, b]: RgbTuple): number {
   const channels = [r, g, b].map((value) => {
     const channel = value / 255;
@@ -133,8 +128,8 @@ const SURFACE_TONE_CONFIG: Record<CustomBaseTone, { colorScheme: 'dark' | 'light
       '--color-surface-alt': '17 17 25',
       '--color-surface-deep': '9 9 15',
       '--color-panel': '21 21 27',
-      '--color-panel-muted': '27 27 34',
-      '--color-panel-contrast': '31 31 39',
+      '--color-panel-muted': '33 33 43',
+      '--color-panel-contrast': '45 45 57',
       '--color-border': '42 42 54',
       '--color-muted': '35 35 43',
       '--color-muted-foreground': '179 179 189',
@@ -149,8 +144,8 @@ const SURFACE_TONE_CONFIG: Record<CustomBaseTone, { colorScheme: 'dark' | 'light
       '--color-surface-alt': '248 249 252',
       '--color-surface-deep': '240 242 247',
       '--color-panel': '255 255 255',
-      '--color-panel-muted': '247 248 252',
-      '--color-panel-contrast': '233 236 244',
+      '--color-panel-muted': '243 244 249',
+      '--color-panel-contrast': '227 230 239',
       '--color-border': '210 214 224',
       '--color-muted': '238 240 246',
       '--color-muted-foreground': '104 112 130',
@@ -190,19 +185,14 @@ function computeAccentPalette(hex: string, scheme: 'dark' | 'light') {
   const luminance = getLuminance(accentRgb);
   const accentForeground = luminance > 0.58 ? '17 17 17' : '255 255 255';
 
-  const gradientBase = mixRgb(accentRgb, [255, 255, 255], scheme === 'light' ? 0.38 : 0.22);
-  const gradientAlt = mixRgb(accentRgb, [255, 255, 255], scheme === 'light' ? 0.28 : 0.16);
-  const gradientPrimaryAlpha = scheme === 'light' ? 0.2 : 0.12;
-  const gradientSecondaryAlpha = scheme === 'light' ? 0.14 : 0.1;
-
   return {
     accent: rgbToCss(accentRgb),
     accentDark: rgbToCss(accentDark),
     accentBright: rgbToCss(accentBright),
     accentBrightDark: rgbToCss(accentBrightDark),
     accentForeground,
-    gradient1: rgbToRgba(gradientBase, gradientPrimaryAlpha),
-    gradient2: rgbToRgba(gradientAlt, gradientSecondaryAlpha)
+    gradient1: 'rgba(0, 0, 0, 0)',
+    gradient2: 'rgba(0, 0, 0, 0)'
   };
 }
 

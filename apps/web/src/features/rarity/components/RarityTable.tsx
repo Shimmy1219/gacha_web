@@ -36,7 +36,7 @@ export function RarityTable({
   canDeleteRow
 }: RarityTableProps): JSX.Element {
   return (
-    <div className="rarity-section__table-wrapper rounded-2xl border border-border/60">
+    <div className="rarity-section__table-wrapper rounded-2xl border border-border/60 bg-panel shadow-sm">
       <table className="rarity-section__table w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
         <colgroup>
           <col className="rarity-section__col rarity-section__col-label" />
@@ -44,7 +44,7 @@ export function RarityTable({
           <col className="rarity-section__col rarity-section__col-rate" />
           <col className="rarity-section__col rarity-section__col-actions" />
         </colgroup>
-        <thead className="rarity-section__table-head bg-surface-deep text-xs uppercase tracking-[0.3em] text-muted-foreground">
+        <thead className="rarity-section__table-head bg-panel-contrast/90 text-xs uppercase tracking-[0.3em] text-muted-foreground">
           <tr>
             <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 font-semibold">
               レアリティ
@@ -54,7 +54,7 @@ export function RarityTable({
             <th className="rarity-section__column rarity-section__column-actions py-2.5" />
           </tr>
         </thead>
-        <tbody className="rarity-section__table-body divide-y divide-border/40 bg-surface/60">
+        <tbody className="rarity-section__table-body divide-y divide-border/40 bg-panel-muted">
           {rows.map((row) => {
             const presentation = getRarityTextPresentation(row.color);
             const deletable = onDelete && (canDeleteRow ? canDeleteRow(row.id) : true);
@@ -68,7 +68,7 @@ export function RarityTable({
                     value={label}
                     onChange={(event) => onLabelChange?.(row.id, event.target.value)}
                     className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
                       presentation.className ?? 'text-surface-foreground'
                     )}
                     style={presentation.style}
@@ -100,7 +100,7 @@ export function RarityTable({
                           event.currentTarget.blur();
                         }
                       }}
-                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rarity-section__rate-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                       aria-label={row.emitRateAriaLabel ?? `${label || row.id} の排出率`}
                       title={row.isEmitRateReadOnly ? '排出率は自動で調整されます' : undefined}
                       disabled={row.isEmitRateReadOnly}
@@ -111,7 +111,7 @@ export function RarityTable({
                 <td className="rarity-section__cell rarity-section__cell-actions px-1 py-2 text-right">
                   <button
                     type="button"
-                    className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rarity-section__delete-button inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-border/70 bg-panel-contrast px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => onDelete?.(row.id)}
                     disabled={!deletable}
                   >
@@ -125,7 +125,7 @@ export function RarityTable({
             <td className="rarity-section__cell px-1 py-3" colSpan={4}>
               <button
                 type="button"
-                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={onAdd}
                 disabled={!onAdd}
               >
