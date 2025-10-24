@@ -206,6 +206,19 @@ function computeAccentPalette(hex: string, scheme: 'dark' | 'light') {
   };
 }
 
+function computeSiteColorScale(hex: string, mainHex: string, scheme: 'dark' | 'light'): string[] {
+  const normalized = normalizeAccentHex(hex);
+  const accentRgb = hexToRgb(normalized) ?? (hexToRgb(DEFAULT_SITE_ACCENT) as RgbTuple);
+  const fallbackMain = scheme === 'light' ? (hexToRgb(LIGHT_MAIN_HEX) as RgbTuple) : (hexToRgb(DARK_MAIN_HEX) as RgbTuple);
+  const mainRgb = hexToRgb(mainHex) ?? fallbackMain;
+
+  return Array.from({ length: 10 }, (_, index) => {
+    const ratio = index / 9;
+    const mixed = mixRgb(accentRgb, mainRgb, ratio);
+    return rgbToCss(mixed);
+  });
+}
+
 function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone: CustomBaseTone): void {
   if (typeof document === 'undefined') {
     return;
@@ -217,6 +230,8 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
   const scheme: 'dark' | 'light' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
   root.dataset.siteThemeScheme = scheme;
   const palette = computeAccentPalette(accentHex, scheme);
+  const mainHex = scheme === 'light' ? LIGHT_MAIN_HEX : DARK_MAIN_HEX;
+  const siteScale = computeSiteColorScale(accentHex, mainHex, scheme);
 
   root.style.setProperty('--color-accent', palette.accent);
   root.style.setProperty('--color-accent-dark', palette.accentDark);
@@ -225,6 +240,10 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
   root.style.setProperty('--color-accent-foreground', palette.accentForeground);
   root.style.setProperty('--background-gradient-1', palette.gradient1);
   root.style.setProperty('--background-gradient-2', palette.gradient2);
+
+  siteScale.forEach((value, index) => {
+    root.style.setProperty(`--site-color-${index + 1}`, value);
+  });
 
   if (theme === 'custom') {
     const toneConfig = SURFACE_TONE_CONFIG[customBaseTone];

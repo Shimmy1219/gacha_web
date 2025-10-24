@@ -70,7 +70,7 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-surface/25 p-5">
+        <article className="user-card space-y-4 rounded-2xl border border-white/5 bg-[rgb(var(--site-color-8)_/_0.25)] p-5">
           <header className="user-card__header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <Disclosure.Button
               type="button"

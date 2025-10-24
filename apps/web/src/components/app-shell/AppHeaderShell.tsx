@@ -76,7 +76,7 @@ export function AppHeaderShell({
   return (
     <header
       ref={headerRef}
-      className="app-header-shell sticky top-0 z-40 border-b border-border/60 bg-surface/90"
+      className="app-header-shell sticky top-0 z-40 border-b border-border/60 bg-[rgb(var(--site-color-10)_/_0.9)]"
     >
       <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
         <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
