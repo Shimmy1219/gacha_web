@@ -4,6 +4,7 @@ import { forwardRef, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
+import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 
 export type ItemId = string;
 export type GachaId = string;
@@ -63,6 +64,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   ref
 ): JSX.Element {
   const { imageAsset } = model;
+  const { isMobile } = useResponsiveDashboard();
   const preview = useAssetPreview(imageAsset?.assetHash ?? null);
   const isImageAsset = Boolean(preview.type?.startsWith('image/'));
   const isVideoAsset = Boolean(preview.type?.startsWith('video/'));
@@ -115,7 +117,12 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
-      <div className="space-y-3">
+      <div
+        className={clsx(
+          'flex gap-3',
+          isMobile ? 'flex-row items-start' : 'flex-col'
+        )}
+      >
         <button
           type="button"
           onClick={handlePreviewClick}
@@ -123,7 +130,8 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(
-            'flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
+            'flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
+            isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in'
           )}
@@ -139,20 +147,22 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             <PhotoIcon className="h-10 w-10" />
           )}
         </button>
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-          <span className={clsx('text-[11px] font-medium', rarityClassName)} style={rarityStyle}>
-            {rarity.label}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <button
-            type="button"
-            className="badge badge--action"
-            onClick={() => onEditImage?.(model.itemId)}
-          >
-            画像を設定
-          </button>
+        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-3')}>
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
+            <span className={clsx('text-[11px] font-medium', rarityClassName)} style={rarityStyle}>
+              {rarity.label}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <button
+              type="button"
+              className="badge badge--action"
+              onClick={() => onEditImage?.(model.itemId)}
+            >
+              画像を設定
+            </button>
+          </div>
         </div>
       </div>
     </article>
