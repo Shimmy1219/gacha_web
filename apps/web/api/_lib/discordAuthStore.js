@@ -20,6 +20,11 @@ function normalizeRecord(raw) {
   return {
     verifier,
     loginContext: typeof raw.loginContext === 'string' ? raw.loginContext : undefined,
+    handoffToken: typeof raw.handoffToken === 'string' ? raw.handoffToken : undefined,
+    handoffExpiresAt:
+      typeof raw.handoffExpiresAt === 'number' && Number.isFinite(raw.handoffExpiresAt)
+        ? raw.handoffExpiresAt
+        : undefined,
   };
 }
 
@@ -30,6 +35,11 @@ export async function saveDiscordAuthState(state, payload) {
   const record = {
     verifier: payload.verifier,
     loginContext: typeof payload.loginContext === 'string' ? payload.loginContext : undefined,
+    handoffToken: typeof payload.handoffToken === 'string' ? payload.handoffToken : undefined,
+    handoffExpiresAt:
+      typeof payload.handoffExpiresAt === 'number' && Number.isFinite(payload.handoffExpiresAt)
+        ? payload.handoffExpiresAt
+        : undefined,
   };
   await kv.set(getKey(state), record, { ex: DISCORD_AUTH_TTL_SEC });
   return record;

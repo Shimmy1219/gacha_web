@@ -88,9 +88,42 @@ export function DiscordLoginButton({
           aria-label="Discordでログイン"
           disabled={isLoggingIn}
           aria-busy={isLoggingIn}
+          aria-live={isLoggingIn ? 'polite' : undefined}
+          aria-atomic={isLoggingIn ? 'true' : undefined}
         >
-          <ShieldCheckIcon className="h-5 w-5" />
-          Discordでログイン
+          {isLoggingIn ? (
+            <>
+              <svg
+                className="h-5 w-5 animate-spin text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                role="presentation"
+                aria-hidden
+              >
+                <circle
+                  className="opacity-30"
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                />
+                <path
+                  className="opacity-90"
+                  d="M21 12a9 9 0 00-9-9"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="font-semibold">処理中…</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheckIcon className="h-5 w-5" />
+              Discordでログイン
+            </>
+          )}
         </button>
         <button
           type="button"
