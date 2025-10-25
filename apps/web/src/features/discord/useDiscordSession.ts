@@ -212,7 +212,10 @@ async function attemptDiscordSessionHandoff(): Promise<boolean> {
     const queryClient = handoffWatcherQueryClient;
     if (queryClient) {
       await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
-      await queryClient.refetchQueries({ queryKey: ['discord', 'session'], type: 'active' });
+      await queryClient.fetchQuery({
+        queryKey: ['discord', 'session'],
+        queryFn: fetchSession,
+      });
     }
 
     return true;
