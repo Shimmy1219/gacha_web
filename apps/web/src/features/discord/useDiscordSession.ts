@@ -41,6 +41,7 @@ interface DiscordHandoffState {
 const HANDOFF_STORAGE_KEY = 'discordHandoffState';
 const HANDOFF_DEFAULT_DURATION_MS = 5 * 60 * 1000;
 const HANDOFF_POLL_INTERVAL_MS = 1500;
+const HANDOFF_BACKGROUND_TIMEOUT_MS = 5000;
 
 let inMemoryHandoffState: DiscordHandoffState | null = null;
 let handoffWatcherActive = false;
@@ -49,6 +50,7 @@ let handoffAttemptInFlight = false;
 let handoffFocusHandler: (() => void) | null = null;
 let handoffVisibilityHandler: (() => void) | null = null;
 let handoffBlurHandler: (() => void) | null = null;
+let handoffPageHideHandler: (() => void) | null = null;
 let handoffWatcherQueryClient: QueryClient | null = null;
 let handoffWatcherHasBackgrounded = false;
 
@@ -138,10 +140,14 @@ function stopHandoffWatcher(): void {
   if (typeof window !== 'undefined' && handoffBlurHandler) {
     window.removeEventListener('blur', handoffBlurHandler);
   }
+  if (typeof window !== 'undefined' && handoffPageHideHandler) {
+    window.removeEventListener('pagehide', handoffPageHideHandler);
+  }
   handoffWatcherTimer = null;
   handoffFocusHandler = null;
   handoffVisibilityHandler = null;
   handoffBlurHandler = null;
+  handoffPageHideHandler = null;
   handoffWatcherActive = false;
   handoffAttemptInFlight = false;
   handoffWatcherQueryClient = null;
@@ -206,6 +212,7 @@ async function attemptDiscordSessionHandoff(): Promise<boolean> {
     const queryClient = handoffWatcherQueryClient;
     if (queryClient) {
       await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+      await queryClient.refetchQueries({ queryKey: ['discord', 'session'], type: 'active' });
     }
 
     return true;
@@ -242,7 +249,7 @@ function ensureHandoffWatcher(queryClient: QueryClient): void {
     }
 
     if (!handoffWatcherHasBackgrounded) {
-      if (Date.now() - currentState.createdAt > HANDOFF_POLL_INTERVAL_MS * 10) {
+      if (Date.now() - currentState.createdAt > HANDOFF_BACKGROUND_TIMEOUT_MS) {
         handoffWatcherHasBackgrounded = true;
       } else {
         return;
@@ -265,6 +272,9 @@ function ensureHandoffWatcher(queryClient: QueryClient): void {
   handoffBlurHandler = () => {
     handoffWatcherHasBackgrounded = true;
   };
+  handoffPageHideHandler = () => {
+    handoffWatcherHasBackgrounded = true;
+  };
   handoffFocusHandler = () => {
     attemptIfReady();
   };
@@ -279,6 +289,7 @@ function ensureHandoffWatcher(queryClient: QueryClient): void {
 
   window.addEventListener('blur', handoffBlurHandler);
   window.addEventListener('focus', handoffFocusHandler);
+  window.addEventListener('pagehide', handoffPageHideHandler);
   document.addEventListener('visibilitychange', handoffVisibilityHandler);
   handoffWatcherTimer = window.setInterval(attemptIfReady, HANDOFF_POLL_INTERVAL_MS);
   attemptIfReady();
