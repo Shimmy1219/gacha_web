@@ -168,7 +168,7 @@ function GachaInventoryCard({
   catalogItems,
   rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
-  const { userInventories: userInventoryStore, pullHistory: pullHistoryStore } = useDomainStores();
+  const { pullHistory: pullHistoryStore } = useDomainStores();
   const { push } = useModal();
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
@@ -255,7 +255,6 @@ function GachaInventoryCard({
         onConfirm: () => {
           resetDraft();
           setIsEditing(false);
-          userInventoryStore.removeInventory({ userId, inventoryId: inventory.inventoryId });
           pullHistoryStore.deletePullsForInventory({ gachaId: inventory.gachaId, userId });
         }
       }
@@ -268,8 +267,7 @@ function GachaInventoryCard({
     push,
     resetDraft,
     userId,
-    userName,
-    userInventoryStore
+    userName
   ]);
 
   const handleOpenMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -379,14 +377,13 @@ function GachaInventoryCard({
         return;
       }
 
-      userInventoryStore.setInventoryItemCount(
+      pullHistoryStore.upsertAdjustment(
         {
           userId,
-          inventoryId: inventory.inventoryId,
+          gachaId: inventory.gachaId,
           itemId: trimmedItemId,
           rarityId,
-          count: normalizedCount,
-          gachaId: inventory.gachaId
+          count: normalizedCount
         },
         { persist: 'immediate' }
       );
@@ -398,11 +395,10 @@ function GachaInventoryCard({
       draftCount,
       draftItemId,
       draftRarityId,
-      inventory.inventoryId,
       inventory.gachaId,
       resetDraft,
       userId,
-      userInventoryStore
+      pullHistoryStore
     ]
   );
 

@@ -58,7 +58,7 @@ function getSequentialItemName(position: number): string {
 }
 
 export function ItemsSection(): JSX.Element {
-  const { catalog: catalogStore, userInventories: userInventoryStore, riagu: riaguStore } = useDomainStores();
+  const { catalog: catalogStore, pullHistory: pullHistoryStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -381,16 +381,19 @@ export function ItemsSection(): JSX.Element {
           updatedAt: timestamp
         });
 
-        userInventoryStore.updateItemRarity({
-          gachaId: entry.model.gachaId,
-          itemId: entry.model.itemId,
-          previousRarityId: entry.model.rarityId,
-          nextRarityId: rarityId,
-          updatedAt: timestamp
-        });
+        pullHistoryStore.retargetAdjustmentsForItem(
+          {
+            gachaId: entry.model.gachaId,
+            itemId: entry.model.itemId,
+            previousRarityId: entry.model.rarityId,
+            nextRarityId: rarityId,
+            executedAt: timestamp
+          },
+          { persist: 'immediate' }
+        );
       });
     },
-    [catalogStore, itemEntryById, userInventoryStore]
+    [catalogStore, itemEntryById, pullHistoryStore]
   );
 
   const applyFlagToItems = useCallback(
@@ -465,14 +468,18 @@ export function ItemsSection(): JSX.Element {
         }
 
         catalogStore.removeItem({ gachaId: entry.model.gachaId, itemId, updatedAt: timestamp });
-        userInventoryStore.removeItemReferences({ itemId, gachaId: entry.model.gachaId, updatedAt: timestamp });
+        pullHistoryStore.deleteAdjustmentsForItem({
+          gachaId: entry.model.gachaId,
+          itemId,
+          executedAt: timestamp
+        });
         riaguStore.removeByItemId(itemId, { persist: 'immediate' });
       });
 
       setSelectedItemIds([]);
       closeContextMenu();
     },
-    [catalogStore, closeContextMenu, itemEntryById, riaguStore, userInventoryStore]
+    [catalogStore, closeContextMenu, itemEntryById, pullHistoryStore, riaguStore]
   );
 
   const handleDeleteRequest = useCallback(
@@ -803,13 +810,16 @@ export function ItemsSection(): JSX.Element {
               }
 
               if (model.rarityId !== payload.rarityId) {
-                userInventoryStore.updateItemRarity({
-                  gachaId: model.gachaId,
-                  itemId: model.itemId,
-                  previousRarityId: model.rarityId,
-                  nextRarityId: payload.rarityId,
-                  updatedAt: timestamp
-                });
+                pullHistoryStore.retargetAdjustmentsForItem(
+                  {
+                    gachaId: model.gachaId,
+                    itemId: model.itemId,
+                    previousRarityId: model.rarityId,
+                    nextRarityId: payload.rarityId,
+                    executedAt: timestamp
+                  },
+                  { persist: 'immediate' }
+                );
               }
             } catch (error) {
               console.error('景品設定の保存に失敗しました', error);
@@ -819,7 +829,11 @@ export function ItemsSection(): JSX.Element {
             try {
               const timestamp = new Date().toISOString();
               catalogStore.removeItem({ gachaId, itemId, updatedAt: timestamp });
-              userInventoryStore.removeItemReferences({ itemId, gachaId, updatedAt: timestamp });
+              pullHistoryStore.deleteAdjustmentsForItem({
+                gachaId,
+                itemId,
+                executedAt: timestamp
+              });
               riaguStore.removeByItemId(itemId, { persist: 'immediate' });
             } catch (error) {
               console.error('景品の削除に失敗しました', error);
@@ -836,7 +850,7 @@ export function ItemsSection(): JSX.Element {
       push,
       rarityOptionsByGacha,
       riaguStore,
-      userInventoryStore
+      pullHistoryStore
     ]
   );
 

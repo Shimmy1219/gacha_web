@@ -177,6 +177,16 @@ export interface ReceivePrefsStateV3 {
   };
 }
 
+export type PullHistoryEntrySourceV1 = 'gacha' | 'manual';
+
+export interface PullHistoryInventoryAdjustmentV1 {
+  type: 'inventory-count';
+  key: string;
+  itemId: string;
+  rarityId?: string;
+  count: number;
+}
+
 export interface PullHistoryEntryV1 {
   id: string;
   gachaId: string;
@@ -187,6 +197,8 @@ export interface PullHistoryEntryV1 {
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;
   notes?: string;
+  source?: PullHistoryEntrySourceV1;
+  adjustments?: PullHistoryInventoryAdjustmentV1[];
 }
 
 export interface PullHistoryStateV1 {
