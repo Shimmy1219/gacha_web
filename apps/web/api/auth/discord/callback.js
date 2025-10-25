@@ -15,6 +15,31 @@ function normalizeLoginContext(value) {
   return null;
 }
 
+async function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function restoreAuthState(state) {
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const consumedState = await consumeDiscordAuthState(state);
+    if (consumedState?.verifier) {
+      return { state: consumedState, consumed: true, attempts: attempt + 1 };
+    }
+    // `getdel` may return null immediately after `set` on some environments, so retry briefly.
+    await delay(80 * (attempt + 1));
+  }
+
+  const fallbackState = await getDiscordAuthState(state);
+  if (fallbackState?.verifier) {
+    return { state: fallbackState, consumed: false, attempts: maxAttempts + 1 };
+  }
+
+  return { state: null, consumed: false, attempts: maxAttempts + 1 };
+}
+
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/callback', req);
   log.info('request received', { hasCode: Boolean(req.query?.code), hasState: Boolean(req.query?.state) });
@@ -64,14 +89,15 @@ export default async function handler(req, res) {
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
       });
-      const storedState = await consumeDiscordAuthState(stateParam);
+      const { state: storedState, consumed: stateConsumed, attempts } = await restoreAuthState(stateParam);
       if (!storedState?.verifier) {
         log.warn('state record missing in kv store', {
           hasStoredState: Boolean(storedState),
+          attempts,
         });
         return res.status(400).send('Invalid state or verifier');
       }
-      stateRecordConsumed = true;
+      stateRecordConsumed = stateConsumed;
       verifierToUse = storedState.verifier;
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
@@ -84,6 +110,8 @@ export default async function handler(req, res) {
         statePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
+        restoredAfterAttempts: attempts,
+        wasConsumed: stateConsumed,
       });
     } else if (!loginContext) {
       const storedState = await getDiscordAuthState(stateParam);
