@@ -212,7 +212,24 @@ export function ItemsSection(): JSX.Element {
   const visibleIdSet = useMemo(() => new Set(items.map((entry) => entry.model.itemId)), [items]);
 
   useEffect(() => {
-    setSelectedItemIds((previous) => previous.filter((id) => visibleIdSet.has(id)));
+    setSelectedItemIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+
+      const next = previous.filter((id) => visibleIdSet.has(id));
+      if (next.length !== previous.length) {
+        return next;
+      }
+
+      for (let index = 0; index < next.length; index += 1) {
+        if (next[index] !== previous[index]) {
+          return next;
+        }
+      }
+
+      return previous;
+    });
   }, [visibleIdSet]);
 
   useEffect(() => {
