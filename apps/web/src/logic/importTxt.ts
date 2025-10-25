@@ -116,7 +116,7 @@ export async function importTxtFile(
     context.stores.rarities.setState(merged.snapshot.rarityState, { persist: 'none' });
   }
   if (merged.snapshot.userInventories) {
-    context.stores.userInventories.setState(merged.snapshot.userInventories, { persist: 'none' });
+    context.stores.userInventories.applyProjectionResult(merged.snapshot.userInventories);
   }
 
   return { gachaId: merged.gachaId, displayName: merged.displayName };

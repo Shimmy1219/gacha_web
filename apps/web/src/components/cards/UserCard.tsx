@@ -168,7 +168,7 @@ function GachaInventoryCard({
   catalogItems,
   rarityOptions: _rarityOptions
 }: GachaInventoryCardProps): JSX.Element {
-  const { userInventories: userInventoryStore, pullHistory: pullHistoryStore } = useDomainStores();
+  const { pullHistory: pullHistoryStore } = useDomainStores();
   const { push } = useModal();
   const totalPulls = useMemo(
     () => inventory.pulls.reduce((total, pull) => total + pull.count, 0),
@@ -206,6 +206,7 @@ function GachaInventoryCard({
   const [draftItemId, setDraftItemId] = useState('');
   const [draftCount, setDraftCount] = useState('');
   const [draftRarityId, setDraftRarityId] = useState('');
+  const [draftBaseCount, setDraftBaseCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -223,6 +224,7 @@ function GachaInventoryCard({
     setDraftItemId('');
     setDraftCount('');
     setDraftRarityId('');
+    setDraftBaseCount(0);
     setErrorMessage(null);
   }, []);
 
@@ -255,7 +257,6 @@ function GachaInventoryCard({
         onConfirm: () => {
           resetDraft();
           setIsEditing(false);
-          userInventoryStore.removeInventory({ userId, inventoryId: inventory.inventoryId });
           pullHistoryStore.deletePullsForInventory({ gachaId: inventory.gachaId, userId });
         }
       }
@@ -268,8 +269,7 @@ function GachaInventoryCard({
     push,
     resetDraft,
     userId,
-    userName,
-    userInventoryStore
+    userName
   ]);
 
   const handleOpenMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -317,6 +317,7 @@ function GachaInventoryCard({
       setDraftItemId(itemId);
       setDraftCount(String(currentCount));
       setDraftRarityId(rarityId);
+      setDraftBaseCount(currentCount);
       setErrorMessage(null);
     },
     [isEditing]
@@ -331,6 +332,7 @@ function GachaInventoryCard({
     setDraftItemId('');
     setDraftCount('1');
     setDraftRarityId('');
+    setDraftBaseCount(0);
     setErrorMessage(null);
   }, [isEditing]);
 
@@ -379,14 +381,21 @@ function GachaInventoryCard({
         return;
       }
 
-      userInventoryStore.setInventoryItemCount(
+      const baseCount = draftBaseCount;
+      const delta = normalizedCount - baseCount;
+      if (delta === 0) {
+        setErrorMessage('変更がありません');
+        return;
+      }
+
+      pullHistoryStore.recordManualInventoryChange(
         {
           userId,
-          inventoryId: inventory.inventoryId,
+          gachaId: inventory.gachaId,
           itemId: trimmedItemId,
-          rarityId,
-          count: normalizedCount,
-          gachaId: inventory.gachaId
+          delta,
+          executedAt: new Date().toISOString(),
+          source: 'manual'
         },
         { persist: 'immediate' }
       );
@@ -398,11 +407,11 @@ function GachaInventoryCard({
       draftCount,
       draftItemId,
       draftRarityId,
-      inventory.inventoryId,
+      draftBaseCount,
       inventory.gachaId,
       resetDraft,
       userId,
-      userInventoryStore
+      pullHistoryStore
     ]
   );
 
@@ -413,11 +422,15 @@ function GachaInventoryCard({
         const matched = catalogItemMap.get(value);
         if (matched) {
           setDraftRarityId(matched.rarityId);
+          const existingCount = inventory.counts?.[matched.rarityId]?.[matched.itemId] ?? 0;
+          setDraftBaseCount(existingCount);
+        } else {
+          setDraftBaseCount(0);
         }
       }
       setErrorMessage(null);
     },
-    [catalogItemMap, draftMode]
+    [catalogItemMap, draftMode, inventory.counts]
   );
 
   return (

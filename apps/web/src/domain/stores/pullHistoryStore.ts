@@ -1,5 +1,6 @@
 import {
   AppPersistence,
+  type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1
 } from '../app-persistence';
@@ -14,13 +15,22 @@ interface AppendPullParams {
   currencyUsed?: number;
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;
-  notes?: string;
+  source?: PullHistoryEntrySourceV1;
   id?: string;
 }
 
 interface ReplacePullParams {
   entry: PullHistoryEntryV1;
   executedAtOverride?: string;
+}
+
+interface RecordManualInventoryChangeParams {
+  gachaId: string;
+  userId?: string;
+  itemId: string;
+  delta: number;
+  executedAt?: string;
+  source?: Extract<PullHistoryEntrySourceV1, 'manual' | 'realtime'>;
 }
 
 function sanitizeCounts(map: Record<string, number> | undefined): Record<string, number> {
@@ -52,6 +62,15 @@ function ensureTimestamp(value?: string): string {
   return parsed.toISOString();
 }
 
+function normalizeUserIdValue(userId: string | undefined): string | undefined {
+  if (!userId) {
+    return undefined;
+  }
+
+  const trimmed = userId.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryStateV1 {
   if (!state || state.version !== 1) {
     const now = new Date().toISOString();
@@ -76,7 +95,7 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (!entry) {
       return;
     }
-    pulls[id] = entry;
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
     order.push(id);
     seen.add(id);
   });
@@ -85,7 +104,7 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (!entry || seen.has(id)) {
       return;
     }
-    pulls[id] = entry;
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
     order.push(id);
     seen.add(id);
   });
@@ -113,17 +132,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
   }
 
   appendPull(params: AppendPullParams, options: UpdateOptions = { persist: 'immediate' }): string {
-    const {
-      gachaId,
-      userId,
-      executedAt,
-      pullCount,
-      currencyUsed,
-      itemCounts,
-      rarityCounts,
-      notes,
-      id
-    } = params;
+    const { gachaId, userId, executedAt, pullCount, currencyUsed, itemCounts, rarityCounts, source, id } = params;
 
     if (!gachaId) {
       console.warn('PullHistoryStore.appendPull called without gachaId', params);
@@ -140,6 +149,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     const sanitizedItemCounts = sanitizeCounts(itemCounts);
     const sanitizedRarityCounts = sanitizeCounts(rarityCounts);
     const executedAtIso = ensureTimestamp(executedAt);
+    const normalizedSource: PullHistoryEntrySourceV1 = source ?? 'insiteResult';
 
     this.update((previous) => {
       const base = normalizeState(previous ?? this.loadLatestState());
@@ -155,7 +165,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         currencyUsed,
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
-        notes
+        source: normalizedSource
       };
       nextPulls[entryId] = entry;
 
@@ -189,13 +199,15 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       const now = new Date().toISOString();
       const sanitizedItemCounts = sanitizeCounts(entry.itemCounts);
       const sanitizedRarityCounts = sanitizeCounts(entry.rarityCounts);
+      const normalizedSource: PullHistoryEntrySourceV1 = entry.source ?? 'insiteResult';
 
       const nextPulls = { ...base.pulls };
       nextPulls[entry.id] = {
         ...entry,
         executedAt: ensureTimestamp(executedAtOverride ?? entry.executedAt),
         itemCounts: sanitizedItemCounts,
-        rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined
+        rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
+        source: normalizedSource
       };
 
       const nextOrder = [entry.id, ...base.order.filter((existingId) => existingId !== entry.id)];
@@ -321,6 +333,146 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         updatedAt: now,
         order: nextOrder,
         pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+  }
+
+  recordManualInventoryChange(
+    params: RecordManualInventoryChangeParams,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): string | undefined {
+    const { gachaId, userId, itemId, delta, executedAt, source } = params;
+
+    const normalizedGachaId = gachaId?.trim() ?? '';
+    if (!normalizedGachaId) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without gachaId', params);
+      return undefined;
+    }
+
+    const normalizedItemId = itemId?.trim() ?? '';
+    if (!normalizedItemId) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without itemId', params);
+      return undefined;
+    }
+
+    if (!Number.isFinite(delta)) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without valid delta', params);
+      return undefined;
+    }
+
+    const normalizedDelta = Math.trunc(delta);
+    if (normalizedDelta === 0) {
+      return undefined;
+    }
+
+    const normalizedUserId = normalizeUserIdValue(userId);
+    const executedAtIso = ensureTimestamp(executedAt);
+    const normalizedSource: PullHistoryEntrySourceV1 = source ?? 'manual';
+
+    let resultId: string | undefined;
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      const now = new Date().toISOString();
+
+      const entryId = generatePullId();
+      const entry: PullHistoryEntryV1 = {
+        id: entryId,
+        gachaId: normalizedGachaId,
+        userId: normalizedUserId,
+        executedAt: executedAtIso,
+        pullCount: 0,
+        currencyUsed: 0,
+        itemCounts: { [normalizedItemId]: normalizedDelta },
+        source: normalizedSource
+      };
+
+      const nextPulls = { ...base.pulls, [entryId]: entry };
+      const nextOrder = [entryId, ...base.order.filter((existingId) => existingId !== entryId)];
+
+      resultId = entryId;
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+
+    return resultId;
+  }
+
+  deleteManualEntriesForItem(
+    params: { gachaId: string; itemId: string },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedGachaId = params.gachaId?.trim() ?? '';
+    const normalizedItemId = params.itemId?.trim() ?? '';
+
+    if (!normalizedGachaId) {
+      console.warn('PullHistoryStore.deleteManualEntriesForItem called without gachaId', params);
+      return;
+    }
+
+    if (!normalizedItemId) {
+      console.warn('PullHistoryStore.deleteManualEntriesForItem called without itemId', params);
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+
+      let mutated = false;
+      const nextPulls: Record<string, PullHistoryEntryV1 | undefined> = { ...base.pulls };
+
+      Object.entries(base.pulls).forEach(([entryId, entry]) => {
+        if (!entry) {
+          return;
+        }
+
+        if (entry.gachaId !== normalizedGachaId) {
+          return;
+        }
+
+        if (entry.source !== 'manual') {
+          return;
+        }
+
+        if (entry.itemCounts?.[normalizedItemId] === undefined) {
+          return;
+        }
+
+        delete nextPulls[entryId];
+        mutated = true;
+      });
+
+      if (!mutated) {
+        return previous;
+      }
+
+      const filteredEntries = Object.entries(nextPulls).filter(
+        (entry): entry is [string, PullHistoryEntryV1] => Boolean(entry[1])
+      );
+
+      if (filteredEntries.length === 0) {
+        return undefined;
+      }
+
+      const nextOrder = base.order.filter((entryId) => nextPulls[entryId]);
+      filteredEntries.forEach(([entryId]) => {
+        if (!nextOrder.includes(entryId)) {
+          nextOrder.push(entryId);
+        }
+      });
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: Object.fromEntries(filteredEntries)
       } satisfies PullHistoryStateV1;
     }, options);
   }
