@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RadioGroup } from '@headlessui/react';
 import { clsx } from 'clsx';
 
 import { SwitchField } from '../../components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
-import { DEFAULT_PALETTE } from '../../features/rarity/components/color-picker/palette';
+import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ModalBody } from '../ModalComponents';
 import { type ModalComponent } from '../ModalTypes';
 
@@ -34,7 +34,6 @@ const MENU_ITEMS: MenuItem[] = [
   }
 ];
 
-const ACCENT_COLOR_OPTIONS = DEFAULT_PALETTE.filter((option) => option.value.startsWith('#'));
 const CUSTOM_BASE_TONE_OPTIONS = [
   {
     id: 'dark',
@@ -74,8 +73,35 @@ export const PageSettingsDialog: ModalComponent = () => {
     setCustomBaseTone
   } = useSiteTheme();
 
+  const accentScheme: 'light' | 'dark' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
   const normalizedAccent = customAccentColor.toLowerCase();
-  const accentChoices = useMemo(() => ACCENT_COLOR_OPTIONS, []);
+  const accentChoices = useMemo(
+    () =>
+      SITE_ACCENT_PALETTE.map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        value: entry[accentScheme]
+      })),
+    [accentScheme]
+  );
+  const selectedPalette = useMemo(
+    () =>
+      SITE_ACCENT_PALETTE.find(
+        (entry) =>
+          entry.light.toLowerCase() === normalizedAccent || entry.dark.toLowerCase() === normalizedAccent
+      ) ?? null,
+    [normalizedAccent]
+  );
+
+  useEffect(() => {
+    if (!selectedPalette) {
+      return;
+    }
+    const nextHex = selectedPalette[accentScheme].toLowerCase();
+    if (nextHex !== normalizedAccent) {
+      setCustomAccentColor(selectedPalette[accentScheme]);
+    }
+  }, [accentScheme, normalizedAccent, selectedPalette, setCustomAccentColor]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
@@ -245,21 +271,19 @@ export const PageSettingsDialog: ModalComponent = () => {
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {accentChoices.map((entry) => {
-                              const normalizedValue = entry.value.toLowerCase();
-                              const isSelected = normalizedValue === normalizedAccent;
+                              const displayColor = entry.value;
+                              const isSelected = selectedPalette?.id === entry.id;
                               return (
                                 <button
                                   key={entry.id}
                                   type="button"
                                   className={clsx(
                                     'group rounded-lg border border-border/60 bg-panel-contrast p-1 transition hover:border-accent/50 hover:bg-panel-contrast/90',
-                                    isSelected
-                                      ? 'border-accent bg-accent/15'
-                                      : undefined
+                                    isSelected ? 'border-accent bg-accent/15' : undefined
                                   )}
                                   onClick={() => {
-                                    if (!isSelected) {
-                                      setCustomAccentColor(entry.value);
+                                    if (customAccentColor.toLowerCase() !== displayColor.toLowerCase()) {
+                                      setCustomAccentColor(displayColor);
                                     }
                                     if (theme !== 'custom') {
                                       setTheme('custom');
@@ -271,8 +295,8 @@ export const PageSettingsDialog: ModalComponent = () => {
                                   <span
                                     className="block h-10 w-10 rounded-md border border-border/50 transition"
                                     style={{
-                                      backgroundColor: entry.value,
-                                      boxShadow: isSelected ? `0 0 0 2px ${entry.value}` : undefined
+                                      backgroundColor: displayColor,
+                                      boxShadow: isSelected ? `0 0 0 2px ${displayColor}` : undefined
                                     }}
                                     aria-hidden="true"
                                   />
