@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import type { QueryClient } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface DiscordUserProfile {
@@ -26,6 +27,220 @@ interface DiscordAuthorizeResponse {
   ok: boolean;
   authorizeUrl: string;
   appAuthorizeUrl?: string;
+  handoffToken?: string;
+  handoffExpiresAt?: number;
+  loginContext?: 'browser' | 'pwa';
+}
+
+interface DiscordHandoffState {
+  token: string;
+  expiresAt: number;
+  createdAt: number;
+}
+
+const HANDOFF_STORAGE_KEY = 'discordHandoffState';
+const HANDOFF_DEFAULT_DURATION_MS = 5 * 60 * 1000;
+const HANDOFF_POLL_INTERVAL_MS = 1500;
+
+let inMemoryHandoffState: DiscordHandoffState | null = null;
+let handoffWatcherActive = false;
+let handoffWatcherTimer: ReturnType<typeof setInterval> | null = null;
+let handoffAttemptInFlight = false;
+let handoffFocusHandler: (() => void) | null = null;
+let handoffVisibilityHandler: (() => void) | null = null;
+let handoffWatcherQueryClient: QueryClient | null = null;
+
+function readStoredHandoffState(): DiscordHandoffState | null {
+  if (inMemoryHandoffState) {
+    return inMemoryHandoffState;
+  }
+
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage?.getItem(HANDOFF_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      window.sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+      return null;
+    }
+    const token = typeof parsed.token === 'string' ? parsed.token : null;
+    const expiresAt = typeof parsed.expiresAt === 'number' ? parsed.expiresAt : null;
+    const createdAt =
+      typeof parsed.createdAt === 'number' && Number.isFinite(parsed.createdAt)
+        ? parsed.createdAt
+        : Date.now();
+    if (!token || !expiresAt || !Number.isFinite(expiresAt)) {
+      window.sessionStorage.removeItem(HANDOFF_STORAGE_KEY);
+      return null;
+    }
+    const state: DiscordHandoffState = { token, expiresAt, createdAt };
+    inMemoryHandoffState = state;
+    return state;
+  } catch (error) {
+    console.warn('Discord handoff state could not be loaded from sessionStorage', error);
+    return inMemoryHandoffState;
+  }
+}
+
+function writeStoredHandoffState(state: DiscordHandoffState | null): void {
+  inMemoryHandoffState = state;
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    if (state) {
+      window.sessionStorage?.setItem(HANDOFF_STORAGE_KEY, JSON.stringify(state));
+    } else {
+      window.sessionStorage?.removeItem(HANDOFF_STORAGE_KEY);
+    }
+  } catch (error) {
+    console.warn('Discord handoff state could not be persisted to sessionStorage', error);
+  }
+}
+
+function clearStoredHandoffState(): void {
+  writeStoredHandoffState(null);
+}
+
+function storeHandoffState(token: string, expiresAt?: number): void {
+  const now = Date.now();
+  const safeExpiresAt =
+    typeof expiresAt === 'number' && Number.isFinite(expiresAt)
+      ? expiresAt
+      : now + HANDOFF_DEFAULT_DURATION_MS;
+  writeStoredHandoffState({ token, expiresAt: safeExpiresAt, createdAt: now });
+}
+
+function stopHandoffWatcher(): void {
+  if (typeof window !== 'undefined' && handoffWatcherTimer !== null) {
+    window.clearInterval(handoffWatcherTimer);
+  }
+  if (typeof window !== 'undefined' && handoffFocusHandler) {
+    window.removeEventListener('focus', handoffFocusHandler);
+  }
+  if (typeof document !== 'undefined' && handoffVisibilityHandler) {
+    document.removeEventListener('visibilitychange', handoffVisibilityHandler);
+  }
+  handoffWatcherTimer = null;
+  handoffFocusHandler = null;
+  handoffVisibilityHandler = null;
+  handoffWatcherActive = false;
+  handoffAttemptInFlight = false;
+  handoffWatcherQueryClient = null;
+}
+
+async function attemptDiscordSessionHandoff(): Promise<boolean> {
+  if (handoffAttemptInFlight) {
+    return false;
+  }
+
+  const state = readStoredHandoffState();
+  if (!state) {
+    stopHandoffWatcher();
+    return false;
+  }
+
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const now = Date.now();
+  if (state.expiresAt <= now) {
+    console.warn('Discord handoff token expired before completion');
+    clearStoredHandoffState();
+    stopHandoffWatcher();
+    return false;
+  }
+
+  handoffAttemptInFlight = true;
+
+  try {
+    const response = await fetch('/api/auth/discord/handoff', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ token: state.token }),
+    });
+
+    if (response.status === 404) {
+      return false;
+    }
+
+    if (response.status === 410) {
+      console.warn('Discord handoff token expired on server before completion');
+      clearStoredHandoffState();
+      stopHandoffWatcher();
+      return false;
+    }
+
+    if (!response.ok) {
+      console.error('Discord handoff endpoint returned an unexpected response', response.status);
+      return false;
+    }
+
+    clearStoredHandoffState();
+    stopHandoffWatcher();
+
+    const queryClient = handoffWatcherQueryClient;
+    if (queryClient) {
+      await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Discord handoff attempt failed', error);
+    return false;
+  } finally {
+    handoffAttemptInFlight = false;
+  }
+}
+
+function ensureHandoffWatcher(queryClient: QueryClient): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  const state = readStoredHandoffState();
+  if (!state) {
+    stopHandoffWatcher();
+    return;
+  }
+
+  handoffWatcherQueryClient = queryClient;
+
+  const attempt = () => {
+    void attemptDiscordSessionHandoff();
+  };
+
+  if (handoffWatcherActive) {
+    return;
+  }
+
+  handoffWatcherActive = true;
+
+  handoffFocusHandler = () => {
+    void attemptDiscordSessionHandoff();
+  };
+  handoffVisibilityHandler = () => {
+    if (document.visibilityState === 'visible') {
+      void attemptDiscordSessionHandoff();
+    }
+  };
+
+  window.addEventListener('focus', handoffFocusHandler);
+  document.addEventListener('visibilitychange', handoffVisibilityHandler);
+  handoffWatcherTimer = window.setInterval(attempt, HANDOFF_POLL_INTERVAL_MS);
+
+  attempt();
 }
 
 function isProbablyMobileDevice(): boolean {
@@ -109,6 +324,10 @@ export function useDiscordSession(): UseDiscordSessionResult {
     queryFn: fetchSession
   });
 
+  useEffect(() => {
+    ensureHandoffWatcher(queryClient);
+  }, [queryClient]);
+
   const login = useCallback(async () => {
     const baseLoginUrl = '/api/auth/discord/start';
     const loginContext = resolveLoginContext();
@@ -137,6 +356,11 @@ export function useDiscordSession(): UseDiscordSessionResult {
 
       const authorizeUrl = payload.authorizeUrl;
       const appAuthorizeUrl = payload.appAuthorizeUrl;
+
+      if (payload.handoffToken && loginContext === 'pwa') {
+        storeHandoffState(payload.handoffToken, payload.handoffExpiresAt);
+        ensureHandoffWatcher(queryClient);
+      }
 
       if (appAuthorizeUrl && isProbablyMobileDevice()) {
         try {

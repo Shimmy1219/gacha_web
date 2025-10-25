@@ -6,6 +6,7 @@ import {
   deleteDiscordAuthState,
   getDiscordAuthState,
 } from '../../_lib/discordAuthStore.js';
+import { saveDiscordHandoff } from '../../_lib/discordHandoffStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
@@ -66,6 +67,8 @@ export default async function handler(req, res) {
   let verifierToUse = typeof cookieVerifier === 'string' ? cookieVerifier : null;
   let shouldCleanupState = Boolean(stateParam);
   let stateRecordConsumed = false;
+  let handoffToken = null;
+  let handoffExpiresAt = null;
 
   try {
     if (!codeParam || !stateParam) {
@@ -102,6 +105,12 @@ export default async function handler(req, res) {
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
       }
+      if (!handoffToken && storedState?.handoffToken) {
+        handoffToken = storedState.handoffToken;
+      }
+      if (!handoffExpiresAt && storedState?.handoffExpiresAt) {
+        handoffExpiresAt = storedState.handoffExpiresAt;
+      }
       const statePreview =
         typeof stateParam === 'string' && stateParam.length > 8
           ? `${stateParam.slice(0, 4)}...`
@@ -112,11 +121,18 @@ export default async function handler(req, res) {
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
         restoredAfterAttempts: attempts,
         wasConsumed: stateConsumed,
+        hasHandoffToken: Boolean(handoffToken),
       });
     } else if (!loginContext) {
       const storedState = await getDiscordAuthState(stateParam);
       if (storedState?.loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext) || loginContext;
+      }
+      if (!handoffToken && storedState?.handoffToken) {
+        handoffToken = storedState.handoffToken;
+      }
+      if (!handoffExpiresAt && storedState?.handoffExpiresAt) {
+        handoffExpiresAt = storedState.handoffExpiresAt;
       }
     }
 
@@ -205,6 +221,38 @@ export default async function handler(req, res) {
     setCookie(res, 'd_verifier', '', { maxAge: 0 });
     setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
+    if (loginContext === 'pwa') {
+      if (handoffToken) {
+        const now = Date.now();
+        if (handoffExpiresAt && handoffExpiresAt < now) {
+          log.warn('handoff token expired before completion', {
+            tokenPreview: handoffToken.slice(0, 6),
+            handoffExpiresAt,
+            now,
+          });
+        } else {
+          try {
+            await saveDiscordHandoff(handoffToken, {
+              sid,
+              uid: me.id,
+              name: me.username,
+              avatar: me.avatar,
+            });
+            log.info('handoff token stored for pwa login', {
+              tokenPreview: handoffToken.slice(0, 6),
+            });
+          } catch (error) {
+            log.error('failed to store handoff token payload', {
+              tokenPreview: handoffToken.slice(0, 6),
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      } else {
+        log.warn('handoff token missing for pwa login context');
+      }
+    }
+
     if (acceptsJson) {
       log.info('returning login completion payload as json response', { loginContext });
       return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
@@ -258,7 +306,7 @@ export default async function handler(req, res) {
     }
 
     const guidanceMessage =
-      'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。';
+      'ログインが完了しました。画面が切り替わらない場合は、このページを閉じてアプリを再読み込みしてください。アプリが表示されていない場合は手動で戻ってください。';
 
     const html = `<!DOCTYPE html>
 <html lang="ja">
@@ -283,7 +331,6 @@ export default async function handler(req, res) {
       <p>${guidanceMessage}</p>
       <p><a href="${redirectTarget}">トップページに移動する</a></p>
     </main>
-    <script>${redirectScript}</script>
     <noscript>
       <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
     </noscript>
