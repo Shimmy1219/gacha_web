@@ -355,7 +355,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
           source: 'manual'
         };
 
-        const nextPulls = { ...base.pulls, [targetId]: updatedEntry };
+        const pullsWithUpdatedEntry = { ...base.pulls, [targetId]: updatedEntry };
         const nextOrderWithTarget = [targetId, ...nextOrder];
 
         resultId = targetId;
@@ -363,7 +363,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
           version: 1,
           updatedAt: now,
           order: nextOrderWithTarget,
-          pulls: nextPulls
+          pulls: pullsWithUpdatedEntry
         } satisfies PullHistoryStateV1;
       }
 
