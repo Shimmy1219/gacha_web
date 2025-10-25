@@ -39,7 +39,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
         classNames={{
           root: 'user-filter-panel__select-wrapper relative',
           button:
-            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground shadow-[0_10px_32px_rgba(0,0,0,0.45)] transition',
+            'user-filter-panel__select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground transition',
           buttonOpen: 'border-accent text-accent',
           buttonClosed: 'hover:border-accent/70',
           icon: 'user-filter-panel__select-icon h-4 w-4 transition-transform',
