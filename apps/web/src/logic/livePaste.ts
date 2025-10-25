@@ -347,7 +347,7 @@ export function applyLivePasteText(
         pullCount: normalizedPulls,
         itemCounts,
         rarityCounts: Object.keys(rarityCounts).length > 0 ? rarityCounts : undefined,
-        notes: 'リアルタイム入力から追加'
+        source: 'realtime'
       });
     }
   });
@@ -380,7 +380,7 @@ export function applyLivePasteText(
   context.stores.appState.setState(nextAppState, { persist: 'none' });
   context.stores.catalog.setState(nextCatalogState, { persist: 'none' });
   context.stores.rarities.setState(nextRarityState, { persist: 'none' });
-  context.stores.userInventories.setState(nextInventoriesState, { persist: 'none' });
+  context.stores.userInventories.applyProjectionResult(nextInventoriesState);
 
   return {
     appliedBlocks: parsedBlocks.length,
