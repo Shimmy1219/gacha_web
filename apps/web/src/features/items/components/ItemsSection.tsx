@@ -380,20 +380,9 @@ export function ItemsSection(): JSX.Element {
           patch,
           updatedAt: timestamp
         });
-
-        pullHistoryStore.retargetAdjustmentsForItem(
-          {
-            gachaId: entry.model.gachaId,
-            itemId: entry.model.itemId,
-            previousRarityId: entry.model.rarityId,
-            nextRarityId: rarityId,
-            executedAt: timestamp
-          },
-          { persist: 'immediate' }
-        );
       });
     },
-    [catalogStore, itemEntryById, pullHistoryStore]
+    [catalogStore, itemEntryById]
   );
 
   const applyFlagToItems = useCallback(
@@ -468,10 +457,9 @@ export function ItemsSection(): JSX.Element {
         }
 
         catalogStore.removeItem({ gachaId: entry.model.gachaId, itemId, updatedAt: timestamp });
-        pullHistoryStore.deleteAdjustmentsForItem({
+        pullHistoryStore.deleteManualEntriesForItem({
           gachaId: entry.model.gachaId,
-          itemId,
-          executedAt: timestamp
+          itemId
         });
         riaguStore.removeByItemId(itemId, { persist: 'immediate' });
       });
@@ -809,18 +797,6 @@ export function ItemsSection(): JSX.Element {
                 riaguStore.removeByItemId(model.itemId, { persist: 'debounced' });
               }
 
-              if (model.rarityId !== payload.rarityId) {
-                pullHistoryStore.retargetAdjustmentsForItem(
-                  {
-                    gachaId: model.gachaId,
-                    itemId: model.itemId,
-                    previousRarityId: model.rarityId,
-                    nextRarityId: payload.rarityId,
-                    executedAt: timestamp
-                  },
-                  { persist: 'immediate' }
-                );
-              }
             } catch (error) {
               console.error('景品設定の保存に失敗しました', error);
             }
@@ -829,10 +805,9 @@ export function ItemsSection(): JSX.Element {
             try {
               const timestamp = new Date().toISOString();
               catalogStore.removeItem({ gachaId, itemId, updatedAt: timestamp });
-              pullHistoryStore.deleteAdjustmentsForItem({
+              pullHistoryStore.deleteManualEntriesForItem({
                 gachaId,
-                itemId,
-                executedAt: timestamp
+                itemId
               });
               riaguStore.removeByItemId(itemId, { persist: 'immediate' });
             } catch (error) {

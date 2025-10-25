@@ -458,7 +458,7 @@ function createMockSnapshot(): {
         currencyUsed: 3000 * (index + 1),
         itemCounts,
         rarityCounts,
-        notes: `${gacha.displayName}のサンプル${10 * (index + 1)}連結果`
+        source: 'insiteResult'
       }
     ] as const;
   });

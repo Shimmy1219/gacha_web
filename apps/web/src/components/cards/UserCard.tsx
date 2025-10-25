@@ -206,6 +206,7 @@ function GachaInventoryCard({
   const [draftItemId, setDraftItemId] = useState('');
   const [draftCount, setDraftCount] = useState('');
   const [draftRarityId, setDraftRarityId] = useState('');
+  const [draftBaseCount, setDraftBaseCount] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -223,6 +224,7 @@ function GachaInventoryCard({
     setDraftItemId('');
     setDraftCount('');
     setDraftRarityId('');
+    setDraftBaseCount(0);
     setErrorMessage(null);
   }, []);
 
@@ -315,6 +317,7 @@ function GachaInventoryCard({
       setDraftItemId(itemId);
       setDraftCount(String(currentCount));
       setDraftRarityId(rarityId);
+      setDraftBaseCount(currentCount);
       setErrorMessage(null);
     },
     [isEditing]
@@ -329,6 +332,7 @@ function GachaInventoryCard({
     setDraftItemId('');
     setDraftCount('1');
     setDraftRarityId('');
+    setDraftBaseCount(0);
     setErrorMessage(null);
   }, [isEditing]);
 
@@ -377,13 +381,21 @@ function GachaInventoryCard({
         return;
       }
 
-      pullHistoryStore.upsertAdjustment(
+      const baseCount = draftBaseCount;
+      const delta = normalizedCount - baseCount;
+      if (delta === 0) {
+        setErrorMessage('変更がありません');
+        return;
+      }
+
+      pullHistoryStore.recordManualInventoryChange(
         {
           userId,
           gachaId: inventory.gachaId,
           itemId: trimmedItemId,
-          rarityId,
-          count: normalizedCount
+          delta,
+          executedAt: new Date().toISOString(),
+          source: 'manual'
         },
         { persist: 'immediate' }
       );
@@ -395,6 +407,7 @@ function GachaInventoryCard({
       draftCount,
       draftItemId,
       draftRarityId,
+      draftBaseCount,
       inventory.gachaId,
       resetDraft,
       userId,
@@ -409,11 +422,15 @@ function GachaInventoryCard({
         const matched = catalogItemMap.get(value);
         if (matched) {
           setDraftRarityId(matched.rarityId);
+          const existingCount = inventory.counts?.[matched.rarityId]?.[matched.itemId] ?? 0;
+          setDraftBaseCount(existingCount);
+        } else {
+          setDraftBaseCount(0);
         }
       }
       setErrorMessage(null);
     },
-    [catalogItemMap, draftMode]
+    [catalogItemMap, draftMode, inventory.counts]
   );
 
   return (

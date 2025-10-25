@@ -347,7 +347,7 @@ export function applyLivePasteText(
         pullCount: normalizedPulls,
         itemCounts,
         rarityCounts: Object.keys(rarityCounts).length > 0 ? rarityCounts : undefined,
-        notes: 'リアルタイム入力から追加'
+        source: 'realtime'
       });
     }
   });

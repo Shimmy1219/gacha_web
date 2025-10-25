@@ -1,5 +1,6 @@
 import {
   type GachaCatalogStateV3,
+  type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1,
   type UserInventoriesStateV3,
@@ -14,7 +15,6 @@ interface AggregatedSnapshot {
   readonly gachaId: string;
   readonly inventoryId: string;
   readonly counts: Map<string, Map<string, number>>;
-  readonly manualOverrides: Map<string, Map<string, number>>;
   readonly earliestExecutedAt?: string;
   readonly latestExecutedAt?: string;
 }
@@ -56,12 +56,28 @@ function ensureIsoString(input: string | undefined, fallback: string): string {
   return parsed.toISOString();
 }
 
-function sanitizeCount(value: number | undefined): number {
+function sanitizePositiveCount(value: number | undefined): number {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
   const normalized = Math.floor(value ?? 0);
+  return normalized > 0 ? normalized : 0;
+}
+
+function normalizeEntryItemCount(
+  value: number | undefined,
+  source: PullHistoryEntrySourceV1 | undefined
+): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const normalized = Math.trunc(value ?? 0);
+  if (source === 'manual') {
+    return normalized;
+  }
+
   return normalized > 0 ? normalized : 0;
 }
 
@@ -125,45 +141,13 @@ function updateAggregatedSnapshot(
     snapshot.latestExecutedAt = executedAt;
   }
 
-  const adjustments = Array.isArray(entry.adjustments) ? entry.adjustments : [];
-  if (adjustments.length > 0) {
-    adjustments
-      .filter((adjustment) => adjustment?.type === 'inventory-count')
-      .forEach((adjustment) => {
-        if (!adjustment) {
-          return;
-        }
-
-        const itemId = adjustment.itemId?.trim();
-        if (!itemId) {
-          return;
-        }
-
-        const rarityIdCandidate = adjustment.rarityId?.trim();
-        const rarityIndexForGacha = itemRarityIndex.get(entry.gachaId ?? '') ?? new Map<string, string>();
-        const rarityId = rarityIdCandidate || rarityIndexForGacha.get(itemId) || UNKNOWN_RARITY_ID;
-
-        let overridesForRarity = snapshot.manualOverrides.get(rarityId);
-        if (!overridesForRarity) {
-          overridesForRarity = new Map<string, number>();
-          snapshot.manualOverrides.set(rarityId, overridesForRarity);
-        }
-
-        if (overridesForRarity.has(itemId)) {
-          return;
-        }
-
-        overridesForRarity.set(itemId, sanitizeCount(adjustment.count));
-      });
-  }
-
   Object.entries(entry.itemCounts ?? {}).forEach(([itemId, rawCount]) => {
     if (!itemId) {
       return;
     }
 
-    const count = sanitizeCount(rawCount);
-    if (count <= 0) {
+    const count = normalizeEntryItemCount(rawCount, entry.source);
+    if (count === 0) {
       return;
     }
 
@@ -175,7 +159,16 @@ function updateAggregatedSnapshot(
       snapshot.counts.set(rarityId, countsForRarity);
     }
 
-    countsForRarity.set(itemId, (countsForRarity.get(itemId) ?? 0) + count);
+    const nextValue = (countsForRarity.get(itemId) ?? 0) + count;
+    if (nextValue === 0) {
+      countsForRarity.delete(itemId);
+      if (countsForRarity.size === 0) {
+        snapshot.counts.delete(rarityId);
+      }
+      return;
+    }
+
+    countsForRarity.set(itemId, nextValue);
   });
 }
 
@@ -195,7 +188,7 @@ function cloneSnapshot(snapshot: UserInventorySnapshotV3): UserInventorySnapshot
     }
     const clonedRecord: Record<string, number> = {};
     Object.entries(record).forEach(([itemId, value]) => {
-      const normalized = sanitizeCount(value);
+      const normalized = sanitizePositiveCount(value);
       if (normalized > 0) {
         clonedRecord[itemId] = normalized;
       }
@@ -208,7 +201,7 @@ function cloneSnapshot(snapshot: UserInventorySnapshotV3): UserInventorySnapshot
   const totalCount = Object.values(nextCounts).reduce((total, record) => {
     return (
       total +
-      Object.values(record).reduce((rarityTotal, value) => rarityTotal + sanitizeCount(value), 0)
+      Object.values(record).reduce((rarityTotal, value) => rarityTotal + sanitizePositiveCount(value), 0)
     );
   }, 0);
 
@@ -236,7 +229,7 @@ function applySnapshotToIndex(
   Object.entries(countsByRarity).forEach(([rarityId, record]) => {
     const entries = Object.entries(record ?? {});
     entries.forEach(([itemId, count]) => {
-      const normalized = sanitizeCount(count);
+      const normalized = sanitizePositiveCount(count);
       if (normalized <= 0) {
         return;
       }
@@ -269,7 +262,7 @@ function applySnapshotToIndex(
         return;
       }
 
-      const normalized = sanitizeCount(count);
+      const normalized = sanitizePositiveCount(count);
       if (normalized <= 0) {
         return;
       }
@@ -291,61 +284,17 @@ function applySnapshotToIndex(
 function buildSnapshotFromAggregate(
   aggregate: AggregatedSnapshot
 ): UserInventorySnapshotV3 | null {
-  const combined = new Map<string, Map<string, number>>();
+  const countsByRarity: Record<string, Record<string, number>> = {};
+  let totalCount = 0;
 
   aggregate.counts.forEach((itemMap, rarityId) => {
     if (!rarityId || itemMap.size === 0) {
       return;
     }
 
-    let combinedMap = combined.get(rarityId);
-    if (!combinedMap) {
-      combinedMap = new Map<string, number>();
-      combined.set(rarityId, combinedMap);
-    }
-
-    itemMap.forEach((count, itemId) => {
-      if (!itemId) {
-        return;
-      }
-      const normalized = sanitizeCount(count);
-      if (normalized <= 0) {
-        return;
-      }
-      combinedMap.set(itemId, (combinedMap.get(itemId) ?? 0) + normalized);
-    });
-  });
-
-  aggregate.manualOverrides.forEach((itemMap, rarityId) => {
-    if (!rarityId || itemMap.size === 0) {
-      return;
-    }
-
-    let combinedMap = combined.get(rarityId);
-    if (!combinedMap) {
-      combinedMap = new Map<string, number>();
-      combined.set(rarityId, combinedMap);
-    }
-
-    itemMap.forEach((count, itemId) => {
-      if (!itemId) {
-        return;
-      }
-      combinedMap.set(itemId, count);
-    });
-  });
-
-  const countsByRarity: Record<string, Record<string, number>> = {};
-  let totalCount = 0;
-
-  combined.forEach((itemMap, rarityId) => {
-    if (!rarityId || itemMap.size === 0) {
-      return;
-    }
-
     const record: Record<string, number> = {};
     itemMap.forEach((count, itemId) => {
-      const normalized = sanitizeCount(count);
+      const normalized = sanitizePositiveCount(count);
       if (normalized <= 0) {
         return;
       }
@@ -442,8 +391,7 @@ export function projectInventories(params: InventoryProjectionParams): Inventory
     const snapshot: AggregatedSnapshot = existing ?? {
       gachaId,
       inventoryId,
-      counts: new Map<string, Map<string, number>>(),
-      manualOverrides: new Map<string, Map<string, number>>()
+      counts: new Map<string, Map<string, number>>()
     };
 
     updateAggregatedSnapshot(snapshot, entry, itemRarityIndex, nowIso);

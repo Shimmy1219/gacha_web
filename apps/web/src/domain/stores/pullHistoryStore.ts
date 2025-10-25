@@ -1,7 +1,7 @@
 import {
   AppPersistence,
+  type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
-  type PullHistoryInventoryAdjustmentV1,
   type PullHistoryStateV1
 } from '../app-persistence';
 import { generatePullId } from '../idGenerators';
@@ -15,7 +15,7 @@ interface AppendPullParams {
   currencyUsed?: number;
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;
-  notes?: string;
+  source?: PullHistoryEntrySourceV1;
   id?: string;
 }
 
@@ -24,14 +24,13 @@ interface ReplacePullParams {
   executedAtOverride?: string;
 }
 
-interface UpsertAdjustmentParams {
+interface RecordManualInventoryChangeParams {
   gachaId: string;
   userId?: string;
-  rarityId: string;
   itemId: string;
-  count: number | null;
+  delta: number;
   executedAt?: string;
-  notes?: string;
+  source?: Extract<PullHistoryEntrySourceV1, 'manual' | 'realtime'>;
 }
 
 function sanitizeCounts(map: Record<string, number> | undefined): Record<string, number> {
@@ -72,30 +71,6 @@ function normalizeUserIdValue(userId: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function buildAdjustmentKey(params: {
-  userId?: string;
-  gachaId: string;
-  rarityId: string;
-  itemId: string;
-}): string {
-  const { userId, gachaId, rarityId, itemId } = params;
-  const normalizedUserId = normalizeUserIdValue(userId) ?? '__default__';
-  return ['manual', normalizedUserId, gachaId, rarityId, itemId].join(':');
-}
-
-function normalizeAdjustmentCount(value: number | null): number | null {
-  if (value === null) {
-    return null;
-  }
-
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  const normalized = Math.floor(value);
-  return normalized >= 0 ? normalized : 0;
-}
-
 function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryStateV1 {
   if (!state || state.version !== 1) {
     const now = new Date().toISOString();
@@ -120,7 +95,7 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (!entry) {
       return;
     }
-    pulls[id] = entry;
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
     order.push(id);
     seen.add(id);
   });
@@ -129,7 +104,7 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (!entry || seen.has(id)) {
       return;
     }
-    pulls[id] = entry;
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
     order.push(id);
     seen.add(id);
   });
@@ -157,17 +132,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
   }
 
   appendPull(params: AppendPullParams, options: UpdateOptions = { persist: 'immediate' }): string {
-    const {
-      gachaId,
-      userId,
-      executedAt,
-      pullCount,
-      currencyUsed,
-      itemCounts,
-      rarityCounts,
-      notes,
-      id
-    } = params;
+    const { gachaId, userId, executedAt, pullCount, currencyUsed, itemCounts, rarityCounts, source, id } = params;
 
     if (!gachaId) {
       console.warn('PullHistoryStore.appendPull called without gachaId', params);
@@ -184,6 +149,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     const sanitizedItemCounts = sanitizeCounts(itemCounts);
     const sanitizedRarityCounts = sanitizeCounts(rarityCounts);
     const executedAtIso = ensureTimestamp(executedAt);
+    const normalizedSource: PullHistoryEntrySourceV1 = source ?? 'insiteResult';
 
     this.update((previous) => {
       const base = normalizeState(previous ?? this.loadLatestState());
@@ -199,8 +165,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         currencyUsed,
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
-        notes,
-        source: 'gacha'
+        source: normalizedSource
       };
       nextPulls[entryId] = entry;
 
@@ -234,461 +199,19 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       const now = new Date().toISOString();
       const sanitizedItemCounts = sanitizeCounts(entry.itemCounts);
       const sanitizedRarityCounts = sanitizeCounts(entry.rarityCounts);
+      const normalizedSource: PullHistoryEntrySourceV1 = entry.source ?? 'insiteResult';
 
       const nextPulls = { ...base.pulls };
       nextPulls[entry.id] = {
         ...entry,
         executedAt: ensureTimestamp(executedAtOverride ?? entry.executedAt),
         itemCounts: sanitizedItemCounts,
-        rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined
+        rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
+        source: normalizedSource
       };
 
       const nextOrder = [entry.id, ...base.order.filter((existingId) => existingId !== entry.id)];
 
-      return {
-        version: 1,
-        updatedAt: now,
-        order: nextOrder,
-        pulls: nextPulls
-      } satisfies PullHistoryStateV1;
-    }, options);
-  }
-
-  upsertAdjustment(
-    params: UpsertAdjustmentParams,
-    options: UpdateOptions = { persist: 'immediate' }
-  ): string | undefined {
-    const { gachaId, userId, rarityId, itemId, count, executedAt, notes } = params;
-
-    const normalizedGachaId = typeof gachaId === 'string' ? gachaId.trim() : '';
-    if (!normalizedGachaId) {
-      console.warn('PullHistoryStore.upsertAdjustment called without gachaId', params);
-      return undefined;
-    }
-
-    const normalizedItemId = typeof itemId === 'string' ? itemId.trim() : '';
-    if (!normalizedItemId) {
-      console.warn('PullHistoryStore.upsertAdjustment called without itemId', params);
-      return undefined;
-    }
-
-    const normalizedRarityId = typeof rarityId === 'string' ? rarityId.trim() : '';
-    if (!normalizedRarityId) {
-      console.warn('PullHistoryStore.upsertAdjustment called without rarityId', params);
-      return undefined;
-    }
-
-    const normalizedCount = normalizeAdjustmentCount(count);
-    const normalizedUserId = normalizeUserIdValue(userId);
-    const adjustmentKey = buildAdjustmentKey({
-      userId: normalizedUserId,
-      gachaId: normalizedGachaId,
-      rarityId: normalizedRarityId,
-      itemId: normalizedItemId
-    });
-
-    const executedAtIso = ensureTimestamp(executedAt);
-    let resultId: string | undefined;
-
-    this.update((previous) => {
-      const base = normalizeState(previous ?? this.loadLatestState());
-      const now = new Date().toISOString();
-
-      let targetId: string | undefined;
-      let targetEntry: PullHistoryEntryV1 | undefined;
-
-      for (const [entryId, entry] of Object.entries(base.pulls)) {
-        if (!entry) {
-          continue;
-        }
-
-        const adjustments = Array.isArray(entry.adjustments) ? entry.adjustments : [];
-        if (adjustments.length === 0) {
-          continue;
-        }
-
-        const matched = adjustments.some((adjustment) => adjustment?.key === adjustmentKey);
-        if (matched) {
-          targetId = entryId;
-          targetEntry = entry;
-          break;
-        }
-      }
-
-      if (normalizedCount === null) {
-        if (!targetId || !targetEntry) {
-          return previous;
-        }
-
-        const remainingAdjustments = (targetEntry.adjustments ?? []).filter(
-          (adjustment) => adjustment?.key !== adjustmentKey
-        );
-
-        const nextPulls = { ...base.pulls };
-        const nextOrder = base.order.filter((entryId) => entryId !== targetId);
-
-        if (remainingAdjustments.length === 0) {
-          delete nextPulls[targetId];
-          resultId = targetId;
-
-          if (nextOrder.length === 0 && Object.keys(nextPulls).length === 0) {
-            return undefined;
-          }
-
-          return {
-            version: 1,
-            updatedAt: now,
-            order: nextOrder.length > 0 ? nextOrder : Object.keys(nextPulls),
-            pulls: nextPulls
-          } satisfies PullHistoryStateV1;
-        }
-
-        const updatedEntry: PullHistoryEntryV1 = {
-          ...targetEntry,
-          userId: normalizedUserId,
-          gachaId: normalizedGachaId,
-          executedAt: executedAtIso,
-          notes: notes ?? targetEntry.notes,
-          adjustments: remainingAdjustments,
-          itemCounts: targetEntry.itemCounts ?? {},
-          pullCount: 0,
-          source: 'manual'
-        };
-
-        const pullsWithUpdatedEntry = { ...base.pulls, [targetId]: updatedEntry };
-        const nextOrderWithTarget = [targetId, ...nextOrder];
-
-        resultId = targetId;
-        return {
-          version: 1,
-          updatedAt: now,
-          order: nextOrderWithTarget,
-          pulls: pullsWithUpdatedEntry
-        } satisfies PullHistoryStateV1;
-      }
-
-      const adjustment: PullHistoryInventoryAdjustmentV1 = {
-        type: 'inventory-count',
-        key: adjustmentKey,
-        itemId: normalizedItemId,
-        rarityId: normalizedRarityId,
-        count: normalizedCount ?? 0
-      };
-
-      if (targetId && targetEntry) {
-        const adjustments = Array.isArray(targetEntry.adjustments)
-          ? targetEntry.adjustments.slice()
-          : [];
-
-        let mutated = false;
-        for (let index = 0; index < adjustments.length; index += 1) {
-          const candidate = adjustments[index];
-          if (!candidate || candidate.key !== adjustmentKey) {
-            continue;
-          }
-          if (
-            candidate.count === adjustment.count &&
-            candidate.itemId === adjustment.itemId &&
-            candidate.rarityId === adjustment.rarityId &&
-            (notes === undefined || notes === targetEntry.notes) &&
-            targetEntry.userId === normalizedUserId &&
-            targetEntry.gachaId === normalizedGachaId &&
-            targetEntry.executedAt === executedAtIso
-          ) {
-            resultId = targetId;
-            return previous;
-          }
-
-          adjustments[index] = { ...candidate, ...adjustment };
-          mutated = true;
-          break;
-        }
-
-        if (!mutated) {
-          adjustments.push(adjustment);
-          mutated = true;
-        }
-
-        if (!mutated) {
-          resultId = targetId;
-          return previous;
-        }
-
-        const updatedEntry: PullHistoryEntryV1 = {
-          ...targetEntry,
-          userId: normalizedUserId,
-          gachaId: normalizedGachaId,
-          executedAt: executedAtIso,
-          notes: notes ?? targetEntry.notes,
-          adjustments,
-          itemCounts: targetEntry.itemCounts ?? {},
-          pullCount: 0,
-          source: 'manual'
-        };
-
-        const nextPulls = { ...base.pulls, [targetId]: updatedEntry };
-        const nextOrder = [targetId, ...base.order.filter((entryId) => entryId !== targetId)];
-
-        resultId = targetId;
-        return {
-          version: 1,
-          updatedAt: now,
-          order: nextOrder,
-          pulls: nextPulls
-        } satisfies PullHistoryStateV1;
-      }
-
-      const entryId = generatePullId();
-      const entry: PullHistoryEntryV1 = {
-        id: entryId,
-        gachaId: normalizedGachaId,
-        userId: normalizedUserId,
-        executedAt: executedAtIso,
-        pullCount: 0,
-        itemCounts: {},
-        notes,
-        source: 'manual',
-        adjustments: [adjustment]
-      };
-
-      const nextPulls = { ...base.pulls, [entryId]: entry };
-      const nextOrder = [entryId, ...base.order.filter((existingId) => existingId !== entryId)];
-
-      resultId = entryId;
-      return {
-        version: 1,
-        updatedAt: now,
-        order: nextOrder,
-        pulls: nextPulls
-      } satisfies PullHistoryStateV1;
-    }, options);
-
-    return resultId;
-  }
-
-  retargetAdjustmentsForItem(
-    params: {
-      gachaId: string;
-      itemId: string;
-      previousRarityId: string;
-      nextRarityId: string;
-      executedAt?: string;
-    },
-    options: UpdateOptions = { persist: 'immediate' }
-  ): void {
-    const normalizedGachaId = params.gachaId?.trim() ?? '';
-    const normalizedItemId = params.itemId?.trim() ?? '';
-    const previousRarityId = params.previousRarityId?.trim() ?? '';
-    const nextRarityId = params.nextRarityId?.trim() ?? '';
-
-    if (!normalizedGachaId) {
-      console.warn('PullHistoryStore.retargetAdjustmentsForItem called without gachaId', params);
-      return;
-    }
-
-    if (!normalizedItemId) {
-      console.warn('PullHistoryStore.retargetAdjustmentsForItem called without itemId', params);
-      return;
-    }
-
-    if (!previousRarityId || !nextRarityId || previousRarityId === nextRarityId) {
-      return;
-    }
-
-    const executedAtIso = ensureTimestamp(params.executedAt);
-
-    this.update((previous) => {
-      const base = normalizeState(previous ?? this.loadLatestState());
-
-      let mutated = false;
-      const nextPulls = { ...base.pulls };
-      let nextOrder = base.order.slice();
-
-      Object.entries(base.pulls).forEach(([entryId, entry]) => {
-        if (!entry || entry.gachaId !== normalizedGachaId) {
-          return;
-        }
-
-        const adjustments = Array.isArray(entry.adjustments) ? entry.adjustments : [];
-        if (adjustments.length === 0) {
-          return;
-        }
-
-        const normalizedUserId = normalizeUserIdValue(entry.userId);
-        const previousKey = buildAdjustmentKey({
-          userId: normalizedUserId,
-          gachaId: normalizedGachaId,
-          rarityId: previousRarityId,
-          itemId: normalizedItemId
-        });
-        const nextKey = buildAdjustmentKey({
-          userId: normalizedUserId,
-          gachaId: normalizedGachaId,
-          rarityId: nextRarityId,
-          itemId: normalizedItemId
-        });
-
-        let entryMutated = false;
-        const seenKeys = new Set<string>();
-        const nextAdjustments: PullHistoryInventoryAdjustmentV1[] = [];
-
-        adjustments.forEach((adjustment) => {
-          if (!adjustment) {
-            return;
-          }
-
-          let candidate = adjustment;
-
-          if (
-            adjustment.type === 'inventory-count' &&
-            adjustment.itemId === normalizedItemId &&
-            (adjustment.key === previousKey || adjustment.rarityId === previousRarityId)
-          ) {
-            entryMutated = true;
-            candidate = {
-              ...adjustment,
-              key: nextKey,
-              rarityId: nextRarityId
-            };
-          }
-
-          if (seenKeys.has(candidate.key)) {
-            const index = nextAdjustments.findIndex((record) => record.key === candidate.key);
-            if (index >= 0) {
-              nextAdjustments[index] = candidate;
-            }
-            return;
-          }
-
-          nextAdjustments.push(candidate);
-          seenKeys.add(candidate.key);
-        });
-
-        if (!entryMutated) {
-          return;
-        }
-
-        mutated = true;
-        nextPulls[entryId] = {
-          ...entry,
-          adjustments: nextAdjustments,
-          executedAt: executedAtIso,
-          source: entry.source ?? 'manual'
-        };
-        nextOrder = [entryId, ...nextOrder.filter((id) => id !== entryId)];
-      });
-
-      if (!mutated) {
-        return previous;
-      }
-
-      const now = new Date().toISOString();
-      return {
-        version: 1,
-        updatedAt: now,
-        order: nextOrder,
-        pulls: nextPulls
-      } satisfies PullHistoryStateV1;
-    }, options);
-  }
-
-  deleteAdjustmentsForItem(
-    params: { gachaId: string; itemId: string; executedAt?: string },
-    options: UpdateOptions = { persist: 'immediate' }
-  ): void {
-    const normalizedGachaId = params.gachaId?.trim() ?? '';
-    const normalizedItemId = params.itemId?.trim() ?? '';
-
-    if (!normalizedGachaId) {
-      console.warn('PullHistoryStore.deleteAdjustmentsForItem called without gachaId', params);
-      return;
-    }
-
-    if (!normalizedItemId) {
-      console.warn('PullHistoryStore.deleteAdjustmentsForItem called without itemId', params);
-      return;
-    }
-
-    const executedAtIso = ensureTimestamp(params.executedAt);
-
-    this.update((previous) => {
-      const base = normalizeState(previous ?? this.loadLatestState());
-
-      let mutated = false;
-      const nextPulls: Record<string, PullHistoryEntryV1 | undefined> = { ...base.pulls };
-      let nextOrder = base.order.slice();
-
-      Object.entries(base.pulls).forEach(([entryId, entry]) => {
-        if (!entry || entry.gachaId !== normalizedGachaId) {
-          return;
-        }
-
-        const adjustments = Array.isArray(entry.adjustments) ? entry.adjustments : [];
-        if (adjustments.length === 0) {
-          return;
-        }
-
-        const remaining = adjustments.filter(
-          (adjustment) =>
-            !adjustment ||
-            adjustment.type !== 'inventory-count' ||
-            adjustment.itemId !== normalizedItemId
-        );
-
-        if (remaining.length === adjustments.length) {
-          return;
-        }
-
-        mutated = true;
-
-        if (
-          remaining.length === 0 &&
-          (entry.pullCount ?? 0) <= 0 &&
-          Object.keys(entry.itemCounts ?? {}).length === 0
-        ) {
-          delete nextPulls[entryId];
-          nextOrder = nextOrder.filter((id) => id !== entryId);
-          return;
-        }
-
-        const seenKeys = new Set<string>();
-        const normalizedRemaining: PullHistoryInventoryAdjustmentV1[] = [];
-
-        remaining.forEach((adjustment) => {
-          if (!adjustment) {
-            return;
-          }
-
-          if (seenKeys.has(adjustment.key)) {
-            const index = normalizedRemaining.findIndex((record) => record.key === adjustment.key);
-            if (index >= 0) {
-              normalizedRemaining[index] = adjustment;
-            }
-            return;
-          }
-
-          normalizedRemaining.push(adjustment);
-          seenKeys.add(adjustment.key);
-        });
-
-        nextPulls[entryId] = {
-          ...entry,
-          adjustments: normalizedRemaining,
-          executedAt: executedAtIso,
-          source: entry.source ?? 'manual'
-        };
-        nextOrder = [entryId, ...nextOrder.filter((id) => id !== entryId)];
-      });
-
-      if (!mutated) {
-        return previous;
-      }
-
-      if (nextOrder.length === 0) {
-        return undefined;
-      }
-
-      const now = new Date().toISOString();
       return {
         version: 1,
         updatedAt: now,
@@ -810,6 +333,146 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         updatedAt: now,
         order: nextOrder,
         pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+  }
+
+  recordManualInventoryChange(
+    params: RecordManualInventoryChangeParams,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): string | undefined {
+    const { gachaId, userId, itemId, delta, executedAt, source } = params;
+
+    const normalizedGachaId = gachaId?.trim() ?? '';
+    if (!normalizedGachaId) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without gachaId', params);
+      return undefined;
+    }
+
+    const normalizedItemId = itemId?.trim() ?? '';
+    if (!normalizedItemId) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without itemId', params);
+      return undefined;
+    }
+
+    if (!Number.isFinite(delta)) {
+      console.warn('PullHistoryStore.recordManualInventoryChange called without valid delta', params);
+      return undefined;
+    }
+
+    const normalizedDelta = Math.trunc(delta);
+    if (normalizedDelta === 0) {
+      return undefined;
+    }
+
+    const normalizedUserId = normalizeUserIdValue(userId);
+    const executedAtIso = ensureTimestamp(executedAt);
+    const normalizedSource: PullHistoryEntrySourceV1 = source ?? 'manual';
+
+    let resultId: string | undefined;
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      const now = new Date().toISOString();
+
+      const entryId = generatePullId();
+      const entry: PullHistoryEntryV1 = {
+        id: entryId,
+        gachaId: normalizedGachaId,
+        userId: normalizedUserId,
+        executedAt: executedAtIso,
+        pullCount: 0,
+        currencyUsed: 0,
+        itemCounts: { [normalizedItemId]: normalizedDelta },
+        source: normalizedSource
+      };
+
+      const nextPulls = { ...base.pulls, [entryId]: entry };
+      const nextOrder = [entryId, ...base.order.filter((existingId) => existingId !== entryId)];
+
+      resultId = entryId;
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+
+    return resultId;
+  }
+
+  deleteManualEntriesForItem(
+    params: { gachaId: string; itemId: string },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedGachaId = params.gachaId?.trim() ?? '';
+    const normalizedItemId = params.itemId?.trim() ?? '';
+
+    if (!normalizedGachaId) {
+      console.warn('PullHistoryStore.deleteManualEntriesForItem called without gachaId', params);
+      return;
+    }
+
+    if (!normalizedItemId) {
+      console.warn('PullHistoryStore.deleteManualEntriesForItem called without itemId', params);
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+
+      let mutated = false;
+      const nextPulls: Record<string, PullHistoryEntryV1 | undefined> = { ...base.pulls };
+
+      Object.entries(base.pulls).forEach(([entryId, entry]) => {
+        if (!entry) {
+          return;
+        }
+
+        if (entry.gachaId !== normalizedGachaId) {
+          return;
+        }
+
+        if (entry.source !== 'manual') {
+          return;
+        }
+
+        if (entry.itemCounts?.[normalizedItemId] === undefined) {
+          return;
+        }
+
+        delete nextPulls[entryId];
+        mutated = true;
+      });
+
+      if (!mutated) {
+        return previous;
+      }
+
+      const filteredEntries = Object.entries(nextPulls).filter(
+        (entry): entry is [string, PullHistoryEntryV1] => Boolean(entry[1])
+      );
+
+      if (filteredEntries.length === 0) {
+        return undefined;
+      }
+
+      const nextOrder = base.order.filter((entryId) => nextPulls[entryId]);
+      filteredEntries.forEach(([entryId]) => {
+        if (!nextOrder.includes(entryId)) {
+          nextOrder.push(entryId);
+        }
+      });
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: Object.fromEntries(filteredEntries)
       } satisfies PullHistoryStateV1;
     }, options);
   }
