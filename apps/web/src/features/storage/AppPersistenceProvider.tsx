@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useState, type Context, type PropsWithChildren } from 'react';
 
 import { AppPersistence } from '@domain/app-persistence';
 import {
@@ -11,7 +11,15 @@ interface AppPersistenceContextValue {
   stores: DomainStores;
 }
 
-const AppPersistenceContext = createContext<AppPersistenceContextValue | null>(null);
+const APP_PERSISTENCE_CONTEXT_KEY = '__gacha_app_persistence_context__';
+
+const globalObject = globalThis as typeof globalThis & {
+  [APP_PERSISTENCE_CONTEXT_KEY]?: Context<AppPersistenceContextValue | null>;
+};
+
+const AppPersistenceContext =
+  globalObject[APP_PERSISTENCE_CONTEXT_KEY] ??
+  (globalObject[APP_PERSISTENCE_CONTEXT_KEY] = createContext<AppPersistenceContextValue | null>(null));
 
 export function AppPersistenceProvider({ children }: PropsWithChildren): JSX.Element {
   const [value] = useState<AppPersistenceContextValue>(() => {
