@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent
+} from 'react';
 import { RadioGroup } from '@headlessui/react';
 import { clsx } from 'clsx';
 
@@ -72,6 +79,7 @@ export const PageSettingsDialog: ModalComponent = () => {
     customBaseTone,
     setCustomBaseTone
   } = useSiteTheme();
+  const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
 
   const accentScheme: 'light' | 'dark' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
   const normalizedAccent = customAccentColor.toLowerCase();
@@ -104,6 +112,44 @@ export const PageSettingsDialog: ModalComponent = () => {
   }, [accentScheme, normalizedAccent, selectedPalette, setCustomAccentColor]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
+
+  useEffect(() => {
+    setCustomAccentDraft(customAccentColor.toUpperCase());
+  }, [customAccentColor]);
+
+  const handleCustomAccentInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setCustomAccentDraft(event.target.value);
+  }, []);
+
+  const handleCustomAccentCommit = useCallback(() => {
+    const trimmed = customAccentDraft.trim();
+    const candidate = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+    const normalized = candidate.toUpperCase();
+
+    if (/^#[0-9A-F]{6}$/.test(normalized)) {
+      if (theme !== 'custom') {
+        setTheme('custom');
+      }
+      setCustomAccentColor(normalized);
+      return;
+    }
+
+    setCustomAccentDraft(customAccentColor.toUpperCase());
+  }, [customAccentDraft, customAccentColor, setCustomAccentColor, setTheme, theme]);
+
+  const handleCustomAccentInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleCustomAccentCommit();
+      }
+    },
+    [handleCustomAccentCommit]
+  );
+
+  const handleCustomAccentInputBlur = useCallback(() => {
+    handleCustomAccentCommit();
+  }, [handleCustomAccentCommit]);
 
   const renderMenuContent = () => {
     switch (activeMenu) {
@@ -259,15 +305,27 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 ボタンや強調表示に使用される差し色です。
                               </p>
                             </div>
-                            <span className="flex items-center gap-2 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                              <span className="sr-only">現在のカラー</span>
+                            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/40">
+                              <label className="sr-only" htmlFor="page-settings-custom-accent">
+                                現在のカラーコード
+                              </label>
                               <span
                                 className="h-4 w-4 rounded border border-border/50"
                                 style={{ backgroundColor: customAccentColor }}
                                 aria-hidden="true"
                               />
-                              {customAccentColor.toUpperCase()}
-                            </span>
+                              <input
+                                id="page-settings-custom-accent"
+                                type="text"
+                                value={customAccentDraft}
+                                onChange={handleCustomAccentInputChange}
+                                onBlur={handleCustomAccentInputBlur}
+                                onKeyDown={handleCustomAccentInputKeyDown}
+                                className="w-24 bg-transparent text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground focus:outline-none"
+                                spellCheck={false}
+                                inputMode="text"
+                              />
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {accentChoices.map((entry) => {
