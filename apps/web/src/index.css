@@ -311,35 +311,45 @@
   }
 
   .gacha-tab--active {
+    --gacha-tab-curve: 0.85rem;
     z-index: 2;
   }
 
   .gacha-tab--active::before {
-    --gacha-tab-curve: 0.85rem;
-    background-color: rgb(var(--color-accent) / 0.92);
-    opacity: 1;
+    background-color: transparent;
+    border-color: transparent;
+    opacity: 0;
+  }
+
+  .gacha-tab--active::after {
+    content: '';
+    position: absolute;
+    inset: 0;
     border-top: 1px solid rgb(var(--color-accent) / 0.95);
     border-left: var(--gacha-tab-curve) solid #0000;
     border-right: var(--gacha-tab-curve) solid #0000;
     border-bottom: 0;
     border-radius: calc(2 * var(--gacha-tab-curve)) calc(2 * var(--gacha-tab-curve)) 0 0 / var(--gacha-tab-curve);
+    background-color: rgb(var(--color-accent) / 0.92);
     mask:
       radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
         calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
-      conic-gradient(#000 0 0) padding-box;
+      conic-gradient(#000 0 1turn) padding-box;
     -webkit-mask:
       radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
         calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
-      conic-gradient(#000 0 0) padding-box;
+      conic-gradient(#000 0 1turn) padding-box;
     background-clip: padding-box;
+    pointer-events: none;
+    z-index: 0;
   }
 
-  .gacha-tab--active:first-child::before {
+  .gacha-tab--active:first-child::after {
     border-left-width: 0;
     border-top-left-radius: var(--gacha-tab-curve);
   }
 
-  .gacha-tab--active:last-child::before {
+  .gacha-tab--active:last-child::after {
     border-right-width: 0;
     border-top-right-radius: var(--gacha-tab-curve);
   }
