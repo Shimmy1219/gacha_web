@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
+import { useLocation } from 'react-router-dom';
 
 import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
 import { useResponsiveDashboard } from '../components/dashboard/useResponsiveDashboard';
@@ -72,6 +73,8 @@ export function App(): JSX.Element {
   const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
+  const location = useLocation();
+  const isGachaRoute = location.pathname.startsWith('/gacha');
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -313,22 +316,35 @@ export function App(): JSX.Element {
   };
 
   return (
-    <div className="app min-h-screen bg-transparent text-surface-foreground">
-      <AppHeaderShell
-        title="四遊楽ガチャツール"
-        tagline="Integrated Gacha Management Tool"
-        onDrawGacha={handleDrawGacha}
-        onRegisterGacha={handleRegisterGacha}
-        onOpenRealtime={handleOpenRealtime}
-        onExportAll={handleExportAll}
-        onOpenPageSettings={handleOpenPageSettings}
-      />
-      <main
-        ref={mainRef}
-        className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}
-      >
+    <div
+      className={clsx(
+        'app',
+        isGachaRoute
+          ? 'min-h-screen bg-transparent text-surface-foreground'
+          : 'bg-surface text-surface-foreground'
+      )}
+    >
+      {isGachaRoute ? (
+        <>
+          <AppHeaderShell
+            title="四遊楽ガチャツール"
+            tagline="Integrated Gacha Management Tool"
+            onDrawGacha={handleDrawGacha}
+            onRegisterGacha={handleRegisterGacha}
+            onOpenRealtime={handleOpenRealtime}
+            onExportAll={handleExportAll}
+            onOpenPageSettings={handleOpenPageSettings}
+          />
+          <main
+            ref={mainRef}
+            className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}
+          >
+            <AppRoutes onDrawGacha={handleDrawGacha} />
+          </main>
+        </>
+      ) : (
         <AppRoutes onDrawGacha={handleDrawGacha} />
-      </main>
+      )}
     </div>
   );
 }
