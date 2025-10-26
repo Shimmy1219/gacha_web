@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent
+} from 'react';
 import { RadioGroup } from '@headlessui/react';
 import { clsx } from 'clsx';
 
@@ -110,35 +117,39 @@ export const PageSettingsDialog: ModalComponent = () => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
 
-  const handleCustomAccentInputChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const rawValue = event.target.value.toUpperCase();
-      const filtered = rawValue.replace(/[^#0-9A-F]/g, '');
-      const hasPrefix = filtered.startsWith('#');
-      const withoutExtraHashes = hasPrefix
-        ? `#${filtered.slice(1).replace(/#/g, '')}`
-        : filtered.replace(/#/g, '');
-      let nextValue = withoutExtraHashes.slice(0, hasPrefix ? 7 : 6);
+  const handleCustomAccentInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setCustomAccentDraft(event.target.value);
+  }, []);
 
-      if (!nextValue.startsWith('#')) {
-        nextValue = nextValue.length > 0 ? `#${nextValue}` : '#';
+  const handleCustomAccentCommit = useCallback(() => {
+    const trimmed = customAccentDraft.trim();
+    const candidate = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+    const normalized = candidate.toUpperCase();
+
+    if (/^#[0-9A-F]{6}$/.test(normalized)) {
+      if (theme !== 'custom') {
+        setTheme('custom');
       }
+      setCustomAccentColor(normalized);
+      return;
+    }
 
-      setCustomAccentDraft(nextValue);
+    setCustomAccentDraft(customAccentColor.toUpperCase());
+  }, [customAccentDraft, customAccentColor, setCustomAccentColor, setTheme, theme]);
 
-      if (/^#[0-9A-F]{6}$/.test(nextValue)) {
-        if (theme !== 'custom') {
-          setTheme('custom');
-        }
-        setCustomAccentColor(nextValue);
+  const handleCustomAccentInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleCustomAccentCommit();
       }
     },
-    [setCustomAccentColor, setTheme, theme]
+    [handleCustomAccentCommit]
   );
 
   const handleCustomAccentInputBlur = useCallback(() => {
-    setCustomAccentDraft(customAccentColor.toUpperCase());
-  }, [customAccentColor]);
+    handleCustomAccentCommit();
+  }, [handleCustomAccentCommit]);
 
   const renderMenuContent = () => {
     switch (activeMenu) {
@@ -309,6 +320,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                                 value={customAccentDraft}
                                 onChange={handleCustomAccentInputChange}
                                 onBlur={handleCustomAccentInputBlur}
+                                onKeyDown={handleCustomAccentInputKeyDown}
                                 className="w-24 bg-transparent text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground focus:outline-none"
                                 spellCheck={false}
                                 inputMode="text"
