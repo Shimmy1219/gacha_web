@@ -1,6 +1,10 @@
 import type { CSSProperties } from 'react';
 
-import { GOLD_HEX, RAINBOW_VALUE, SILVER_HEX } from '../components/color-picker/palette';
+import {
+  GOLD_HEX,
+  RAINBOW_VALUE,
+  SILVER_HEX
+} from '../../../pages/gacha/components/rarity/color-picker/palette';
 
 export interface RarityTextPresentation {
   className?: string;
