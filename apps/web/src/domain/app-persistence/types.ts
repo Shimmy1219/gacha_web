@@ -177,6 +177,8 @@ export interface ReceivePrefsStateV3 {
   };
 }
 
+export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';
+
 export interface PullHistoryEntryV1 {
   id: string;
   gachaId: string;
@@ -186,7 +188,7 @@ export interface PullHistoryEntryV1 {
   currencyUsed?: number;
   itemCounts: Record<string, number>;
   rarityCounts?: Record<string, number>;
-  notes?: string;
+  source: PullHistoryEntrySourceV1;
 }
 
 export interface PullHistoryStateV1 {
