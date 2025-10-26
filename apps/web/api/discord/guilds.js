@@ -1,11 +1,12 @@
 // /api/discord/guilds.js
 // ユーザーアクセストークンで /users/@me/guilds → owner=true だけ返す
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
 const CSRF_COOKIE_NAME = 'discord_csrf';
-const CSRF_HEADER_NAME = 'x-csrf-token';
+const CSRF_HEADER_NAME = DEFAULT_CSRF_HEADER_NAME;
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/discord/guilds', req);
