@@ -10,10 +10,7 @@ import type {
   UserInventorySnapshotV3,
   UserProfilesStateV3
 } from '@domain/app-persistence';
-import {
-  generateDeterministicInventoryId,
-  generateDeterministicUserId
-} from '@domain/idGenerators';
+import { generateDeterministicInventoryId } from '@domain/idGenerators';
 import type { DomainStores } from '@domain/stores/createDomainStores';
 
 interface ParsedLiveBlock {
@@ -225,7 +222,6 @@ export function applyLivePasteText(
   const nextAppState = prepareAppState(snapshot.appState, nowIso);
   const nextRarityState = prepareRarityState(snapshot.rarityState, nowIso);
   const nextCatalogState = prepareCatalogState(snapshot.catalogState, nowIso);
-  const nextProfilesState = prepareUserProfiles(snapshot.userProfiles, nowIso);
   const nextInventoriesState = prepareUserInventories(snapshot.userInventories, nowIso);
 
   const aggregated = aggregateByGacha(parsedBlocks);
@@ -291,7 +287,10 @@ export function applyLivePasteText(
       return;
     }
 
-    const userId = ensureUserProfile(nextProfilesState, block.userName, nowIso);
+    const userId = context.stores.userProfiles.ensureProfile(block.userName);
+    if (!userId) {
+      return;
+    }
     touchedUsers.add(userId);
 
     applyInventoryDelta({
@@ -359,18 +358,20 @@ export function applyLivePasteText(
   nextAppState.updatedAt = nowIso;
   nextRarityState.updatedAt = nowIso;
   nextCatalogState.updatedAt = nowIso;
-  nextProfilesState.updatedAt = nowIso;
   nextInventoriesState.updatedAt = nowIso;
   nextInventoriesState.byItemId = rebuildInventoryIndex(nextInventoriesState.inventories);
 
   const pullHistoryState = context.stores.pullHistory.getState();
+
+  const userProfilesState =
+    context.stores.userProfiles.getState() ?? prepareUserProfiles(snapshot.userProfiles, nowIso);
 
   const nextSnapshot: GachaLocalStorageSnapshot = {
     ...snapshot,
     appState: nextAppState,
     rarityState: nextRarityState,
     catalogState: nextCatalogState,
-    userProfiles: nextProfilesState,
+    userProfiles: userProfilesState,
     userInventories: nextInventoriesState,
     pullHistory: pullHistoryState ?? snapshot.pullHistory
   };
@@ -775,31 +776,6 @@ function applyInventoryDelta(params: {
 
   nextInventories[inventoryId] = snapshot;
   inventoriesState.inventories[userId] = nextInventories;
-}
-
-function ensureUserProfile(
-  profilesState: UserProfilesStateV3,
-  userName: string,
-  nowIso: string
-): string {
-  const userId = generateDeterministicUserId(userName);
-  const existing = profilesState.users[userId];
-  if (existing) {
-    profilesState.users[userId] = {
-      ...existing,
-      id: userId,
-      displayName: userName,
-      updatedAt: nowIso
-    };
-  } else {
-    profilesState.users[userId] = {
-      id: userId,
-      displayName: userName,
-      updatedAt: nowIso,
-      joinedAt: nowIso
-    };
-  }
-  return userId;
 }
 
 function rebuildInventoryIndex(

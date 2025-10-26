@@ -11,6 +11,7 @@ import { LivePasteDialog } from '../modals/dialogs/LivePasteDialog';
 import { LivePasteGachaPickerDialog } from '../modals/dialogs/LivePasteGachaPickerDialog';
 import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogErrorDialog';
 import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
+import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { importTxtFile } from '../logic/importTxt';
 import {
@@ -188,14 +189,10 @@ export function App(): JSX.Element {
   };
 
   const handleDrawGacha = () => {
-    push(GuideInfoDialog, {
-      id: 'draw-gacha-info',
+    push(DrawGachaDialog, {
+      id: 'draw-gacha-dialog',
       title: 'ガチャを引く',
-      size: 'sm',
-      payload: {
-        message: 'ガチャの実行シミュレーターは現在準備中です。公開までしばらくお待ちください。',
-        confirmLabel: '了解'
-      }
+      size: 'lg'
     });
   };
 

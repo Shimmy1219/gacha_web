@@ -1,4 +1,5 @@
 export * from './CreateGachaWizardDialog';
+export * from './DrawGachaDialog';
 export * from './GachaDeleteConfirmDialog';
 export * from './GuideInfoDialog';
 export * from './ItemAssetPreviewDialog';
