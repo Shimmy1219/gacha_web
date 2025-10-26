@@ -202,3 +202,59 @@ export async function getAssetMetadata(assetId: string): Promise<StoredAssetMeta
   const { blob: _blob, ...metadata } = record;
   return metadata;
 }
+
+export async function exportAllAssets(): Promise<StoredAssetRecord[]> {
+  if (!isBrowserEnvironment()) {
+    return [];
+  }
+
+  try {
+    return await runTransaction('readonly', async (store) => {
+      return await new Promise<StoredAssetRecord[]>((resolve, reject) => {
+        const records: StoredAssetRecord[] = [];
+        const request = store.openCursor();
+
+        request.onsuccess = () => {
+          const cursor = request.result as IDBCursorWithValue | null;
+          if (!cursor) {
+            resolve(records);
+            return;
+          }
+
+          const value = cursor.value as StoredAssetRecord | undefined;
+          if (value && typeof value.id === 'string') {
+            records.push(value);
+          }
+          cursor.continue();
+        };
+
+        request.onerror = () => {
+          reject(request.error ?? new Error('Failed to iterate asset records'));
+        };
+      });
+    });
+  } catch (error) {
+    console.error('Failed to export assets from IndexedDB', error);
+    return [];
+  }
+}
+
+export async function importAssets(records: StoredAssetRecord[]): Promise<void> {
+  if (!isBrowserEnvironment() || records.length === 0) {
+    return;
+  }
+
+  await runTransaction('readwrite', async (store) => {
+    await Promise.all(
+      records.map(
+        (record) =>
+          new Promise<void>((resolve, reject) => {
+            const request = store.put(record);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error ?? new Error('Failed to store asset record'));
+          })
+      )
+    );
+    return undefined;
+  });
+}

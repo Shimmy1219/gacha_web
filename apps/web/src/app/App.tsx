@@ -12,6 +12,7 @@ import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogE
 import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
+import { exportBackupToDevice, importBackupFromFile } from '../features/storage/backupService';
 import { importTxtFile } from '../logic/importTxt';
 import {
   applyLivePasteText,
@@ -169,8 +170,45 @@ export function App(): JSX.Element {
         onPickJson: (file) => {
           console.info('JSONインポート処理は未接続です', file);
         },
-        onImportBackup: (file) => {
-          console.info('バックアップ読み込み処理は未接続です', file);
+        onImportBackup: async (file) => {
+          try {
+            const result = await importBackupFromFile(file, { persistence, stores });
+            console.info('バックアップの読み込みが完了しました', result);
+
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              if (result.importedGachaIds.length === 0) {
+                const skippedNames = result.skippedGacha
+                  .map((entry) => entry.name ?? entry.id)
+                  .filter(Boolean)
+                  .join(', ');
+                const summary = skippedNames
+                  ? `バックアップに含まれるガチャは既に登録済みのため、追加されませんでした。\nスキップされたガチャ: ${skippedNames}`
+                  : 'バックアップに追加可能なガチャが見つかりませんでした。';
+                window.alert(summary);
+              } else {
+                const importedList = result.importedGachaNames.length > 0
+                  ? `追加したガチャ: ${result.importedGachaNames.join(', ')}`
+                  : `追加したガチャID: ${result.importedGachaIds.join(', ')}`;
+                const skippedList = result.skippedGacha.length > 0
+                  ? `\nスキップされたガチャ: ${result.skippedGacha
+                      .map((entry) => entry.name ?? entry.id)
+                      .filter(Boolean)
+                      .join(', ')}`
+                  : '';
+                const assetsLine = result.importedAssetCount > 0 ? `\n復元したアセット数: ${result.importedAssetCount}` : '';
+                window.alert(`バックアップの復元が完了しました。\n${importedList}${assetsLine}${skippedList}`);
+              }
+            }
+          } catch (error) {
+            console.error('バックアップの復元に失敗しました', error);
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : 'バックアップの復元に失敗しました。ファイル形式や内容をご確認ください。';
+              window.alert(message);
+            }
+          }
         },
         onEnterTransferCode: () => {
           console.info('引継ぎコード入力処理は未接続です');
@@ -298,8 +336,20 @@ export function App(): JSX.Element {
     handleOpenStartWizard();
   };
 
-  const handleExportAll = () => {
-    console.info('全体エクスポート処理は未実装です');
+  const handleExportAll = async () => {
+    try {
+      await exportBackupToDevice(persistence);
+      console.info('バックアップファイルを保存しました');
+    } catch (error) {
+      console.error('バックアップのエクスポートに失敗しました', error);
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。';
+        window.alert(message);
+      }
+    }
   };
 
   const handleOpenPageSettings = () => {
