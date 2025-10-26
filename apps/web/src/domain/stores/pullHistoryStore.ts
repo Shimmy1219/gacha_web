@@ -4,6 +4,7 @@ import {
   type PullHistoryEntryV1,
   type PullHistoryStateV1
 } from '../app-persistence';
+import type { GachaResultPayload } from '../gacha/gachaResult';
 import { generatePullId } from '../idGenerators';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
@@ -180,6 +181,77 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     }, options);
 
     return entryId;
+  }
+
+  recordGachaResult(result: GachaResultPayload, options: UpdateOptions = { persist: 'immediate' }): string {
+    const { gachaId, userId, executedAt, pullCount, currencyUsed, items } = result;
+
+    const normalizedGachaId = gachaId?.trim() ?? '';
+    if (!normalizedGachaId) {
+      console.warn('PullHistoryStore.recordGachaResult called without gachaId', result);
+      return '';
+    }
+
+    const normalizedPullCount = Number.isFinite(pullCount) ? Math.max(0, Math.floor(pullCount)) : 0;
+    if (normalizedPullCount <= 0) {
+      console.warn('PullHistoryStore.recordGachaResult called with invalid pullCount', result);
+      return '';
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      console.warn('PullHistoryStore.recordGachaResult called without items', result);
+      return '';
+    }
+
+    const sanitizedItems = items
+      .map((item) => ({
+        itemId: item.itemId?.trim() ?? '',
+        rarityId: item.rarityId?.trim() ?? '',
+        count: Number.isFinite(item.count) ? Math.max(0, Math.floor(item.count)) : 0
+      }))
+      .filter((item) => item.itemId && item.count > 0);
+
+    if (!sanitizedItems.length) {
+      console.warn('PullHistoryStore.recordGachaResult received no valid items after sanitization', result);
+      return '';
+    }
+
+    const itemCounts = sanitizedItems.reduce<Record<string, number>>((acc, item) => {
+      acc[item.itemId] = (acc[item.itemId] ?? 0) + item.count;
+      return acc;
+    }, {});
+
+    const rarityCounts = sanitizedItems.reduce<Record<string, number>>((acc, item) => {
+      if (!item.rarityId) {
+        return acc;
+      }
+      acc[item.rarityId] = (acc[item.rarityId] ?? 0) + item.count;
+      return acc;
+    }, {});
+
+    const normalizedUserId = normalizeUserIdValue(userId);
+
+    const totalItemCount = Object.values(itemCounts).reduce((total, value) => total + value, 0);
+    if (totalItemCount !== normalizedPullCount) {
+      console.warn('PullHistoryStore.recordGachaResult detected mismatch between pullCount and item counts', {
+        expected: normalizedPullCount,
+        actual: totalItemCount,
+        result
+      });
+    }
+
+    return this.appendPull(
+      {
+        gachaId: normalizedGachaId,
+        userId: normalizedUserId,
+        executedAt,
+        pullCount: normalizedPullCount,
+        currencyUsed,
+        itemCounts,
+        rarityCounts
+      },
+      options
+    );
   }
 
   replacePull(params: ReplacePullParams, options: UpdateOptions = { persist: 'immediate' }): void {
