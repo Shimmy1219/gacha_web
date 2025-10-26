@@ -1,14 +1,20 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import {
   ArrowRightOnRectangleIcon,
   Cog6ToothIcon,
+  UserGroupIcon,
   ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { useDiscordSession } from '../../../../features/discord/useDiscordSession';
+import { useModal, DiscordGuildPickerDialog } from '../../../../modals';
+import {
+  loadDiscordGuildSelection,
+  type DiscordGuildSelection
+} from '../../../../features/discord/discordGuildSelectionStorage';
 
 function getAvatarUrl(id: string, avatar?: string): string | undefined {
   if (!avatar) {
@@ -29,9 +35,12 @@ export function DiscordLoginButton({
   className
 }: DiscordLoginButtonProps): JSX.Element {
   const { data, isLoading, login, logout } = useDiscordSession();
+  const { push } = useModal();
   const user = data?.user;
   const previousUserIdRef = useRef<string | null>(null);
+  const openedGuildModalUserRef = useRef<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [guildSelection, setGuildSelection] = useState<DiscordGuildSelection | null>(null);
 
   const userId = user?.id;
   const userName = user?.name;
@@ -42,6 +51,51 @@ export function DiscordLoginButton({
     }
     previousUserIdRef.current = userId ?? null;
   }, [userId, userName]);
+
+  useEffect(() => {
+    if (!userId) {
+      setGuildSelection(null);
+      return;
+    }
+    const stored = loadDiscordGuildSelection(userId);
+    setGuildSelection(stored);
+  }, [userId]);
+
+  const openGuildSelectionModal = useCallback(() => {
+    if (!userId) {
+      return;
+    }
+
+    push(DiscordGuildPickerDialog, {
+      id: 'discord-guild-picker',
+      title: 'お渡し鯖を選択',
+      size: 'lg',
+      payload: {
+        userId,
+        userName,
+        onGuildSelected: (selection) => {
+          setGuildSelection(selection);
+        }
+      }
+    });
+  }, [push, userId, userName]);
+
+  useEffect(() => {
+    if (!userId) {
+      openedGuildModalUserRef.current = null;
+      return;
+    }
+
+    if (openedGuildModalUserRef.current === userId) {
+      return;
+    }
+
+    openedGuildModalUserRef.current = userId;
+
+    if (!guildSelection) {
+      openGuildSelectionModal();
+    }
+  }, [guildSelection, openGuildSelectionModal, userId]);
 
   if (isLoading) {
     return (
@@ -139,6 +193,26 @@ export function DiscordLoginButton({
         leaveTo="transform opacity-0 scale-95"
       >
         <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-panel/95">
+          <Menu.Item>
+            {({ active }) => (
+              <button
+                type="button"
+                onClick={openGuildSelectionModal}
+                className={clsx(
+                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
+                  active ? 'bg-surface/40' : undefined
+                )}
+              >
+                <UserGroupIcon className="h-4 w-4" />
+                <span className="flex flex-col text-left">
+                  <span>お渡し鯖を設定</span>
+                  <span className="text-xs text-muted-foreground">
+                    {guildSelection ? `現在: ${guildSelection.guildName}` : '未選択'}
+                  </span>
+                </span>
+              </button>
+            )}
+          </Menu.Item>
           <Menu.Item>
             {({ active }) => (
               <button
