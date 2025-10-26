@@ -37,6 +37,7 @@ const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
 type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
 type ItemsByGacha = Record<string, ItemEntry[]>;
+type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
@@ -72,14 +73,14 @@ export function ItemsSection(): JSX.Element {
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
-      return {} as Record<string, Array<{ id: string; label: string }>>;
+      return {} as Record<string, RarityOptionEntry[]>;
     }
 
-    return Object.entries(data.rarityState.byGacha ?? {}).reduce<Record<string, Array<{ id: string; label: string }>>>(
+    return Object.entries(data.rarityState.byGacha ?? {}).reduce<Record<string, RarityOptionEntry[]>>(
       (acc, [gachaId, rarityIds]) => {
         acc[gachaId] = rarityIds.map((rarityId) => {
           const entity = data.rarityState?.entities?.[rarityId];
-          return { id: rarityId, label: entity?.label ?? rarityId };
+          return { id: rarityId, label: entity?.label ?? rarityId, color: entity?.color ?? null };
         });
         return acc;
       },
@@ -755,7 +756,8 @@ export function ItemsSection(): JSX.Element {
       const riaguAssignmentCount = assignmentRecords.reduce((total, record) => total + Math.max(0, record.count ?? 0), 0);
       const rarityOptions = rarityOptionsByGacha[model.gachaId] ?? [rarity].map((entry) => ({
         id: entry.rarityId,
-        label: entry.label
+        label: entry.label,
+        color: entry.color
       }));
 
       push(PrizeSettingsDialog, {

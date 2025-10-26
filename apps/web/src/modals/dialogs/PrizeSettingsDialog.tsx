@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { SwitchField } from '../../components/form/SwitchField';
+import { SingleSelectDropdown, type SingleSelectOption } from '../../components/select/SingleSelectDropdown';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { ItemDeleteConfirmDialog } from './ItemDeleteConfirmDialog';
 import { type RiaguConfigDialogPayload, RiaguConfigDialog } from './RiaguConfigDialog';
@@ -15,6 +16,7 @@ import { useAssetPreview } from '../../features/assets/useAssetPreview';
 interface RarityOption {
   id: string;
   label: string;
+  color?: string | null;
 }
 
 export interface PrizeSettingsDialogPayload {
@@ -99,6 +101,29 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const assetRequestIdRef = useRef(0);
   const unsavedAssetIdRef = useRef<string | null>(null);
   const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null);
+
+  const rarityOptionMap = useMemo(() => {
+    const map = new Map<string, RarityOption>();
+    payload?.rarityOptions?.forEach((option) => {
+      map.set(option.id, option);
+    });
+    return map;
+  }, [payload?.rarityOptions]);
+
+  const raritySelectOptions = useMemo<SingleSelectOption<string>[]>(
+    () =>
+      (payload?.rarityOptions ?? []).map((option) => ({
+        value: option.id,
+        label: option.label
+      })),
+    [payload?.rarityOptions]
+  );
+
+  const selectedRarityOption = rarityId ? rarityOptionMap.get(rarityId) : undefined;
+
+  const currentRarityLabel = selectedRarityOption?.label ?? payload?.rarityLabel ?? '未分類';
+  const currentRarityColor = selectedRarityOption?.color ??
+    (rarityId === payload?.rarityId ? payload?.rarityColor : undefined);
 
   const revokePreview = () => {
     if (previewUrl) {
@@ -236,7 +261,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     riaguTarget !== initialState.riagu ||
     (currentAssetId ?? null) !== (initialState.assetId ?? null);
 
-  const rarityColor = payload?.rarityColor ?? '#ff4f89';
+  const rarityColor = currentRarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
   const rarityBadgeBackground = getBadgeBackground(rarityColor);
   const rarityBadgeStyle = {
@@ -363,17 +388,50 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           </label>
           <div className="flex w-full flex-col gap-2 lg:max-w-[14rem]">
             <span className="text-sm font-medium text-surface-foreground">レアリティ</span>
-            <select
+            <SingleSelectDropdown<string>
               value={rarityId}
-              onChange={(event) => setRarityId(event.target.value)}
-              className={INPUT_CLASSNAME}
-            >
-              {payload?.rarityOptions?.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={raritySelectOptions}
+              onChange={setRarityId}
+              placeholder="レアリティを選択"
+              fallbackToFirstOption={false}
+              classNames={{
+                root: 'w-full',
+                button:
+                  'w-full justify-between rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm font-semibold text-surface-foreground',
+                buttonOpen: 'border-accent/70 text-accent',
+                buttonClosed: 'hover:border-accent/70',
+                menu:
+                  'w-full space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 backdrop-blur-sm',
+                option: 'flex w-full items-center justify-between rounded-lg px-3 py-2',
+                optionLabel: 'flex-1 truncate text-left',
+                checkIcon: 'h-4 w-4 text-accent'
+              }}
+              renderButtonLabel={() => {
+                if (!rarityId) {
+                  return <span className="text-muted-foreground">レアリティを選択</span>;
+                }
+                return (
+                  <span
+                    className={clsx('block truncate text-left', rarityPreviewPresentation.className)}
+                    style={rarityPreviewPresentation.style}
+                  >
+                    {currentRarityLabel}
+                  </span>
+                );
+              }}
+              renderOptionContent={(option) => {
+                const optionMeta = rarityOptionMap.get(option.value) ?? null;
+                const presentation = getRarityTextPresentation(optionMeta?.color);
+                return (
+                  <span
+                    className={clsx('block truncate text-left font-medium', presentation.className)}
+                    style={presentation.style}
+                  >
+                    {optionMeta?.label ?? option.label}
+                  </span>
+                );
+              }}
+            />
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
@@ -413,7 +471,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                       )}
                       style={rarityBadgeStyle}
                     >
-                      {payload?.rarityLabel}
+                      {currentRarityLabel}
                     </span>
                   </div>
                 </div>
