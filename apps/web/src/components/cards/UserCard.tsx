@@ -434,7 +434,7 @@ function GachaInventoryCard({
   );
 
   return (
-    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5">
+    <section className="user-card__inventory-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-inventory-card)] p-5">
       <header className="user-card__inventory-header flex flex-wrap items-center justify-between gap-3">
         <div className="user-card__inventory-meta space-y-1">
           <h4 className="user-card__inventory-title text-sm font-semibold text-surface-foreground">{inventory.gachaName}</h4>
