@@ -294,12 +294,12 @@
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 0.75rem 0.75rem 0 0;
     border: 1px solid rgb(var(--color-border) / 0.45);
     border-bottom: 0;
     background-color: rgb(var(--color-panel-contrast) / 0.88);
     opacity: 0.9;
     transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+    clip-path: path('M 6% 0 C 4% 0 2% 1.5% 1.5% 4% C 0.5% 7% 0% 11% 0% 16% V 82% C 0% 92% 6% 100% 16% 104% C 34% 112% 66% 112% 84% 104% C 94% 100% 100% 92% 100% 82% V 16% C 100% 11% 99.5% 7% 98.5% 4% C 98% 1.5% 96% 0 94% 0 Z');
   }
 
   .gacha-tab--active::before {
