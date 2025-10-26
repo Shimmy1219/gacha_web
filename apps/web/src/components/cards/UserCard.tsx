@@ -7,7 +7,7 @@ import { useCallback, useMemo, useRef, useState, type FormEvent, type MouseEvent
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { ConfirmDialog, useModal } from '../../modals';
+import { ConfirmDialog, InventoryHistoryDialog, useModal } from '../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 
 export type UserId = string;
@@ -240,11 +240,27 @@ function GachaInventoryCard({
   }, [resetDraft]);
 
   const handleOpenHistory = useCallback(() => {
-    console.info('インベントリ履歴の表示は未実装です', {
-      userId,
-      inventoryId: inventory.inventoryId
+    setMenuAnchor(null);
+    push(InventoryHistoryDialog, {
+      id: `inventory-history-${inventory.inventoryId}`,
+      title: '獲得履歴',
+      size: 'lg',
+      payload: {
+        userId,
+        userName,
+        gachaId: inventory.gachaId,
+        gachaName: inventory.gachaName
+      }
     });
-  }, [inventory.inventoryId, userId]);
+  }, [
+    inventory.gachaId,
+    inventory.gachaName,
+    inventory.inventoryId,
+    push,
+    setMenuAnchor,
+    userId,
+    userName
+  ]);
 
   const handleDeleteInventory = useCallback(() => {
     push(ConfirmDialog, {
