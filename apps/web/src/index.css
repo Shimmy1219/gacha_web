@@ -357,6 +357,10 @@
   [data-site-theme='light'] .start-wizard__tile:hover .start-wizard__tile-cta {
     color: rgb(0 0 0 / 1);
   }
+
+  [data-site-theme='light'] .prize-settings__delete-button {
+    color: rgb(0 0 0 / 1);
+  }
 }
 
 
