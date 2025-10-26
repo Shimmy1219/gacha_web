@@ -1,6 +1,6 @@
 import {
   ArrowUpTrayIcon,
-  BoltIcon,
+  CheckCircleIcon,
   DocumentDuplicateIcon,
   FolderArrowDownIcon,
   PaperAirplaneIcon
@@ -244,14 +244,17 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         ) : null}
 
         {lastDownload ? (
-          <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs text-emerald-200">
-            <p className="text-sm font-semibold text-emerald-100">端末への保存が完了しました</p>
+          <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs text-surface-foreground">
+            <div className="flex items-center gap-2 text-sm font-semibold text-surface-foreground">
+              <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+              端末への保存が完了しました
+            </div>
             <p>ファイル名: {lastDownload.fileName}</p>
             <p>収録件数: {lastDownload.fileCount} 件</p>
             <p>保存日時: {formatExpiresAt(lastDownload.savedAt) ?? lastDownload.savedAt}</p>
             {lastDownload.warnings.length > 0 ? (
               <div className="space-y-1">
-                <p className="font-semibold text-emerald-100">警告:</p>
+                <p className="font-semibold">警告:</p>
                 <ul className="list-inside list-disc space-y-1">
                   {lastDownload.warnings.map((warning, index) => (
                     <li key={`${warning}-${index}`}>{warning}</li>
@@ -261,11 +264,6 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
             ) : null}
           </div>
         ) : null}
-
-        <div className="flex items-center gap-2 rounded-2xl border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-accent">
-          <BoltIcon className="h-4 w-4" />
-          ZIP には画像ファイルに加えて catalog-state:v3 と rarity-state:v3 のメタデータが含まれます。
-        </div>
       </ModalBody>
       <ModalFooter>
         <button type="button" className="btn btn-muted" onClick={close}>
