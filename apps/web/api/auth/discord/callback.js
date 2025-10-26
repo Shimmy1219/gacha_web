@@ -95,12 +95,12 @@ export default async function handler(req, res) {
     const cookieValid = cookieStateMatches && cookieHasVerifier;
 
     if (!cookieValid) {
-      log.warn('state or verifier mismatch', {
+      const mismatchLogContext = {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
-      });
+      };
       const {
         state: storedState,
         consumed: stateConsumed,
@@ -108,10 +108,17 @@ export default async function handler(req, res) {
         waitedMs: restoreWaitedMs,
       } = await restoreAuthState(stateParam);
       if (!storedState?.verifier) {
+        log.warn('state or verifier mismatch', {
+          ...mismatchLogContext,
+          attempts,
+          waitedMs: restoreWaitedMs,
+          loginContext: loginContext || null,
+        });
         log.warn('state record missing in kv store', {
           hasStoredState: Boolean(storedState),
           attempts,
           waitedMs: restoreWaitedMs,
+          loginContext: loginContext || null,
         });
         return res.status(400).send('Invalid state or verifier');
       }
@@ -130,6 +137,13 @@ export default async function handler(req, res) {
         typeof stateParam === 'string' && stateParam.length > 8
           ? `${stateParam.slice(0, 4)}...`
           : stateParam;
+      log.info('state or verifier mismatch', {
+        ...mismatchLogContext,
+        attempts,
+        waitedMs: restoreWaitedMs,
+        loginContext,
+        recoveredFromKv: true,
+      });
       log.info('state restored from kv store', {
         statePreview,
         hasLoginContext: Boolean(loginContext),
