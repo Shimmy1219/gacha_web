@@ -133,7 +133,8 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             'flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition hover:bg-panel-contrast focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
             isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
-            canPreviewAsset && 'cursor-zoom-in'
+            canPreviewAsset && 'cursor-zoom-in',
+            canPreviewAsset && 'group-hover:bg-panel-contrast'
           )}
           data-preview-button="true"
         >
