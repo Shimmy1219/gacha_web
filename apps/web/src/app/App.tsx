@@ -317,9 +317,6 @@ export function App(): JSX.Element {
       <AppHeaderShell
         title="四遊楽ガチャツール"
         tagline="Integrated Gacha Management Tool"
-        summaryLabel="TXT/JSON未読込"
-        summaryVariant="warning"
-        summaryDescription="TXT/JSONを読み込んでガチャデータを同期"
         onDrawGacha={handleDrawGacha}
         onRegisterGacha={handleRegisterGacha}
         onOpenRealtime={handleOpenRealtime}

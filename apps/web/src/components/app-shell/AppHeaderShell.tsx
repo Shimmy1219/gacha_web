@@ -6,14 +6,10 @@ import { HeaderBrand } from './HeaderBrand';
 import { MobileMenuButton } from './MobileMenuButton';
 import { ResponsiveToolbarRail } from './ResponsiveToolbarRail';
 import { ToolbarActions } from './ToolbarActions';
-import { ToolbarSummary } from './ToolbarSummary';
 
 export interface AppHeaderShellProps {
   title: string;
   tagline?: string;
-  summaryLabel: string;
-  summaryVariant?: 'default' | 'warning' | 'success';
-  summaryDescription?: string;
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
   onOpenRealtime?: () => void;
@@ -24,9 +20,6 @@ export interface AppHeaderShellProps {
 export function AppHeaderShell({
   title,
   tagline,
-  summaryLabel,
-  summaryVariant = 'default',
-  summaryDescription,
   onDrawGacha,
   onRegisterGacha,
   onOpenRealtime,
@@ -158,12 +151,6 @@ export function AppHeaderShell({
       <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
         <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
           <HeaderBrand title={title} tagline={tagline} />
-          <ToolbarSummary
-            mode="desktop"
-            label={summaryLabel}
-            variant={summaryVariant}
-            description={summaryDescription}
-          />
         </div>
         <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
           <ToolbarActions
@@ -201,12 +188,6 @@ export function AppHeaderShell({
             閉じる
           </button>
         </div>
-        <ToolbarSummary
-          mode="mobile"
-          label={summaryLabel}
-          variant={summaryVariant}
-          description={summaryDescription}
-        />
         <ToolbarActions
           mode="mobile"
           onDrawGacha={onDrawGacha}
