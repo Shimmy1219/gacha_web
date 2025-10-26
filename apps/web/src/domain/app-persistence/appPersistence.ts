@@ -59,9 +59,9 @@ export interface PersistPartialSnapshot
 }
 
 export class AppPersistence {
-  private readonly storage: StorageLike | null;
+  private storage: StorageLike | null;
 
-  private readonly eventTarget: EventTarget | null;
+  private eventTarget: EventTarget | null;
 
   private readonly debounceMs: number;
 
@@ -101,7 +101,7 @@ export class AppPersistence {
   }
 
   saveSnapshot(snapshot: GachaLocalStorageSnapshot): void {
-    if (!this.storage) {
+    if (!this.ensureStorage()) {
       return;
     }
 
@@ -124,7 +124,9 @@ export class AppPersistence {
   }
 
   savePartial(partial: PersistPartialSnapshot): void {
-    if (!this.storage) {
+    if (!this.ensureStorage()) {
+      this.pending = this.mergePending(this.pending, partial);
+      this.scheduleRetry();
       return;
     }
 
@@ -285,10 +287,6 @@ export class AppPersistence {
   }
 
   saveDebounced(partial: PersistPartialSnapshot = {}): void {
-    if (!this.storage) {
-      return;
-    }
-
     this.pending = this.mergePending(this.pending, partial);
 
     if (this.timer) {
@@ -325,7 +323,7 @@ export class AppPersistence {
     patch: Partial<GachaCatalogItemV3>;
     updatedAt?: string;
   }): void {
-    if (!this.storage) {
+    if (!this.ensureStorage()) {
       throw new Error('Storage is not available');
     }
 
@@ -380,12 +378,13 @@ export class AppPersistence {
   }
 
   private readJson<T>(key: StorageKey): T | undefined {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return undefined;
     }
 
     const storageKey = STORAGE_KEYS[key];
-    const raw = this.storage.getItem(storageKey);
+    const raw = storage.getItem(storageKey);
     if (!raw) {
       return undefined;
     }
@@ -399,26 +398,28 @@ export class AppPersistence {
   }
 
   private persistValue(key: StorageKey, value: unknown): void {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return;
     }
 
     const storageKey = STORAGE_KEYS[key];
     if (typeof value === 'undefined') {
-      this.storage.removeItem(storageKey);
+      storage.removeItem(storageKey);
     } else {
-      this.storage.setItem(storageKey, JSON.stringify(value));
+      storage.setItem(storageKey, JSON.stringify(value));
     }
   }
 
   private collectSaveOptions(): Record<string, SaveOptionsSnapshotV3> {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return {};
     }
 
     const result: Record<string, SaveOptionsSnapshotV3> = {};
-    for (let index = 0; index < this.storage.length; index += 1) {
-      const key = this.storage.key(index);
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
       if (!key || !key.startsWith(SAVE_OPTIONS_PREFIX)) {
         continue;
       }
@@ -429,7 +430,7 @@ export class AppPersistence {
       }
 
       try {
-        const raw = this.storage.getItem(key);
+        const raw = storage.getItem(key);
         if (!raw) {
           continue;
         }
@@ -444,7 +445,8 @@ export class AppPersistence {
   }
 
   private replaceSaveOptions(map: Record<string, SaveOptionsSnapshotV3> | null): void {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return;
     }
 
@@ -458,12 +460,13 @@ export class AppPersistence {
       if (!userId) {
         return;
       }
-      this.storage!.setItem(this.buildSaveOptionsKey(userId), JSON.stringify(value));
+      storage.setItem(this.buildSaveOptionsKey(userId), JSON.stringify(value));
     });
   }
 
   private mergeSaveOptions(map: SaveOptionsPartial | null | undefined): void {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return;
     }
 
@@ -483,9 +486,9 @@ export class AppPersistence {
 
       const key = this.buildSaveOptionsKey(userId);
       if (value === null) {
-        this.storage!.removeItem(key);
+        storage.removeItem(key);
       } else if (typeof value !== 'undefined') {
-        this.storage!.setItem(key, JSON.stringify(value));
+        storage.setItem(key, JSON.stringify(value));
       }
     });
   }
@@ -495,31 +498,81 @@ export class AppPersistence {
   }
 
   private clearSaveOptions(): void {
-    if (!this.storage) {
+    const storage = this.ensureStorage();
+    if (!storage) {
       return;
     }
 
     const keysToRemove: string[] = [];
-    for (let index = 0; index < this.storage.length; index += 1) {
-      const key = this.storage.key(index);
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
       if (key && key.startsWith(SAVE_OPTIONS_PREFIX)) {
         keysToRemove.push(key);
       }
     }
 
     keysToRemove.forEach((key) => {
-      this.storage!.removeItem(key);
+      storage.removeItem(key);
     });
   }
 
   private emitUpdated(): void {
-    if (!this.eventTarget) {
+    const target = this.ensureEventTarget();
+    if (!target) {
       return;
     }
 
     if (typeof Event === 'function') {
-      this.eventTarget.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
+      target.dispatchEvent(new Event(GACHA_STORAGE_UPDATED_EVENT));
     }
+  }
+
+  private ensureStorage(): StorageLike | null {
+    if (this.storage) {
+      return this.storage;
+    }
+
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      this.storage = window.localStorage;
+    }
+
+    return this.storage;
+  }
+
+  private ensureEventTarget(): EventTarget | null {
+    if (this.eventTarget) {
+      return this.eventTarget;
+    }
+
+    if (typeof window !== 'undefined') {
+      this.eventTarget = window;
+    }
+
+    return this.eventTarget;
+  }
+
+  private scheduleRetry(): void {
+    if (!this.pending) {
+      return;
+    }
+
+    if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+      return;
+    }
+
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const payload = this.pending;
+      this.pending = null;
+      if (payload) {
+        this.savePartial(payload);
+      }
+    }, this.debounceMs);
   }
 
   private mergePending(
