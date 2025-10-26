@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { GachaLayout } from '../layouts/GachaLayout';
+import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
@@ -311,19 +311,17 @@ export function App(): JSX.Element {
     });
   };
 
-  return (
-    <GachaLayout
-      title="四遊楽ガチャツール"
-      tagline="Integrated Gacha Management Tool"
-      mainRef={mainRef}
-      isMobile={isMobile}
-      onDrawGacha={handleDrawGacha}
-      onRegisterGacha={handleRegisterGacha}
-      onOpenRealtime={handleOpenRealtime}
-      onExportAll={handleExportAll}
-      onOpenPageSettings={handleOpenPageSettings}
-    >
-      <AppRoutes onDrawGacha={handleDrawGacha} />
-    </GachaLayout>
-  );
+  const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {
+    title: '四遊楽ガチャツール',
+    tagline: 'Integrated Gacha Management Tool',
+    mainRef,
+    isMobile,
+    onDrawGacha: handleDrawGacha,
+    onRegisterGacha: handleRegisterGacha,
+    onOpenRealtime: handleOpenRealtime,
+    onExportAll: handleExportAll,
+    onOpenPageSettings: handleOpenPageSettings
+  };
+
+  return <AppRoutes gachaLayoutProps={gachaLayoutProps} />;
 }

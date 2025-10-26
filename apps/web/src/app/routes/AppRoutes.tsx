@@ -1,14 +1,49 @@
-import { Navigate, useRoutes } from 'react-router-dom';
+import { Navigate, Outlet, useRoutes } from 'react-router-dom';
 
+import { GachaLayout, type GachaLayoutProps } from '../../layouts/GachaLayout';
+import { MarketingLayout } from '../../layouts/MarketingLayout';
+import { HomePage } from '../../pages/home/HomePage';
+import { ReceivePage } from '../../pages/receive/ReceivePage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
 
 interface AppRoutesProps {
-  onDrawGacha?: () => void;
+  gachaLayoutProps: Omit<GachaLayoutProps, 'children'>;
 }
 
-export function AppRoutes({ onDrawGacha }: AppRoutesProps = {}): JSX.Element | null {
+function GachaLayoutContainer({ layoutProps }: { layoutProps: Omit<GachaLayoutProps, 'children'> }): JSX.Element {
+  return (
+    <GachaLayout {...layoutProps}>
+      <Outlet />
+    </GachaLayout>
+  );
+}
+
+function MarketingLayoutContainer(): JSX.Element {
+  return (
+    <MarketingLayout>
+      <Outlet />
+    </MarketingLayout>
+  );
+}
+
+export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | null {
   return useRoutes([
-    { path: '/', element: <GachaPage onDrawGacha={onDrawGacha} /> },
-    { path: '*', element: <Navigate to="/" replace /> }
+    {
+      path: '/',
+      element: <MarketingLayoutContainer />,
+      children: [
+        { index: true, element: <Navigate to="home" replace /> },
+        { path: 'home', element: <HomePage /> }
+      ]
+    },
+    {
+      path: '/',
+      element: <GachaLayoutContainer layoutProps={gachaLayoutProps} />,
+      children: [
+        { path: 'gacha', element: <GachaPage onDrawGacha={gachaLayoutProps.onDrawGacha} /> },
+        { path: 'receive', element: <ReceivePage /> }
+      ]
+    },
+    { path: '*', element: <Navigate to="/home" replace /> }
   ]);
 }
