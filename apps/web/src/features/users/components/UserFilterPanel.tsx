@@ -83,15 +83,19 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
           type="button"
           onClick={toggle}
           className={clsx(
-            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border border-border/60 bg-panel-muted transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
-            value && 'border-accent bg-accent/30'
+            'user-filter-panel__toggle-button relative inline-flex h-6 w-11 items-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+            value
+              ? 'border-accent bg-[rgb(var(--color-accent)/1)]'
+              : 'border-border/60 bg-panel-muted'
           )}
           aria-pressed={value}
         >
           <span
             className={clsx(
-              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full bg-white transition-all',
-              value ? 'translate-x-[22px]' : 'translate-x-[6px]'
+              'user-filter-panel__toggle-indicator inline-block h-4 w-4 rounded-full transition-all',
+              value
+                ? 'translate-x-[22px] bg-[rgb(var(--color-accent-foreground)/1)]'
+                : 'translate-x-[6px] bg-[rgb(var(--color-surface-foreground)/1)]'
             )}
           />
         </button>

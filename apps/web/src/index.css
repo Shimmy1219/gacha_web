@@ -17,6 +17,8 @@
   --color-muted: 35 35 43;
   --color-muted-foreground: 179 179 189;
   --color-overlay: 17 17 26;
+  --color-item-card: #1b1b23;
+  --color-user-inventory-card: #1b1b23;
   --color-accent: 225 29 72;
   --color-accent-dark: 159 18 57;
   --color-accent-bright: 243 31 85;
@@ -39,6 +41,8 @@
   --color-muted: 238 240 246;
   --color-muted-foreground: 104 112 130;
   --color-overlay: 252 253 255;
+  --color-item-card: #fafafc;
+  --color-user-inventory-card: #f5f6fa;
 }
 
 [data-site-theme='custom'] {
@@ -54,6 +58,8 @@
   --color-muted: 35 35 43;
   --color-muted-foreground: 179 179 189;
   --color-overlay: 17 17 26;
+  --color-item-card: #1b1b23;
+  --color-user-inventory-card: #1b1b23;
 }
 
 @layer base {
@@ -391,6 +397,18 @@
     min-height: 0;
     overflow: visible;
     padding-right: 0;
+  }
+
+  .start-wizard__tile:hover .start-wizard__tile-cta {
+    color: rgb(var(--color-accent-foreground) / 1);
+  }
+
+  [data-site-theme='light'] .start-wizard__tile:hover .start-wizard__tile-cta {
+    color: rgb(0 0 0 / 1);
+  }
+
+  [data-site-theme='light'] .prize-settings__delete-button {
+    color: rgb(0 0 0 / 1);
   }
 }
 

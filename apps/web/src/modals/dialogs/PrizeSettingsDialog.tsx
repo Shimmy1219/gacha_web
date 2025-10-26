@@ -356,9 +356,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       itemName: payload.itemName,
       defaultPrice: payload.riaguPrice,
       defaultType: payload.riaguType,
-      onRemove: () => {
-        console.info('リアグ設定の解除（ダミー）', payload.itemId);
-      },
       onSave: (data) => {
         console.info('リアグ設定の保存（ダミー）', data);
       }
@@ -561,7 +558,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         <button
           type="button"
           className={clsx(
-            'btn border-red-500/60 bg-red-500/15 text-red-100 transition hover:border-red-400 hover:bg-red-500/25',
+            'btn prize-settings__delete-button border-red-500/60 bg-red-500/15 text-red-100 transition hover:border-red-400 hover:bg-red-500/25',
             'disabled:cursor-not-allowed disabled:opacity-50'
           )}
           onClick={handleDeleteItem}

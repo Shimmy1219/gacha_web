@@ -116,7 +116,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
             {tile.description}
           </p>
         </div>
-        <span className="start-wizard__tile-cta mt-auto inline-flex items-center gap-1 text-xs font-semibold text-accent transition group-hover:text-white">
+        <span className="start-wizard__tile-cta mt-auto inline-flex items-center gap-1 text-xs font-semibold text-accent transition">
           進む
         </span>
       </button>
