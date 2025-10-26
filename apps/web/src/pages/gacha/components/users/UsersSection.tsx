@@ -9,24 +9,10 @@ import {
 } from '../cards/UserCard';
 import { SectionContainer } from '../layout/SectionContainer';
 import { useModal } from '../../../../modals';
-import { SaveOptionsDialog } from '../../../../modals/dialogs/SaveOptionsDialog';
+import { SaveTargetDialog } from '../../../../modals/dialogs/SaveTargetDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
-
-function formatExpiresAt(value?: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date);
-}
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -85,38 +71,18 @@ export function UsersSection(): JSX.Element {
 
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
-      const saved = data?.saveOptions?.[userId];
-      const url = saved?.shareUrl ?? saved?.downloadUrl;
-
-      push(SaveOptionsDialog, {
-        id: `save-options-${userId}`,
-        title: '保存オプション',
-        description: 'ZIP保存・アップロード・共有リンクの各オプションを選択できます。',
+      push(SaveTargetDialog, {
+        id: `save-target-${userId}`,
+        title: '保存対象を選択',
+        description: 'まずは保存したい範囲（全件・ガチャ単位・履歴単位）を選んでください。',
         size: 'lg',
         payload: {
-          uploadResult: url
-            ? {
-                url,
-                label: saved?.shareUrl ?? url,
-                expiresAt: formatExpiresAt(saved?.expiresAt)
-              }
-            : undefined,
-          onSaveToDevice: () => {
-            console.info('デバイス保存処理は未接続です', userId);
-          },
-          onUploadToService: () => {
-            console.info('ZIPアップロード処理は未接続です', userId);
-          },
-          onShareToDiscord: () => {
-            console.info('Discord共有処理は未接続です', userId);
-          },
-          onCopyUrl: (copyUrl) => {
-            console.info('共有URLをコピー（ダミー）', { userId, url: copyUrl });
-          }
+          userId,
+          userName: data?.userProfiles?.users?.[userId]?.displayName ?? userId
         }
       });
     },
-    [data?.saveOptions, push]
+    [data?.userProfiles?.users, push]
   );
 
   return (
