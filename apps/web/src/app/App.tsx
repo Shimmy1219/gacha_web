@@ -166,9 +166,6 @@ export function App(): JSX.Element {
             }
           }
         },
-        onPickJson: (file) => {
-          console.info('JSONインポート処理は未接続です', file);
-        },
         onImportBackup: (file) => {
           console.info('バックアップ読み込み処理は未接続です', file);
         },
