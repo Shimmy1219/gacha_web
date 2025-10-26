@@ -331,9 +331,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       itemName: payload.itemName,
       defaultPrice: payload.riaguPrice,
       defaultType: payload.riaguType,
-      onRemove: () => {
-        console.info('リアグ設定の解除（ダミー）', payload.itemId);
-      },
       onSave: (data) => {
         console.info('リアグ設定の保存（ダミー）', data);
       }
