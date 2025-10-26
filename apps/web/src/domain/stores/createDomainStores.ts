@@ -7,6 +7,7 @@ import { RarityStore } from './rarityStore';
 import { RiaguStore } from './riaguStore';
 import { PullHistoryStore } from './pullHistoryStore';
 import { UserInventoryStore } from './userInventoryStore';
+import { UserProfileStore } from './userProfileStore';
 import { UiPreferencesStore } from './uiPreferencesStore';
 
 export interface DomainStores {
@@ -14,6 +15,7 @@ export interface DomainStores {
   catalog: CatalogStore;
   rarities: RarityStore;
   userInventories: UserInventoryStore;
+  userProfiles: UserProfileStore;
   riagu: RiaguStore;
   ptControls: PtControlsStore;
   uiPreferences: UiPreferencesStore;
@@ -26,6 +28,7 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     catalog: new CatalogStore(persistence),
     rarities: new RarityStore(persistence),
     userInventories: new UserInventoryStore(persistence),
+    userProfiles: new UserProfileStore(persistence),
     riagu: new RiaguStore(persistence),
     ptControls: new PtControlsStore(persistence),
     uiPreferences: new UiPreferencesStore(persistence),
@@ -71,6 +74,7 @@ function hydrateStores(
     stores.catalog.hydrate(snapshot.catalogState);
     stores.rarities.hydrate(snapshot.rarityState);
     stores.userInventories.hydrate(snapshot.userInventories);
+    stores.userProfiles.hydrate(snapshot.userProfiles);
     stores.riagu.hydrate(snapshot.riaguState);
     stores.ptControls.hydrate(snapshot.ptSettings);
     stores.uiPreferences.hydrate(snapshot.uiPreferences);

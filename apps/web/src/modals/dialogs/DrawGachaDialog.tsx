@@ -116,8 +116,13 @@ function formatExecutedAt(value: string | undefined): string {
 }
 
 export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
-  const { appState: appStateStore, catalog: catalogStore, rarities: rarityStore, pullHistory } =
-    useDomainStores();
+  const {
+    appState: appStateStore,
+    catalog: catalogStore,
+    rarities: rarityStore,
+    userProfiles,
+    pullHistory
+  } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
@@ -212,9 +217,12 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       }));
 
       const executedAt = new Date().toISOString();
+      const normalizedUserName = userName.trim();
+      const userId = normalizedUserName ? userProfiles.ensureProfile(normalizedUserName) : undefined;
+
       const payload: GachaResultPayload = {
         gachaId: selectedGacha.id,
-        userId: userName.trim() ? userName.trim() : undefined,
+        userId,
         executedAt,
         pullCount: parsedCount,
         items: itemsForStore

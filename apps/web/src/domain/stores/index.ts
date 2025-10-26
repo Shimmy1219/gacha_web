@@ -3,6 +3,7 @@ export * from './appStateStore';
 export * from './catalogStore';
 export * from './rarityStore';
 export * from './userInventoryStore';
+export * from './userProfileStore';
 export * from './riaguStore';
 export * from './ptControlsStore';
 export * from './uiPreferencesStore';
