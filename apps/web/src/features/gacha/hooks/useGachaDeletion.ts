@@ -5,7 +5,7 @@ import { deleteAsset } from '@domain/assets/assetStorage';
 import { useModal } from '../../../modals';
 import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import { GachaDeleteConfirmDialog } from '../../../modals/dialogs/GachaDeleteConfirmDialog';
-import type { GachaTabOption } from '../components/GachaTabs';
+import type { GachaTabOption } from '../../../pages/gacha/components/common/GachaTabs';
 
 interface DeleteTarget {
   id: string;

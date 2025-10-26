@@ -1,4 +1,4 @@
-import { DEFAULT_PALETTE } from '../components/color-picker/palette';
+import { DEFAULT_PALETTE } from '../../../pages/gacha/components/rarity/color-picker/palette';
 
 export const FALLBACK_RARITY_COLOR = '#3f3f46';
 

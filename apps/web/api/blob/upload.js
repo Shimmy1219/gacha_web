@@ -69,7 +69,14 @@ export default async function handler(req, res) {
   const originHdr = req.headers.origin || '';
   const referer = req.headers.referer || '';
   let derivedOrigin = '';
-  try { derivedOrigin = referer ? new URL(referer).origin : ''; } catch {}
+  try {
+    derivedOrigin = referer ? new URL(referer).origin : '';
+  } catch (error) {
+    vLog('failed to parse referer URL', {
+      referer,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 
   const originToCheck = originHdr || derivedOrigin || '';
   const isAllowed =
@@ -173,14 +180,19 @@ export default async function handler(req, res) {
       },
 
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('[blob/upload completed]', {
+        const details = {
           url: blob.url,
           downloadUrl: blob.downloadUrl || null,
           pathname: blob.pathname,
           size: blob.size,
-          contentType: blob.contentType,
-          // tokenPayload: tokenPayload // 必要ならログ
-        });
+          contentType: blob.contentType
+        };
+
+        if (VERBOSE) {
+          Object.assign(details, { tokenPayload });
+        }
+
+        console.log('[blob/upload completed]', details);
       },
     });
 

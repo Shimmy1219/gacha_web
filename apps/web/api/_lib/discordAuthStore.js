@@ -48,7 +48,9 @@ export async function getDiscordAuthState(state) {
     try {
       return normalizeRecord(JSON.parse(value));
     } catch (error) {
-      throw new Error('Failed to parse discord auth state from kv');
+      throw new Error('Failed to parse discord auth state from kv', {
+        cause: error instanceof Error ? error : undefined
+      });
     }
   }
   return null;
@@ -67,7 +69,9 @@ export async function consumeDiscordAuthState(state) {
     try {
       return normalizeRecord(JSON.parse(value));
     } catch (error) {
-      throw new Error('Failed to parse discord auth state from kv');
+      throw new Error('Failed to parse discord auth state from kv', {
+        cause: error instanceof Error ? error : undefined
+      });
     }
   }
   return null;

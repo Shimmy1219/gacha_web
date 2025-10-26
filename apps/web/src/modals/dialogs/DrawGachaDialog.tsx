@@ -1,7 +1,7 @@
 import { SparklesIcon } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useState } from 'react';
 
-import { SingleSelectDropdown, type SingleSelectOption } from '../../components/select/SingleSelectDropdown';
+import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';

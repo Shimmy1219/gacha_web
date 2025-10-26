@@ -13,9 +13,9 @@ import { generateGachaId, generateItemId, generateRarityId } from '@domain/idGen
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { PtControlsPanel } from '../../features/rarity/components/PtControlsPanel';
-import { RarityTable, type RarityTableRow } from '../../features/rarity/components/RarityTable';
-import { DEFAULT_PALETTE } from '../../features/rarity/components/color-picker/palette';
+import { PtControlsPanel } from '../../pages/gacha/components/rarity/PtControlsPanel';
+import { RarityTable, type RarityTableRow } from '../../pages/gacha/components/rarity/RarityTable';
+import { DEFAULT_PALETTE } from '../../pages/gacha/components/rarity/color-picker/palette';
 import { formatRarityRate, parseRarityRateInput } from '../../features/rarity/utils/rarityRate';
 import {
   FALLBACK_RARITY_COLOR,
