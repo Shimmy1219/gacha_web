@@ -4,6 +4,7 @@ export * from './GachaDeleteConfirmDialog';
 export * from './GuideInfoDialog';
 export * from './ItemAssetPreviewDialog';
 export * from './ItemDeleteConfirmDialog';
+export * from './InventoryHistoryDialog';
 export * from './LivePasteCatalogErrorDialog';
 export * from './LivePasteDialog';
 export * from './LivePasteGachaPickerDialog';
