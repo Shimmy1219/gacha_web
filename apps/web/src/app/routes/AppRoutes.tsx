@@ -1,46 +1,7 @@
 import { Navigate, useRoutes } from 'react-router-dom';
 
-import { DashboardShell } from '../../components/dashboard/DashboardShell';
-import { MockStorageButton } from '../../features/dev/MockStorageButton';
-import { ItemsSection } from '../../features/items/components/ItemsSection';
-import { RaritySection } from '../../features/rarity/components/RaritySection';
-import { RiaguSection } from '../../features/riagu/components/RiaguSection';
-import { UsersSection } from '../../features/users/components/UsersSection';
-
-interface DashboardPageProps {
-  onDrawGacha?: () => void;
-}
-
-function DashboardPage({ onDrawGacha }: DashboardPageProps): JSX.Element {
-  const sections = [
-    {
-      id: 'rarity',
-      label: 'レアリティ',
-      description: '排出率とカラーの管理',
-      node: <RaritySection />
-    },
-    {
-      id: 'items',
-      label: 'アイテム',
-      description: 'アイテム画像とリアグ同期',
-      node: <ItemsSection />
-    },
-    {
-      id: 'users',
-      label: 'ユーザー',
-      description: '獲得内訳とフィルタ',
-      node: <UsersSection />
-    },
-    {
-      id: 'riagu',
-      label: 'リアグ',
-      description: 'リアルグッズ管理',
-      node: <RiaguSection />
-    }
-  ];
-
-  return <DashboardShell sections={sections} controlsSlot={<MockStorageButton />} onDrawGacha={onDrawGacha} />;
-}
+import { createGachaRoutes } from './gacha-routes';
+import { createMarketingRoutes } from './marketing-routes';
 
 interface AppRoutesProps {
   onDrawGacha?: () => void;
@@ -48,7 +9,8 @@ interface AppRoutesProps {
 
 export function AppRoutes({ onDrawGacha }: AppRoutesProps = {}): JSX.Element | null {
   return useRoutes([
-    { path: '/', element: <DashboardPage onDrawGacha={onDrawGacha} /> },
-    { path: '*', element: <Navigate to="/" replace /> }
+    ...createMarketingRoutes(),
+    ...createGachaRoutes({ onDrawGacha }),
+    { path: '*', element: <Navigate to="/home" replace /> }
   ]);
 }
