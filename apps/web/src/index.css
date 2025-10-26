@@ -349,6 +349,14 @@
     overflow: visible;
     padding-right: 0;
   }
+
+  .start-wizard__tile:hover .start-wizard__tile-cta {
+    color: rgb(var(--color-accent-foreground) / 1);
+  }
+
+  [data-site-theme='light'] .start-wizard__tile:hover .start-wizard__tile-cta {
+    color: rgb(0 0 0 / 1);
+  }
 }
 
 
