@@ -13,7 +13,7 @@ interface DeleteTarget {
 }
 
 export function useGachaDeletion(): (target: DeleteTarget | GachaTabOption) => void {
-  const { appState, catalog, rarities, riagu, userInventories, ptControls } = useDomainStores();
+  const { appState, catalog, rarities, riagu, ptControls, pullHistory } = useDomainStores();
   const { push } = useModal();
 
   const performDeletion = useCallback(
@@ -39,13 +39,13 @@ export function useGachaDeletion(): (target: DeleteTarget | GachaTabOption) => v
       rarities.removeGacha(gachaId);
       riagu.removeGacha(gachaId);
       ptControls.removeGacha(gachaId);
-      userInventories.removeGacha(gachaId);
+      pullHistory.deletePullsForInventory({ gachaId });
 
       if (assetIds.length > 0) {
         void Promise.allSettled(assetIds.map((assetId) => deleteAsset(assetId)));
       }
     },
-    [appState, catalog, rarities, riagu, userInventories, ptControls]
+    [appState, catalog, rarities, riagu, ptControls, pullHistory]
   );
 
   return useCallback(

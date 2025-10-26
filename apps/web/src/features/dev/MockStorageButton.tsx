@@ -3,12 +3,11 @@ import { useCallback, useState } from 'react';
 import {
   type GachaLocalStorageSnapshot,
   type PullHistoryStateV1,
-  type UserInventoriesStateV3,
-  type UserInventorySnapshotV3
+  type UserInventoriesStateV3
 } from '@domain/app-persistence';
+import { projectInventories } from '@domain/inventoryProjection';
 import {
   generateDeterministicGachaId,
-  generateDeterministicInventoryId,
   generateDeterministicItemId,
   generateDeterministicPtBundleId,
   generateDeterministicPtGuaranteeId,
@@ -302,90 +301,6 @@ function createMockSnapshot(): {
   });
 
   const userIds = Object.keys(userProfiles);
-  const inventories: UserInventoriesStateV3['inventories'] = {};
-  const reverseIndex: UserInventoriesStateV3['byItemId'] = {};
-
-  userIds.forEach((userId, userIndex) => {
-    const assignedGachas = [
-      GACHA_DEFINITIONS[userIndex % GACHA_DEFINITIONS.length],
-      GACHA_DEFINITIONS[(userIndex + 1) % GACHA_DEFINITIONS.length]
-    ];
-
-    const userInventories: Record<string, UserInventorySnapshotV3> = {};
-
-    assignedGachas.forEach((gacha, assignmentIndex) => {
-      const gachaItems = itemsByGacha[gacha.id] ?? [];
-      const selections = gachaItems.slice(0, 3).map((item, itemIndex) => {
-        const count = ((userIndex + itemIndex + assignmentIndex) % 4) + 1;
-        return {
-          itemId: item.itemId,
-          rarityId: item.rarityId,
-          count
-        };
-      });
-
-      const totalCount = selections.reduce((sum, entry) => sum + entry.count, 0);
-      const itemsMap: Record<string, string[]> = {};
-      const countsMap: Record<string, Record<string, number>> = {};
-
-      selections.forEach((entry) => {
-        if (!itemsMap[entry.rarityId]) {
-          itemsMap[entry.rarityId] = [];
-        }
-        itemsMap[entry.rarityId].push(entry.itemId);
-
-        if (!countsMap[entry.rarityId]) {
-          countsMap[entry.rarityId] = {};
-        }
-        countsMap[entry.rarityId][entry.itemId] = entry.count;
-      });
-
-      const inventoryId = generateDeterministicInventoryId(`${userId}-${gacha.id}`);
-
-      userInventories[inventoryId] = {
-        inventoryId,
-        gachaId: gacha.id,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        totalCount,
-        items: itemsMap,
-        counts: countsMap
-      };
-
-      selections.forEach((entry) => {
-        if (!reverseIndex[entry.itemId]) {
-          reverseIndex[entry.itemId] = [];
-        }
-        reverseIndex[entry.itemId].push({
-          userId,
-          gachaId: gacha.id,
-          rarityId: entry.rarityId,
-          count: entry.count
-        });
-      });
-    });
-
-    inventories[userId] = userInventories;
-  });
-
-  const userInventoriesState = {
-    version: 3,
-    updatedAt: nowIso,
-    inventories,
-    byItemId: reverseIndex
-  };
-
-  const hitCounts = Object.entries(reverseIndex).reduce<Record<string, number>>((acc, [itemId, entries]) => {
-    const total = entries.reduce((sum, entry) => sum + Number(entry.count ?? 0), 0);
-    acc[itemId] = total;
-    return acc;
-  }, {});
-
-  const hitCountsState = {
-    version: 3,
-    updatedAt: nowIso,
-    byItemId: hitCounts
-  };
 
   const riaguCandidates = itemDefinitions.filter((item) => item.riagu);
 
@@ -543,7 +458,7 @@ function createMockSnapshot(): {
         currencyUsed: 3000 * (index + 1),
         itemCounts,
         rarityCounts,
-        notes: `${gacha.displayName}のサンプル${10 * (index + 1)}連結果`
+        source: 'insiteResult'
       }
     ] as const;
   });
@@ -554,6 +469,35 @@ function createMockSnapshot(): {
     order: pullHistoryEntries.map(([entryId]) => entryId),
     pulls: Object.fromEntries(pullHistoryEntries)
   } satisfies PullHistoryStateV1;
+
+  const { state: projectedInventories } = projectInventories({
+    pullHistory: pullHistoryState,
+    catalogState,
+    now: nowIso
+  });
+
+  const userInventoriesState: UserInventoriesStateV3 =
+    projectedInventories ?? {
+      version: 3,
+      updatedAt: nowIso,
+      inventories: {},
+      byItemId: {}
+    };
+
+  const hitCounts = Object.entries(userInventoriesState.byItemId).reduce<Record<string, number>>(
+    (acc, [itemId, entries]) => {
+      const total = entries.reduce((sum, entry) => sum + Number(entry.count ?? 0), 0);
+      acc[itemId] = total;
+      return acc;
+    },
+    {}
+  );
+
+  const hitCountsState = {
+    version: 3,
+    updatedAt: userInventoriesState.updatedAt,
+    byItemId: hitCounts
+  };
 
   const snapshot: GachaLocalStorageSnapshot = {
     appState,

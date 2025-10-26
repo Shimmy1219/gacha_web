@@ -8,15 +8,16 @@ import type {
   GachaLocalStorageSnapshot,
   GachaRarityEntityV3,
   GachaRarityStateV3,
-  UserInventoriesStateV3,
-  UserInventorySnapshotV3,
+  PullHistoryEntryV1,
+  PullHistoryStateV1,
   UserProfilesStateV3
 } from '@domain/app-persistence';
+import { projectInventories } from '@domain/inventoryProjection';
 import type { DomainStores } from '@domain/stores/createDomainStores';
 import {
   generateDeterministicGachaId,
-  generateDeterministicInventoryId,
   generateDeterministicItemId,
+  generateDeterministicPullId,
   generateDeterministicRarityId,
   generateDeterministicUserId
 } from '@domain/idGenerators';
@@ -115,9 +116,8 @@ export async function importTxtFile(
   if (merged.snapshot.rarityState) {
     context.stores.rarities.setState(merged.snapshot.rarityState, { persist: 'none' });
   }
-  if (merged.snapshot.userInventories) {
-    context.stores.userInventories.setState(merged.snapshot.userInventories, { persist: 'none' });
-  }
+  context.stores.pullHistory.setState(merged.snapshot.pullHistory, { persist: 'none' });
+  context.stores.userInventories.applyProjectionResult(merged.snapshot.userInventories);
 
   return { gachaId: merged.gachaId, displayName: merged.displayName };
 }
@@ -392,8 +392,8 @@ function mergeNamazuIntoSnapshot(parsed: ParsedNamazuData, snapshot: GachaLocalS
     nowIso
   );
   const profilesResult = buildNextUserProfiles(snapshot.userProfiles, parsed.history, nowIso);
-  const inventoriesResult = buildNextUserInventories(
-    snapshot.userInventories,
+  const pullHistoryState = buildNextPullHistory(
+    snapshot.pullHistory,
     gachaId,
     parsed.history,
     rarityResult.rarityIdByLabel,
@@ -401,13 +401,21 @@ function mergeNamazuIntoSnapshot(parsed: ParsedNamazuData, snapshot: GachaLocalS
     nowIso
   );
 
+  const projection = projectInventories({
+    pullHistory: pullHistoryState,
+    catalogState: catalogResult.state,
+    legacyInventories: snapshot.userInventories,
+    now: nowIso
+  });
+
   const nextSnapshot: GachaLocalStorageSnapshot = {
     ...snapshot,
     appState: nextAppState,
     rarityState: rarityResult.state,
     catalogState: catalogResult.state,
     userProfiles: profilesResult,
-    userInventories: inventoriesResult.state
+    userInventories: projection.state,
+    pullHistory: pullHistoryState
   };
 
   return {
@@ -607,96 +615,177 @@ function buildNextUserProfiles(
   return base;
 }
 
-function buildNextUserInventories(
-  previous: UserInventoriesStateV3 | undefined,
+function normalizePullHistoryState(
+  previous: PullHistoryStateV1 | undefined,
+  nowIso: string
+): PullHistoryStateV1 {
+  if (!previous || previous.version !== 1) {
+    return {
+      version: 1,
+      updatedAt: nowIso,
+      order: [],
+      pulls: {}
+    } satisfies PullHistoryStateV1;
+  }
+
+  const pulls: Record<string, PullHistoryEntryV1> = {};
+  const order: string[] = [];
+  const seen = new Set<string>();
+
+  const orderedIds = Array.isArray(previous.order) ? previous.order : [];
+  orderedIds.forEach((id) => {
+    if (typeof id !== 'string' || id.length === 0 || seen.has(id)) {
+      return;
+    }
+    const entry = previous.pulls?.[id];
+    if (!entry) {
+      return;
+    }
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
+    order.push(id);
+    seen.add(id);
+  });
+
+  Object.entries(previous.pulls ?? {}).forEach(([id, entry]) => {
+    if (!entry || seen.has(id)) {
+      return;
+    }
+    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
+    order.push(id);
+    seen.add(id);
+  });
+
+  return {
+    version: 1,
+    updatedAt: previous.updatedAt ?? nowIso,
+    order,
+    pulls
+  } satisfies PullHistoryStateV1;
+}
+
+function buildNextPullHistory(
+  previous: PullHistoryStateV1 | undefined,
   gachaId: string,
   history: ParsedHistoryEntry[],
   rarityIdByLabel: Map<string, string>,
   itemIdByCode: Map<string, string>,
   nowIso: string
-): {
-  state: UserInventoriesStateV3;
-  itemEntries: Map<string, Array<{ userId: string; rarityId: string; count: number }>>;
-} {
-  const base: UserInventoriesStateV3 = previous
-    ? {
-        ...previous,
-        inventories: { ...(previous.inventories ?? {}) },
-        byItemId: { ...(previous.byItemId ?? {}) }
-      }
-    : {
-        version: 3,
-        updatedAt: nowIso,
-        inventories: {},
-        byItemId: {}
-      };
+): PullHistoryStateV1 | undefined {
+  const normalized = normalizePullHistoryState(previous, nowIso);
 
-  const aggregatedByItem = new Map<string, Array<{ userId: string; rarityId: string; count: number }>>();
+  const retainedPulls: Record<string, PullHistoryEntryV1> = {};
+  const retainedOrder: string[] = [];
+  const seen = new Set<string>();
 
-  history.forEach((entry) => {
-    const userId = generateDeterministicUserId(entry.userName);
-    const inventoryId = generateDeterministicInventoryId(`${userId}-${gachaId}`);
-
-    const userInventories = { ...(base.inventories[userId] ?? {}) };
-
-    for (const [existingInventoryId, snapshot] of Object.entries(userInventories)) {
-      if (snapshot?.gachaId === gachaId && existingInventoryId !== inventoryId) {
-        delete userInventories[existingInventoryId];
-      }
+  const shouldRemoveEntry = (entry: PullHistoryEntryV1 | undefined): boolean => {
+    if (!entry) {
+      return false;
     }
+    if (entry.gachaId !== gachaId) {
+      return false;
+    }
+    return entry.source === undefined || entry.source === 'insiteResult';
+  };
 
-    const itemsByRarity: Record<string, string[]> = {};
-    const countsByRarity: Record<string, Record<string, number>> = {};
+  normalized.order.forEach((id) => {
+    if (typeof id !== 'string' || id.length === 0 || seen.has(id)) {
+      return;
+    }
+    const entry = normalized.pulls[id];
+    if (!entry || shouldRemoveEntry(entry)) {
+      return;
+    }
+    retainedPulls[id] = entry;
+    retainedOrder.push(id);
+    seen.add(id);
+  });
+
+  Object.entries(normalized.pulls).forEach(([id, entry]) => {
+    if (!entry || seen.has(id) || shouldRemoveEntry(entry)) {
+      return;
+    }
+    retainedPulls[id] = entry;
+    retainedOrder.push(id);
+    seen.add(id);
+  });
+
+  const newEntries: Array<{ id: string; entry: PullHistoryEntryV1 }> = [];
+  const baseTimestamp = Date.parse(nowIso);
+  const timestampFallback = Number.isFinite(baseTimestamp) ? baseTimestamp : Date.now();
+
+  history.forEach((record, index) => {
+    const userId = generateDeterministicUserId(record.userName);
+    const itemCounts: Record<string, number> = {};
+    const rarityCounts: Record<string, number> = {};
     let totalCount = 0;
 
-    entry.items.forEach((item) => {
-      const rarityId = rarityIdByLabel.get(item.rarityLabel) ?? generateDeterministicRarityId(`${gachaId}-${item.rarityLabel}`);
-      const itemId = itemIdByCode.get(item.code) ?? generateDeterministicItemId(`${gachaId}-${item.code}`);
-
-      if (!itemsByRarity[rarityId]) {
-        itemsByRarity[rarityId] = [];
-      }
-      if (!countsByRarity[rarityId]) {
-        countsByRarity[rarityId] = {};
+    record.items.forEach((item) => {
+      const normalizedCount = Math.max(0, Math.floor(item.count));
+      if (normalizedCount === 0) {
+        return;
       }
 
-      for (let index = 0; index < item.count; index += 1) {
-        itemsByRarity[rarityId].push(itemId);
-      }
+      const itemId =
+        itemIdByCode.get(item.code) ?? generateDeterministicItemId(`${gachaId}-${item.code}`);
+      const rarityId =
+        rarityIdByLabel.get(item.rarityLabel) ??
+        generateDeterministicRarityId(`${gachaId}-${item.rarityLabel}`);
 
-      countsByRarity[rarityId][itemId] = (countsByRarity[rarityId][itemId] ?? 0) + item.count;
-      totalCount += item.count;
-
-      if (!aggregatedByItem.has(itemId)) {
-        aggregatedByItem.set(itemId, []);
-      }
-      aggregatedByItem.get(itemId)?.push({ userId, rarityId, count: item.count });
+      itemCounts[itemId] = (itemCounts[itemId] ?? 0) + normalizedCount;
+      rarityCounts[rarityId] = (rarityCounts[rarityId] ?? 0) + normalizedCount;
+      totalCount += normalizedCount;
     });
 
-    Object.values(itemsByRarity).forEach((list) => {
-      list.sort((a, b) => a.localeCompare(b, 'ja'));
-    });
+    if (totalCount === 0) {
+      return;
+    }
 
-    const snapshot: UserInventorySnapshotV3 = {
-      inventoryId,
+    const entryId = generateDeterministicPullId(`${gachaId}:${userId}:${index}`);
+    const executedAtMillis = timestampFallback - index * 1000;
+    const executedAt = new Date(executedAtMillis).toISOString();
+
+    const entry: PullHistoryEntryV1 = {
+      id: entryId,
       gachaId,
-      updatedAt: nowIso,
-      totalCount,
-      items: itemsByRarity,
-      counts: countsByRarity
+      userId,
+      executedAt,
+      pullCount: Math.max(totalCount, 1),
+      currencyUsed: 0,
+      itemCounts,
+      rarityCounts: Object.keys(rarityCounts).length > 0 ? rarityCounts : undefined,
+      source: 'insiteResult'
     };
 
-    userInventories[inventoryId] = snapshot;
-    base.inventories[userId] = userInventories;
+    newEntries.push({ id: entryId, entry });
   });
 
-  aggregatedByItem.forEach((entries, itemId) => {
-    const existingEntries = Array.isArray(base.byItemId[itemId]) ? base.byItemId[itemId] ?? [] : [];
-    const filtered = existingEntries.filter((entry) => entry.gachaId !== gachaId);
-    base.byItemId[itemId] = [...filtered, ...entries.map((entry) => ({ ...entry, gachaId }))];
+  const nextPulls: Record<string, PullHistoryEntryV1> = { ...retainedPulls };
+  const nextOrder: string[] = [];
+  const orderSeen = new Set<string>();
+
+  newEntries.forEach(({ id, entry }) => {
+    nextPulls[id] = entry;
+    if (!orderSeen.has(id)) {
+      nextOrder.push(id);
+      orderSeen.add(id);
+    }
   });
 
-  base.updatedAt = nowIso;
+  retainedOrder.forEach((id) => {
+    if (!orderSeen.has(id)) {
+      nextOrder.push(id);
+      orderSeen.add(id);
+    }
+  });
 
-  return { state: base, itemEntries: aggregatedByItem };
+  if (nextOrder.length === 0) {
+    return undefined;
+  }
+
+  return {
+    version: 1,
+    updatedAt: nowIso,
+    order: nextOrder,
+    pulls: nextPulls
+  } satisfies PullHistoryStateV1;
 }
