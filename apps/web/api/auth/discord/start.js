@@ -31,11 +31,21 @@ export default async function handler(req, res) {
 
   const contextParam = Array.isArray(req.query.context) ? req.query.context[0] : req.query.context;
   const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
+  const isPwaContext = normalizedContext === 'pwa';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
+
+  let handoffToken;
+  let handoffExpiresAt;
+  if (isPwaContext) {
+    handoffToken = crypto.randomBytes(32).toString('base64url');
+    handoffExpiresAt = Date.now() + 5 * 60 * 1000;
+  }
 
   await saveDiscordAuthState(state, {
     verifier,
     loginContext: normalizedContext,
+    handoffToken,
+    handoffExpiresAt,
   });
 
   const params = new URLSearchParams({
@@ -76,6 +86,9 @@ export default async function handler(req, res) {
       ok: true,
       authorizeUrl: webAuthorizeUrl,
       appAuthorizeUrl,
+      handoffToken,
+      handoffExpiresAt,
+      loginContext: normalizedContext,
     });
   }
 
