@@ -1,8 +1,10 @@
 import { clsx } from 'clsx';
 import { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { useStoreValue } from '@domain/stores';
 import {
   type PullHistoryEntrySourceV1,
@@ -15,6 +17,14 @@ interface InventoryHistoryDialogPayload {
   userName: string;
   gachaId: string;
   gachaName: string;
+}
+
+interface ItemMetadata {
+  name: string;
+  rarityId?: string;
+  rarityLabel?: string;
+  rarityColor?: string | null;
+  raritySortOrder?: number | null;
 }
 
 const DEFAULT_USER_ID = generateDeterministicUserId('default-user');
@@ -85,13 +95,10 @@ export function InventoryHistoryDialog({
   const itemMetadata = useMemo(() => {
     const catalogSnapshot = catalogState?.byGacha?.[gachaId];
     if (!catalogSnapshot?.items) {
-      return new Map<string, { name: string; rarityId?: string; rarityLabel?: string; rarityColor?: string | null }>();
+      return new Map<string, ItemMetadata>();
     }
 
-    const metadata = new Map<
-      string,
-      { name: string; rarityId?: string; rarityLabel?: string; rarityColor?: string | null }
-    >();
+    const metadata = new Map<string, ItemMetadata>();
     Object.values(catalogSnapshot.items).forEach((item) => {
       if (!item?.itemId) {
         return;
@@ -102,7 +109,8 @@ export function InventoryHistoryDialog({
         name: item.name ?? item.itemId,
         rarityId,
         rarityLabel: rarityEntity?.label ?? rarityId,
-        rarityColor: rarityEntity?.color ?? null
+        rarityColor: rarityEntity?.color ?? null,
+        raritySortOrder: rarityEntity?.sortOrder ?? null
       });
     });
     return metadata;
@@ -148,85 +156,118 @@ export function InventoryHistoryDialog({
             このインベントリには履歴がありません。
           </p>
         ) : (
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
             {historyEntries.map((entry) => {
               const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
               const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
               const sourceClassName = SOURCE_CLASSNAMES[entry.source] ?? 'border-border/60 bg-panel-muted text-muted-foreground';
-              const itemEntries = Object.entries(entry.itemCounts ?? {}).filter(([, count]) => Number(count) !== 0);
+              const pullCountValue =
+                typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount)
+                  ? Math.max(0, entry.pullCount)
+                  : 0;
+              const pullCountLabel = `${numberFormatter.format(pullCountValue)}連`;
+              const currencyUsedLabel =
+                typeof entry.currencyUsed === 'number' && Number.isFinite(entry.currencyUsed) && entry.currencyUsed
+                  ? numberFormatter.format(entry.currencyUsed)
+                  : null;
+              const itemEntries = Object.entries(entry.itemCounts ?? {})
+                .map(([itemId, rawCount]) => {
+                  const count = Number(rawCount);
+                  if (!Number.isFinite(count) || count === 0) {
+                    return null;
+                  }
+                  const metadata = itemMetadata.get(itemId);
+                  const rarityLabel = metadata?.rarityLabel;
+                  const rarityColor = metadata?.rarityColor ?? undefined;
+                  const raritySortOrder = metadata?.raritySortOrder ?? Number.NEGATIVE_INFINITY;
+                  const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
+                    typeof rarityColor === 'string' ? rarityColor : undefined
+                  );
+
+                  return {
+                    itemId,
+                    count,
+                    itemLabel: metadata?.name ?? itemId,
+                    rarityLabel,
+                    rarityTextClassName,
+                    rarityTextStyle,
+                    raritySortOrder
+                  };
+                })
+                .filter((value): value is {
+                  itemId: string;
+                  count: number;
+                  itemLabel: string;
+                  rarityLabel?: string;
+                  rarityTextClassName?: string;
+                  rarityTextStyle?: CSSProperties;
+                  raritySortOrder: number;
+                } => value !== null)
+                .sort((a, b) => {
+                  if (a.raritySortOrder !== b.raritySortOrder) {
+                    return b.raritySortOrder - a.raritySortOrder;
+                  }
+                  return a.itemLabel.localeCompare(b.itemLabel, 'ja');
+                });
 
               return (
                 <article
                   key={entry.id}
                   className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast p-4"
                 >
-                  <header className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <header className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
+                    <div className="flex flex-col gap-1">
                       <span className="font-medium text-surface-foreground">{executedAtLabel}</span>
-                      <span className={clsx('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold', sourceClassName)}>
+                      <span className="text-[11px] text-muted-foreground">{pullCountLabel}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span
+                        className={clsx(
+                          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+                          sourceClassName
+                        )}
+                      >
                         {sourceLabel}
                       </span>
+                      {entry.id ? (
+                        <span className="font-mono text-[11px] text-muted-foreground/80">ID: {entry.id}</span>
+                      ) : null}
                     </div>
-                    {entry.id ? (
-                      <span className="font-mono text-[11px] text-muted-foreground/80">ID: {entry.id}</span>
-                    ) : null}
                   </header>
                   {itemEntries.length > 0 ? (
                     <div className="space-y-2">
-                      {itemEntries.map(([itemId, rawCount]) => {
-                        const count = Number(rawCount);
-                        const metadata = itemMetadata.get(itemId);
-                        const rarityLabel = metadata?.rarityLabel;
-                        const rarityColor = metadata?.rarityColor ?? undefined;
-                        const itemLabel = metadata?.name ?? itemId;
-
-                        return (
-                          <div
-                            key={itemId}
-                            className="flex items-center gap-3 text-sm text-surface-foreground"
-                          >
-                            {rarityLabel ? (
+                      {itemEntries.map((item) => (
+                        <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
+                          {item.rarityLabel ? (
+                            <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
                               <span
-                                className="inline-flex min-w-[3rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                                style={
-                                  rarityColor
-                                    ? {
-                                        borderColor: `${rarityColor}33`,
-                                        backgroundColor: `${rarityColor}1a`,
-                                        color: rarityColor
-                                      }
-                                    : undefined
-                                }
+                                className={clsx('leading-tight', item.rarityTextClassName)}
+                                style={item.rarityTextStyle}
                               >
-                                {rarityLabel}
+                                {item.rarityLabel}
                               </span>
-                            ) : null}
-                            <span className="flex-1 font-medium">{itemLabel}</span>
-                            <span
-                              className={clsx(
-                                'font-mono text-sm',
-                                count < 0 ? 'text-red-500' : 'text-surface-foreground'
-                              )}
-                            >
-                              {formatCount(numberFormatter, count)}
                             </span>
-                          </div>
-                        );
-                      })}
+                          ) : null}
+                          <span className="flex-1 font-medium">{item.itemLabel}</span>
+                          <span
+                            className={clsx(
+                              'font-mono text-sm',
+                              item.count < 0 ? 'text-red-500' : 'text-surface-foreground'
+                            )}
+                          >
+                            {formatCount(numberFormatter, item.count)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">アイテムの記録がありません。</p>
                   )}
-                  <footer className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-                    {entry.pullCount > 0 ? (
-                      <span>記録回数: {numberFormatter.format(entry.pullCount)}</span>
-                    ) : (
-                      <span>記録回数: 0</span>
-                    )}
-                    {Number.isFinite(entry.currencyUsed) && entry.currencyUsed ? (
-                      <span>消費リソース: {numberFormatter.format(entry.currencyUsed)}</span>
-                    ) : null}
-                  </footer>
+                  {currencyUsedLabel ? (
+                    <footer className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
+                      <span>消費リソース: {currencyUsedLabel}</span>
+                    </footer>
+                  ) : null}
                 </article>
               );
             })}

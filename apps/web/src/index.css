@@ -181,6 +181,29 @@
     );
   }
 
+  .inventory-history-dialog__scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-accent) / 0.5) transparent;
+  }
+
+  .inventory-history-dialog__scroll::-webkit-scrollbar {
+    width: 0.5rem;
+  }
+
+  .inventory-history-dialog__scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .inventory-history-dialog__scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-accent) / 0.55),
+      rgb(var(--color-accent-bright) / 0.4)
+    );
+    border-radius: 9999px;
+    border: 2px solid transparent;
+  }
+
   .badge {
     @apply inline-flex items-center rounded-full border border-border/60 bg-surface/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
   }
