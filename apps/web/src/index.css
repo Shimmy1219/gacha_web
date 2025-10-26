@@ -288,23 +288,12 @@
     padding: 0.3rem;
     cursor: pointer;
     color: theme('colors.muted.foreground');
-    --gacha-tab-outside-left: rgb(var(--color-panel-contrast) / 0.88);
-    --gacha-tab-outside-right: rgb(var(--color-panel-contrast) / 0.88);
   }
 
-  .gacha-tab:first-child {
-    --gacha-tab-outside-left: rgb(var(--color-panel) / 1);
-  }
-
-  .gacha-tab:last-child {
-    --gacha-tab-outside-right: rgb(var(--color-panel) / 1);
-  }
-
-  .gacha-tab__base {
-    display: block;
+  .gacha-tab::before {
+    content: '';
     position: absolute;
     inset: 0;
-    overflow: visible;
     border-radius: 0.75rem 0.75rem 0 0;
     border: 1px solid rgb(var(--color-border) / 0.45);
     border-bottom: 0;
@@ -315,47 +304,44 @@
     z-index: 0;
   }
 
-  .gacha-tab--active {
-    z-index: 3;
-  }
-
-  .gacha-tab--active .gacha-tab__base {
-    background-color: rgb(var(--color-accent) / 0.92);
-    border-color: rgb(var(--color-accent) / 0.95);
-    opacity: 1;
-  }
-
-  .gacha-tab--inactive:hover .gacha-tab__base {
+  .gacha-tab--inactive:hover::before {
     background-color: rgb(var(--color-panel-contrast) / 0.95);
     border-color: rgba(255, 63, 102, 0.55);
     opacity: 1;
   }
 
-  .gacha-tab--active .gacha-tab__base::before,
-  .gacha-tab--active .gacha-tab__base::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    pointer-events: none;
+  .gacha-tab--active {
+    z-index: 2;
   }
 
-  .gacha-tab--active .gacha-tab__base::before {
-    left: -0.625rem;
-    width: 0.625rem;
-    height: 0.625rem;
+  .gacha-tab--active::before {
+    --gacha-tab-curve: 0.85rem;
     background-color: rgb(var(--color-accent) / 0.92);
-    box-shadow: calc(100% + 1.25rem) 0 0 0 rgb(var(--color-accent) / 0.92);
-    z-index: 0;
+    opacity: 1;
+    border-top: 1px solid rgb(var(--color-accent) / 0.95);
+    border-left: var(--gacha-tab-curve) solid #0000;
+    border-right: var(--gacha-tab-curve) solid #0000;
+    border-bottom: 0;
+    border-radius: calc(2 * var(--gacha-tab-curve)) calc(2 * var(--gacha-tab-curve)) 0 0 / var(--gacha-tab-curve);
+    mask:
+      radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
+        calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
+      conic-gradient(#000 0 0) padding-box;
+    -webkit-mask:
+      radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
+        calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
+      conic-gradient(#000 0 0) padding-box;
+    background-clip: padding-box;
   }
 
-  .gacha-tab--active .gacha-tab__base::after {
-    left: -1.25rem;
-    right: -1.25rem;
-    height: 1.25rem;
-    background:
-      radial-gradient(circle at left bottom, var(--gacha-tab-outside-left) 0 72%, transparent 73%) left bottom / 1.25rem 1.25rem no-repeat,
-      radial-gradient(circle at right bottom, var(--gacha-tab-outside-right) 0 72%, transparent 73%) right bottom / 1.25rem 1.25rem no-repeat;
-    z-index: 1;
+  .gacha-tab--active:first-child::before {
+    border-left-width: 0;
+    border-top-left-radius: var(--gacha-tab-curve);
+  }
+
+  .gacha-tab--active:last-child::before {
+    border-right-width: 0;
+    border-top-right-radius: var(--gacha-tab-curve);
   }
 
   .gacha-tab__label {

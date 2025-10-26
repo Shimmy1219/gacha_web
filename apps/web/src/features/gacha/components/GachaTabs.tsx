@@ -28,7 +28,6 @@ export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: Gac
             key={tab.id}
             className={clsx('gacha-tab', isActive ? 'gacha-tab--active' : 'gacha-tab--inactive')}
           >
-            <span className="gacha-tab__base" aria-hidden="true" />
             <button
               type="button"
               className="gacha-tab__label"
