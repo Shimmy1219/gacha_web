@@ -398,14 +398,20 @@ function mergeNamazuIntoSnapshot(
     rarityResult.rarityIdByLabel,
     nowIso
   );
-  const profilesResult = buildNextUserProfiles(snapshot.userProfiles, parsed.history, nowIso, stores.userProfiles);
+  const profilesResult = buildNextUserProfiles(
+    snapshot.userProfiles,
+    parsed.history,
+    nowIso,
+    stores.userProfiles
+  );
   const pullHistoryState = buildNextPullHistory(
     snapshot.pullHistory,
     gachaId,
     parsed.history,
     rarityResult.rarityIdByLabel,
     catalogResult.itemIdByCode,
-    nowIso
+    nowIso,
+    stores.userProfiles
   );
 
   const projection = projectInventories({
@@ -627,7 +633,7 @@ function buildNextUserProfiles(
     if (!trimmedName) {
       return;
     }
-    userProfileStore.ensureProfile(trimmedName);
+    userProfileStore.ensureProfile(trimmedName, { persist: 'none' });
   });
 
   currentState = userProfileStore.getState() ?? ensureBaseState();
@@ -689,7 +695,8 @@ function buildNextPullHistory(
   history: ParsedHistoryEntry[],
   rarityIdByLabel: Map<string, string>,
   itemIdByCode: Map<string, string>,
-  nowIso: string
+  nowIso: string,
+  userProfileStore: UserProfileStore
 ): PullHistoryStateV1 | undefined {
   const normalized = normalizePullHistoryState(previous, nowIso);
 
@@ -734,7 +741,10 @@ function buildNextPullHistory(
   const timestampFallback = Number.isFinite(baseTimestamp) ? baseTimestamp : Date.now();
 
   history.forEach((record, index) => {
-    const userId = generateDeterministicUserId(record.userName);
+    const userId = userProfileStore.ensureProfile(record.userName, { persist: 'none' });
+    if (!userId) {
+      return;
+    }
     const itemCounts: Record<string, number> = {};
     const rarityCounts: Record<string, number> = {};
     let totalCount = 0;
