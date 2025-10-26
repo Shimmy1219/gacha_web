@@ -101,7 +101,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       data-riagu={model.isRiagu}
       data-selected={isSelected ? 'true' : undefined}
       className={clsx(
-        'item-card group relative overflow-visible rounded-2xl border border-border/60 bg-[#FAFAFC] p-[10px] shadow-sm transition hover:border-accent/60 hover:bg-panel-muted dark:bg-[#1B1B23]',
+        'item-card group/item relative overflow-visible rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-[10px] shadow-sm transition-colors hover:border-accent/60 hover:bg-panel-muted',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60',
         isSelected && 'ring-2 ring-offset-2 ring-offset-[rgb(var(--color-surface-deep)/1)] ring-accent/70'
       )}
@@ -134,7 +134,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full',
             hasImage && isImageAsset && previewUrl && 'border-transparent',
             canPreviewAsset && 'cursor-zoom-in',
-            canPreviewAsset && 'group-hover:bg-panel-contrast'
+            canPreviewAsset && 'group-hover/item:bg-panel-contrast'
           )}
           data-preview-button="true"
         >
