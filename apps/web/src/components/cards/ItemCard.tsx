@@ -101,7 +101,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       data-riagu={model.isRiagu}
       data-selected={isSelected ? 'true' : undefined}
       className={clsx(
-        'item-card group relative overflow-visible rounded-2xl border border-border/60 bg-[#F5F6FA] p-[10px] shadow-sm transition hover:border-accent/60 hover:bg-panel-muted dark:bg-panel',
+        'item-card group relative overflow-visible rounded-2xl border border-border/60 bg-[#FAFAFC] p-[10px] shadow-sm transition hover:border-accent/60 hover:bg-panel-muted dark:bg-[#1B1B23]',
         model.isRiagu && 'ring-1 ring-inset ring-accent/60',
         isSelected && 'ring-2 ring-offset-2 ring-offset-[rgb(var(--color-surface-deep)/1)] ring-accent/70'
       )}
