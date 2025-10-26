@@ -54,11 +54,6 @@ function sanitizePathComponent(value: string): string {
   return normalized.length > 0 ? normalized : 'unknown';
 }
 
-function sanitizeFileBase(value: string): string {
-  const withoutExtension = value.replace(/\.[^.]+$/, '');
-  return sanitizePathComponent(withoutExtension || value);
-}
-
 function guessExtension(record: StoredAssetRecord, _fallbackItem: SelectedAsset): string {
   if (record.name) {
     const matched = record.name.match(/\.([a-zA-Z0-9]+)$/);
@@ -273,7 +268,7 @@ export async function buildUserZipFromSelection({
       return;
     }
 
-    const baseName = sanitizeFileBase(asset.name || item.itemName || item.itemId);
+    const baseName = sanitizePathComponent(item.itemName || item.itemId);
     const extension = guessExtension(asset, item);
     let fileName = `${baseName}${extension}`;
     let counter = 1;
