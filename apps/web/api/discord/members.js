@@ -48,8 +48,10 @@ export default async function handler(req, res){
       }));
       log.info('members search succeeded', { count: rows.length, mode: 'search' });
       return res.json({ ok:true, members: rows, mode:'search' });
-    }catch(_e){
-      log.warn('members search failed, falling back');
+    }catch(error){
+      log.warn('members search failed, falling back', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       // 403が出る等はフォールバックに回す
     }
   }

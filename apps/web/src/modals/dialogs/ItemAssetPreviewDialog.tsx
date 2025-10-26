@@ -9,7 +9,7 @@ import {
 } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { type ItemId } from '../../components/cards/ItemCard';
+import { type ItemId } from '../../pages/gacha/components/cards/ItemCard';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 

@@ -102,8 +102,8 @@ interface ModalState {
 
 ### 5.3 2025-10-17 時点の React 実装状況メモ
 - `StartWizardDialog`／`GuideInfoDialog`／`LivePasteDialog` は `App.tsx` のヘッダー操作から `useModal().push` で呼び出し済み。TXT/JSON 読み込み・新規作成・リアルタイム貼り付けはいずれも `console.info` でダミー処理を差し込んでおり、実処理の接続が未完了。【F:apps/web/src/app/App.tsx†L6-L102】
-- `PrizeSettingsDialog` は `ItemsSection` のサンプルカードから `push` できるが、保存・ピックアップ指定などもダミーの `console.info` のまま。`usePrizeSettings` 相当のデータフローは未導入で、今後の hook 実装が必要。【F:apps/web/src/features/items/components/ItemsSection.tsx†L8-L198】【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L13-L247】
-- `SaveOptionsDialog` は `UsersSection` 内の「エクスポート」ボタンから開ける。`uploadResult` はダミー値、保存／アップロード／Discord 送信はすべて `console.info` のスタブ。AppStateStore 連携と実サービス呼び出しを後続タスクに残している。【F:apps/web/src/features/users/components/UsersSection.tsx†L82-L139】【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
+- `PrizeSettingsDialog` は `ItemsSection` のサンプルカードから `push` できるが、保存・ピックアップ指定などもダミーの `console.info` のまま。`usePrizeSettings` 相当のデータフローは未導入で、今後の hook 実装が必要。【F:apps/web/src/pages/gacha/components/items/ItemsSection.tsx†L8-L198】【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L13-L247】
+- `SaveOptionsDialog` は `UsersSection` 内の「エクスポート」ボタンから開ける。`uploadResult` はダミー値、保存／アップロード／Discord 送信はすべて `console.info` のスタブ。AppStateStore 連携と実サービス呼び出しを後続タスクに残している。【F:apps/web/src/pages/gacha/components/users/UsersSection.tsx†L82-L139】【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
 - `GachaDeleteConfirmDialog`／`ItemDeleteConfirmDialog` はコンポーネント実装のみ完了し、UI からの導線がまだ存在しない。ガチャ・景品一覧の削除アクションを React 化するタイミングで `push` を接続する必要がある。【F:apps/web/src/features/gacha/dialogs/GachaDeleteConfirmDialog.tsx†L1-L66】【F:apps/web/src/features/items/dialogs/ItemDeleteConfirmDialog.tsx†L1-L84】
 
 #### TODO（導線・仕様差分）

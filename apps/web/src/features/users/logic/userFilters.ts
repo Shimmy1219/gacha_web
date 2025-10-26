@@ -14,7 +14,7 @@ import { useDomainStores } from '../../storage/AppPersistenceProvider';
 import type {
   UserCardProps,
   UserInventoryEntryItem
-} from '../../../components/cards/UserCard';
+} from '../../../pages/gacha/components/cards/UserCard';
 
 interface StoreLike<T> {
   getState(): T | undefined;

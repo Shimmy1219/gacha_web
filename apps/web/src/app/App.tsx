@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { clsx } from 'clsx';
 
-import { AppHeaderShell } from '../components/app-shell/AppHeaderShell';
-import { useResponsiveDashboard } from '../components/dashboard/useResponsiveDashboard';
+import { GachaLayout } from '../layouts/GachaLayout';
+import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
 import { GuideInfoDialog } from '../modals/dialogs/GuideInfoDialog';
@@ -87,14 +86,14 @@ export function App(): JSX.Element {
     const gestureEvents = ['gesturestart', 'gesturechange', 'gestureend'] as const;
 
     gestureEvents.forEach((eventName) => {
-      document.addEventListener(eventName as any, preventGestureZoom as EventListener, {
+      document.addEventListener(eventName as unknown as string, preventGestureZoom, {
         passive: false
       });
     });
 
     return () => {
       gestureEvents.forEach((eventName) => {
-        document.removeEventListener(eventName as any, preventGestureZoom as EventListener);
+        document.removeEventListener(eventName as unknown as string, preventGestureZoom);
       });
     };
   }, []);
@@ -313,22 +312,18 @@ export function App(): JSX.Element {
   };
 
   return (
-    <div className="app min-h-screen bg-transparent text-surface-foreground">
-      <AppHeaderShell
-        title="四遊楽ガチャツール"
-        tagline="Integrated Gacha Management Tool"
-        onDrawGacha={handleDrawGacha}
-        onRegisterGacha={handleRegisterGacha}
-        onOpenRealtime={handleOpenRealtime}
-        onExportAll={handleExportAll}
-        onOpenPageSettings={handleOpenPageSettings}
-      />
-      <main
-        ref={mainRef}
-        className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}
-      >
-        <AppRoutes onDrawGacha={handleDrawGacha} />
-      </main>
-    </div>
+    <GachaLayout
+      title="四遊楽ガチャツール"
+      tagline="Integrated Gacha Management Tool"
+      mainRef={mainRef}
+      isMobile={isMobile}
+      onDrawGacha={handleDrawGacha}
+      onRegisterGacha={handleRegisterGacha}
+      onOpenRealtime={handleOpenRealtime}
+      onExportAll={handleExportAll}
+      onOpenPageSettings={handleOpenPageSettings}
+    >
+      <AppRoutes onDrawGacha={handleDrawGacha} />
+    </GachaLayout>
   );
 }

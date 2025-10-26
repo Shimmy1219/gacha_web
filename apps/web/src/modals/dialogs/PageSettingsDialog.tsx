@@ -9,7 +9,7 @@ import {
 import { RadioGroup } from '@headlessui/react';
 import { clsx } from 'clsx';
 
-import { SwitchField } from '../../components/form/SwitchField';
+import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ModalBody } from '../ModalComponents';

@@ -18,12 +18,24 @@ function readKey(){
   const raw = process.env.RECEIVE_TOKEN_KEY;
   if (!raw) throw new Error('RECEIVE_TOKEN_KEY is not set');
   let key;
-  try { key = b64u.dec(raw); } catch {}
-  if (!key || key.length !== 32) {
-    try { key = Buffer.from(raw, 'base64'); } catch {}
+  try { key = b64u.dec(raw); } catch (error) {
+    vLog('failed to decode RECEIVE_TOKEN_KEY as base64url', {
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
   if (!key || key.length !== 32) {
-    try { key = Buffer.from(raw, 'hex'); } catch {}
+    try { key = Buffer.from(raw, 'base64'); } catch (error) {
+      vLog('failed to decode RECEIVE_TOKEN_KEY as base64', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  if (!key || key.length !== 32) {
+    try { key = Buffer.from(raw, 'hex'); } catch (error) {
+      vLog('failed to decode RECEIVE_TOKEN_KEY as hex', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
   if (!key || key.length !== 32) {
     if (Buffer.from(raw).length === 32) key = Buffer.from(raw);
