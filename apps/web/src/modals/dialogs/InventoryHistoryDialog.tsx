@@ -239,9 +239,14 @@ export function InventoryHistoryDialog({
                       {itemEntries.map((item) => (
                         <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
                           {item.rarityLabel ? (
-                            <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
+                            <span
+                              className="inventory-history-dialog__rarity-badge inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm"
+                            >
                               <span
-                                className={clsx('leading-tight', item.rarityTextClassName)}
+                                className={clsx(
+                                  'inventory-history-dialog__rarity-badge__label',
+                                  item.rarityTextClassName
+                                )}
                                 style={item.rarityTextStyle}
                               >
                                 {item.rarityLabel}
