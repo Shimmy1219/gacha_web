@@ -80,20 +80,28 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
         </section>
 
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <h3 className="text-sm font-semibold text-surface-foreground">オーナーのギルド一覧</h3>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/60"
-              onClick={() => {
-                void refetch();
-              }}
-              disabled={isFetching}
-              aria-busy={isFetching}
-            >
-              <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-              再取得
-            </button>
+            <div className="flex items-center gap-3">
+              {isFetching ? (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ギルド情報を取得中です…
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/60"
+                onClick={() => {
+                  void refetch();
+                }}
+                disabled={isFetching}
+                aria-busy={isFetching}
+              >
+                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                再取得
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
