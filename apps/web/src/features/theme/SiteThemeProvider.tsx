@@ -133,7 +133,10 @@ const SURFACE_TONE_CONFIG: Record<CustomBaseTone, { colorScheme: 'dark' | 'light
       '--color-border': '42 42 54',
       '--color-muted': '35 35 43',
       '--color-muted-foreground': '179 179 189',
-      '--color-overlay': '17 17 26'
+      '--color-overlay': '17 17 26',
+      '--color-user-card': '#1b1b23',
+      '--color-item-card': '#1b1b23',
+      '--color-user-inventory-card': '#1b1b23'
     }
   },
   light: {
@@ -149,7 +152,10 @@ const SURFACE_TONE_CONFIG: Record<CustomBaseTone, { colorScheme: 'dark' | 'light
       '--color-border': '210 214 224',
       '--color-muted': '238 240 246',
       '--color-muted-foreground': '104 112 130',
-      '--color-overlay': '252 253 255'
+      '--color-overlay': '252 253 255',
+      '--color-user-card': '#fafafc',
+      '--color-item-card': '#fafafc',
+      '--color-user-inventory-card': '#f5f6fa'
     }
   }
 };
