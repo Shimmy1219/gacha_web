@@ -11,6 +11,7 @@ import { LivePasteGachaPickerDialog } from '../modals/dialogs/LivePasteGachaPick
 import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogErrorDialog';
 import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
+import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { exportBackupToDevice, importBackupFromFile } from '../features/storage/backupService';
 import { importTxtFile } from '../logic/importTxt';
@@ -336,20 +337,38 @@ export function App(): JSX.Element {
     handleOpenStartWizard();
   };
 
-  const handleExportAll = async () => {
-    try {
-      await exportBackupToDevice(persistence);
-      console.info('バックアップファイルを保存しました');
-    } catch (error) {
-      console.error('バックアップのエクスポートに失敗しました', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。';
-        window.alert(message);
+  const handleExportAll = () => {
+    push(BackupTransferDialog, {
+      id: 'backup-transfer-dialog',
+      title: 'バックアップ/引継ぎ',
+      size: 'md',
+      payload: {
+        onSelectBackup: async () => {
+          try {
+            await exportBackupToDevice(persistence);
+            console.info('バックアップファイルを保存しました');
+          } catch (error) {
+            console.error('バックアップのエクスポートに失敗しました', error);
+            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : 'バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。';
+              window.alert(message);
+            }
+            throw (error instanceof Error
+              ? error
+              : new Error('バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。'));
+          }
+        },
+        onSelectTransfer: () => {
+          console.info('引継ぎ処理は未接続です');
+          if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+            window.alert('引継ぎコードによる復元は準備中です。');
+          }
+        }
       }
-    }
+    });
   };
 
   const handleOpenPageSettings = () => {
