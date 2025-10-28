@@ -5,12 +5,15 @@ import {
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
+import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import { useAppPersistence } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface SaveOptionsUploadResult {
@@ -60,10 +63,15 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
   const { userId, userName, snapshot, selection } = payload;
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
 
-  const existingUpload: SaveOptionsUploadResult | null = useMemo(() => {
+  const { uploadZip } = useBlobUpload();
+  const persistence = useAppPersistence();
+  const { data: discordSession } = useDiscordSession();
+
+  const storedUpload: SaveOptionsUploadResult | null = useMemo(() => {
     const saved = snapshot.saveOptions?.[userId];
     if (!saved) {
       return null;
@@ -78,6 +86,16 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
       expiresAt: formatExpiresAt(saved.expiresAt)
     };
   }, [snapshot.saveOptions, userId]);
+
+  const [uploadResult, setUploadResult] = useState<SaveOptionsUploadResult | null>(storedUpload);
+
+  useEffect(() => {
+    setUploadResult(storedUpload);
+  }, [storedUpload]);
+
+  useEffect(() => {
+    setCopied(false);
+  }, [uploadResult?.url]);
 
   const gachaNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -134,7 +152,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
       return;
     }
     setIsProcessing(true);
-    setErrorMessage(null);
+    setErrorBanner(null);
     try {
       const result = await buildUserZipFromSelection({
         snapshot,
@@ -160,9 +178,71 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
       });
     } catch (error) {
       console.error('ZIPの作成に失敗しました', error);
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorBanner(`ZIPの作成に失敗しました: ${message}`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleUploadToShimmy = async () => {
+    if (isProcessing || isUploading) {
+      return;
+    }
+    setIsUploading(true);
+    setErrorBanner(null);
+    try {
+      const zip = await buildUserZipFromSelection({
+        snapshot,
+        selection,
+        userId,
+        userName
+      });
+
+      const uploadResponse = await uploadZip({
+        file: zip.blob,
+        fileName: zip.fileName,
+        userId,
+        receiverName: userName,
+        ownerDiscordId: discordSession?.user?.id,
+        ownerDiscordName: discordSession?.user?.name
+      });
+
+      const expiresAtDisplay = uploadResponse.expiresAt
+        ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
+        : undefined;
+
+      const savedAt = new Date().toISOString();
+
+      persistence.savePartial({
+        saveOptions: {
+          [userId]: {
+            version: 3,
+            key: uploadResponse.token,
+            shareUrl: uploadResponse.shareUrl,
+            downloadUrl: uploadResponse.downloadUrl,
+            expiresAt: uploadResponse.expiresAt,
+            pathname: uploadResponse.pathname,
+            savedAt
+          }
+        }
+      });
+
+      setUploadResult({
+        url: uploadResponse.shareUrl,
+        label: uploadResponse.shareUrl,
+        expiresAt: expiresAtDisplay
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.info('ZIPアップロードがユーザーによってキャンセルされました');
+        return;
+      }
+      console.error('ZIPアップロード処理に失敗しました', error);
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorBanner(`アップロードに失敗しました: ${message}`);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -188,17 +268,17 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
             actionLabel={isProcessing ? '生成中…' : 'デバイスに保存'}
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
             onClick={handleSaveToDevice}
-            disabled={isProcessing}
+            disabled={isUploading}
+            isBusy={isProcessing}
           />
           <SaveOptionCard
             title="shimmy3.comへアップロード"
-            description="ZIPをアップロードして受け取り用の共有リンクを発行します。現在は準備中です。"
-            actionLabel="準備中"
-            disabled
+            description="ZIPをshimmy3.comにアップロードし、受け取り用の共有リンクを発行します。"
+            actionLabel={isUploading ? 'アップロード中…' : 'ZIPをアップロード'}
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
-            onClick={() => {
-              console.info('ZIPアップロード処理は後続タスクで実装されます', { userId });
-            }}
+            onClick={handleUploadToShimmy}
+            disabled={isProcessing}
+            isBusy={isUploading}
           />
           <SaveOptionCard
             title="Discordで共有"
@@ -212,7 +292,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
           />
         </div>
 
-        {existingUpload ? (
+        {uploadResult ? (
           <div className="space-y-2 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 text-surface-foreground">
               <DocumentDuplicateIcon className="h-5 w-5 text-accent" />
@@ -220,26 +300,26 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),auto] sm:items-center">
               <a
-                href={existingUpload.url}
+                href={uploadResult.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
               >
-                {existingUpload.label ?? existingUpload.url}
+                {uploadResult.label ?? uploadResult.url}
               </a>
-              <button type="button" className="btn btn-muted" onClick={() => handleCopyUrl(existingUpload.url)}>
+              <button type="button" className="btn btn-muted" onClick={() => handleCopyUrl(uploadResult.url)}>
                 {copied ? 'コピーしました' : 'URLをコピー'}
               </button>
             </div>
-            {existingUpload.expiresAt ? (
-              <p className="text-[11px] text-muted-foreground">有効期限: {existingUpload.expiresAt}</p>
+            {uploadResult.expiresAt ? (
+              <p className="text-[11px] text-muted-foreground">有効期限: {uploadResult.expiresAt}</p>
             ) : null}
           </div>
         ) : null}
 
-        {errorMessage ? (
+        {errorBanner ? (
           <div className="rounded-2xl border border-rose-500/70 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            ZIPの作成に失敗しました: {errorMessage}
+            {errorBanner}
           </div>
         ) : null}
 
@@ -281,9 +361,19 @@ interface SaveOptionCardProps {
   icon: JSX.Element;
   onClick: () => void;
   disabled?: boolean;
+  isBusy?: boolean;
 }
 
-function SaveOptionCard({ title, description, actionLabel, icon, onClick, disabled }: SaveOptionCardProps): JSX.Element {
+function SaveOptionCard({
+  title,
+  description,
+  actionLabel,
+  icon,
+  onClick,
+  disabled,
+  isBusy = false
+}: SaveOptionCardProps): JSX.Element {
+  const isDisabled = Boolean(disabled) || isBusy;
   return (
     <div className="save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5">
       <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
@@ -297,8 +387,8 @@ function SaveOptionCard({ title, description, actionLabel, icon, onClick, disabl
         type="button"
         className="btn btn-primary mt-auto"
         onClick={onClick}
-        disabled={disabled}
-        aria-busy={disabled}
+        disabled={isDisabled}
+        aria-busy={isBusy}
       >
         {actionLabel}
       </button>

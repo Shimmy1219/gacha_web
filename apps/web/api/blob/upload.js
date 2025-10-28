@@ -42,6 +42,49 @@ function sanitizeSegment(s, fallback) {
   return t || fallback;
 }
 
+function sanitizeDirectoryName(value, fallback) {
+  if (typeof value !== 'string') return fallback;
+  const replaced = value
+    .normalize('NFKC')
+    .replace(/[^0-9A-Za-z._-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 64);
+  return replaced || fallback;
+}
+
+function sanitizeZipFileName(value, fallback) {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  let normalized = trimmed
+    .normalize('NFKC')
+    .replace(/[^0-9A-Za-z._-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+  if (!/\.zip$/i.test(normalized)) {
+    normalized = `${normalized.replace(/\.+$/, '')}.zip`;
+  }
+  if (!normalized) {
+    return fallback;
+  }
+  if (normalized.length > 128) {
+    const base = normalized.slice(0, -4); // remove .zip
+    const truncatedBase = base.slice(0, 124);
+    normalized = `${truncatedBase}.zip`;
+  }
+  return normalized;
+}
+
+function buildFileNameWithSuffix(fileName, suffix) {
+  const safeSuffix = typeof suffix === 'string' ? suffix.replace(/[^0-9A-Za-z_-]/g, '').slice(0, 24) : '';
+  const extIndex = fileName.toLowerCase().lastIndexOf('.zip');
+  const baseName = extIndex >= 0 ? fileName.slice(0, extIndex) : fileName;
+  const truncatedBase = baseName.slice(0, Math.max(1, 120 - safeSuffix.length));
+  const finalBase = safeSuffix ? `${truncatedBase}-${safeSuffix}` : truncatedBase;
+  return `${finalBase}.zip`;
+}
+
 export default async function handler(req, res) {
   const log = createRequestLogger('api/blob/upload', req);
   log.info('request received', { method: req.method, hasBody: Boolean(req.body) });
@@ -127,6 +170,10 @@ export default async function handler(req, res) {
         // 2) ユーザー/用途（サニタイズ）
         const userId  = sanitizeSegment(payload?.userId,  'anon');
         const purpose = sanitizeSegment(payload?.purpose, 'misc');
+        const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
+        const ownerDirectory = sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
+        const receiverDirectory = sanitizeDirectoryName(payload?.receiverName, 'unknown');
+        const requestedFileName = sanitizeZipFileName(payload?.fileName, 'archive.zip');
 
         // 3) レート制限（DBレス：同一IP 1分に1回）
         //    - 時間窓: 60秒
@@ -153,12 +200,24 @@ export default async function handler(req, res) {
         ];
 
         // 6) 決定論的な格納パス（DBレスRateLimitの要）
-        //    - 同一IP・同一時間窓なら "同じ pathname" になる
-        //    - 元ファイル名は保存先では使わない（必要なら別メタで管理）
-        const pathname = `/uploads/${userId}/${purpose}/${h}.zip`;
+        //    - /receive/<discordName>/<displayName>/<filename-with-hash>.zip 形式
+        //    - 同一IP・同一時間窓なら suffix が同じになり重複アップロードを拒否
+        const finalFileName = buildFileNameWithSuffix(requestedFileName, h);
+        const pathname = `/receive/${ownerDirectory}/${receiverDirectory}/${finalFileName}`;
 
         const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 12);
-        const policyLog = { userId, purpose, windowId, pathname, validUntilMs, ipHash };
+        const policyLog = {
+          userId,
+          purpose,
+          ownerDiscordId,
+          ownerDirectory,
+          receiverDirectory,
+          requestedFileName,
+          windowId,
+          pathname,
+          validUntilMs,
+          ipHash
+        };
         vLog('policy', policyLog);
         log.info('upload token policy decided', { ...policyLog, hasCsrf: Boolean(csrfFromPayload) });
 
