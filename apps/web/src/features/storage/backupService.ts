@@ -94,6 +94,157 @@ function dedupeOrder(base: string[] | undefined, additions: string[]): string[] 
   return nextOrder;
 }
 
+function cloneSnapshot<T>(value: T): T {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  const globalClone = (globalThis as { structuredClone?: <U>(input: U) => U }).structuredClone;
+  if (typeof globalClone === 'function') {
+    return globalClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function pruneSnapshotForOverwrite(
+  base: GachaLocalStorageSnapshot,
+  overwriteIds: Set<string>
+): GachaLocalStorageSnapshot {
+  if (!base || overwriteIds.size === 0) {
+    return base;
+  }
+
+  const snapshot = cloneSnapshot(base);
+  const itemIdsByGacha = new Map<string, Set<string>>();
+
+  overwriteIds.forEach((gachaId) => {
+    const itemIds = new Set<string>();
+    const baseCatalog = base.catalogState?.byGacha?.[gachaId];
+    if (baseCatalog?.items) {
+      Object.values(baseCatalog.items).forEach((item) => {
+        if (item?.itemId) {
+          itemIds.add(item.itemId);
+        }
+      });
+    }
+    itemIdsByGacha.set(gachaId, itemIds);
+
+    const rarityIds = new Set<string>();
+    const baseRarities = base.rarityState?.byGacha?.[gachaId];
+    baseRarities?.forEach((rarityId) => {
+      if (rarityId) {
+        rarityIds.add(rarityId);
+      }
+    });
+
+    if (snapshot.appState?.meta) {
+      delete snapshot.appState.meta[gachaId];
+      if (Array.isArray(snapshot.appState.order)) {
+        snapshot.appState.order = snapshot.appState.order.filter((id) => id !== gachaId);
+      }
+      if (snapshot.appState.selectedGachaId === gachaId) {
+        snapshot.appState.selectedGachaId = snapshot.appState.order?.[0] ?? null;
+      }
+    }
+
+    if (snapshot.catalogState?.byGacha) {
+      delete snapshot.catalogState.byGacha[gachaId];
+    }
+
+    if (snapshot.rarityState?.byGacha) {
+      delete snapshot.rarityState.byGacha[gachaId];
+    }
+    if (snapshot.rarityState?.entities) {
+      rarityIds.forEach((rarityId) => {
+        delete snapshot.rarityState!.entities[rarityId];
+      });
+    }
+    if (snapshot.rarityState?.indexByName) {
+      delete snapshot.rarityState.indexByName[gachaId];
+    }
+
+    if (snapshot.ptSettings?.byGachaId) {
+      delete snapshot.ptSettings.byGachaId[gachaId];
+    }
+
+    if (snapshot.userInventories?.inventories) {
+      Object.values(snapshot.userInventories.inventories).forEach((record) => {
+        if (!record) {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(record, gachaId)) {
+          delete record[gachaId];
+        }
+      });
+    }
+
+    if (snapshot.pullHistory?.pulls) {
+      Object.entries(snapshot.pullHistory.pulls).forEach(([pullId, entry]) => {
+        if (entry?.gachaId === gachaId) {
+          delete snapshot.pullHistory!.pulls[pullId];
+        }
+      });
+      if (Array.isArray(snapshot.pullHistory?.order)) {
+        snapshot.pullHistory.order = snapshot.pullHistory.order.filter((pullId) => {
+          const entry = snapshot.pullHistory!.pulls[pullId];
+          return Boolean(entry);
+        });
+      }
+    }
+  });
+
+  overwriteIds.forEach((gachaId) => {
+    const itemIds = itemIdsByGacha.get(gachaId);
+    if (itemIds && snapshot.userInventories?.byItemId) {
+      const byItemId = snapshot.userInventories.byItemId;
+      itemIds.forEach((itemId) => {
+        const entries = byItemId[itemId];
+        if (!entries) {
+          return;
+        }
+        const filtered = entries.filter((entry) => entry?.gachaId !== gachaId);
+        if (filtered.length > 0) {
+          byItemId[itemId] = filtered;
+        } else {
+          delete byItemId[itemId];
+        }
+      });
+    }
+
+    if (itemIds && snapshot.hitCounts?.byItemId) {
+      const hitCountsByItemId = snapshot.hitCounts.byItemId;
+      itemIds.forEach((itemId) => {
+        if (Object.prototype.hasOwnProperty.call(hitCountsByItemId, itemId)) {
+          delete hitCountsByItemId[itemId];
+        }
+      });
+    }
+
+    if (itemIds && snapshot.riaguState) {
+      if (snapshot.riaguState.riaguCards) {
+        const riaguCards = snapshot.riaguState.riaguCards;
+        Object.entries(riaguCards).forEach(([cardId, card]) => {
+          if (!card) {
+            return;
+          }
+          if (card.gachaId === gachaId || (card.itemId && itemIds.has(card.itemId))) {
+            delete riaguCards[cardId];
+          }
+        });
+      }
+      if (snapshot.riaguState.indexByItemId) {
+        const indexByItemId = snapshot.riaguState.indexByItemId;
+        itemIds.forEach((itemId) => {
+          if (Object.prototype.hasOwnProperty.call(indexByItemId, itemId)) {
+            delete indexByItemId[itemId];
+          }
+        });
+      }
+    }
+  });
+
+  return snapshot;
+}
+
 function determineImportContext(
   base: GachaLocalStorageSnapshot,
   addition: GachaLocalStorageSnapshot
@@ -759,7 +910,46 @@ export async function importBackupFromFile(
   }
 
   const baseSnapshot = persistence.loadSnapshot();
-  const { snapshot: mergedSnapshot, context, skipped } = mergeSnapshots(baseSnapshot, metadata.snapshot);
+
+  const existingMeta = baseSnapshot.appState?.meta ?? {};
+  const importMeta = metadata.snapshot.appState?.meta ?? {};
+  const duplicateEntries: Array<{ id: string; existingName?: string; incomingName?: string }> = [];
+
+  Object.entries(importMeta).forEach(([gachaId, meta]) => {
+    if (!gachaId) {
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(existingMeta, gachaId)) {
+      duplicateEntries.push({
+        id: gachaId,
+        existingName: existingMeta[gachaId]?.displayName,
+        incomingName: meta?.displayName
+      });
+    }
+  });
+
+  const overwriteGachaIds = new Set<string>();
+
+  if (duplicateEntries.length > 0) {
+    duplicateEntries.forEach(({ id, existingName, incomingName }) => {
+      const displayName = incomingName ?? existingName ?? id;
+      let shouldOverwrite = false;
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        const message =
+          `バックアップ内の「${displayName}」は既に登録済みです。` +
+          '\n上書きしますか？\n\nOK: 上書きする\nキャンセル: スキップする';
+        shouldOverwrite = window.confirm(message);
+      }
+      if (shouldOverwrite) {
+        overwriteGachaIds.add(id);
+      }
+    });
+  }
+
+  const sanitizedBaseSnapshot =
+    overwriteGachaIds.size > 0 ? pruneSnapshotForOverwrite(baseSnapshot, overwriteGachaIds) : baseSnapshot;
+
+  const { snapshot: mergedSnapshot, context, skipped } = mergeSnapshots(sanitizedBaseSnapshot, metadata.snapshot);
 
   const importedGachaIds = Array.from(context.gachaIds);
   if (importedGachaIds.length === 0) {
