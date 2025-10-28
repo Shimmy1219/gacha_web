@@ -16,4 +16,5 @@ export * from './RiaguConfigDialog';
 export * from './RiaguDisableConfirmDialog';
 export * from './SaveOptionsDialog';
 export * from './BackupTransferDialog';
+export * from './BackupImportConflictDialog';
 export * from './StartWizardDialog';

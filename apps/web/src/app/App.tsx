@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
@@ -12,8 +12,14 @@ import { LivePasteCatalogErrorDialog } from '../modals/dialogs/LivePasteCatalogE
 import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
+import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
-import { exportBackupToDevice, importBackupFromFile } from '../features/storage/backupService';
+import {
+  exportBackupToDevice,
+  importBackupFromFile,
+  type BackupDuplicateEntry,
+  type BackupDuplicateResolution
+} from '../features/storage/backupService';
 import { importTxtFile } from '../logic/importTxt';
 import {
   applyLivePasteText,
@@ -73,6 +79,35 @@ export function App(): JSX.Element {
   const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
+
+  const resolveBackupDuplicate = useCallback(
+    (entry: BackupDuplicateEntry) =>
+      new Promise<BackupDuplicateResolution>((resolve) => {
+        let settled = false;
+        const finalize = (decision: BackupDuplicateResolution) => {
+          if (!settled) {
+            settled = true;
+            resolve(decision);
+          }
+        };
+
+        push(BackupImportConflictDialog, {
+          id: 'backup-import-conflict',
+          title: 'バックアップの復元',
+          size: 'sm',
+          payload: {
+            entry,
+            onResolve: (decision) => {
+              finalize(decision);
+            }
+          },
+          onClose: () => {
+            finalize('skip');
+          }
+        });
+      }),
+    [push]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -173,7 +208,11 @@ export function App(): JSX.Element {
         },
         onImportBackup: async (file) => {
           try {
-            const result = await importBackupFromFile(file, { persistence, stores });
+            const result = await importBackupFromFile(file, {
+              persistence,
+              stores,
+              resolveDuplicate: resolveBackupDuplicate
+            });
             console.info('バックアップの読み込みが完了しました', result);
 
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {

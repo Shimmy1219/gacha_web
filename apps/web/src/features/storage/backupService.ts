@@ -63,6 +63,22 @@ export interface BackupImportResult {
   importedAssetCount: number;
 }
 
+export interface BackupDuplicateEntry {
+  id: string;
+  existingName?: string;
+  incomingName?: string;
+}
+
+export type BackupDuplicateResolution = 'overwrite' | 'skip';
+
+export interface BackupImportOptions {
+  persistence: AppPersistence;
+  stores: DomainStores;
+  resolveDuplicate?:
+    | ((entry: BackupDuplicateEntry) => BackupDuplicateResolution | void)
+    | ((entry: BackupDuplicateEntry) => Promise<BackupDuplicateResolution | void>);
+}
+
 function ensureBrowserEnvironment(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('バックアップ機能はブラウザ環境でのみ利用できます');
@@ -888,8 +904,9 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
 
 export async function importBackupFromFile(
   file: File,
-  { persistence, stores }: { persistence: AppPersistence; stores: DomainStores }
+  options: BackupImportOptions
 ): Promise<BackupImportResult> {
+  const { persistence, stores, resolveDuplicate } = options;
   ensureBrowserEnvironment();
 
   const zip = await JSZip.loadAsync(file);
@@ -913,7 +930,7 @@ export async function importBackupFromFile(
 
   const existingMeta = baseSnapshot.appState?.meta ?? {};
   const importMeta = metadata.snapshot.appState?.meta ?? {};
-  const duplicateEntries: Array<{ id: string; existingName?: string; incomingName?: string }> = [];
+  const duplicateEntries: BackupDuplicateEntry[] = [];
 
   Object.entries(importMeta).forEach(([gachaId, meta]) => {
     if (!gachaId) {
@@ -931,19 +948,24 @@ export async function importBackupFromFile(
   const overwriteGachaIds = new Set<string>();
 
   if (duplicateEntries.length > 0) {
-    duplicateEntries.forEach(({ id, existingName, incomingName }) => {
-      const displayName = incomingName ?? existingName ?? id;
-      let shouldOverwrite = false;
-      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+    for (const entry of duplicateEntries) {
+      let decision: BackupDuplicateResolution | void;
+
+      if (resolveDuplicate) {
+        decision = await resolveDuplicate(entry);
+      } else if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        const displayName = entry.incomingName ?? entry.existingName ?? entry.id;
         const message =
           `バックアップ内の「${displayName}」は既に登録済みです。` +
           '\n上書きしますか？\n\nOK: 上書きする\nキャンセル: スキップする';
-        shouldOverwrite = window.confirm(message);
+        const shouldOverwrite = window.confirm(message);
+        decision = shouldOverwrite ? 'overwrite' : 'skip';
       }
-      if (shouldOverwrite) {
-        overwriteGachaIds.add(id);
+
+      if (decision === 'overwrite') {
+        overwriteGachaIds.add(entry.id);
       }
-    });
+    }
   }
 
   const sanitizedBaseSnapshot =
