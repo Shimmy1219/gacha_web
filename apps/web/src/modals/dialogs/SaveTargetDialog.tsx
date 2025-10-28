@@ -16,6 +16,7 @@ import { useGachaLocalStorage } from '../../features/storage/useGachaLocalStorag
 import type { SaveTargetSelection, SaveTargetSelectionMode } from '../../features/save/types';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { SaveOptionsDialog } from './SaveOptionsDialog';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 
 interface SaveTargetDialogPayload {
   userId: string;
@@ -36,6 +37,7 @@ interface HistorySelectionEntry {
   pullCount: number;
   itemCount: number;
   items: HistorySelectionItem[];
+  rarityGroups: HistorySelectionRarityGroup[];
 }
 
 interface HistorySelectionItem {
@@ -45,6 +47,14 @@ interface HistorySelectionItem {
   rarityId?: string;
   rarityLabel?: string;
   rarityColor?: string;
+}
+
+interface HistorySelectionRarityGroup {
+  rarityId?: string;
+  rarityLabel: string;
+  rarityColor?: string;
+  items: HistorySelectionItem[];
+  totalCount: number;
 }
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('ja-JP', {
@@ -148,6 +158,12 @@ function buildHistoryEntries(
     }
 
     const catalogSnapshot = entry.gachaId ? catalogState?.byGacha?.[entry.gachaId] : undefined;
+    const rarityOrderIndex = new Map<string, number>();
+    if (entry.gachaId) {
+      rarityState?.byGacha?.[entry.gachaId]?.forEach((rarityId, index) => {
+        rarityOrderIndex.set(rarityId, index);
+      });
+    }
     const orderIndex = new Map<string, number>();
     catalogSnapshot?.order?.forEach((itemId, index) => {
       orderIndex.set(itemId, index);
@@ -176,7 +192,7 @@ function buildHistoryEntries(
           itemName: catalogItem?.name ?? itemId,
           count,
           rarityId,
-          rarityLabel: rarity?.label,
+          rarityLabel: rarity?.label ?? '未分類',
           rarityColor: rarity?.color
         };
       })
@@ -192,6 +208,34 @@ function buildHistoryEntries(
         return b.count - a.count;
       });
 
+    const rarityGroups = Array.from(
+      items.reduce((acc, item) => {
+        const rarityKey = item.rarityId ?? `__unassigned:${item.rarityLabel ?? '未分類'}`;
+        const label = item.rarityLabel ?? '未分類';
+        const existing = acc.get(rarityKey);
+        if (existing) {
+          existing.items.push(item);
+          existing.totalCount += item.count;
+          return acc;
+        }
+        acc.set(rarityKey, {
+          rarityId: item.rarityId,
+          rarityLabel: label,
+          rarityColor: item.rarityColor,
+          items: [item],
+          totalCount: item.count
+        });
+        return acc;
+      }, new Map<string, HistorySelectionRarityGroup>()).values()
+    ).sort((a, b) => {
+      const orderA = a.rarityId !== undefined ? rarityOrderIndex.get(a.rarityId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+      const orderB = b.rarityId !== undefined ? rarityOrderIndex.get(b.rarityId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.rarityLabel.localeCompare(b.rarityLabel, 'ja');
+    });
+
     result.push({
       id: entry.id,
       gachaId: entry.gachaId,
@@ -199,7 +243,8 @@ function buildHistoryEntries(
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
       itemCount,
-      items
+      items,
+      rarityGroups
     });
   });
 
@@ -552,32 +597,42 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                           : 'max-h-0 overflow-hidden py-0 opacity-0'
                       )}
                     >
-                      {entry.items.length > 0 ? (
-                        <ul className="space-y-1">
-                          {entry.items.map((item) => (
-                            <li
-                              key={`${entry.id}-${item.itemId}`}
-                              className="flex items-center justify-between gap-3 text-surface-foreground/90"
-                            >
-                              <div className="flex items-center gap-2">
-                                {item.rarityLabel ? (
+                      {entry.rarityGroups.length > 0 ? (
+                        <div className="space-y-3 text-xs">
+                          {entry.rarityGroups.map((group) => {
+                            const { className, style } = getRarityTextPresentation(group.rarityColor);
+                            const groupKey = group.rarityId ?? `unassigned-${group.rarityLabel}`;
+                            return (
+                              <div
+                                key={`${entry.id}-${groupKey}`}
+                                className="grid gap-2 sm:grid-cols-[minmax(4rem,auto),1fr] sm:items-start"
+                              >
+                                <div className="flex items-center gap-2">
                                   <span
-                                    className="rounded-full border px-2 py-0.5 text-[10px]"
-                                    style={
-                                      item.rarityColor
-                                        ? { borderColor: item.rarityColor, color: item.rarityColor }
-                                        : undefined
-                                    }
+                                    className={clsx('text-xs font-semibold', className)}
+                                    style={style}
                                   >
-                                    {item.rarityLabel}
+                                    {group.rarityLabel}
                                   </span>
-                                ) : null}
-                                <span className="text-sm text-surface-foreground/90">{item.itemName}</span>
+                                  <span className="text-[10px] text-muted-foreground">{group.totalCount}件</span>
+                                </div>
+                                <div className="flex flex-wrap items-start gap-2">
+                                  {group.items.map((item) => (
+                                    <span
+                                      key={`${entry.id}-${groupKey}-${item.itemId}`}
+                                      className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px] text-surface-foreground/90"
+                                    >
+                                      <span className="max-w-[10rem] truncate">{item.itemName}</span>
+                                      {item.count > 1 ? (
+                                        <span className="text-[10px] text-muted-foreground">×{item.count}</span>
+                                      ) : null}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                              <span className="text-[11px] text-muted-foreground">×{item.count}</span>
-                            </li>
-                          ))}
-                        </ul>
+                            );
+                          })}
+                        </div>
                       ) : (
                         <p className="text-[11px] text-muted-foreground">景品情報が見つかりませんでした。</p>
                       )}
