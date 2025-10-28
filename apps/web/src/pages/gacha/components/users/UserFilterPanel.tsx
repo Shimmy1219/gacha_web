@@ -22,7 +22,7 @@ function MultiSelectFilter({ id, label, options, value, onChange }: MultiSelectF
   const dropdownOptions = useMemo(() => options.map((option) => ({ ...option })), [options]);
 
   return (
-    <div className="user-filter-panel__multi-select grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
+    <div className="user-filter-panel__multi-select grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">
       <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
         {label}
       </span>
@@ -73,7 +73,7 @@ function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.
   const toggle = (): void => onChange(!value);
 
   return (
-    <div className="user-filter-panel__toggle-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
+    <div className="user-filter-panel__toggle-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">
       <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
         {label}
       </span>
@@ -121,12 +121,12 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       aria-hidden={!open}
       data-state={open ? 'open' : 'closed'}
       className={clsx(
-        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-5 transition-opacity duration-300 ease-linear',
+        'user-filter-panel space-y-6 rounded-2xl border border-white/5 bg-surface/20 p-3 transition-opacity duration-300 ease-linear sm:p-5',
         'data-[state=open]:opacity-100',
         'data-[state=closed]:pointer-events-none data-[state=closed]:select-none data-[state=closed]:opacity-0'
       )}
     >
-      <div className="user-filter-panel__controls grid gap-5">
+      <div className="user-filter-panel__controls grid gap-3 sm:gap-5">
         <MultiSelectFilter
           id="user-filter-gacha"
           label="ガチャ絞り込み"
@@ -144,7 +144,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
         <ToggleRow label="はずれを隠す" value={state.hideMiss} onChange={setHideMiss} />
         <ToggleRow label="獲得数を表示" value={state.showCounts} onChange={setShowCounts} />
         <ToggleRow label="リアグのみを表示" value={state.showSkipOnly} onChange={setShowSkipOnly} />
-        <div className="user-filter-panel__search-row grid gap-2 sm:grid-cols-[minmax(8rem,auto),1fr] sm:items-center">
+        <div className="user-filter-panel__search-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">
           <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
             ユーザー検索
           </span>
