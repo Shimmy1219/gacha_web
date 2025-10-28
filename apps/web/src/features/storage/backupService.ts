@@ -22,6 +22,16 @@ const BACKUP_VERSION = 1;
 const METADATA_FILENAME = 'metadata.json';
 const ASSETS_DIRECTORY = 'assets';
 
+function formatBackupTimestamp(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+}
+
 interface BackupAssetMetadata extends Omit<StoredAssetRecord, 'blob'> {
   path: string;
 }
@@ -708,8 +718,8 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
     compressionOptions: { level: 6 }
   });
 
-  const sanitizedTimestamp = savedAt.replace(/[T:.]/g, '-');
-  const fileName = `gacha-backup-${sanitizedTimestamp}.shimmy`;
+  const backupTimestamp = formatBackupTimestamp(new Date(savedAt));
+  const fileName = `shiyura-gacha-backup-${backupTimestamp}.shimmy`;
 
   const url = URL.createObjectURL(blob);
   try {

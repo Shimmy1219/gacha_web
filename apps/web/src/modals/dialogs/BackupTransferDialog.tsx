@@ -67,7 +67,7 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
             </span>
             <span className="text-base font-semibold text-surface-foreground">バックアップを作成する</span>
             <span className="text-xs text-muted-foreground">
-              端末に現在のデータを保存します。生成された .shimmy ファイルは任意の場所に保管できます。
+              端末に現在のデータを保存します。バックアップを読み込む時は「ガチャを登録」ボタンから読み込んでください。
             </span>
           </button>
           <button
@@ -80,9 +80,9 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
               <ArrowPathRoundedSquareIcon className="h-6 w-6" />
             </span>
-            <span className="text-base font-semibold text-surface-foreground">引継ぎコードを使う</span>
+            <span className="text-base font-semibold text-surface-foreground">クラウド経由で引き継ぎをする</span>
             <span className="text-xs text-muted-foreground">
-              発行済みの引継ぎコードを入力して別端末へデータを引き継ぎます。
+              引継ぎを行うと6桁のコードが発行されます。引き継ぎは24時間以内に完了させてください。24時間経過後はアップロードしたデータは自動的に削除されます。
             </span>
           </button>
         </div>
