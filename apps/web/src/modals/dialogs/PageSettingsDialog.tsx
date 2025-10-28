@@ -1,7 +1,9 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent
@@ -67,12 +69,21 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewForeground: string;
 }>;
 
+const REM_IN_PIXELS = 16;
+const BASE_MODAL_MIN_HEIGHT_REM = 28;
+const VIEWPORT_PADDING_REM = 12;
+const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
+const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
+
 export const PageSettingsDialog: ModalComponent = () => {
+  const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
   const [groupBySeries, setGroupBySeries] = useState(false);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
+  const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
+  const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const {
     theme,
     setTheme,
@@ -151,6 +162,50 @@ export const PageSettingsDialog: ModalComponent = () => {
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const updateViewport = () => {
+      const innerHeight = window.innerHeight;
+      const next = innerHeight - VIEWPORT_PADDING_PX;
+      const limit = next > 0 ? next : innerHeight;
+      setViewportMaxHeight(limit > 0 ? limit : null);
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const element = modalBodyRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new window.ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const nextHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, Math.ceil(entry.contentRect.height));
+        setMaxBodyHeight((previous) => (nextHeight > previous ? nextHeight : previous));
+      }
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const handleCustomAccentInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCustomAccentDraft(event.target.value);
@@ -475,8 +530,19 @@ export const PageSettingsDialog: ModalComponent = () => {
     }
   };
 
+  const desiredMinHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, maxBodyHeight);
+  const viewportLimit = viewportMaxHeight != null && viewportMaxHeight > 0 ? viewportMaxHeight : null;
+  const effectiveMinHeight = viewportLimit ? Math.min(desiredMinHeight, viewportLimit) : desiredMinHeight;
+
   return (
-    <ModalBody className="mt-6 flex max-h-[calc(100vh-12rem)] min-h-[28rem] flex-col space-y-0 overflow-hidden">
+    <ModalBody
+      ref={modalBodyRef}
+      className="mt-6 flex flex-col space-y-0 overflow-hidden"
+      style={{
+        minHeight: `${effectiveMinHeight}px`,
+        maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
+      }}
+    >
       <div className="flex flex-1 flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
         <nav className="w-full max-w-[220px] shrink-0">
           <ul className="space-y-2">
