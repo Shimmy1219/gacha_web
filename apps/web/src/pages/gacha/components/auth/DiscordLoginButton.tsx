@@ -41,6 +41,7 @@ export function DiscordLoginButton({
   const openedGuildModalUserRef = useRef<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [guildSelection, setGuildSelection] = useState<DiscordGuildSelection | null>(null);
+  const [hasLoadedGuildSelection, setHasLoadedGuildSelection] = useState(false);
 
   const userId = user?.id;
   const userName = user?.name;
@@ -55,10 +56,12 @@ export function DiscordLoginButton({
   useEffect(() => {
     if (!userId) {
       setGuildSelection(null);
+      setHasLoadedGuildSelection(false);
       return;
     }
     const stored = loadDiscordGuildSelection(userId);
     setGuildSelection(stored);
+    setHasLoadedGuildSelection(true);
   }, [userId]);
 
   const openGuildSelectionModal = useCallback(() => {
@@ -86,16 +89,19 @@ export function DiscordLoginButton({
       return;
     }
 
+    if (!hasLoadedGuildSelection) {
+      return;
+    }
+
     if (openedGuildModalUserRef.current === userId) {
       return;
     }
 
-    openedGuildModalUserRef.current = userId;
-
     if (!guildSelection) {
+      openedGuildModalUserRef.current = userId;
       openGuildSelectionModal();
     }
-  }, [guildSelection, openGuildSelectionModal, userId]);
+  }, [guildSelection, hasLoadedGuildSelection, openGuildSelectionModal, userId]);
 
   if (isLoading) {
     return (
