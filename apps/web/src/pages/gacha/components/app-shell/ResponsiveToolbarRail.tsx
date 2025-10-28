@@ -1,3 +1,4 @@
+import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,11 +22,46 @@ export function ResponsiveToolbarRail({
 }: ResponsiveToolbarRailProps): JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [rendered, setRendered] = useState(open);
+  const [isActive, setIsActive] = useState(open);
 
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+
+    if (open) {
+      setRendered(true);
+    } else if (rendered) {
+      timeoutId = window.setTimeout(() => {
+        setRendered(false);
+      }, 300);
+    }
+
+    return () => {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [open, rendered]);
+
+  useEffect(() => {
+    if (!rendered) {
+      setIsActive(false);
+      return;
+    }
+
+    let frameId = window.requestAnimationFrame(() => {
+      setIsActive(open);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [open, rendered]);
 
   useEffect(() => {
     if (!open) {
@@ -40,7 +76,7 @@ export function ResponsiveToolbarRail({
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
 
-  useLockBodyScroll(open);
+  useLockBodyScroll(rendered);
 
   useEffect(() => {
     if (!open) {
@@ -57,11 +93,14 @@ export function ResponsiveToolbarRail({
   }, [open]);
 
   const content = (
-    <div className="responsive-toolbar-rail lg:hidden" aria-hidden={!open}>
-      {open ? (
+    <div className="responsive-toolbar-rail lg:hidden" aria-hidden={!rendered}>
+      {rendered ? (
         <>
           <div
-            className="responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-[rgb(11,11,15)]"
+            className={clsx(
+              'responsive-toolbar-rail__backdrop fixed inset-0 z-40 bg-overlay/70 transition-opacity duration-300 ease-in-out',
+              isActive ? 'opacity-100' : 'opacity-0'
+            )}
             onClick={onClose}
           />
           <aside
@@ -69,7 +108,11 @@ export function ResponsiveToolbarRail({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
-            className="responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-full max-w-sm overflow-y-auto border-l border-border/60 bg-surface/98 px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16"
+            className={clsx(
+              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-[70vw] max-w-md overflow-y-auto border-l border-border/60 bg-panel text-surface-foreground shadow-2xl transition-transform duration-300 ease-in-out px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 transform-gpu',
+              isActive ? 'translate-x-0' : 'translate-x-full',
+              !isActive && 'motion-safe:will-change-transform'
+            )}
             ref={panelRef}
             tabIndex={-1}
           >
