@@ -217,7 +217,9 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   const { status, data, error } = useGachaLocalStorage();
   const [mode, setMode] = useState<SaveTargetSelectionMode>('all');
   const [selectedGachaIds, setSelectedGachaIds] = useState<string[]>([]);
+  const [gachaSelectionInitialized, setGachaSelectionInitialized] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
+  const [historySelectionInitialized, setHistorySelectionInitialized] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -240,16 +242,60 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   }, [mode, selectedGachaIds, selectedHistoryIds]);
 
   useEffect(() => {
-    if (mode === 'gacha' && selectedGachaIds.length === 0 && gachaEntries.length > 0) {
+    if (
+      mode === 'gacha' &&
+      gachaEntries.length > 0 &&
+      selectedGachaIds.length === 0 &&
+      !gachaSelectionInitialized
+    ) {
+      setGachaSelectionInitialized(true);
       setSelectedGachaIds(gachaEntries.map((entry) => entry.gachaId));
     }
-  }, [mode, gachaEntries, selectedGachaIds.length]);
+  }, [mode, gachaEntries, gachaSelectionInitialized, selectedGachaIds.length]);
 
   useEffect(() => {
-    if (mode === 'history' && selectedHistoryIds.length === 0 && historyEntries.length > 0) {
+    if (
+      mode === 'history' &&
+      historyEntries.length > 0 &&
+      selectedHistoryIds.length === 0 &&
+      !historySelectionInitialized
+    ) {
+      setHistorySelectionInitialized(true);
       setSelectedHistoryIds(historyEntries.map((entry) => entry.id));
     }
-  }, [mode, historyEntries, selectedHistoryIds.length]);
+  }, [mode, historyEntries, historySelectionInitialized, selectedHistoryIds.length]);
+
+  useEffect(() => {
+    setSelectedGachaIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+      const validIds = previous.filter((id) => gachaEntries.some((entry) => entry.gachaId === id));
+      if (validIds.length === previous.length) {
+        return previous;
+      }
+      if (validIds.length === 0) {
+        setGachaSelectionInitialized(false);
+      }
+      return validIds;
+    });
+  }, [gachaEntries]);
+
+  useEffect(() => {
+    setSelectedHistoryIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+      const validIds = previous.filter((id) => historyEntries.some((entry) => entry.id === id));
+      if (validIds.length === previous.length) {
+        return previous;
+      }
+      if (validIds.length === 0) {
+        setHistorySelectionInitialized(false);
+      }
+      return validIds;
+    });
+  }, [historyEntries]);
 
   useEffect(() => {
     setExpandedHistoryIds((previous) =>
@@ -268,6 +314,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   }, [mode, selectedGachaIds.length, selectedHistoryIds.length]);
 
   const toggleGacha = (gachaId: string) => {
+    setGachaSelectionInitialized(true);
     setSelectedGachaIds((previous) => {
       if (previous.includes(gachaId)) {
         return previous.filter((id) => id !== gachaId);
@@ -277,6 +324,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   };
 
   const toggleHistory = (entryId: string) => {
+    setHistorySelectionInitialized(true);
     setSelectedHistoryIds((previous) => {
       if (previous.includes(entryId)) {
         return previous.filter((id) => id !== entryId);
@@ -389,7 +437,12 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedGachaIds(allGachaSelected ? [] : gachaEntries.map((entry) => entry.gachaId))}
+                onClick={() => {
+                  setGachaSelectionInitialized(true);
+                  setSelectedGachaIds(
+                    allGachaSelected ? [] : gachaEntries.map((entry) => entry.gachaId)
+                  );
+                }}
                 disabled={gachaEntries.length === 0}
               >
                 {allGachaSelected ? 'すべて解除' : 'すべて選択'}
@@ -433,7 +486,12 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedHistoryIds(allHistorySelected ? [] : historyEntries.map((entry) => entry.id))}
+                onClick={() => {
+                  setHistorySelectionInitialized(true);
+                  setSelectedHistoryIds(
+                    allHistorySelected ? [] : historyEntries.map((entry) => entry.id)
+                  );
+                }}
                 disabled={historyEntries.length === 0}
               >
                 {allHistorySelected ? 'すべて解除' : 'すべて選択'}
