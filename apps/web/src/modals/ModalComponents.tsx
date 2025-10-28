@@ -19,7 +19,7 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   md: 'max-w-xl',
   lg: 'max-w-[55rem]',
   xl: 'max-w-[64rem]',
-  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)] max-h-[96vh]'
+  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)] md:max-h-[96vh]'
 };
 
 interface ModalOverlayProps extends ComponentPropsWithoutRef<typeof DialogBackdrop> {}
@@ -53,7 +53,8 @@ export const ModalPanel = forwardRef<
       {...props}
       ref={ref}
       className={clsx(
-        'modal-panel relative z-10 flex w-full transform flex-col overflow-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
+        'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur md:max-h-none md:overflow-hidden',
+        'max-h-[calc(100vh-2rem)]',
         SIZE_CLASS_MAP[size],
         'p-6',
         className
@@ -71,7 +72,12 @@ interface ModalHeaderProps {
 
 export function ModalHeader({ title, description, actions, className }: ModalHeaderProps): JSX.Element {
   return (
-    <div className={clsx('modal-header flex flex-wrap items-start justify-between gap-4 border-b border-white/5 pb-4', className)}>
+    <div
+      className={clsx(
+        'modal-header flex flex-wrap items-start justify-between gap-4 border-b border-white/5 pb-4 pr-12 md:pr-0',
+        className
+      )}
+    >
       <div className="space-y-2">
         <DialogTitle className="text-lg font-semibold text-surface-foreground">{title}</DialogTitle>
         {description ? (
