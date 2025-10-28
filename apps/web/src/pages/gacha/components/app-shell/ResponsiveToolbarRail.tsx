@@ -31,30 +31,35 @@ export function ResponsiveToolbarRail({
   }, []);
 
   useEffect(() => {
-    let frameId: number | undefined;
     let timeoutId: number | undefined;
 
     if (open) {
       setRendered(true);
-      frameId = window.requestAnimationFrame(() => {
-        setIsActive(true);
-      });
-    } else {
-      setIsActive(false);
-      if (rendered) {
-        timeoutId = window.setTimeout(() => {
-          setRendered(false);
-        }, 300);
-      }
+    } else if (rendered) {
+      timeoutId = window.setTimeout(() => {
+        setRendered(false);
+      }, 300);
     }
 
     return () => {
-      if (frameId !== undefined) {
-        window.cancelAnimationFrame(frameId);
-      }
       if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId);
       }
+    };
+  }, [open, rendered]);
+
+  useEffect(() => {
+    if (!rendered) {
+      setIsActive(false);
+      return;
+    }
+
+    let frameId = window.requestAnimationFrame(() => {
+      setIsActive(open);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
     };
   }, [open, rendered]);
 
@@ -104,12 +109,12 @@ export function ResponsiveToolbarRail({
             aria-modal="true"
             aria-labelledby={labelledBy}
             className={clsx(
-              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-[70vw] max-w-md overflow-y-auto border-l border-border/60 bg-panel text-surface-foreground shadow-2xl transition-transform duration-300 ease-in-out px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16',
+              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 w-[70vw] max-w-md overflow-y-auto border-l border-border/60 bg-panel text-surface-foreground shadow-2xl transition-transform duration-300 ease-in-out px-6 pb-[max(3rem,calc(2rem+env(safe-area-inset-bottom)))] pt-16 transform-gpu',
+              isActive ? 'translate-x-0' : 'translate-x-full',
               !isActive && 'motion-safe:will-change-transform'
             )}
             ref={panelRef}
             tabIndex={-1}
-            style={{ transform: isActive ? 'translateX(0)' : 'translateX(100%)' }}
           >
             <div className="responsive-toolbar-rail__content space-y-6">
               {children}

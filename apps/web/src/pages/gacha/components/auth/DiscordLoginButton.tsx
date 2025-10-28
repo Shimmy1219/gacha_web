@@ -103,7 +103,7 @@ export function DiscordLoginButton({
     }
   }, [guildSelection, hasLoadedGuildSelection, openGuildSelectionModal, userId]);
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
       <div
         className={clsx('discord-login-button h-11 w-44 animate-pulse rounded-xl bg-surface/40', className)}

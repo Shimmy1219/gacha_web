@@ -106,7 +106,9 @@ export function useDiscordSession(): UseDiscordSessionResult {
 
   const query = useQuery({
     queryKey: ['discord', 'session'],
-    queryFn: fetchSession
+    queryFn: fetchSession,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false
   });
 
   const login = useCallback(async () => {
