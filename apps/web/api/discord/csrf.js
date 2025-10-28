@@ -1,10 +1,13 @@
-// /api/blob/csrf.js
-// 目的: CSRFトークンを安全属性付きクッキーに設定し、同じ値をJSONでも返す（Double Submit Cookie）
+// /api/discord/csrf.js
+// Discord連携用のCSRFトークンをDouble Submit Cookieで発行する
 import { issueCsrfToken } from '../_lib/csrf.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
+const COOKIE_NAME = 'discord_csrf';
+const CSRF_TOKEN_BYTES = 32;
+
 export default async function handler(req, res) {
-  const log = createRequestLogger('api/blob/csrf', req);
+  const log = createRequestLogger('api/discord/csrf', req);
   log.info('request received');
 
   if (req.method !== 'GET') {
@@ -13,7 +16,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
-  const token = issueCsrfToken(res);
+  const token = issueCsrfToken(res, { cookieName: COOKIE_NAME, tokenBytes: CSRF_TOKEN_BYTES });
 
   log.info('csrf token issued');
   return res.status(200).json({ ok: true, token });
