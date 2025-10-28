@@ -1,12 +1,16 @@
 import {
   ArrowUpTrayIcon,
-  BoltIcon,
+  CheckCircleIcon,
   DocumentDuplicateIcon,
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
+
+import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
+import type { SaveTargetSelection } from '../../features/save/types';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface SaveOptionsUploadResult {
@@ -16,121 +20,250 @@ export interface SaveOptionsUploadResult {
 }
 
 export interface SaveOptionsDialogPayload {
-  onSaveToDevice?: () => void;
-  onUploadToService?: () => void;
-  onShareToDiscord?: () => void;
-  onCopyUrl?: (url: string) => void;
-  uploadResult?: SaveOptionsUploadResult | null;
-  isUploading?: boolean;
+  userId: string;
+  userName: string;
+  snapshot: GachaLocalStorageSnapshot;
+  selection: SaveTargetSelection;
+}
+
+interface LastDownloadState {
+  fileName: string;
+  fileCount: number;
+  warnings: string[];
+  savedAt: string;
+}
+
+function formatExpiresAt(value?: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: string): string {
+  if (!entry) {
+    return `${gachaName}: 履歴情報なし`;
+  }
+  const executedAt = formatExpiresAt(entry.executedAt) ?? '日時不明';
+  const pullCount = Number.isFinite(entry.pullCount) ? `${entry.pullCount}連` : '回数不明';
+  return `${executedAt} / ${gachaName} (${pullCount})`;
 }
 
 export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
+  const { userId, userName, snapshot, selection } = payload;
   const [copied, setCopied] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
+
+  const existingUpload: SaveOptionsUploadResult | null = useMemo(() => {
+    const saved = snapshot.saveOptions?.[userId];
+    if (!saved) {
+      return null;
+    }
+    const url = saved.shareUrl ?? saved.downloadUrl;
+    if (!url) {
+      return null;
+    }
+    return {
+      url,
+      label: saved.shareUrl ?? url,
+      expiresAt: formatExpiresAt(saved.expiresAt)
+    };
+  }, [snapshot.saveOptions, userId]);
+
+  const gachaNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.entries(snapshot.appState?.meta ?? {}).forEach(([gachaId, meta]) => {
+      if (gachaId) {
+        map.set(gachaId, meta.displayName ?? gachaId);
+      }
+    });
+    return map;
+  }, [snapshot.appState?.meta]);
+
+  const selectionSummary = useMemo(() => {
+    if (selection.mode === 'all') {
+      const gachaCount = Object.keys(snapshot.userInventories?.inventories?.[userId] ?? {}).length;
+      return {
+        description: '全てのガチャ景品をまとめて保存します。',
+        details: [`保存対象ガチャ数: ${gachaCount}`]
+      };
+    }
+    if (selection.mode === 'gacha') {
+      const names = selection.gachaIds.map((id) => gachaNameMap.get(id) ?? id);
+      return {
+        description: `選択したガチャ ${selection.gachaIds.length} 件を保存します。`,
+        details: names
+      };
+    }
+    const history = snapshot.pullHistory?.pulls ?? {};
+    const details = selection.pullIds.map((pullId) => {
+      const entry = history[pullId];
+      const gachaName = entry?.gachaId ? gachaNameMap.get(entry.gachaId) ?? entry.gachaId : 'ガチャ不明';
+      return formatHistoryEntry(entry, gachaName);
+    });
+    return {
+      description: `選択した履歴 ${selection.pullIds.length} 件に含まれる景品を保存します。`,
+      details
+    };
+  }, [selection, snapshot.userInventories?.inventories, snapshot.pullHistory?.pulls, gachaNameMap, userId]);
 
   const handleCopyUrl = async (url: string) => {
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
         setCopied(true);
-        payload?.onCopyUrl?.(url);
         setTimeout(() => setCopied(false), 2000);
         return;
       }
     } catch (error) {
       console.warn('クリップボードへのコピーに失敗しました', error);
     }
-    payload?.onCopyUrl?.(url);
   };
 
-  const result = payload?.uploadResult;
+  const handleSaveToDevice = async () => {
+    if (isProcessing) {
+      return;
+    }
+    setIsProcessing(true);
+    setErrorMessage(null);
+    try {
+      const result = await buildUserZipFromSelection({
+        snapshot,
+        selection,
+        userId,
+        userName
+      });
+
+      const blobUrl = window.URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = result.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.URL.revokeObjectURL(blobUrl);
+
+      setLastDownload({
+        fileName: result.fileName,
+        fileCount: result.fileCount,
+        warnings: result.warnings,
+        savedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('ZIPの作成に失敗しました', error);
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <>
       <ModalBody className="space-y-6">
+        <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象の概要</div>
+          <div className="text-sm text-surface-foreground">{selectionSummary.description}</div>
+          {selectionSummary.details.length > 0 ? (
+            <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
+              {selectionSummary.details.map((line, index) => (
+                <li key={`${line}-${index}`}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-3">
           <SaveOptionCard
             title="自分で保存して共有"
             description="端末にZIPを保存し、後からお好みのサービスにアップロードして共有します。"
-            actionLabel="デバイスに保存"
+            actionLabel={isProcessing ? '生成中…' : 'デバイスに保存'}
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
-            onClick={() => {
-              if (payload?.onSaveToDevice) {
-                payload.onSaveToDevice();
-              } else {
-                console.info('ZIP保存処理は未接続です');
-              }
-            }}
+            onClick={handleSaveToDevice}
+            disabled={isProcessing}
           />
           <SaveOptionCard
             title="shimmy3.comへアップロード"
-            description="ZIPをアップロードして受け取り用の共有リンクを発行します。期限管理も自動で行われます。"
-            actionLabel={payload?.isUploading ? 'アップロード中…' : 'ZIPをアップロード'}
-            disabled={payload?.isUploading}
+            description="ZIPをアップロードして受け取り用の共有リンクを発行します。現在は準備中です。"
+            actionLabel="準備中"
+            disabled
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
             onClick={() => {
-              if (payload?.onUploadToService) {
-                payload.onUploadToService();
-              } else {
-                console.info('アップロード処理は未接続です');
-              }
+              console.info('ZIPアップロード処理は後続タスクで実装されます', { userId });
             }}
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="保存したZIPリンクをDiscordの共有チャンネルへ送信します。Bot連携で受け取り通知も実施予定です。"
-            actionLabel="Discordへ送信"
+            description="保存したZIPリンクをDiscordの共有チャンネルへ送信します。現在は準備中です。"
+            actionLabel="準備中"
+            disabled
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={() => {
-              if (payload?.onShareToDiscord) {
-                payload.onShareToDiscord();
-              } else {
-                console.info('Discord送信は未接続です');
-              }
+              console.info('Discord共有処理は後続タスクで実装されます', { userId });
             }}
           />
         </div>
 
-        {result ? (
+        {existingUpload ? (
           <div className="space-y-2 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 text-surface-foreground">
               <DocumentDuplicateIcon className="h-5 w-5 text-accent" />
-              受け取り用URL
+              直近の共有リンク
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),auto] sm:items-center">
               <a
-                href={result.url}
+                href={existingUpload.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
               >
-                {result.label ?? result.url}
+                {existingUpload.label ?? existingUpload.url}
               </a>
-              <button
-                type="button"
-                className="btn btn-muted"
-                onClick={() => handleCopyUrl(result.url)}
-              >
+              <button type="button" className="btn btn-muted" onClick={() => handleCopyUrl(existingUpload.url)}>
                 {copied ? 'コピーしました' : 'URLをコピー'}
               </button>
             </div>
-            {result.expiresAt ? (
-              <p className="text-[11px] text-muted-foreground">
-                有効期限: {result.expiresAt}
-              </p>
+            {existingUpload.expiresAt ? (
+              <p className="text-[11px] text-muted-foreground">有効期限: {existingUpload.expiresAt}</p>
             ) : null}
           </div>
-        ) : (
-          <div className="rounded-2xl border border-white/5 bg-surface/30 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-            <p>
-              アップロードすると、共有用URLがここに表示されます。Discord送信を選んだ場合は最新のURLが自動で添付されます。
-            </p>
-          </div>
-        )}
+        ) : null}
 
-        <div className="flex items-center gap-2 rounded-2xl border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-accent">
-          <BoltIcon className="h-4 w-4" />
-          保存オプションは今後AppStateStoreと連携し、Zip生成・Blobアップロードを統合予定です。
-        </div>
+        {errorMessage ? (
+          <div className="rounded-2xl border border-rose-500/70 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            ZIPの作成に失敗しました: {errorMessage}
+          </div>
+        ) : null}
+
+        {lastDownload ? (
+          <div className="space-y-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-xs text-surface-foreground">
+            <div className="flex items-center gap-2 text-sm font-semibold text-surface-foreground">
+              <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+              端末への保存が完了しました
+            </div>
+            <p>ファイル名: {lastDownload.fileName}</p>
+            <p>収録件数: {lastDownload.fileCount} 件</p>
+            <p>保存日時: {formatExpiresAt(lastDownload.savedAt) ?? lastDownload.savedAt}</p>
+            {lastDownload.warnings.length > 0 ? (
+              <div className="space-y-1">
+                <p className="font-semibold">警告:</p>
+                <ul className="list-inside list-disc space-y-1">
+                  {lastDownload.warnings.map((warning, index) => (
+                    <li key={`${warning}-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </ModalBody>
       <ModalFooter>
         <button type="button" className="btn btn-muted" onClick={close}>

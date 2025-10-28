@@ -71,7 +71,7 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5">
+        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
             <Disclosure.Button
               type="button"
@@ -517,9 +517,11 @@ function GachaInventoryCard({
                 <span className={clsx('user-card__rarity-name text-sm font-semibold', className)} style={style}>
                   {group.rarity.label}
                 </span>
-                <span className="user-card__rarity-count text-[11px] text-muted-foreground">
-                  {group.items.reduce((sum, item) => sum + item.count, 0)}件
-                </span>
+                {showCounts ? (
+                  <span className="user-card__rarity-count text-[11px] text-muted-foreground">
+                    {group.items.reduce((sum, item) => sum + item.count, 0)}件
+                  </span>
+                ) : null}
               </div>
               <div className="user-card__rarity-items flex flex-wrap items-start gap-2">
                 {group.items.map((item) => {
@@ -583,7 +585,7 @@ function GachaInventoryCard({
                       disabled={!isEditing || !item.rarity.rarityId}
                     >
                       <span>{item.itemName}</span>
-                      {item.count > 1 ? (
+                      {showCounts && item.count > 1 ? (
                         <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
                       ) : null}
                     </button>

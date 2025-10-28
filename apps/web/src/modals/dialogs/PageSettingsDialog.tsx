@@ -1,7 +1,9 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent
@@ -14,6 +16,9 @@ import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ModalBody } from '../ModalComponents';
 import { type ModalComponent } from '../ModalTypes';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
+import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -64,12 +69,21 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewForeground: string;
 }>;
 
+const REM_IN_PIXELS = 16;
+const BASE_MODAL_MIN_HEIGHT_REM = 28;
+const VIEWPORT_PADDING_REM = 12;
+const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
+const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
+
 export const PageSettingsDialog: ModalComponent = () => {
+  const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
   const [groupBySeries, setGroupBySeries] = useState(false);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
+  const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
+  const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const {
     theme,
     setTheme,
@@ -80,6 +94,38 @@ export const PageSettingsDialog: ModalComponent = () => {
     setCustomBaseTone
   } = useSiteTheme();
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
+  const { appState: appStateStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
+  const confirmDeleteGacha = useGachaDeletion();
+
+  const gachaEntries = useMemo(() => {
+    if (!appState) {
+      return [] as Array<{ id: string; name: string; isSelected: boolean }>;
+    }
+
+    const order = appState.order ?? [];
+    const meta = appState.meta ?? {};
+    const seen = new Set<string>();
+    const entries: Array<{ id: string; name: string; isSelected: boolean }> = [];
+
+    const append = (gachaId: string | undefined | null) => {
+      if (!gachaId || seen.has(gachaId)) {
+        return;
+      }
+      seen.add(gachaId);
+      const displayName = meta[gachaId]?.displayName?.trim();
+      entries.push({
+        id: gachaId,
+        name: displayName && displayName.length > 0 ? displayName : gachaId,
+        isSelected: appState.selectedGachaId === gachaId
+      });
+    };
+
+    order.forEach(append);
+    Object.keys(meta).forEach(append);
+
+    return entries;
+  }, [appState]);
 
   const accentScheme: 'light' | 'dark' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
   const normalizedAccent = customAccentColor.toLowerCase();
@@ -116,6 +162,50 @@ export const PageSettingsDialog: ModalComponent = () => {
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const updateViewport = () => {
+      const innerHeight = window.innerHeight;
+      const next = innerHeight - VIEWPORT_PADDING_PX;
+      const limit = next > 0 ? next : innerHeight;
+      setViewportMaxHeight(limit > 0 ? limit : null);
+    };
+
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const element = modalBodyRef.current;
+    if (!element) {
+      return;
+    }
+
+    const observer = new window.ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const nextHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, Math.ceil(entry.contentRect.height));
+        setMaxBodyHeight((previous) => (nextHeight > previous ? nextHeight : previous));
+      }
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const handleCustomAccentInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setCustomAccentDraft(event.target.value);
@@ -175,6 +265,46 @@ export const PageSettingsDialog: ModalComponent = () => {
                 checked={groupBySeries}
                 onChange={setGroupBySeries}
               />
+            </div>
+            <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-surface-foreground">登録済みのガチャ</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  現在ローカルに保存されているガチャの一覧です。不要になったガチャは削除することで、関連するアイテムやリアグ設定もまとめて整理できます。
+                </p>
+              </div>
+              {gachaEntries.length > 0 ? (
+                <ul className="space-y-2">
+                  {gachaEntries.map((entry) => (
+                    <li key={entry.id}>
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
+                        <div className="space-y-1">
+                          <p className="font-semibold leading-tight">{entry.name}</p>
+                          <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {entry.isSelected ? (
+                            <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                              選択中
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+                            onClick={() => confirmDeleteGacha({ id: entry.id, name: entry.name })}
+                          >
+                            削除
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-xl border border-border/50 bg-panel px-4 py-3 text-xs text-muted-foreground">
+                  まだガチャが登録されていません。ガチャ管理ページから新しいガチャを作成すると、ここに表示されます。
+                </p>
+              )}
             </div>
           </div>
         );
@@ -400,9 +530,20 @@ export const PageSettingsDialog: ModalComponent = () => {
     }
   };
 
+  const desiredMinHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, maxBodyHeight);
+  const viewportLimit = viewportMaxHeight != null && viewportMaxHeight > 0 ? viewportMaxHeight : null;
+  const effectiveMinHeight = viewportLimit ? Math.min(desiredMinHeight, viewportLimit) : desiredMinHeight;
+
   return (
-    <ModalBody className="mt-6 space-y-0 max-h-[calc(100vh-12rem)] overflow-hidden">
-      <div className="flex h-full flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
+    <ModalBody
+      ref={modalBodyRef}
+      className="mt-6 flex flex-col space-y-0 overflow-hidden"
+      style={{
+        minHeight: `${effectiveMinHeight}px`,
+        maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
+      }}
+    >
+      <div className="flex flex-1 flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
         <nav className="w-full max-w-[220px] shrink-0">
           <ul className="space-y-2">
             {menuItems.map((item) => {

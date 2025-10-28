@@ -10,14 +10,13 @@ import { GuideInfoDialog } from './GuideInfoDialog';
 
 export interface StartWizardDialogPayload {
   onPickTxt?: (file: File) => void;
-  onPickJson?: (file: File) => void;
   onCreateNew?: () => void;
   onImportBackup?: (file: File) => void;
   onEnterTransferCode?: () => void;
   onOpenGuide?: () => void;
 }
 
-type StartWizardTileKey = 'backup' | 'transfer' | 'txt' | 'json' | 'new';
+type StartWizardTileKey = 'backup' | 'transfer' | 'txt' | 'new';
 
 interface StartWizardTileConfig {
   key: StartWizardTileKey;
@@ -27,19 +26,13 @@ interface StartWizardTileConfig {
 }
 
 export function StartWizardDialog({ payload, close, push }: ModalComponentProps<StartWizardDialogPayload>): JSX.Element {
-  const jsonInputId = useId();
   const txtInputId = useId();
   const backupInputId = useId();
-  const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const txtInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
 
   const handlePickTxt = useCallback(() => {
     txtInputRef.current?.click();
-  }, []);
-
-  const handlePickJson = useCallback(() => {
-    jsonInputRef.current?.click();
   }, []);
 
   const handleImportBackup = useCallback(() => {
@@ -85,19 +78,13 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         onSelect: handlePickTxt
       },
       {
-        key: 'json',
-        title: 'JSONを読み込む',
-        description: '本ツール形式のgacha_summary.jsonなどを選択してAppStateへ反映します。',
-        onSelect: handlePickJson
-      },
-      {
         key: 'new',
         title: '新しくガチャを始める',
         description: 'レアリティ・景品・ユーザーの初期設定をゼロから作成します。',
         onSelect: handleCreateNew
       }
     ],
-    [handleImportBackup, handleEnterTransferCode, handlePickJson, handlePickTxt, handleCreateNew]
+    [handleImportBackup, handleEnterTransferCode, handlePickTxt, handleCreateNew]
   );
 
   const renderTile = (tile: StartWizardTileConfig) => {
@@ -171,21 +158,6 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
             const file = event.currentTarget.files?.[0];
             if (file) {
               payload?.onPickTxt?.(file);
-              close();
-            }
-            event.currentTarget.value = '';
-          }}
-        />
-        <input
-          ref={jsonInputRef}
-          id={jsonInputId}
-          type="file"
-          accept="application/json,.json"
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) {
-              payload?.onPickJson?.(file);
               close();
             }
             event.currentTarget.value = '';

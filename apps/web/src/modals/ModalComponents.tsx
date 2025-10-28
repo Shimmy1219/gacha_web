@@ -87,9 +87,12 @@ export function ModalHeader({ title, description, actions, className }: ModalHea
 
 interface ModalBodyProps extends ComponentPropsWithoutRef<'div'> {}
 
-export function ModalBody({ className, ...props }: ModalBodyProps): JSX.Element {
-  return <div {...props} className={clsx('modal-body mt-2 space-y-2 text-sm', className)} />;
-}
+export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function ModalBody(
+  { className, ...props },
+  ref
+) {
+  return <div {...props} ref={ref} className={clsx('modal-body mt-2 space-y-2 text-sm', className)} />;
+});
 
 interface ModalFooterProps extends ComponentPropsWithoutRef<'div'> {}
 

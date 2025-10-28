@@ -1,8 +1,12 @@
 // /api/discord/guilds.js
 // ユーザーアクセストークンで /users/@me/guilds → owner=true だけ返す
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { createRequestLogger } from '../_lib/logger.js';
+
+const CSRF_COOKIE_NAME = 'discord_csrf';
+const CSRF_HEADER_NAME = DEFAULT_CSRF_HEADER_NAME;
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/discord/guilds', req);
@@ -13,10 +17,19 @@ export default async function handler(req, res) {
     log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
-  const { sid } = getCookies(req);
+  const cookies = getCookies(req);
+  const { sid } = cookies;
   if (!sid) {
     log.info('no session cookie found');
     return res.status(401).json({ ok: false, error: 'no session' });
+  }
+
+  const csrfCookie = cookies[CSRF_COOKIE_NAME];
+  const csrfHeader = typeof req.headers[CSRF_HEADER_NAME] === 'string' ? req.headers[CSRF_HEADER_NAME] : undefined;
+
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    log.warn('csrf mismatch', { hasCookie: Boolean(csrfCookie), hasHeader: Boolean(csrfHeader) });
+    return res.status(403).json({ ok: false, error: 'csrf mismatch' });
   }
 
   const sess = await getSessionWithRefresh(sid);
