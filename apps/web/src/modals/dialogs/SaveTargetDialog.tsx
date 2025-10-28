@@ -26,7 +26,7 @@ interface SaveTargetDialogPayload {
 interface GachaSelectionEntry {
   gachaId: string;
   gachaName: string;
-  itemCount: number;
+  itemTypeCount: number;
 }
 
 interface HistorySelectionEntry {
@@ -35,7 +35,7 @@ interface HistorySelectionEntry {
   gachaName: string;
   executedAt: string;
   pullCount: number;
-  itemCount: number;
+  itemTypeCount: number;
   items: HistorySelectionItem[];
   rarityGroups: HistorySelectionRarityGroup[];
 }
@@ -79,34 +79,32 @@ function getGachaDisplayName(gachaId: string, appMeta: AppMetaMap): string {
   return appMeta?.[gachaId]?.displayName ?? gachaId;
 }
 
-function countSnapshotItems(snapshot: UserInventorySnapshotV3 | undefined): number {
+function collectSnapshotItemIds(snapshot: UserInventorySnapshotV3 | undefined): Set<string> {
+  const itemIds = new Set<string>();
   if (!snapshot) {
-    return 0;
-  }
-  const counts = snapshot.counts ?? {};
-  const totalFromCounts = Object.values(counts).reduce((total, record) => {
-    if (!record) {
-      return total;
-    }
-    return (
-      total +
-      Object.values(record).reduce((sum, value) => {
-        const normalized = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
-        return sum + (normalized > 0 ? normalized : 0);
-      }, 0)
-    );
-  }, 0);
-
-  if (totalFromCounts > 0) {
-    return totalFromCounts;
+    return itemIds;
   }
 
-  return Object.values(snapshot.items ?? {}).reduce((total, itemIds) => {
-    if (!Array.isArray(itemIds)) {
-      return total;
+  Object.values(snapshot.items ?? {}).forEach((ids) => {
+    if (!Array.isArray(ids)) {
+      return;
     }
-    return total + itemIds.length;
-  }, 0);
+    ids.forEach((itemId) => {
+      if (itemId) {
+        itemIds.add(itemId);
+      }
+    });
+  });
+
+  Object.values(snapshot.counts ?? {}).forEach((record) => {
+    Object.keys(record ?? {}).forEach((itemId) => {
+      if (itemId) {
+        itemIds.add(itemId);
+      }
+    });
+  });
+
+  return itemIds;
 }
 
 function buildGachaEntries(
@@ -119,23 +117,29 @@ function buildGachaEntries(
     return [];
   }
 
-  const map = new Map<string, GachaSelectionEntry>();
+  const map = new Map<string, { entry: GachaSelectionEntry; itemIds: Set<string> }>();
   Object.values(snapshots).forEach((snapshot) => {
     if (!snapshot?.gachaId) {
       return;
     }
     const gachaId = snapshot.gachaId;
-    const itemCount = countSnapshotItems(snapshot);
     const gachaName = getGachaDisplayName(gachaId, appMeta);
+    const snapshotItemIds = collectSnapshotItemIds(snapshot);
     const existing = map.get(gachaId);
     if (existing) {
-      existing.itemCount += itemCount;
+      snapshotItemIds.forEach((itemId) => existing.itemIds.add(itemId));
+      existing.entry.itemTypeCount = existing.itemIds.size;
       return;
     }
-    map.set(gachaId, { gachaId, gachaName, itemCount });
+    map.set(gachaId, {
+      entry: { gachaId, gachaName, itemTypeCount: snapshotItemIds.size },
+      itemIds: snapshotItemIds
+    });
   });
 
-  return Array.from(map.values()).sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'));
+  return Array.from(map.values())
+    .map(({ entry, itemIds }) => ({ ...entry, itemTypeCount: itemIds.size }))
+    .sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'));
 }
 
 function buildHistoryEntries(
@@ -179,8 +183,6 @@ function buildHistoryEntries(
       },
       []
     );
-
-    const itemCount = normalizedItems.reduce((total, item) => total + item.count, 0);
 
     const items: HistorySelectionItem[] = normalizedItems
       .map(({ itemId, count }) => {
@@ -242,7 +244,7 @@ function buildHistoryEntries(
       gachaName: getGachaDisplayName(entry.gachaId, appMeta),
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
-      itemCount,
+      itemTypeCount: normalizedItems.length,
       items,
       rarityGroups
     });
@@ -509,7 +511,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                   >
                     <div className="flex flex-col">
                       <span className="font-semibold text-surface-foreground/90">{entry.gachaName}</span>
-                      <span className="text-[11px] text-muted-foreground">{entry.itemCount}件の景品</span>
+                      <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
                     </div>
                     <input
                       type="checkbox"
@@ -566,7 +568,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                       <div className="flex flex-1 flex-col">
                         <span className="font-semibold text-surface-foreground/90">{entry.gachaName}</span>
                         <span className="text-[11px] text-muted-foreground">
-                          {formatExecutedAt(entry.executedAt)} ・ {entry.pullCount}連 / {entry.itemCount}件
+                          {formatExecutedAt(entry.executedAt)} ・ {entry.pullCount}連
                         </span>
                       </div>
                       <ChevronDownIcon
@@ -586,7 +588,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                         />
                         <span>この履歴を保存</span>
                       </label>
-                      <span className="text-[11px] text-muted-foreground">{entry.itemCount}件の景品</span>
+                      <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
                     </div>
                     <div
                       id={`history-entry-${entry.id}`}
