@@ -16,4 +16,5 @@ export * from './RarityRateErrorDialog';
 export * from './RiaguConfigDialog';
 export * from './RiaguDisableConfirmDialog';
 export * from './SaveOptionsDialog';
+export * from './SaveTargetDialog';
 export * from './StartWizardDialog';
