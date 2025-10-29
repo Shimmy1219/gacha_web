@@ -69,6 +69,50 @@ export function ItemsSection(): JSX.Element {
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
+  const [gridTemplateColumns, setGridTemplateColumns] = useState(
+    'repeat(auto-fit,minmax(150px,181px))'
+  );
+  const computeGridTemplateColumns = useCallback((width: number) => {
+    const gap = 16; // gap-4 => 1rem
+    const minWidth = 150;
+    const maxWidth = 200;
+    const idealWidth = 181;
+
+    if (!Number.isFinite(width) || width <= 0) {
+      return `repeat(auto-fit,minmax(${minWidth}px,${idealWidth}px))`;
+    }
+
+    const calculateCardWidth = (columns: number) => {
+      if (columns <= 0) {
+        return idealWidth;
+      }
+
+      const totalGap = gap * Math.max(0, columns - 1);
+      return (width - totalGap) / columns;
+    };
+
+    const clampWidth = (value: number) => Math.max(minWidth, Math.min(maxWidth, value));
+
+    let columns = Math.max(1, Math.round((width + gap) / (idealWidth + gap)));
+    let cardWidth = calculateCardWidth(columns);
+
+    while (columns > 1 && cardWidth < minWidth) {
+      columns -= 1;
+      cardWidth = calculateCardWidth(columns);
+    }
+
+    let safety = 0;
+    while (cardWidth > maxWidth && safety < 50) {
+      columns += 1;
+      cardWidth = calculateCardWidth(columns);
+      safety += 1;
+    }
+
+    const finalWidth = clampWidth(cardWidth);
+    const roundedWidth = Math.round(finalWidth * 100) / 100;
+
+    return `repeat(${columns}, minmax(${minWidth}px, ${roundedWidth}px))`;
+  }, []);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -243,12 +287,12 @@ export function ItemsSection(): JSX.Element {
       return;
     }
 
-    const updateLayout = () => {
-      const width = element.getBoundingClientRect().width;
+    const updateLayout = (width: number) => {
       setForceMobileSection(width <= 300);
+      setGridTemplateColumns(computeGridTemplateColumns(width));
     };
 
-    updateLayout();
+    updateLayout(element.getBoundingClientRect().width);
 
     if (typeof ResizeObserver === 'undefined') {
       return;
@@ -257,7 +301,7 @@ export function ItemsSection(): JSX.Element {
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       const width = entry ? entry.contentRect.width : element.getBoundingClientRect().width;
-      setForceMobileSection(width <= 300);
+      updateLayout(width);
     });
 
     observer.observe(element);
@@ -265,7 +309,7 @@ export function ItemsSection(): JSX.Element {
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [computeGridTemplateColumns]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenuState(null);
@@ -708,14 +752,7 @@ export function ItemsSection(): JSX.Element {
     [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
   );
 
-  const gridClassName = useMemo(
-    () =>
-      clsx(
-        'items-section__grid grid gap-4',
-        '[grid-template-columns:repeat(auto-fit,minmax(150px,196px))]'
-      ),
-    []
-  );
+  const gridClassName = useMemo(() => clsx('items-section__grid grid gap-4'), []);
 
   const handleEditImage = useCallback(
     (itemId: string) => {
@@ -911,7 +948,7 @@ export function ItemsSection(): JSX.Element {
 
               {showAddCard || items.length > 0 ? (
                 <div onMouseDown={handleSurfaceMouseDown}>
-                  <div className={gridClassName}>
+                  <div className={gridClassName} style={{ gridTemplateColumns }}>
                     {showAddCard ? (
                       <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                     ) : null}
