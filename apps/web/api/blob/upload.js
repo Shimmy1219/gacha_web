@@ -109,6 +109,34 @@ function buildFileNameWithSuffix(fileName, suffix) {
   return `${finalBase}.zip`;
 }
 
+function extractReceiverDirectoryCandidate(fileName) {
+  const base = sanitizeZipFileNameBase(fileName);
+  if (!base) {
+    return '';
+  }
+  // remove a trailing timestamp (12 digits) optionally preceded by separators
+  return base.replace(/[-_]*(\d{6,})$/, '');
+}
+
+function ensureReceiverPrefixedFileName(fileName, receiverDirectory) {
+  const sanitized = sanitizeZipFileName(fileName, 'archive.zip');
+  if (!receiverDirectory) {
+    return sanitized;
+  }
+
+  const base = sanitizeZipFileNameBase(sanitized);
+  if (base.startsWith(receiverDirectory)) {
+    return sanitized;
+  }
+
+  const timestampMatch = base.match(/(\d{6,})$/);
+  const mergedBase = timestampMatch
+    ? `${receiverDirectory}${timestampMatch[1]}`
+    : `${receiverDirectory}-${base}`;
+
+  return sanitizeZipFileName(`${mergedBase}.zip`, `${receiverDirectory}.zip`);
+}
+
 function deriveUploadPolicy(req, payload) {
   const cookies = parseCookies(req.headers.cookie);
 
@@ -124,8 +152,16 @@ function deriveUploadPolicy(req, payload) {
   const purpose = sanitizeSegment(payload?.purpose, 'misc');
   const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
   const ownerDirectory = sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
-  const receiverDirectory = sanitizeDirectoryName(payload?.receiverName, 'unknown');
-  const requestedFileName = sanitizeZipFileName(payload?.fileName, 'archive.zip');
+  const receiverFromPayload = sanitizeDirectoryName(payload?.receiverName, '');
+  const receiverFromFileName = sanitizeDirectoryName(
+    extractReceiverDirectoryCandidate(payload?.fileName),
+    ''
+  );
+  const receiverDirectory = receiverFromPayload || receiverFromFileName || 'unknown';
+  const requestedFileName = ensureReceiverPrefixedFileName(
+    payload?.fileName,
+    receiverDirectory === 'unknown' ? '' : receiverDirectory
+  );
 
   const ip = (req.headers['x-forwarded-for'] || '')
     .split(',')[0].trim() || req.socket?.remoteAddress || '0.0.0.0';

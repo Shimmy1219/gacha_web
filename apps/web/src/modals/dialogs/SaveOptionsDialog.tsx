@@ -5,7 +5,7 @@ import {
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 
@@ -66,10 +66,26 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
   const [isUploading, setIsUploading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<{ id: number; message: string } | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
   const { data: discordSession } = useDiscordSession();
+
+  const receiverDisplayName = useMemo(() => {
+    const profileName = snapshot.userProfiles?.users?.[userId]?.displayName;
+    const candidates = [profileName, userName, userId];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim();
+        if (trimmed) {
+          return trimmed;
+        }
+      }
+    }
+    return userId;
+  }, [snapshot.userProfiles?.users, userId, userName]);
 
   const storedUpload: SaveOptionsUploadResult | null = useMemo(() => {
     const saved = snapshot.saveOptions?.[userId];
@@ -96,6 +112,27 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
   useEffect(() => {
     setCopied(false);
   }, [uploadResult?.url]);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!uploadNotice) {
+      return;
+    }
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+    }
+    noticeTimerRef.current = setTimeout(() => {
+      setUploadNotice(null);
+    }, 4000);
+  }, [uploadNotice?.id]);
 
   const gachaNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -158,7 +195,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         snapshot,
         selection,
         userId,
-        userName
+        userName: receiverDisplayName
       });
 
       const blobUrl = window.URL.createObjectURL(result.blob);
@@ -196,14 +233,14 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         snapshot,
         selection,
         userId,
-        userName
+        userName: receiverDisplayName
       });
 
       const uploadResponse = await uploadZip({
         file: zip.blob,
         fileName: zip.fileName,
         userId,
-        receiverName: userName,
+        receiverName: receiverDisplayName,
         ownerDiscordId: discordSession?.user?.id,
         ownerDiscordName: discordSession?.user?.name
       });
@@ -233,6 +270,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         label: uploadResponse.shareUrl,
         expiresAt: expiresAtDisplay
       });
+      setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('ZIPアップロードがユーザーによってキャンセルされました');
@@ -248,6 +286,14 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
 
   return (
     <>
+      {uploadNotice ? (
+        <div className="px-6 pt-4">
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/60 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100 shadow-lg">
+            <CheckCircleIcon className="h-5 w-5 text-emerald-300" />
+            <span>{uploadNotice.message}</span>
+          </div>
+        </div>
+      ) : null}
       <ModalBody className="space-y-6">
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象の概要</div>
