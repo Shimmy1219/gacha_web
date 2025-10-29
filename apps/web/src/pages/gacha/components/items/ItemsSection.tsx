@@ -67,6 +67,8 @@ export function ItemsSection(): JSX.Element {
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
+  const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [forceMobileSection, setForceMobileSection] = useState(false);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -234,6 +236,36 @@ export function ItemsSection(): JSX.Element {
     setSelectedItemIds([]);
     setContextMenuState(null);
   }, [activeGachaId]);
+
+  useEffect(() => {
+    const element = sectionWrapperRef.current;
+    if (!element) {
+      return;
+    }
+
+    const updateLayout = () => {
+      const width = element.getBoundingClientRect().width;
+      setForceMobileSection(width <= 300);
+    };
+
+    updateLayout();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = entry ? entry.contentRect.width : element.getBoundingClientRect().width;
+      setForceMobileSection(width <= 300);
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const closeContextMenu = useCallback(() => {
     setContextMenuState(null);
@@ -680,7 +712,7 @@ export function ItemsSection(): JSX.Element {
     () =>
       clsx(
         'items-section__grid grid gap-4',
-        '[grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]'
+        '[grid-template-columns:repeat(auto-fit,minmax(150px,200px))]'
       ),
     []
   );
@@ -832,7 +864,8 @@ export function ItemsSection(): JSX.Element {
   const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
 
   return (
-    <SectionContainer
+    <div ref={sectionWrapperRef} className="h-full">
+      <SectionContainer
       id="items"
       title="アイテム画像の設定"
       description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
@@ -848,6 +881,7 @@ export function ItemsSection(): JSX.Element {
       }
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
       contentClassName="items-section__content"
+      forceMobile={forceMobileSection}
     >
       <GachaTabs
         tabs={gachaTabs}
@@ -931,7 +965,8 @@ export function ItemsSection(): JSX.Element {
           disableEditImage={contextMenuState.targetIds.length !== 1}
         />
       ) : null}
-    </SectionContainer>
+      </SectionContainer>
+    </div>
   );
 }
 
