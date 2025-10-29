@@ -1,6 +1,7 @@
 // /api/receive/resolve.js
 import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
+import { kv } from '../_lib/kv.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 function vLog(...args){ if (VERBOSE) console.log('[receive/resolve]', ...args); }
@@ -13,6 +14,13 @@ const b64u = {
     return Buffer.from(s + pad, 'base64');
   }
 };
+
+const SHORT_TOKEN_PATTERN = /^[A-Za-z0-9_-]{10}$/;
+const SHORT_TOKEN_PREFIX = 'receive:token:';
+
+function shortTokenKey(token){
+  return `${SHORT_TOKEN_PREFIX}${token}`;
+}
 
 function readKey(){
   const raw = process.env.RECEIVE_TOKEN_KEY;
@@ -75,7 +83,20 @@ export default async function handler(req, res){
       return res.status(400).json({ ok:false, error:'Bad Request: token required', code:'TOKEN_REQUIRED' });
     }
 
-    const parts = t.split('.');
+    let token = t;
+    if (SHORT_TOKEN_PATTERN.test(token)){
+      const redisKey = shortTokenKey(token);
+      const stored = await kv.get(redisKey);
+      if (!stored){
+        log.warn('short token not found', { token });
+        return res.status(404).json({ ok:false, error:'Not Found: token not found', code:'TOKEN_NOT_FOUND' });
+      }
+      const resolvedToken = String(stored);
+      vLog('short token resolved', { shortToken: token });
+      token = resolvedToken;
+    }
+
+    const parts = token.split('.');
     if (parts.length !== 3 || parts[0] !== 'v1'){
       log.warn('token format invalid');
       return res.status(400).json({ ok:false, error:'Bad Request: invalid token format', code:'INVALID_FORMAT' });
