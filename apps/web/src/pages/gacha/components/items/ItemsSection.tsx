@@ -63,9 +63,6 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const defaultGridWidthRef = useRef<number | null>(null);
-  const [isCondensedGrid, setIsCondensedGrid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
@@ -679,57 +676,13 @@ export function ItemsSection(): JSX.Element {
     [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
   );
 
-  useEffect(() => {
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const element = gridRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-
-      const width = entry.contentRect.width;
-      if (width <= 0) {
-        return;
-      }
-
-      if (defaultGridWidthRef.current === null || width > defaultGridWidthRef.current) {
-        defaultGridWidthRef.current = width;
-      }
-
-      const threshold = (defaultGridWidthRef.current ?? width) * (2 / 3);
-      setIsCondensedGrid((previous) => {
-        const next = width <= threshold + 0.5;
-        return previous === next ? previous : next;
-      });
-    });
-
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, [activeGachaId, items.length]);
-
-  useEffect(() => {
-    if (items.length === 0) {
-      setIsCondensedGrid(false);
-    }
-  }, [items.length]);
-
   const gridClassName = useMemo(
     () =>
       clsx(
-        'items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2',
-        isCondensedGrid ? 'xl:grid-cols-2' : 'xl:grid-cols-3'
+        'items-section__grid grid gap-4',
+        '[grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]'
       ),
-    [isCondensedGrid]
+    []
   );
 
   const handleEditImage = useCallback(
@@ -924,7 +877,7 @@ export function ItemsSection(): JSX.Element {
 
               {showAddCard || items.length > 0 ? (
                 <div onMouseDown={handleSurfaceMouseDown}>
-                  <div ref={gridRef} className={gridClassName}>
+                  <div className={gridClassName}>
                     {showAddCard ? (
                       <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                     ) : null}
