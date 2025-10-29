@@ -417,7 +417,8 @@
     color: rgb(0 0 0 / 1);
   }
 
-  [data-site-theme='light'] .prize-settings__delete-button {
+  [data-site-theme='light'] .prize-settings__delete-button,
+  [data-site-theme='custom'][data-site-theme-scheme='light'] .prize-settings__delete-button {
     color: rgb(0 0 0 / 1);
   }
 }
