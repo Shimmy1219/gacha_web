@@ -1,6 +1,7 @@
 // /api/receive/token.js
 import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
+import { kv } from '../_lib/kv.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 
@@ -37,6 +38,40 @@ const b64u = {
     return Buffer.from(s + pad, 'base64');
   }
 };
+
+const SHORT_TOKEN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const SHORT_TOKEN_LENGTH = 10;
+const SHORT_TOKEN_PREFIX = 'receive:token:';
+
+function randomShortToken(){
+  // 10 chars of base64url alphabet => 60 bits entropy
+  const bytes = crypto.randomBytes(8); // 64 bits
+  let value = BigInt('0x' + bytes.toString('hex')) & ((1n << 60n) - 1n);
+  let out = '';
+  for (let i = 0; i < SHORT_TOKEN_LENGTH; i += 1){
+    const idx = Number(value & 63n);
+    out += SHORT_TOKEN_ALPHABET[idx];
+    value >>= 6n;
+  }
+  return out;
+}
+
+function shortTokenKey(token){
+  return `${SHORT_TOKEN_PREFIX}${token}`;
+}
+
+async function storeShortToken(longToken, exp, issuedAt){
+  const now = typeof issuedAt === 'number' ? issuedAt : Date.now();
+  const ttlMs = Math.max(0, Number(exp) - now);
+  const ttlSec = Math.max(1, Math.ceil(ttlMs / 1000));
+  for (let attempt = 0; attempt < 5; attempt += 1){
+    const short = randomShortToken();
+    const key = shortTokenKey(short);
+    const result = await kv.set(key, longToken, { ex: ttlSec, nx: true });
+    if (result === 'OK') return short;
+  }
+  throw new Error('failed to allocate short token');
+}
 
 // filename / segment sanitize
 function sanitizeFilename(s, fallback='download.zip'){
@@ -204,15 +239,16 @@ export default async function handler(req, res){
     const packed = Buffer.concat([ct, tag]);
 
     const token = `v1.${b64u.enc(iv)}.${b64u.enc(packed)}`;
+    const shortToken = await storeShortToken(token, exp, now);
 
     // 共有URL生成
     const site = process.env.NEXT_PUBLIC_SITE_ORIGIN || hostToOrigin(req.headers.host);
-    const shareUrl = `${site.replace(/\/+$/,'')}/receive?t=${encodeURIComponent(token)}`;
+    const shareUrl = `${site.replace(/\/+$/,'')}/receive?t=${encodeURIComponent(shortToken)}`;
 
     vLog('issued', { exp, name: filename, purpose: purp });
     log.info('token issued', { purpose: purp, exp, downloadHost: new URL(normalizedUrl).host });
 
-    return res.status(200).json({ ok:true, token, shareUrl, exp });
+    return res.status(200).json({ ok:true, token, shortToken, shareUrl, exp });
   } catch (err){
     const msg = err?.message || String(err);
     console.error('[receive/token error]', msg, VERBOSE ? { stack: err?.stack } : '');
