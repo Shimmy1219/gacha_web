@@ -63,13 +63,56 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const defaultGridWidthRef = useRef<number | null>(null);
-  const [isCondensedGrid, setIsCondensedGrid] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
+  const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [forceMobileSection, setForceMobileSection] = useState(false);
+  const [gridTemplateColumns, setGridTemplateColumns] = useState(
+    'repeat(auto-fit,minmax(150px,181px))'
+  );
+  const computeGridTemplateColumns = useCallback((width: number) => {
+    const gap = 16; // gap-4 => 1rem
+    const minWidth = 150;
+    const maxWidth = 200;
+    const idealWidth = 181;
+
+    if (!Number.isFinite(width) || width <= 0) {
+      return `repeat(auto-fit,minmax(${minWidth}px,${idealWidth}px))`;
+    }
+
+    const calculateCardWidth = (columns: number) => {
+      if (columns <= 0) {
+        return idealWidth;
+      }
+
+      const totalGap = gap * Math.max(0, columns - 1);
+      return (width - totalGap) / columns;
+    };
+
+    const clampWidth = (value: number) => Math.max(minWidth, Math.min(maxWidth, value));
+
+    let columns = Math.max(1, Math.round((width + gap) / (idealWidth + gap)));
+    let cardWidth = calculateCardWidth(columns);
+
+    while (columns > 1 && cardWidth < minWidth) {
+      columns -= 1;
+      cardWidth = calculateCardWidth(columns);
+    }
+
+    let safety = 0;
+    while (cardWidth > maxWidth && safety < 50) {
+      columns += 1;
+      cardWidth = calculateCardWidth(columns);
+      safety += 1;
+    }
+
+    const finalWidth = clampWidth(cardWidth);
+    const roundedWidth = Math.round(finalWidth * 100) / 100;
+
+    return `repeat(${columns}, minmax(${minWidth}px, ${roundedWidth}px))`;
+  }, []);
 
   const rarityOptionsByGacha = useMemo(() => {
     if (!data?.rarityState) {
@@ -237,6 +280,36 @@ export function ItemsSection(): JSX.Element {
     setSelectedItemIds([]);
     setContextMenuState(null);
   }, [activeGachaId]);
+
+  useEffect(() => {
+    const element = sectionWrapperRef.current;
+    if (!element) {
+      return;
+    }
+
+    const updateLayout = (width: number) => {
+      setForceMobileSection(width <= 300);
+      setGridTemplateColumns(computeGridTemplateColumns(width));
+    };
+
+    updateLayout(element.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      const width = entry ? entry.contentRect.width : element.getBoundingClientRect().width;
+      updateLayout(width);
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [computeGridTemplateColumns]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenuState(null);
@@ -679,58 +752,7 @@ export function ItemsSection(): JSX.Element {
     [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
   );
 
-  useEffect(() => {
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const element = gridRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-
-      const width = entry.contentRect.width;
-      if (width <= 0) {
-        return;
-      }
-
-      if (defaultGridWidthRef.current === null || width > defaultGridWidthRef.current) {
-        defaultGridWidthRef.current = width;
-      }
-
-      const threshold = (defaultGridWidthRef.current ?? width) * (2 / 3);
-      setIsCondensedGrid((previous) => {
-        const next = width <= threshold + 0.5;
-        return previous === next ? previous : next;
-      });
-    });
-
-    observer.observe(element);
-    return () => {
-      observer.disconnect();
-    };
-  }, [activeGachaId, items.length]);
-
-  useEffect(() => {
-    if (items.length === 0) {
-      setIsCondensedGrid(false);
-    }
-  }, [items.length]);
-
-  const gridClassName = useMemo(
-    () =>
-      clsx(
-        'items-section__grid grid grid-cols-1 gap-3 md:grid-cols-2',
-        isCondensedGrid ? 'xl:grid-cols-2' : 'xl:grid-cols-3'
-      ),
-    [isCondensedGrid]
-  );
+  const gridClassName = useMemo(() => clsx('items-section__grid grid gap-4'), []);
 
   const handleEditImage = useCallback(
     (itemId: string) => {
@@ -879,7 +901,8 @@ export function ItemsSection(): JSX.Element {
   const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
 
   return (
-    <SectionContainer
+    <div ref={sectionWrapperRef} className="h-full">
+      <SectionContainer
       id="items"
       title="アイテム画像の設定"
       description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
@@ -895,6 +918,7 @@ export function ItemsSection(): JSX.Element {
       }
       footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
       contentClassName="items-section__content"
+      forceMobile={forceMobileSection}
     >
       <GachaTabs
         tabs={gachaTabs}
@@ -924,7 +948,7 @@ export function ItemsSection(): JSX.Element {
 
               {showAddCard || items.length > 0 ? (
                 <div onMouseDown={handleSurfaceMouseDown}>
-                  <div ref={gridRef} className={gridClassName}>
+                  <div className={gridClassName} style={{ gridTemplateColumns }}>
                     {showAddCard ? (
                       <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                     ) : null}
@@ -978,7 +1002,8 @@ export function ItemsSection(): JSX.Element {
           disableEditImage={contextMenuState.targetIds.length !== 1}
         />
       ) : null}
-    </SectionContainer>
+      </SectionContainer>
+    </div>
   );
 }
 

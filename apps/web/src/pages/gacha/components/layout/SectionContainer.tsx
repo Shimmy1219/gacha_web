@@ -14,6 +14,7 @@ interface SectionContainerProps {
   children: ReactNode;
   className?: string;
   contentClassName?: string;
+  forceMobile?: boolean;
 }
 
 export function SectionContainer({
@@ -26,11 +27,13 @@ export function SectionContainer({
   footer,
   children,
   className,
-  contentClassName
+  contentClassName,
+  forceMobile = false
 }: SectionContainerProps): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
   const { isMobile } = useResponsiveDashboard();
+  const isMobileLayout = forceMobile || isMobile;
 
   const updateScrollbarState = useCallback(() => {
     const element = contentRef.current;
@@ -75,8 +78,8 @@ export function SectionContainer({
       id={id}
       className={clsx(
         'section-container group relative flex min-h-0 flex-col overflow-hidden bg-panel/95 p-4 text-sm ring-1 ring-inset ring-white/5',
-        !isMobile && 'h-full rounded-[1.5rem] border border-border/70',
-        isMobile && 'section-container--mobile',
+        !isMobileLayout && 'h-full rounded-[1.5rem] border border-border/70',
+        isMobileLayout && 'section-container--mobile',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
         'after:pointer-events-none after:absolute after:-inset-x-px after:-inset-y-px after:bg-panel-overlay after:opacity-0 after:transition-opacity after:duration-300 group-hover:after:opacity-100',
         className
@@ -107,15 +110,15 @@ export function SectionContainer({
         <div
           className={clsx(
             'section-container__content-wrapper min-h-0',
-            isMobile ? 'flex-none overflow-visible' : 'flex-1 overflow-hidden'
+            isMobileLayout ? 'flex-none overflow-visible' : 'flex-1 overflow-hidden'
           )}
         >
           <div
             ref={contentRef}
             className={clsx(
               'section-container__content min-h-0 space-y-4',
-              isMobile ? 'h-auto overflow-visible' : 'section-scroll h-full',
-              !isMobile && !hasScrollbar && 'section-scroll--no-scrollbar',
+              isMobileLayout ? 'h-auto overflow-visible' : 'section-scroll h-full',
+              !isMobileLayout && !hasScrollbar && 'section-scroll--no-scrollbar',
               contentClassName
             )}
           >
