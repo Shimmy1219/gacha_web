@@ -61,6 +61,15 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     runProjection(false);
   });
 
+  let skipInitialCatalog = true;
+  stores.catalog.subscribe(() => {
+    if (skipInitialCatalog) {
+      skipInitialCatalog = false;
+      return;
+    }
+    runProjection(false);
+  });
+
   return stores;
 }
 
