@@ -480,7 +480,7 @@
   flex: 1 1 auto;
   width: 100%;
   min-width: 5rem;
-  max-width: 7rem;
+  text-align: right;
 }
 
 @layer utilities {
