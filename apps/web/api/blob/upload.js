@@ -9,11 +9,6 @@ import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
-const EVENT_TYPES = {
-  GENERATE_CLIENT_TOKEN: 'blob.generate-client-token',
-  UPLOAD_COMPLETED: 'blob.upload-completed'
-};
-
 function vLog(...args) {
   if (VERBOSE) console.log('[blob/upload]', ...args);
 }
@@ -199,79 +194,6 @@ async function handlePrepareUpload(req, res, log, body) {
   }
 }
 
-async function handleLegacyUpload(req, res, log, body) {
-  try {
-    const { handleUpload } = await import('@vercel/blob/client');
-
-    const jsonResponse = await handleUpload({
-      request: req,
-      body,
-
-      onBeforeGenerateToken: async (_pathname, clientPayload, multipart) => {
-        let parsedPayload = {};
-        if (clientPayload) {
-          try {
-            parsedPayload = JSON.parse(clientPayload);
-          } catch (error) {
-            vLog('clientPayload JSON parse error:', String(error));
-          }
-        }
-        const { policyLog, policy } = deriveUploadPolicy(req, { ...parsedPayload, csrf: parsedPayload?.csrf });
-        log.info('upload token policy decided', { ...policyLog, multipart });
-
-        return {
-          addRandomSuffix: false,
-          allowOverwrite: false,
-          allowedContentTypes: policy.allowedContentTypes,
-          maximumSizeInBytes: policy.maximumSizeInBytes,
-          validUntil: policy.validUntilMs,
-          pathname: `/${policy.pathname}`
-        };
-      },
-
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const details = {
-          url: blob.url,
-          downloadUrl: blob.downloadUrl || null,
-          pathname: blob.pathname,
-          size: blob.size,
-          contentType: blob.contentType
-        };
-
-        if (VERBOSE) {
-          Object.assign(details, { tokenPayload });
-        }
-
-        console.log('[blob/upload completed]', details);
-      },
-    });
-
-    const eventType = jsonResponse?.type || EVENT_TYPES.GENERATE_CLIENT_TOKEN;
-    if (eventType === EVENT_TYPES.UPLOAD_COMPLETED) {
-      log.info('upload completion acknowledged');
-    } else {
-      log.info('upload token issued (legacy flow)', {
-        pathname: jsonResponse?.pathname || null,
-        uploadUrl: jsonResponse?.uploadUrl || null,
-      });
-    }
-    return res.status(200).json(jsonResponse);
-  } catch (err) {
-    const msg = err?.message || String(err);
-    const status =
-      (err && (err.statusCode || err.status)) ? (err.statusCode || err.status)
-      : (/forbidden/i.test(msg) ? 403 : 500);
-
-    console.error('[blob/upload error]', msg, VERBOSE ? { stack: err?.stack } : '');
-    log.error('upload token issuance failed', { status, error: err });
-    return res.status(status).json({
-      ok: false,
-      error: msg,
-      dbg: VERBOSE ? { hint: 'Enable/keep VERBOSE_BLOB_LOG=1 to see more logs above.' } : undefined,
-    });
-  }
-}
-
 export default async function handler(req, res) {
   const log = createRequestLogger('api/blob/upload', req);
   log.info('request received', { method: req.method, hasBody: Boolean(req.body) });
@@ -330,15 +252,10 @@ export default async function handler(req, res) {
   }
 
   const body = req.body ?? {};
-  const eventType = typeof body?.type === 'string' ? body.type : '';
-  if (eventType === EVENT_TYPES.GENERATE_CLIENT_TOKEN || eventType === EVENT_TYPES.UPLOAD_COMPLETED) {
-    return handleLegacyUpload(req, res, log, body);
-  }
-
   if (body?.action === 'prepare-upload') {
     return handlePrepareUpload(req, res, log, body);
   }
 
-  log.warn('invalid upload request payload', { eventType, action: body?.action });
+  log.warn('invalid upload request payload', { action: body?.action });
   return res.status(400).json({ ok: false, error: 'Bad Request' });
 }
