@@ -19,6 +19,34 @@ interface PtGuaranteeRowState {
   minRarity: string;
 }
 
+function areBundleRowsEqual(a: PtBundleRowState[], b: PtBundleRowState[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (!right || left.id !== right.id || left.price !== right.price || left.pulls !== right.pulls) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areGuaranteeRowsEqual(a: PtGuaranteeRowState[], b: PtGuaranteeRowState[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (!right || left.id !== right.id || left.minPulls !== right.minPulls || left.minRarity !== right.minRarity) {
+      return false;
+    }
+  }
+  return true;
+}
+
 type PanelSnapshot = {
   perPull: string;
   complete: string;
@@ -320,8 +348,11 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
   );
 
   useEffect(() => {
-    setPerPull(settings?.perPull?.price != null ? String(settings.perPull.price) : '');
-    setComplete(settings?.complete?.price != null ? String(settings.complete.price) : '');
+    const nextPerPull = settings?.perPull?.price != null ? String(settings.perPull.price) : '';
+    setPerPull((previous) => (previous === nextPerPull ? previous : nextPerPull));
+
+    const nextComplete = settings?.complete?.price != null ? String(settings.complete.price) : '';
+    setComplete((previous) => (previous === nextComplete ? previous : nextComplete));
 
     const nextBundles = settings?.bundles
       ? settings.bundles.map((bundle) =>
@@ -331,7 +362,7 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           })
         )
       : [];
-    setBundles(nextBundles);
+    setBundles((previous) => (areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles));
 
     const nextGuarantees = settings?.guarantees
       ? settings.guarantees.map((guarantee) =>
@@ -341,10 +372,15 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           })
         )
       : [];
-    setGuarantees(nextGuarantees);
+    setGuarantees((previous) =>
+      areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
+    );
 
     const comparable = cloneSettingWithoutUpdatedAt(settings);
-    lastEmittedRef.current = comparable ? JSON.stringify(comparable) : '';
+    const serialized = comparable ? JSON.stringify(comparable) : '';
+    if (lastEmittedRef.current !== serialized) {
+      lastEmittedRef.current = serialized;
+    }
   }, [settings]);
 
   const emitSettingsChange = useCallback(
