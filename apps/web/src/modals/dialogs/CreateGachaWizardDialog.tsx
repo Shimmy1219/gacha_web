@@ -23,6 +23,10 @@ import {
   generateRandomRarityEmitRate,
   generateRandomRarityLabel
 } from '../../features/rarity/utils/raritySeed';
+import {
+  SingleSelectDropdown,
+  type SingleSelectOption
+} from '../../pages/gacha/components/select/SingleSelectDropdown';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -39,6 +43,7 @@ interface DraftItem {
   previewUrl: string;
   isRiagu: boolean;
   isCompleteTarget: boolean;
+  rarityId: string | null;
 }
 
 const INITIAL_RARITY_PRESETS = [
@@ -157,7 +162,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     [rarities]
   );
 
-  const rarityOptions = useMemo(
+  type RaritySelectOption = SingleSelectOption & { color?: string };
+
+  const rarityOptions = useMemo<RaritySelectOption[]>(
     () =>
       rarities.length > 0
         ? rarities.map((rarity) => ({
@@ -245,6 +252,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         Array.from(fileList, async (file) => await saveAsset(file))
       );
 
+      const defaultRarityId = rarities[rarities.length - 1]?.id ?? rarities[0]?.id ?? null;
+
       setItems((previous) => {
         const nextItems = [...previous];
 
@@ -260,7 +269,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             name: '',
             previewUrl,
             isRiagu: false,
-            isCompleteTarget: false
+            isCompleteTarget: false,
+            rarityId: defaultRarityId
           });
         });
 
@@ -279,7 +289,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     } finally {
       setIsProcessingAssets(false);
     }
-  }, []);
+  }, [rarities]);
 
   const handleRemoveItem = useCallback((assetId: string) => {
     setItems((previous) => {
@@ -309,6 +319,30 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       previous.map((item) => (item.assetId === assetId ? { ...item, [key]: checked } : item))
     );
   }, []);
+
+  const handleChangeItemRarity = useCallback((assetId: string, rarityId: string) => {
+    setItems((previous) =>
+      previous.map((item) => (item.assetId === assetId ? { ...item, rarityId } : item))
+    );
+  }, []);
+
+  useEffect(() => {
+    const availableRarityIds = new Set(rarities.map((rarity) => rarity.id));
+    const fallbackRarityId = rarities[rarities.length - 1]?.id ?? rarities[0]?.id ?? null;
+
+    if (!fallbackRarityId) {
+      return;
+    }
+
+    setItems((previous) =>
+      previous.map((item) => {
+        if (item.rarityId && availableRarityIds.has(item.rarityId)) {
+          return item;
+        }
+        return { ...item, rarityId: fallbackRarityId };
+      })
+    );
+  }, [rarities]);
 
   const handleProceedFromBasicStep = useCallback(() => {
     const trimmedName = gachaName.trim();
@@ -430,23 +464,28 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       const highestRarityId = rarityOrder[rarityOrder.length - 1] ?? rarityOrder[0] ?? null;
       const catalogItems: Record<string, GachaCatalogItemV3> = {};
       const catalogOrder: string[] = [];
+      const fallbackRarityId = highestRarityId ?? null;
+      const availableRarityIds = new Set(rarityOrder);
 
-      if (highestRarityId) {
-        items.forEach((item, index) => {
-          const itemId = generateItemId();
-          catalogOrder.push(itemId);
-          catalogItems[itemId] = {
-            itemId,
-            name: item.name || `景品${index + 1}`,
-            rarityId: highestRarityId,
-            order: index,
-            imageAssetId: item.assetId,
-            ...(item.isRiagu ? { riagu: true } : {}),
-            ...(item.isCompleteTarget ? { completeTarget: true } : {}),
-            updatedAt: timestamp
-          } satisfies GachaCatalogItemV3;
-        });
+      if (!fallbackRarityId) {
+        throw new Error('No rarity is available for catalog items.');
       }
+
+      items.forEach((item, index) => {
+        const resolvedRarityId = item.rarityId && availableRarityIds.has(item.rarityId) ? item.rarityId : fallbackRarityId;
+        const itemId = generateItemId();
+        catalogOrder.push(itemId);
+        catalogItems[itemId] = {
+          itemId,
+          name: item.name || `景品${index + 1}`,
+          rarityId: resolvedRarityId,
+          order: index,
+          imageAssetId: item.assetId,
+          ...(item.isRiagu ? { riagu: true } : {}),
+          ...(item.isCompleteTarget ? { completeTarget: true } : {}),
+          updatedAt: timestamp
+        } satisfies GachaCatalogItemV3;
+      });
 
       nextCatalogByGacha[gachaId] = {
         order: catalogOrder,
@@ -589,7 +628,61 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{item.assetId}</p>
+                      <div className="mt-1 max-w-[12rem]">
+                        <SingleSelectDropdown
+                          value={item.rarityId ?? undefined}
+                          options={rarityOptions}
+                          onChange={(value) => handleChangeItemRarity(item.assetId, value)}
+                          placeholder="レアリティ未設定"
+                          fallbackToFirstOption={false}
+                          classNames={{
+                            root: 'relative inline-block w-full',
+                            button:
+                              'inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-surface/60 px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                            icon: 'h-3.5 w-3.5 text-muted-foreground transition-transform',
+                            iconOpen: 'rotate-180 text-accent',
+                            menu:
+                              'absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-xs backdrop-blur-sm',
+                            option: 'flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition',
+                            optionActive: 'bg-accent/10 text-surface-foreground',
+                            optionInactive: 'text-muted-foreground hover:bg-surface/40',
+                            optionLabel: 'flex-1 text-left',
+                            checkIcon: 'h-3.5 w-3.5 text-accent transition'
+                          }}
+                          renderButtonLabel={({ selectedOption }) => {
+                            const option = selectedOption as RaritySelectOption | undefined;
+                            const label = option?.label ?? 'レアリティ未設定';
+                            const color = option?.color;
+                            return (
+                              <span className="flex w-full items-center gap-2 truncate">
+                                {color ? (
+                                  <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: color }}
+                                  />
+                                ) : null}
+                                <span className="truncate" style={color ? { color } : undefined}>
+                                  {label}
+                                </span>
+                              </span>
+                            );
+                          }}
+                          renderOptionContent={(option) => {
+                            const rarityOption = option as RaritySelectOption;
+                            return (
+                              <span className="flex w-full items-center gap-2 truncate">
+                                {rarityOption.color ? (
+                                  <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: rarityOption.color }}
+                                  />
+                                ) : null}
+                                <span className="flex-1 truncate">{rarityOption.label}</span>
+                              </span>
+                            );
+                          }}
+                        />
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
                       <label className="inline-flex items-center gap-2">
