@@ -45,6 +45,25 @@ interface ReceiveTokenResponse {
   error?: string;
 }
 
+interface PrepareUploadResponsePayload {
+  ok?: boolean;
+  token?: string;
+  pathname?: string;
+  fileName?: string;
+  expiresAt?: string;
+  error?: string;
+}
+
+interface PrepareUploadArgs {
+  csrf: string;
+  userId: string;
+  fileName: string;
+  purpose: string;
+  ownerDiscordId?: string;
+  ownerDiscordName?: string;
+  receiverName?: string;
+}
+
 const CSRF_ENDPOINT = '/api/blob/csrf';
 const UPLOAD_ENDPOINT = '/api/blob/upload';
 const RECEIVE_TOKEN_ENDPOINT = '/api/receive/token';
@@ -146,6 +165,50 @@ async function issueReceiveShareUrl(
   };
 }
 
+async function requestUploadAuthorization(
+  fetcher: typeof fetch,
+  args: PrepareUploadArgs
+): Promise<{ token: string; pathname: string; fileName?: string }> {
+  let response: Response;
+  try {
+    response = await fetcher(UPLOAD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        action: 'prepare-upload',
+        csrf: args.csrf,
+        userId: args.userId,
+        fileName: args.fileName,
+        purpose: args.purpose,
+        ownerDiscordId: args.ownerDiscordId,
+        ownerDiscordName: args.ownerDiscordName,
+        receiverName: args.receiverName
+      })
+    });
+  } catch (error) {
+    throw new BlobUploadError('アップロードポリシーの取得に失敗しました (network error)', { cause: error });
+  }
+
+  let payload: PrepareUploadResponsePayload | null = null;
+  try {
+    payload = (await response.json()) as PrepareUploadResponsePayload;
+  } catch (error) {
+    throw new BlobUploadError('アップロードポリシーの取得に失敗しました (invalid json)', { cause: error });
+  }
+
+  if (!response.ok || !payload?.ok || !payload.token || !payload.pathname) {
+    const reason = payload?.error ?? `status ${response.status}`;
+    throw new BlobUploadError(`アップロードポリシーの取得に失敗しました (${reason})`);
+  }
+
+  return {
+    token: payload.token,
+    pathname: payload.pathname,
+    fileName: payload.fileName
+  };
+}
+
 export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<UploadZipResult> } {
   const csrfRef = useRef<string | null>(null);
 
@@ -178,22 +241,23 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
     const ownerDiscordName = normalizeOptionalString(args.ownerDiscordName ?? undefined);
     const receiverName = normalizeOptionalString(args.receiverName);
 
+    const uploadIntent = await requestUploadAuthorization(fetch, {
+      csrf,
+      userId: args.userId,
+      fileName: args.fileName,
+      purpose: DEFAULT_PURPOSE,
+      ownerDiscordId,
+      ownerDiscordName,
+      receiverName
+    });
+
     let uploadResult;
     try {
-      uploadResult = await upload(args.fileName, args.file, {
+      uploadResult = await upload(uploadIntent.pathname, args.file, {
         access: 'public',
         multipart: true,
         contentType: 'application/zip',
-        handleUploadUrl: UPLOAD_ENDPOINT,
-        clientPayload: JSON.stringify({
-          csrf,
-          userId: args.userId,
-          purpose: DEFAULT_PURPOSE,
-          ownerDiscordId,
-          ownerDiscordName,
-          receiverName,
-          fileName: args.fileName
-        })
+        token: uploadIntent.token
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

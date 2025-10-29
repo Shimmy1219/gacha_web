@@ -9,6 +9,11 @@ import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
+const EVENT_TYPES = {
+  GENERATE_CLIENT_TOKEN: 'blob.generate-client-token',
+  UPLOAD_COMPLETED: 'blob.upload-completed'
+};
+
 function vLog(...args) {
   if (VERBOSE) console.log('[blob/upload]', ...args);
 }
@@ -85,6 +90,188 @@ function buildFileNameWithSuffix(fileName, suffix) {
   return `${finalBase}.zip`;
 }
 
+function deriveUploadPolicy(req, payload) {
+  const cookies = parseCookies(req.headers.cookie);
+
+  const csrfFromCookie = cookies['csrf'] || '';
+  const csrfFromPayload = typeof payload?.csrf === 'string' ? payload.csrf : '';
+  if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
+    const err = new Error('Forbidden: invalid CSRF token');
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const userId = sanitizeSegment(payload?.userId, 'anon');
+  const purpose = sanitizeSegment(payload?.purpose, 'misc');
+  const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
+  const ownerDirectory = sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
+  const receiverDirectory = sanitizeDirectoryName(payload?.receiverName, 'unknown');
+  const requestedFileName = sanitizeZipFileName(payload?.fileName, 'archive.zip');
+
+  const ip = (req.headers['x-forwarded-for'] || '')
+    .split(',')[0].trim() || req.socket?.remoteAddress || '0.0.0.0';
+
+  const WINDOW_MS = 60 * 1000;
+  const windowId = Math.floor(Date.now() / WINDOW_MS);
+
+  const secret = process.env.BLOB_RATE_SECRET || 'dev-secret-change-me';
+  const h = crypto.createHmac('sha256', secret)
+    .update(`${ip}:${windowId}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  const validUntilMs = Date.now() + 5 * 60 * 1000;
+
+  const allowedContentTypes = [
+    'application/zip',
+    'application/x-zip-compressed'
+  ];
+
+  const finalFileName = buildFileNameWithSuffix(requestedFileName, h);
+  const pathname = `receive/${ownerDirectory}/${receiverDirectory}/${finalFileName}`;
+
+  const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 12);
+
+  const policyLog = {
+    userId,
+    purpose,
+    ownerDiscordId,
+    ownerDirectory,
+    receiverDirectory,
+    requestedFileName,
+    windowId,
+    pathname: `/${pathname}`,
+    validUntilMs,
+    ipHash
+  };
+
+  const result = {
+    policyLog,
+    policy: {
+      userId,
+      purpose,
+      ownerDiscordId,
+      ownerDirectory,
+      receiverDirectory,
+      requestedFileName,
+      finalFileName,
+      pathname,
+      validUntilMs,
+      allowedContentTypes,
+      maximumSizeInBytes: 100 * 1024 * 1024
+    }
+  };
+  vLog('policy', policyLog);
+  return result;
+}
+
+async function handlePrepareUpload(req, res, log, body) {
+  const { policyLog, policy } = deriveUploadPolicy(req, body);
+
+  log.info('upload intent authorized', { ...policyLog, hasCsrf: true });
+
+  try {
+    const { generateClientTokenFromReadWriteToken } = await import('@vercel/blob/client');
+    const token = await generateClientTokenFromReadWriteToken({
+      pathname: policy.pathname,
+      access: 'public',
+      addRandomSuffix: false,
+      allowedContentTypes: policy.allowedContentTypes,
+      maximumSizeInBytes: policy.maximumSizeInBytes,
+      validUntil: policy.validUntilMs
+    });
+
+    const expiresAtIso = new Date(policy.validUntilMs).toISOString();
+
+    return res.status(200).json({
+      ok: true,
+      token,
+      pathname: policy.pathname,
+      fileName: policy.finalFileName,
+      expiresAt: expiresAtIso,
+      ownerDirectory: policy.ownerDirectory,
+      receiverDirectory: policy.receiverDirectory
+    });
+  } catch (error) {
+    const status = error?.statusCode || error?.status || 500;
+    log.error('failed to generate client token', { error, status });
+    return res.status(status).json({ ok: false, error: error?.message || 'Failed to generate upload token' });
+  }
+}
+
+async function handleLegacyUpload(req, res, log, body) {
+  try {
+    const { handleUpload } = await import('@vercel/blob/client');
+
+    const jsonResponse = await handleUpload({
+      request: req,
+      body,
+
+      onBeforeGenerateToken: async (_pathname, clientPayload, multipart) => {
+        let parsedPayload = {};
+        if (clientPayload) {
+          try {
+            parsedPayload = JSON.parse(clientPayload);
+          } catch (error) {
+            vLog('clientPayload JSON parse error:', String(error));
+          }
+        }
+        const { policyLog, policy } = deriveUploadPolicy(req, { ...parsedPayload, csrf: parsedPayload?.csrf });
+        log.info('upload token policy decided', { ...policyLog, multipart });
+
+        return {
+          addRandomSuffix: false,
+          allowOverwrite: false,
+          allowedContentTypes: policy.allowedContentTypes,
+          maximumSizeInBytes: policy.maximumSizeInBytes,
+          validUntil: policy.validUntilMs,
+          pathname: `/${policy.pathname}`
+        };
+      },
+
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        const details = {
+          url: blob.url,
+          downloadUrl: blob.downloadUrl || null,
+          pathname: blob.pathname,
+          size: blob.size,
+          contentType: blob.contentType
+        };
+
+        if (VERBOSE) {
+          Object.assign(details, { tokenPayload });
+        }
+
+        console.log('[blob/upload completed]', details);
+      },
+    });
+
+    const eventType = jsonResponse?.type || EVENT_TYPES.GENERATE_CLIENT_TOKEN;
+    if (eventType === EVENT_TYPES.UPLOAD_COMPLETED) {
+      log.info('upload completion acknowledged');
+    } else {
+      log.info('upload token issued (legacy flow)', {
+        pathname: jsonResponse?.pathname || null,
+        uploadUrl: jsonResponse?.uploadUrl || null,
+      });
+    }
+    return res.status(200).json(jsonResponse);
+  } catch (err) {
+    const msg = err?.message || String(err);
+    const status =
+      (err && (err.statusCode || err.status)) ? (err.statusCode || err.status)
+      : (/forbidden/i.test(msg) ? 403 : 500);
+
+    console.error('[blob/upload error]', msg, VERBOSE ? { stack: err?.stack } : '');
+    log.error('upload token issuance failed', { status, error: err });
+    return res.status(status).json({
+      ok: false,
+      error: msg,
+      dbg: VERBOSE ? { hint: 'Enable/keep VERBOSE_BLOB_LOG=1 to see more logs above.' } : undefined,
+    });
+  }
+}
+
 export default async function handler(req, res) {
   const log = createRequestLogger('api/blob/upload', req);
   log.info('request received', { method: req.method, hasBody: Boolean(req.body) });
@@ -142,136 +329,16 @@ export default async function handler(req, res) {
     });
   }
 
-  // ====== 2) トークン生成 & CSRF/ポリシー ======
-  try {
-    const { handleUpload } = await import('@vercel/blob/client');
-    const body = req.body ?? {};
-
-    const jsonResponse = await handleUpload({
-      request: req,
-      body,
-
-      // ここで CSRF 照合・保存ポリシー（拡張子/MIME/サイズ/格納パス/有効期限）を決定
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const cookies = parseCookies(req.headers.cookie);
-
-        // 1) CSRF チェック
-        let payload = {};
-        try { payload = clientPayload ? JSON.parse(clientPayload) : {}; }
-        catch (e) { vLog('clientPayload JSON parse error:', String(e)); }
-
-        const csrfFromCookie  = cookies['csrf'] || '';
-        const csrfFromPayload = payload?.csrf || '';
-        if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
-          const err = new Error('Forbidden: invalid CSRF token');
-          err.statusCode = 403; throw err;
-        }
-
-        // 2) ユーザー/用途（サニタイズ）
-        const userId  = sanitizeSegment(payload?.userId,  'anon');
-        const purpose = sanitizeSegment(payload?.purpose, 'misc');
-        const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
-        const ownerDirectory = sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
-        const receiverDirectory = sanitizeDirectoryName(payload?.receiverName, 'unknown');
-        const requestedFileName = sanitizeZipFileName(payload?.fileName, 'archive.zip');
-
-        // 3) レート制限（DBレス：同一IP 1分に1回）
-        //    - 時間窓: 60秒
-        //    - 決定論的 pathname を生成し、allowOverwrite: false で 2回目以降を弾く
-        const ip = (req.headers['x-forwarded-for'] || '')
-          .split(',')[0].trim() || req.socket?.remoteAddress || '0.0.0.0';
-
-        const WINDOW_MS = 60 * 1000; // 60秒窓
-        const windowId = Math.floor(Date.now() / WINDOW_MS);
-
-        const secret = process.env.BLOB_RATE_SECRET || 'dev-secret-change-me';
-        const h = crypto.createHmac('sha256', secret)
-                        .update(`${ip}:${windowId}`)
-                        .digest('hex')
-                        .slice(0, 32);
-
-        // 4) 有効期限（例: 5分）
-        const validUntilMs = Date.now() + 5 * 60 * 1000;
-
-        // 5) ZIP限定などの基本ポリシ
-        const allowedContentTypes = [
-          'application/zip',
-          'application/x-zip-compressed',
-        ];
-
-        // 6) 決定論的な格納パス（DBレスRateLimitの要）
-        //    - /receive/<discordName>/<displayName>/<filename-with-hash>.zip 形式
-        //    - 同一IP・同一時間窓なら suffix が同じになり重複アップロードを拒否
-        const finalFileName = buildFileNameWithSuffix(requestedFileName, h);
-        const pathname = `/receive/${ownerDirectory}/${receiverDirectory}/${finalFileName}`;
-
-        const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 12);
-        const policyLog = {
-          userId,
-          purpose,
-          ownerDiscordId,
-          ownerDirectory,
-          receiverDirectory,
-          requestedFileName,
-          windowId,
-          pathname,
-          validUntilMs,
-          ipHash
-        };
-        vLog('policy', policyLog);
-        log.info('upload token policy decided', { ...policyLog, hasCsrf: Boolean(csrfFromPayload) });
-
-        return {
-          // ★ DBレス・ハードレートの要点
-          addRandomSuffix: false,
-          allowOverwrite: false, // 同名があれば失敗（= 同窓2回目を拒否）
-
-          // 基本制限
-          allowedContentTypes,
-          maximumSizeInBytes: 100 * 1024 * 1024,
-
-          // セキュリティ/運用
-          validUntil: validUntilMs,
-
-          // 保存先指定（prefixではなく固定パス）
-          pathname,
-        };
-      },
-
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const details = {
-          url: blob.url,
-          downloadUrl: blob.downloadUrl || null,
-          pathname: blob.pathname,
-          size: blob.size,
-          contentType: blob.contentType
-        };
-
-        if (VERBOSE) {
-          Object.assign(details, { tokenPayload });
-        }
-
-        console.log('[blob/upload completed]', details);
-      },
-    });
-
-    log.info('upload token issued', {
-      pathname: jsonResponse?.pathname || null,
-      uploadUrl: jsonResponse?.uploadUrl || null,
-    });
-    return res.status(200).json(jsonResponse);
-  } catch (err) {
-    const msg = err?.message || String(err);
-    const status =
-      (err && (err.statusCode || err.status)) ? (err.statusCode || err.status)
-      : (/forbidden/i.test(msg) ? 403 : 500);
-
-    console.error('[blob/upload error]', msg, VERBOSE ? { stack: err?.stack } : '');
-    log.error('upload token issuance failed', { status, error: err });
-    return res.status(status).json({
-      ok: false,
-      error: msg,
-      dbg: VERBOSE ? { hint: 'Enable/keep VERBOSE_BLOB_LOG=1 to see more logs above.' } : undefined,
-    });
+  const body = req.body ?? {};
+  const eventType = typeof body?.type === 'string' ? body.type : '';
+  if (eventType === EVENT_TYPES.GENERATE_CLIENT_TOKEN || eventType === EVENT_TYPES.UPLOAD_COMPLETED) {
+    return handleLegacyUpload(req, res, log, body);
   }
+
+  if (body?.action === 'prepare-upload') {
+    return handlePrepareUpload(req, res, log, body);
+  }
+
+  log.warn('invalid upload request payload', { eventType, action: body?.action });
+  return res.status(400).json({ ok: false, error: 'Bad Request' });
 }
