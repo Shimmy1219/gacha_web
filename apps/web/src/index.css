@@ -310,18 +310,58 @@
     background-color: rgb(var(--color-panel-contrast) / 0.88);
     opacity: 0.9;
     transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
-  }
-
-  .gacha-tab--active::before {
-    background-color: rgb(var(--color-accent) / 0.92);
-    border-color: rgb(var(--color-accent) / 0.95);
-    opacity: 1;
+    pointer-events: none;
+    z-index: 0;
   }
 
   .gacha-tab--inactive:hover::before {
     background-color: rgb(var(--color-panel-contrast) / 0.95);
     border-color: rgba(255, 63, 102, 0.55);
     opacity: 1;
+  }
+
+  .gacha-tab--active {
+    --gacha-tab-curve: 0.85rem;
+    z-index: 2;
+  }
+
+  .gacha-tab--active::before {
+    background-color: transparent;
+    border-color: transparent;
+    opacity: 0;
+  }
+
+  .gacha-tab--active::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-top: 1px solid rgb(var(--color-accent) / 0.95);
+    border-left: var(--gacha-tab-curve) solid #0000;
+    border-right: var(--gacha-tab-curve) solid #0000;
+    border-bottom: 0;
+    border-radius: calc(2 * var(--gacha-tab-curve)) calc(2 * var(--gacha-tab-curve)) 0 0 / var(--gacha-tab-curve);
+    background-color: rgb(var(--color-accent) / 0.92);
+    mask:
+      radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
+        calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
+      conic-gradient(#000 0 1turn) padding-box;
+    -webkit-mask:
+      radial-gradient(var(--gacha-tab-curve) at var(--gacha-tab-curve) 0, #0000 98%, #000 101%)
+        calc(-1 * var(--gacha-tab-curve)) 100% / 100% var(--gacha-tab-curve) repeat-x,
+      conic-gradient(#000 0 1turn) padding-box;
+    background-clip: padding-box;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .gacha-tab--active:first-child::after {
+    border-left-width: 0;
+    border-top-left-radius: var(--gacha-tab-curve);
+  }
+
+  .gacha-tab--active:last-child::after {
+    border-right-width: 0;
+    border-top-right-radius: var(--gacha-tab-curve);
   }
 
   .gacha-tab__label {
