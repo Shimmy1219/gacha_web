@@ -712,7 +712,7 @@ export function ItemsSection(): JSX.Element {
     () =>
       clsx(
         'items-section__grid grid gap-4',
-        '[grid-template-columns:repeat(auto-fit,minmax(150px,200px))]'
+        '[grid-template-columns:repeat(auto-fit,minmax(150px,196px))]'
       ),
     []
   );
