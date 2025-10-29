@@ -42,38 +42,62 @@ function sanitizeSegment(s, fallback) {
   return t || fallback;
 }
 
+function limitGraphemes(value, max) {
+  if (!Number.isFinite(max) || max <= 0) {
+    return value;
+  }
+  const segments = Array.from(value);
+  if (segments.length <= max) {
+    return value;
+  }
+  return segments.slice(0, max).join('');
+}
+
 function sanitizeDirectoryName(value, fallback) {
   if (typeof value !== 'string') return fallback;
-  const replaced = value
-    .normalize('NFKC')
-    .replace(/[^0-9A-Za-z._-]+/g, '-')
+  const normalized = value.normalize('NFKC').trim();
+  if (!normalized) return fallback;
+  const limited = limitGraphemes(normalized, 64);
+  const replaced = limited
+    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '-')
     .replace(/-{2,}/g, '-')
-    .replace(/^[-.]+|[-.]+$/g, '')
-    .slice(0, 64);
+    .replace(/^[-.]+|[-.]+$/g, '');
   return replaced || fallback;
 }
 
-function sanitizeZipFileName(value, fallback) {
-  if (typeof value !== 'string') return fallback;
-  const trimmed = value.trim();
-  if (!trimmed) return fallback;
-  let normalized = trimmed
-    .normalize('NFKC')
-    .replace(/[^0-9A-Za-z._-]+/g, '-')
+function sanitizeZipFileNameBase(value) {
+  const normalized = typeof value === 'string' ? value.normalize('NFKC') : '';
+  const ensured = normalized.endsWith('.zip') ? normalized.slice(0, -4) : normalized;
+  const limited = limitGraphemes(ensured, 120);
+  return limited
+    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');
-  if (!/\.zip$/i.test(normalized)) {
-    normalized = `${normalized.replace(/\.+$/, '')}.zip`;
-  }
-  if (!normalized) {
-    return fallback;
-  }
-  if (normalized.length > 128) {
-    const base = normalized.slice(0, -4); // remove .zip
-    const truncatedBase = base.slice(0, 124);
-    normalized = `${truncatedBase}.zip`;
-  }
-  return normalized;
+}
+
+function sanitizeZipFileName(value, fallback) {
+  const fallbackValue = typeof fallback === 'string' && fallback ? fallback : 'archive.zip';
+  if (typeof value !== 'string') return fallbackValue;
+  const trimmed = value.trim();
+  const normalized = trimmed ? trimmed.normalize('NFKC') : '';
+  const ensured = normalized && /\.zip$/i.test(normalized)
+    ? normalized
+    : `${normalized.replace(/\.+$/, '') || normalized}.zip`;
+
+  const basePart = ensured.slice(0, -4);
+  const limitedBase = limitGraphemes(basePart, 120);
+  const sanitizedBase = limitedBase
+    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+
+  const fallbackBase = sanitizeZipFileNameBase(fallbackValue);
+  const finalBase = sanitizedBase || fallbackBase || 'archive';
+
+  return `${finalBase}.zip`;
 }
 
 function buildFileNameWithSuffix(fileName, suffix) {
