@@ -346,8 +346,11 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
   const lastEmittedRef = useRef<string>(
     initialComparableSettings ? JSON.stringify(initialComparableSettings) : ''
   );
+  const syncingFromSettingsRef = useRef(false);
 
   useEffect(() => {
+    syncingFromSettingsRef.current = true;
+
     const nextPerPull = settings?.perPull?.price != null ? String(settings.perPull.price) : '';
     setPerPull((previous) => (previous === nextPerPull ? previous : nextPerPull));
 
@@ -400,6 +403,11 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
   );
 
   useEffect(() => {
+    if (syncingFromSettingsRef.current) {
+      syncingFromSettingsRef.current = false;
+      return;
+    }
+
     emitSettingsChange({
       perPull,
       complete,
