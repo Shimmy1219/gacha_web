@@ -7,6 +7,7 @@ import {
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 
@@ -69,6 +70,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
   const [uploadNotice, setUploadNotice] = useState<{ id: number; message: string } | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticePortalRef = useRef<HTMLDivElement | null>(null);
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
@@ -120,6 +122,10 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
       }
+      if (noticePortalRef.current?.parentNode) {
+        noticePortalRef.current.parentNode.removeChild(noticePortalRef.current);
+        noticePortalRef.current = null;
+      }
     };
   }, []);
 
@@ -134,6 +140,27 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
       setUploadNotice(null);
     }, 4000);
   }, [uploadNotice?.id]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const root = document.getElementById('modal-root');
+    if (!root) {
+      return;
+    }
+    const container = document.createElement('div');
+    root.appendChild(container);
+    noticePortalRef.current = container;
+    return () => {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+      if (noticePortalRef.current === container) {
+        noticePortalRef.current = null;
+      }
+    };
+  }, []);
 
   const gachaNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -296,16 +323,22 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
     }
   };
 
+  const uploadNoticePortal =
+    uploadNotice && noticePortalRef.current
+      ? createPortal(
+          <div className="pointer-events-none fixed inset-x-0 top-10 z-[120] flex justify-center">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-emerald-500/50 bg-white/95 px-5 py-2 text-sm font-medium text-black shadow-lg shadow-emerald-900/10">
+              <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+              <span className="text-black">{uploadNotice.message}</span>
+            </div>
+          </div>,
+          noticePortalRef.current
+        )
+      : null;
+
   return (
     <>
-      {uploadNotice ? (
-        <div className="px-6 pt-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/60 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-100 shadow-lg">
-            <CheckCircleIcon className="h-5 w-5 text-emerald-300" />
-            <span>{uploadNotice.message}</span>
-          </div>
-        </div>
-      ) : null}
+      {uploadNoticePortal}
       <ModalBody className="space-y-6">
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象の概要</div>
