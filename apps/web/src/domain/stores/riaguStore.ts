@@ -56,12 +56,9 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
             indexByItemId: {}
           };
 
-      const sanitizedUnitCost =
-        typeof input.unitCost === 'number' && Number.isFinite(input.unitCost) ? input.unitCost : undefined;
-      const trimmedType = input.typeLabel?.trim();
-      const sanitizedType = trimmedType ? trimmedType : undefined;
-      const sanitizedOrderHint =
-        typeof input.orderHint === 'number' && Number.isFinite(input.orderHint) ? input.orderHint : undefined;
+      const hasUnitCost = Object.prototype.hasOwnProperty.call(input, 'unitCost');
+      const hasTypeLabel = Object.prototype.hasOwnProperty.call(input, 'typeLabel');
+      const hasOrderHint = Object.prototype.hasOwnProperty.call(input, 'orderHint');
       const next: RiaguStateV3 = {
         ...base,
         updatedAt: nowIso
@@ -70,6 +67,22 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
       const existingId = next.indexByItemId[input.itemId];
       if (existingId && next.riaguCards[existingId]) {
         const existing = next.riaguCards[existingId];
+        const sanitizedUnitCost = hasUnitCost
+          ? typeof input.unitCost === 'number' && Number.isFinite(input.unitCost)
+            ? input.unitCost
+            : undefined
+          : existing.unitCost;
+        const sanitizedType = hasTypeLabel
+          ? (() => {
+              const trimmed = typeof input.typeLabel === 'string' ? input.typeLabel.trim() : '';
+              return trimmed.length > 0 ? trimmed : undefined;
+            })()
+          : existing.typeLabel ?? undefined;
+        const sanitizedOrderHint = hasOrderHint
+          ? typeof input.orderHint === 'number' && Number.isFinite(input.orderHint)
+            ? input.orderHint
+            : undefined
+          : existing.orderHint;
         const nextCard: RiaguCardModelV3 = {
           ...existing,
           itemId: input.itemId,
@@ -83,6 +96,12 @@ export class RiaguStore extends PersistedStore<RiaguStateV3 | undefined> {
         next.riaguCards[existingId] = nextCard;
         createdOrUpdated = nextCard;
       } else {
+        const sanitizedUnitCost =
+          typeof input.unitCost === 'number' && Number.isFinite(input.unitCost) ? input.unitCost : undefined;
+        const trimmedType = typeof input.typeLabel === 'string' ? input.typeLabel.trim() : '';
+        const sanitizedType = trimmedType.length > 0 ? trimmedType : undefined;
+        const sanitizedOrderHint =
+          typeof input.orderHint === 'number' && Number.isFinite(input.orderHint) ? input.orderHint : undefined;
         const riaguId = generateRiaguId();
         const nextCard: RiaguCardModelV3 = {
           id: riaguId,
