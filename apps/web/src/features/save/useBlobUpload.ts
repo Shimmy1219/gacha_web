@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { upload } from '@vercel/blob/client';
+import { put } from '@vercel/blob/client';
 
 export interface UploadZipArgs {
   file: Blob;
@@ -253,7 +253,7 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
 
     let uploadResult;
     try {
-      uploadResult = await upload(uploadIntent.pathname, args.file, {
+      uploadResult = await put(uploadIntent.pathname, args.file, {
         access: 'public',
         multipart: true,
         contentType: 'application/zip',
