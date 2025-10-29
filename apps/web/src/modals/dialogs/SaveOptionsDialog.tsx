@@ -1,4 +1,5 @@
 import {
+  ArrowPathIcon,
   ArrowUpTrayIcon,
   CheckCircleIcon,
   DocumentDuplicateIcon,
@@ -228,6 +229,17 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
     }
     setIsUploading(true);
     setErrorBanner(null);
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = null;
+    }
+    setUploadNotice(null);
+    setUploadResult(null);
+    persistence.savePartial({
+      saveOptions: {
+        [userId]: null
+      }
+    });
     try {
       const zip = await buildUserZipFromSelection({
         snapshot,
@@ -436,7 +448,10 @@ function SaveOptionCard({
         disabled={isDisabled}
         aria-busy={isBusy}
       >
-        {actionLabel}
+        <span className="flex items-center justify-center gap-2">
+          {isBusy ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
+          <span>{actionLabel}</span>
+        </span>
       </button>
     </div>
   );
