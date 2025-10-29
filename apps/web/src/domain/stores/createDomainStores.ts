@@ -39,18 +39,18 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
 
   const initialLegacy = snapshot?.userInventories;
 
-  const runProjection = (includeLegacy: boolean) => {
+  const runProjection = () => {
     const { state } = projectInventories({
       pullHistory: stores.pullHistory.getState(),
       catalogState: stores.catalog.getState(),
-      legacyInventories: includeLegacy ? initialLegacy : undefined
+      legacyInventories: initialLegacy
     });
 
     stores.userInventories.applyProjectionResult(state);
     stores.userInventories.saveDebounced();
   };
 
-  runProjection(true);
+  runProjection();
 
   let skipInitialPullHistory = true;
   stores.pullHistory.subscribe(() => {
@@ -58,7 +58,16 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
       skipInitialPullHistory = false;
       return;
     }
-    runProjection(false);
+    runProjection();
+  });
+
+  let skipInitialCatalog = true;
+  stores.catalog.subscribe(() => {
+    if (skipInitialCatalog) {
+      skipInitialCatalog = false;
+      return;
+    }
+    runProjection();
   });
 
   return stores;
