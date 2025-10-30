@@ -432,29 +432,29 @@ export function ReceivePage(): JSX.Element {
   const renderResolveStatus = () => {
     if (resolveStatus === 'loading') {
       return (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <ArrowPathIcon className="h-5 w-5 animate-spin" aria-hidden="true" />
-          リンクを確認しています…
+        <div className="receive-page-resolve-status-loading flex items-center gap-2 text-sm text-muted-foreground">
+          <ArrowPathIcon className="receive-page-resolve-status-loading-icon h-5 w-5 animate-spin" aria-hidden="true" />
+          <span className="receive-page-resolve-status-loading-text">リンクを確認しています…</span>
         </div>
       );
     }
     if (resolveStatus === 'error' && resolveError) {
       return (
-        <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
-          <ExclamationTriangleIcon className="mt-0.5 h-5 w-5" aria-hidden="true" />
-          <span>{resolveError}</span>
+        <div className="receive-page-resolve-status-error flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm text-rose-200">
+          <ExclamationTriangleIcon className="receive-page-resolve-status-error-icon mt-0.5 h-5 w-5" aria-hidden="true" />
+          <span className="receive-page-resolve-status-error-text">{resolveError}</span>
         </div>
       );
     }
     if (resolveStatus === 'success' && resolved) {
       const expiryText = formatExpiration(expiration);
       return (
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-pink-200">
+        <div className="receive-page-resolve-status-success flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span className="receive-page-resolve-status-success-chip rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-pink-200">
             リンク確認済み
           </span>
-          {resolved.name ? <span>ファイル名: {resolved.name}</span> : null}
-          {expiryText ? <span>期限: {expiryText}</span> : null}
+          {resolved.name ? <span className="receive-page-resolve-status-success-name">ファイル名: {resolved.name}</span> : null}
+          {expiryText ? <span className="receive-page-resolve-status-success-expiry">期限: {expiryText}</span> : null}
         </div>
       );
     }
@@ -462,36 +462,40 @@ export function ReceivePage(): JSX.Element {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,114,182,0.18),_transparent_55%)]" aria-hidden="true" />
-      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-16 lg:px-10">
-        <div className="rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-pink-200">
+    <div className="receive-page-root relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+      <div className="receive-page-background pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,114,182,0.18),_transparent_55%)]" aria-hidden="true" />
+      <div className="receive-page-content relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-16 lg:px-10">
+        <div className="receive-page-hero-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
+          <div className="receive-page-hero-header flex flex-wrap items-start justify-between gap-4">
+            <div className="receive-page-hero-info space-y-2">
+              <span className="receive-page-hero-label inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-pink-200">
                 景品受け取り
               </span>
-              <h1 className="text-3xl font-bold tracking-tight">共有リンクから景品を受け取る</h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">
+              <h1 className="receive-page-hero-title text-3xl font-bold tracking-tight">共有リンクから景品を受け取る</h1>
+              <p className="receive-page-hero-description max-w-2xl text-sm text-muted-foreground">
                 配信者から共有された受け取りIDまたはリンクを入力すると、その場でZIPファイルをダウンロードして中身を確認できます。
               </p>
-              {renderResolveStatus()}
+              <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
             </div>
-            <div className="flex flex-col items-end gap-3">
+            <div className="receive-page-hero-actions flex flex-col items-end gap-3">
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
+                className="receive-page-copy-page-url-button inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
               >
-                {copyState === 'copied' ? <CheckIcon className="h-5 w-5" aria-hidden="true" /> : <ClipboardDocumentIcon className="h-5 w-5" aria-hidden="true" />}
-                {copyState === 'copied' ? 'コピーしました' : 'このページのURLをコピー'}
+                {copyState === 'copied' ? (
+                  <CheckIcon className="receive-page-copy-success-icon h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <ClipboardDocumentIcon className="receive-page-copy-default-icon h-5 w-5" aria-hidden="true" />
+                )}
+                <span className="receive-page-copy-button-text">{copyState === 'copied' ? 'コピーしました' : 'このページのURLをコピー'}</span>
               </button>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 grid gap-6 lg:grid-cols-[2fr,auto] lg:items-end">
-            <div className="space-y-2">
-              <label htmlFor="receive-token" className="text-sm font-medium text-white">
+          <form onSubmit={handleSubmit} className="receive-page-token-form mt-8 grid gap-6 lg:grid-cols-[2fr,auto] lg:items-end">
+            <div className="receive-page-token-field space-y-2">
+              <label htmlFor="receive-token" className="receive-page-token-label text-sm font-medium text-white">
                 受け取りID または 共有リンク
               </label>
               <input
@@ -506,56 +510,56 @@ export function ReceivePage(): JSX.Element {
                   }
                 }}
                 placeholder="例: https://example.com/receive?t=XXXXXXXXXX"
-                className="w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-base text-white shadow-inner shadow-black/40 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-400"
+                className="receive-page-token-input w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-base text-white shadow-inner shadow-black/40 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-400"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="receive-page-token-helper text-xs text-muted-foreground">
                 10 桁の英数字 ID または配信者から共有された URL を貼り付けてください。
               </p>
             </div>
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
+              className="receive-page-token-submit-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
             >
-              リンクを読み込む
+              <span className="receive-page-token-submit-button-text">リンクを読み込む</span>
             </button>
           </form>
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold">手順</h2>
-              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                <li>「受け取る」ボタンを押すとブラウザ上でZIPのダウンロードが始まります（端末には自動保存されません）。</li>
-                <li>ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
-                <li>各項目の「保存」ボタンで、端末に個別保存できます。元のZIPを保存することも可能です。</li>
+        <div className="receive-page-steps-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
+          <div className="receive-page-steps-content flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="receive-page-steps-description">
+              <h2 className="receive-page-steps-title text-2xl font-semibold">手順</h2>
+              <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                <li className="receive-page-step-item">「受け取る」ボタンを押すとブラウザ上でZIPのダウンロードが始まります（端末には自動保存されません）。</li>
+                <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
+                <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。元のZIPを保存することも可能です。</li>
               </ol>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="receive-page-steps-actions flex flex-col gap-3">
               <button
                 type="button"
                 onClick={handleStartDownload}
                 disabled={resolveStatus !== 'success' || downloadPhase === 'downloading' || downloadPhase === 'unpacking'}
-                className="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-8 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
+                className="receive-page-start-download-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-8 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
               >
-                受け取る
+                <span className="receive-page-start-download-button-text">受け取る</span>
               </button>
               <button
                 type="button"
                 onClick={handleDownloadZip}
                 disabled={!zipBlob}
-                className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-8 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
+                className="receive-page-save-zip-button inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-8 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
               >
-                ZIPを保存
+                <span className="receive-page-save-zip-button-text">ZIPを保存</span>
               </button>
               {downloadError ? (
-                <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{downloadError}</div>
+                <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{downloadError}</div>
               ) : null}
             </div>
           </div>
 
           {(downloadPhase === 'downloading' || downloadPhase === 'unpacking') && (
-            <div className="mt-6 space-y-4">
+            <div className="receive-page-progress-section mt-6 space-y-4">
               <ProgressBar
                 label="ダウンロード"
                 value={
@@ -569,25 +573,25 @@ export function ReceivePage(): JSX.Element {
           )}
 
           {downloadPhase === 'complete' && mediaItems.length > 0 ? (
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-muted-foreground">
-              <span>
+            <div className="receive-page-completion-summary mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-muted-foreground">
+              <span className="receive-page-completion-summary-text">
                 {mediaItems.length} 件 ・ 合計 {formatBytes(totalSize)}
                 {resolved?.purpose ? ` ・ 用途: ${resolved.purpose}` : ''}
               </span>
-              <span className="text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
+              <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
             </div>
           ) : null}
         </div>
 
         {mediaItems.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="receive-page-media-grid grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {mediaItems.map((item) => (
               <ReceiveItemCard key={item.id} item={item} onDownload={handleDownloadItem} />
             ))}
           </div>
         ) : resolveStatus === 'success' && downloadPhase === 'waiting' ? (
-          <div className="rounded-3xl border border-dashed border-white/10 bg-black/30 p-10 text-center text-sm text-muted-foreground">
-            受け取りボタンを押すとファイルのダウンロードが始まります。
+          <div className="receive-page-download-prompt rounded-3xl border border-dashed border-white/10 bg-black/30 p-10 text-center text-sm text-muted-foreground">
+            <span className="receive-page-download-prompt-text">受け取りボタンを押すとファイルのダウンロードが始まります。</span>
           </div>
         ) : null}
       </div>
