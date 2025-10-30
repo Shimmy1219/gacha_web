@@ -12,6 +12,7 @@ import JSZip from 'jszip';
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
+import { AppHeaderShell } from '../gacha/components/app-shell/AppHeaderShell';
 
 interface ResolveSuccessPayload {
   url: string;
@@ -171,14 +172,22 @@ async function extractMediaItems(
   let processed = 0;
 
   for (const [path, file] of entries) {
-    if (path.startsWith('__MACOSX/')) {
+    const filename = path.split('/').pop() ?? path;
+    const lowerFilename = filename.toLowerCase();
+
+    if (path.startsWith('__MACOSX/') || lowerFilename.endsWith('.json')) {
       processed += 1;
       onProgress?.(processed, total);
       continue;
     }
 
     const blobEntry = await file.async('blob');
-    const filename = path.split('/').pop() ?? path;
+    if (blobEntry.type === 'application/json') {
+      processed += 1;
+      onProgress?.(processed, total);
+      continue;
+    }
+
     const mimeType = blobEntry.type || undefined;
     mediaItems.push({
       id: path,
@@ -253,6 +262,10 @@ export function ReceivePage(): JSX.Element {
     const keyParam = searchParams.get('key');
     const tokenParam = searchParams.get('t');
     return (keyParam ?? tokenParam ?? '').trim();
+  }, [searchParams]);
+  const isShareLinkMode = useMemo(() => {
+    const tokenParam = searchParams.get('t');
+    return Boolean(tokenParam && tokenParam.trim());
   }, [searchParams]);
 
   useEffect(() => {
@@ -464,7 +477,17 @@ export function ReceivePage(): JSX.Element {
   return (
     <div className="receive-page-root relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
       <div className="receive-page-background pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,114,182,0.18),_transparent_55%)]" aria-hidden="true" />
-      <div className="receive-page-content relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-16 lg:px-10">
+      <div className="receive-page-header-wrapper relative z-20">
+        <AppHeaderShell
+          title="景品受け取り"
+          tagline="共有リンクから景品を受け取る"
+          showDrawGachaButton={false}
+          showRegisterGachaButton={false}
+          showRealtimeButton={false}
+          showExportButton={false}
+        />
+      </div>
+      <main className="receive-page-content relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-16 lg:px-10">
         <div className="receive-page-hero-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
           <div className="receive-page-hero-header flex flex-wrap items-start justify-between gap-4">
             <div className="receive-page-hero-info space-y-2">
@@ -477,52 +500,56 @@ export function ReceivePage(): JSX.Element {
               </p>
               <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
             </div>
-            <div className="receive-page-hero-actions flex flex-col items-end gap-3">
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="receive-page-copy-page-url-button inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
-              >
-                {copyState === 'copied' ? (
-                  <CheckIcon className="receive-page-copy-success-icon h-5 w-5" aria-hidden="true" />
-                ) : (
-                  <ClipboardDocumentIcon className="receive-page-copy-default-icon h-5 w-5" aria-hidden="true" />
-                )}
-                <span className="receive-page-copy-button-text">{copyState === 'copied' ? 'コピーしました' : 'このページのURLをコピー'}</span>
-              </button>
-            </div>
+            {!isShareLinkMode ? (
+              <div className="receive-page-hero-actions flex flex-col items-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="receive-page-copy-page-url-button inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
+                >
+                  {copyState === 'copied' ? (
+                    <CheckIcon className="receive-page-copy-success-icon h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <ClipboardDocumentIcon className="receive-page-copy-default-icon h-5 w-5" aria-hidden="true" />
+                  )}
+                  <span className="receive-page-copy-button-text">{copyState === 'copied' ? 'コピーしました' : 'このページのURLをコピー'}</span>
+                </button>
+              </div>
+            ) : null}
           </div>
 
-          <form onSubmit={handleSubmit} className="receive-page-token-form mt-8 grid gap-6 lg:grid-cols-[2fr,auto] lg:items-end">
-            <div className="receive-page-token-field space-y-2">
-              <label htmlFor="receive-token" className="receive-page-token-label text-sm font-medium text-white">
-                受け取りID または 共有リンク
-              </label>
-              <input
-                id="receive-token"
-                type="text"
-                value={tokenInput}
-                onChange={(event) => {
-                  setTokenInput(event.target.value);
-                  if (resolveStatus === 'error') {
-                    setResolveError(null);
-                    setResolveStatus('idle');
-                  }
-                }}
-                placeholder="例: https://example.com/receive?t=XXXXXXXXXX"
-                className="receive-page-token-input w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-base text-white shadow-inner shadow-black/40 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-400"
-              />
-              <p className="receive-page-token-helper text-xs text-muted-foreground">
-                10 桁の英数字 ID または配信者から共有された URL を貼り付けてください。
-              </p>
-            </div>
-            <button
-              type="submit"
-              className="receive-page-token-submit-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
-            >
-              <span className="receive-page-token-submit-button-text">リンクを読み込む</span>
-            </button>
-          </form>
+          {!isShareLinkMode ? (
+            <form onSubmit={handleSubmit} className="receive-page-token-form mt-8 grid gap-6 lg:grid-cols-[2fr,auto] lg:items-end">
+              <div className="receive-page-token-field space-y-2">
+                <label htmlFor="receive-token" className="receive-page-token-label text-sm font-medium text-white">
+                  受け取りID または 共有リンク
+                </label>
+                <input
+                  id="receive-token"
+                  type="text"
+                  value={tokenInput}
+                  onChange={(event) => {
+                    setTokenInput(event.target.value);
+                    if (resolveStatus === 'error') {
+                      setResolveError(null);
+                      setResolveStatus('idle');
+                    }
+                  }}
+                  placeholder="例: https://example.com/receive?t=XXXXXXXXXX"
+                  className="receive-page-token-input w-full rounded-2xl border border-white/10 bg-black/60 px-4 py-3 text-base text-white shadow-inner shadow-black/40 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-400"
+                />
+                <p className="receive-page-token-helper text-xs text-muted-foreground">
+                  10 桁の英数字 ID または配信者から共有された URL を貼り付けてください。
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="receive-page-token-submit-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-6 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
+              >
+                <span className="receive-page-token-submit-button-text">リンクを読み込む</span>
+              </button>
+            </form>
+          ) : null}
         </div>
 
         <div className="receive-page-steps-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
@@ -544,14 +571,16 @@ export function ReceivePage(): JSX.Element {
               >
                 <span className="receive-page-start-download-button-text">受け取る</span>
               </button>
-              <button
-                type="button"
-                onClick={handleDownloadZip}
-                disabled={!zipBlob}
-                className="receive-page-save-zip-button inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-8 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
-              >
-                <span className="receive-page-save-zip-button-text">ZIPを保存</span>
-              </button>
+              {!isShareLinkMode ? (
+                <button
+                  type="button"
+                  onClick={handleDownloadZip}
+                  disabled={!zipBlob}
+                  className="receive-page-save-zip-button inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-8 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
+                >
+                  <span className="receive-page-save-zip-button-text">ZIPを保存</span>
+                </button>
+              ) : null}
               {downloadError ? (
                 <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{downloadError}</div>
               ) : null}
@@ -594,7 +623,7 @@ export function ReceivePage(): JSX.Element {
             <span className="receive-page-download-prompt-text">受け取りボタンを押すとファイルのダウンロードが始まります。</span>
           </div>
         ) : null}
-      </div>
+      </main>
     </div>
   );
 }

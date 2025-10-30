@@ -15,6 +15,10 @@ export interface AppHeaderShellProps {
   onOpenRealtime?: () => void;
   onExportAll?: () => void;
   onOpenPageSettings?: () => void;
+  showDrawGachaButton?: boolean;
+  showRegisterGachaButton?: boolean;
+  showRealtimeButton?: boolean;
+  showExportButton?: boolean;
 }
 
 export function AppHeaderShell({
@@ -24,7 +28,11 @@ export function AppHeaderShell({
   onRegisterGacha,
   onOpenRealtime,
   onExportAll,
-  onOpenPageSettings
+  onOpenPageSettings,
+  showDrawGachaButton = true,
+  showRegisterGachaButton = true,
+  showRealtimeButton = true,
+  showExportButton = true
 }: AppHeaderShellProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
@@ -159,6 +167,10 @@ export function AppHeaderShell({
             onRegisterGacha={onRegisterGacha}
             onOpenRealtime={onOpenRealtime}
             onExportAll={onExportAll}
+            showDrawGachaButton={showDrawGachaButton}
+            showRegisterGachaButton={showRegisterGachaButton}
+            showRealtimeButton={showRealtimeButton}
+            showExportButton={showExportButton}
           />
           <div className="hidden lg:block">
             <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
@@ -194,6 +206,10 @@ export function AppHeaderShell({
           onRegisterGacha={onRegisterGacha}
           onOpenRealtime={onOpenRealtime}
           onExportAll={onExportAll}
+          showDrawGachaButton={showDrawGachaButton}
+          showRegisterGachaButton={showRegisterGachaButton}
+          showRealtimeButton={showRealtimeButton}
+          showExportButton={showExportButton}
         />
         <div className="app-header-shell__mobile-login lg:hidden">
           <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
