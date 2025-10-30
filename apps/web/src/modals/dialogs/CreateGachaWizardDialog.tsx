@@ -98,8 +98,13 @@ function createInitialRarities(): DraftRarity[] {
 export interface CreateGachaWizardDialogPayload {}
 
 export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
-  const { appState: appStateStore, rarities: rarityStore, catalog: catalogStore, ptControls: ptControlsStore } =
-    useDomainStores();
+  const {
+    appState: appStateStore,
+    rarities: rarityStore,
+    catalog: catalogStore,
+    ptControls: ptControlsStore,
+    riagu: riaguStore
+  } = useDomainStores();
 
   const [step, setStep] = useState<WizardStep>('basic');
   const [gachaName, setGachaName] = useState('');
@@ -471,6 +476,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         throw new Error('No rarity is available for catalog items.');
       }
 
+      const riaguCardInputs: Array<{ itemId: string }> = [];
+
       items.forEach((item, index) => {
         const resolvedRarityId = item.rarityId && availableRarityIds.has(item.rarityId) ? item.rarityId : fallbackRarityId;
         const itemId = generateItemId();
@@ -485,6 +492,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           ...(item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
         } satisfies GachaCatalogItemV3;
+
+        if (item.isRiagu) {
+          riaguCardInputs.push({ itemId });
+        }
       });
 
       nextCatalogByGacha[gachaId] = {
@@ -499,6 +510,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       };
 
       catalogStore.setState(nextCatalogState, { persist: 'immediate' });
+
+      riaguCardInputs.forEach(({ itemId }) => {
+        riaguStore.upsertCard({ itemId, gachaId }, { persist: 'immediate' });
+      });
 
       ptControlsStore.setGachaSettings(gachaId, ptSettings, { persist: 'immediate' });
 
@@ -523,7 +538,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     ptControlsStore,
     ptSettings,
     rarities,
-    rarityStore
+    rarityStore,
+    riaguStore
   ]);
 
   const renderBasicStep = () => {
