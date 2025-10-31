@@ -1,5 +1,4 @@
 import { DashboardShell } from './components/dashboard/DashboardShell';
-import { MockStorageButton } from './components/dev/MockStorageButton';
 import { ItemsSection } from './components/items/ItemsSection';
 import { RaritySection } from './components/rarity/RaritySection';
 import { RiaguSection } from './components/riagu/RiaguSection';
@@ -37,5 +36,5 @@ export function GachaPage({ onDrawGacha }: GachaPageProps): JSX.Element {
     }
   ];
 
-  return <DashboardShell sections={sections} controlsSlot={<MockStorageButton />} onDrawGacha={onDrawGacha} />;
+  return <DashboardShell sections={sections} onDrawGacha={onDrawGacha} />;
 }
