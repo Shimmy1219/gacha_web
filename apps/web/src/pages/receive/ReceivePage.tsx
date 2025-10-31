@@ -723,7 +723,7 @@ export function ReceivePage(): JSX.Element {
         ) : null}
 
         {mediaItems.length > 0 ? (
-          <div className="receive-page-media-grid grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="receive-page-media-grid grid gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
             {mediaItems.map((item) => (
               <ReceiveItemCard key={item.id} item={item} onDownload={handleDownloadItem} />
             ))}
