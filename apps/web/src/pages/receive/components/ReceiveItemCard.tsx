@@ -63,7 +63,14 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
 
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
-      <div className="receive-item-card-preview-container relative aspect-video w-full bg-black/60">{previewNode}</div>
+      <div className="receive-item-card-preview-container relative aspect-video w-full bg-black/60">
+        {item.metadata?.rarity ? (
+          <span className="receive-item-card-rarity-badge absolute left-3 top-3 rounded-full bg-rose-500 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50">
+            {item.metadata.rarity}
+          </span>
+        ) : null}
+        {previewNode}
+      </div>
       <div className="receive-item-card-body flex flex-1 flex-col gap-3 p-4">
         <div className="receive-item-card-metadata space-y-2">
           <div className="receive-item-card-title-group space-y-1">
@@ -77,11 +84,6 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
             ) : null}
           </div>
           <div className="receive-item-card-attribute-group flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {item.metadata?.rarity ? (
-              <span className="receive-item-card-attribute receive-item-card-attribute-rarity rounded-full border border-white/10 bg-white/10 px-2 py-1 font-medium text-pink-100">
-                レアリティ: {item.metadata.rarity}
-              </span>
-            ) : null}
             {typeof item.metadata?.obtainedCount === 'number' ? (
               <span className="receive-item-card-attribute receive-item-card-attribute-count rounded-full border border-white/10 bg-white/10 px-2 py-1 font-medium text-blue-100/80">
                 獲得数: {item.metadata.obtainedCount}
