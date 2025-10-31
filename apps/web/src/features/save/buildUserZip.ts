@@ -18,6 +18,19 @@ interface SelectedAsset {
   itemId: string;
   itemName: string;
   rarityId: string;
+  count: number;
+  isRiagu: boolean;
+}
+
+interface ZipItemMetadata {
+  filePath: string;
+  gachaName: string;
+  itemName: string;
+  rarity: string;
+  isRiagu: boolean;
+  riaguType: string | null;
+  obtainedCount: number;
+  isNewForUser: boolean;
 }
 
 interface BuildParams {
@@ -134,13 +147,17 @@ function aggregateInventoryItems(
         }
 
         seenAssets.add(assetId);
+        const count = snapshot.counts?.[rarityId]?.[itemId];
+        const obtainedCount = typeof count === 'number' && count > 0 ? count : 1;
         selected.push({
           assetId,
           gachaId: snapshot.gachaId,
           gachaName,
           itemId,
           itemName: catalogItem.name ?? itemId,
-          rarityId: catalogItem.rarityId ?? rarityId
+          rarityId: catalogItem.rarityId ?? rarityId,
+          count: obtainedCount,
+          isRiagu: Boolean(catalogItem.riagu)
         });
       });
     });
@@ -196,18 +213,57 @@ function aggregateHistoryItems(
       }
 
       seenAssets.add(assetId);
+      const obtainedCount = typeof count === 'number' && count > 0 ? count : 1;
       selected.push({
         assetId,
         gachaId,
         gachaName,
         itemId,
         itemName: catalogItem.name ?? itemId,
-        rarityId: catalogItem.rarityId ?? 'unknown'
+        rarityId: catalogItem.rarityId ?? 'unknown',
+        count: obtainedCount,
+        isRiagu: Boolean(catalogItem.riagu)
       });
     });
   });
 
   return selected;
+}
+
+function resolveRarityLabel(rarityState: GachaRarityStateV3 | undefined, rarityId: string): string {
+  if (!rarityId) {
+    return 'unknown';
+  }
+  const entity = rarityState?.entities?.[rarityId];
+  if (!entity) {
+    return 'unknown';
+  }
+  return entity.label || 'unknown';
+}
+
+function resolveRiaguType(
+  riaguState: GachaLocalStorageSnapshot['riaguState'],
+  itemId: string
+): string | null {
+  const riaguCardId = riaguState?.indexByItemId?.[itemId];
+  if (!riaguCardId) {
+    return null;
+  }
+  const card = riaguState?.riaguCards?.[riaguCardId];
+  return card?.typeLabel ?? null;
+}
+
+function isItemNewForUser(
+  inventoriesState: GachaLocalStorageSnapshot['userInventories'],
+  userId: string,
+  gachaId: string,
+  itemId: string
+): boolean {
+  const entries = inventoriesState?.byItemId?.[itemId];
+  if (!entries || entries.length === 0) {
+    return true;
+  }
+  return !entries.some((entry) => entry.userId === userId && entry.gachaId === gachaId);
 }
 
 export async function buildUserZipFromSelection({
@@ -257,6 +313,7 @@ export async function buildUserZipFromSelection({
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
   const usedNames = new Set<string>();
+  const itemMetadataList: ZipItemMetadata[] = [];
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -281,6 +338,19 @@ export async function buildUserZipFromSelection({
     gachaDir.file(fileName, asset.blob, {
       binary: true,
       compression: 'STORE'
+    });
+
+    const filePath = `items/${sanitizePathComponent(item.gachaName)}/${fileName}`;
+    const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
+    itemMetadataList.push({
+      filePath,
+      gachaName: item.gachaName,
+      itemName: item.itemName,
+      rarity: rarityLabel,
+      isRiagu: item.isRiagu,
+      riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+      obtainedCount: item.count,
+      isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
     });
   });
 
@@ -329,13 +399,15 @@ export async function buildUserZipFromSelection({
     metaFolder.file(
       'items.json',
       JSON.stringify(
-        availableRecords.map(({ item }) => ({
-          assetId: item.assetId,
-          gachaId: item.gachaId,
-          gachaName: item.gachaName,
-          itemId: item.itemId,
-          itemName: item.itemName,
-          rarityId: item.rarityId
+        itemMetadataList.map((metadata) => ({
+          filePath: metadata.filePath,
+          gachaName: metadata.gachaName,
+          itemName: metadata.itemName,
+          rarity: metadata.rarity,
+          isRiagu: metadata.isRiagu,
+          riaguType: metadata.riaguType,
+          obtainedCount: metadata.obtainedCount,
+          isNewForUser: metadata.isNewForUser
         })),
         null,
         2
