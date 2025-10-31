@@ -74,19 +74,32 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
     }
   }, [item.kind, item.filename, objectUrl]);
 
+  const kindChipInner = (
+    <>
+      {resolveKindIcon(item.kind)}
+      <span className="receive-item-card-kind-text">{item.kind.toUpperCase()}</span>
+    </>
+  );
+
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl shadow-black/40 backdrop-blur">
-      <div className="receive-item-card-content flex w-full gap-4 md:flex-col">
-        <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-24 flex-shrink-0 items-center justify-center overflow-visible rounded-xl border border-white/10 bg-black/60 md:aspect-video md:h-auto md:w-full md:flex-shrink md:rounded-2xl md:border-transparent">
-          {item.metadata?.rarity ? (
-            <span
-              className="receive-item-card-rarity-badge absolute rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50"
-              style={{ top: '-5px', left: '-5px' }}
-            >
-              {item.metadata.rarity}
-            </span>
-          ) : null}
-          {previewNode}
+      <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
+        <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
+          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-white/10 bg-black/60 md:aspect-video md:h-auto md:rounded-2xl md:border-transparent">
+            {item.metadata?.rarity ? (
+              <span
+                className="receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50 md:left-[-5px] md:top-[-5px]"
+              >
+                {item.metadata.rarity}
+              </span>
+            ) : null}
+            {previewNode}
+          </div>
+          <div className="receive-item-card-kind-chip-mobile-container md:hidden">
+            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-pink-200">
+              {kindChipInner}
+            </div>
+          </div>
         </div>
         <div className="receive-item-card-body flex min-w-0 flex-1 flex-col gap-3 md:gap-4">
           <div className="receive-item-card-metadata space-y-2">
@@ -119,9 +132,10 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
             </div>
           </div>
           <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-pink-200">
-              {resolveKindIcon(item.kind)}
-              <span className="receive-item-card-kind-text">{item.kind.toUpperCase()}</span>
+            <div className="receive-item-card-kind-chip-desktop-container hidden md:flex">
+              <div className="receive-item-card-kind-chip-desktop flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-pink-200">
+                {kindChipInner}
+              </div>
             </div>
             <button
               type="button"
