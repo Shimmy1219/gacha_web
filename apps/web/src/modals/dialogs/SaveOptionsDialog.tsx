@@ -347,7 +347,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
 
     try {
-      const selection = requireDiscordGuildSelection(userId);
+      const loginUserId = discordSession?.user?.id;
+      if (!loginUserId) {
+        setErrorBanner('Discordのログイン情報を取得できませんでした。再度ログインしてから共有してください。');
+        return;
+      }
+      const selection = requireDiscordGuildSelection(loginUserId);
       push(DiscordMemberPickerDialog, {
         title: 'Discord共有先の選択',
         size: 'lg',
