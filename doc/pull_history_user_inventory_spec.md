@@ -84,7 +84,7 @@ Pull History の `order` 配列は最近の更新順で並び、プロジェク�
 - Pull History は常に完全な履歴を残し、User Inventory は純粋な投影結果に限定する。
 - 手動調整は Pull History に差分として書き込むことで、将来の再計算や同期処理でも再現性が保たれる。
 - `projectInventories` は Pull History 以外のデータを参照しないため、履歴の編集・削除を行った場合でも投影し直すだけで整合性を回復できる。
-- 仮データ生成やインポート処理も Pull History を起点に在庫を再構築し、両者の乖離を防ぐように実装されている。【F:apps/web/src/pages/gacha/components/dev/MockStorageButton.tsx†L1-L200】【F:apps/web/src/logic/importTxt.ts†L1-L120】
+- インポート処理も Pull History を起点に在庫を再構築し、両者の乖離を防ぐように実装されている。【F:apps/web/src/logic/importTxt.ts†L1-L120】
 
 ## ダイアグノスティクスと監視
 - `projectInventories` が返す `diagnostics` を活用することで、Pull History に欠損がある場合や孤児在庫が残っている場合の検出が可能である。

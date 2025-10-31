@@ -193,7 +193,7 @@ export function RiaguSection(): JSX.Element {
                 <p className="text-sm text-muted-foreground">ローカルストレージからリアグ情報を読み込み中です…</p>
               ) : null}
               {status === 'ready' && !hasAnyEntries ? (
-                <p className="text-sm text-muted-foreground">リアグ対象のアイテムがありません。仮データを投入してから再度ご確認ください。</p>
+                <p className="text-sm text-muted-foreground">リアグ対象のアイテムがありません。ガチャの設定と在庫を確認してください。</p>
               ) : null}
               {status === 'ready' && hasAnyEntries && activeEntries.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
