@@ -164,6 +164,20 @@ function normalizeZipPath(path: string): string {
   return path.replace(/^\.\//, '').replace(/^\//, '');
 }
 
+function deriveDownloadFilename(item: ReceiveMediaItem): string {
+  if (item.path) {
+    const normalizedPath = normalizeZipPath(item.path);
+    const withoutItemsPrefix = normalizedPath.startsWith('items/')
+      ? normalizedPath.slice('items/'.length)
+      : normalizedPath;
+    const sanitized = withoutItemsPrefix.replace(/\/+/g, '__').replace(/__+/g, '__');
+    if (sanitized.trim().length > 0) {
+      return sanitized;
+    }
+  }
+  return item.filename;
+}
+
 function findZipObjectByRelativePath(zip: JSZip, relativePath: string): JSZipObject | undefined {
   const normalized = normalizeZipPath(relativePath);
   const direct = zip.file(normalized);
@@ -312,6 +326,21 @@ function formatBytes(bytes: number): string {
   const exponent = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
   const value = bytes / 1024 ** exponent;
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 export function ReceivePage(): JSX.Element {
@@ -479,15 +508,8 @@ export function ReceivePage(): JSX.Element {
   }, [resolved?.url]);
 
   const handleDownloadItem = useCallback((item: ReceiveMediaItem) => {
-    const url = URL.createObjectURL(item.blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = item.filename;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    const downloadName = deriveDownloadFilename(item);
+    triggerBlobDownload(item.blob, downloadName);
   }, []);
 
   const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
@@ -498,37 +520,26 @@ export function ReceivePage(): JSX.Element {
     if (mediaItems.length === 0) {
       return;
     }
+    if (typeof document === 'undefined') {
+      setBulkDownloadError('まとめて保存機能はブラウザ環境でのみ利用できます。');
+      return;
+    }
     setIsBulkDownloading(true);
     setBulkDownloadError(null);
     try {
-      const zip = new JSZip();
       for (const item of mediaItems) {
-        const normalizedPath = item.path ? normalizeZipPath(item.path) : '';
-        const targetPath = normalizedPath || item.filename;
-        zip.file(targetPath, item.blob);
+        handleDownloadItem(item);
+        // Allow the browser event loop to process each download action.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
-      const archiveBlob = await zip.generateAsync({ type: 'blob' });
-      const baseName = (resolved?.name && resolved.name.trim().length > 0 ? resolved.name.trim() : 'receive_items').replace(
-        /[\\/:*?"<>|]+/g,
-        '_'
-      );
-      const downloadName = `${baseName}_まとめて保存.zip`;
-      const url = URL.createObjectURL(archiveBlob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = downloadName;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to prepare bulk download archive', error);
-      setBulkDownloadError('まとめて保存の準備に失敗しました。もう一度お試しください。');
+      console.error('Failed to perform bulk download', error);
+      setBulkDownloadError('まとめて保存中にエラーが発生しました。個別保存をお試しください。');
     } finally {
       setIsBulkDownloading(false);
     }
-  }, [mediaItems, resolved?.name]);
+  }, [handleDownloadItem, mediaItems]);
 
   const handleCopyLink = useCallback(async () => {
     if (typeof window === 'undefined') {

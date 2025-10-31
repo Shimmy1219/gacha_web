@@ -88,7 +88,7 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
           <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-white/10 bg-black/60 md:aspect-video md:h-auto md:rounded-2xl md:border-transparent">
             {item.metadata?.rarity ? (
               <span
-                className="receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50 md:left-[-5px] md:top-[-5px]"
+                className="receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50"
               >
                 {item.metadata.rarity}
               </span>
