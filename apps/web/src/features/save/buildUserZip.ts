@@ -40,22 +40,6 @@ interface BuildParams {
   userName: string;
 }
 
-const MIME_EXTENSION_MAP: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/jpg': '.jpg',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-  'image/svg+xml': '.svg',
-  'image/avif': '.avif',
-  'audio/mpeg': '.mp3',
-  'audio/mp3': '.mp3',
-  'audio/wav': '.wav',
-  'audio/ogg': '.ogg',
-  'video/mp4': '.mp4',
-  'video/webm': '.webm'
-};
-
 function ensureBrowserEnvironment(): void {
   if (typeof window === 'undefined') {
     throw new Error('ブラウザ環境でのみ保存処理を実行できます');
@@ -65,20 +49,6 @@ function ensureBrowserEnvironment(): void {
 function sanitizePathComponent(value: string): string {
   const normalized = value.replace(/[\\/:*?"<>|]/g, '_').trim();
   return normalized.length > 0 ? normalized : 'unknown';
-}
-
-function guessExtension(record: StoredAssetRecord, _fallbackItem: SelectedAsset): string {
-  if (record.name) {
-    const matched = record.name.match(/\.([a-zA-Z0-9]+)$/);
-    if (matched) {
-      return `.${matched[1].toLowerCase()}`;
-    }
-  }
-  const mime = record.type?.toLowerCase() ?? '';
-  if (mime && MIME_EXTENSION_MAP[mime]) {
-    return MIME_EXTENSION_MAP[mime];
-  }
-  return '.bin';
 }
 
 function formatTimestamp(date: Date): string {
@@ -312,8 +282,7 @@ export async function buildUserZipFromSelection({
 
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
-  const usedNames = new Set<string>();
-  const itemMetadataList: ZipItemMetadata[] = [];
+  const itemMetadataMap: Record<string, ZipItemMetadata> = {};
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -325,15 +294,7 @@ export async function buildUserZipFromSelection({
       return;
     }
 
-    const baseName = sanitizePathComponent(item.itemName || item.itemId);
-    const extension = guessExtension(asset, item);
-    let fileName = `${baseName}${extension}`;
-    let counter = 1;
-    while (usedNames.has(`${item.gachaId}/${fileName}`)) {
-      fileName = `${baseName}_${counter}${extension}`;
-      counter += 1;
-    }
-    usedNames.add(`${item.gachaId}/${fileName}`);
+    const fileName = item.assetId;
 
     gachaDir.file(fileName, asset.blob, {
       binary: true,
@@ -342,7 +303,7 @@ export async function buildUserZipFromSelection({
 
     const filePath = `items/${sanitizePathComponent(item.gachaName)}/${fileName}`;
     const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
-    itemMetadataList.push({
+    itemMetadataMap[item.assetId] = {
       filePath,
       gachaName: item.gachaName,
       itemName: item.itemName,
@@ -351,7 +312,7 @@ export async function buildUserZipFromSelection({
       riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
       obtainedCount: item.count,
       isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
-    });
+    };
   });
 
   const metaFolder = zip.folder('meta');
@@ -398,20 +359,7 @@ export async function buildUserZipFromSelection({
 
     metaFolder.file(
       'items.json',
-      JSON.stringify(
-        itemMetadataList.map((metadata) => ({
-          filePath: metadata.filePath,
-          gachaName: metadata.gachaName,
-          itemName: metadata.itemName,
-          rarity: metadata.rarity,
-          isRiagu: metadata.isRiagu,
-          riaguType: metadata.riaguType,
-          obtainedCount: metadata.obtainedCount,
-          isNewForUser: metadata.isNewForUser
-        })),
-        null,
-        2
-      ),
+      JSON.stringify(itemMetadataMap, null, 2),
       {
         date: new Date(generatedAt),
         compression: 'DEFLATE',
