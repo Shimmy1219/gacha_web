@@ -9,19 +9,6 @@ interface ReceiveItemCardProps {
   onDownload: (item: ReceiveMediaItem) => void;
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) {
-    return '---';
-  }
-  if (bytes === 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const exponent = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-  const value = bytes / 1024 ** exponent;
-  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
-}
-
 function resolveKindIcon(kind: ReceiveMediaItem['kind']): JSX.Element {
   switch (kind) {
     case 'image':
@@ -110,15 +97,6 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
                 NEW
               </span>
             ) : null}
-          </div>
-          <div className="receive-item-card-fileinfo-group text-xs text-muted-foreground">
-            <p className="receive-item-card-fileinfo">
-              ファイル名: {item.filename}
-            </p>
-            <p className="receive-item-card-filemetrics">
-              {formatBytes(item.size)}
-              {item.mimeType ? ` ・ ${item.mimeType}` : null}
-            </p>
           </div>
         </div>
         <div className="receive-item-card-footer mt-auto flex items-center justify-between">
