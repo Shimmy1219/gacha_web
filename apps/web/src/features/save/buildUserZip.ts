@@ -57,6 +57,50 @@ function sanitizePathComponent(value: string): string {
   return normalized.length > 0 ? normalized : 'unknown';
 }
 
+const MIME_TYPE_EXTENSION_MAP: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/svg+xml': '.svg',
+  'image/bmp': '.bmp',
+  'image/x-icon': '.ico',
+  'image/vnd.microsoft.icon': '.ico',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'image/avif': '.avif'
+};
+
+function inferAssetExtension(asset: StoredAssetRecord): string {
+  const fromName = (() => {
+    const name = asset.name?.trim();
+    if (!name) {
+      return null;
+    }
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0 || lastDot === name.length - 1) {
+      return null;
+    }
+    const rawExtension = name.slice(lastDot);
+    return /^\.[0-9A-Za-z]+$/.test(rawExtension) ? rawExtension.toLowerCase() : null;
+  })();
+
+  if (fromName) {
+    return fromName;
+  }
+
+  const type = asset.type?.toLowerCase();
+  if (type) {
+    const mapped = MIME_TYPE_EXTENSION_MAP[type];
+    if (mapped) {
+      return mapped;
+    }
+  }
+
+  return '.bin';
+}
+
 function formatTimestamp(date: Date): string {
   const pad = (input: number) => input.toString().padStart(2, '0');
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}`;
@@ -308,19 +352,21 @@ export async function buildUserZipFromSelection({
       return;
     }
 
-    const gachaDir = itemsFolder.folder(sanitizePathComponent(item.gachaName));
+    const sanitizedGachaName = sanitizePathComponent(item.gachaName);
+    const gachaDir = itemsFolder.folder(sanitizedGachaName);
     if (!gachaDir) {
       return;
     }
 
-    const fileName = item.assetId;
+    const fileExtension = inferAssetExtension(asset);
+    const fileName = `${item.assetId}${fileExtension}`;
 
     gachaDir.file(fileName, asset.blob, {
       binary: true,
       compression: 'STORE'
     });
 
-    const filePath = `items/${sanitizePathComponent(item.gachaName)}/${fileName}`;
+    const filePath = `items/${sanitizedGachaName}/${fileName}`;
     const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
     itemMetadataMap[item.assetId] = {
       filePath,
