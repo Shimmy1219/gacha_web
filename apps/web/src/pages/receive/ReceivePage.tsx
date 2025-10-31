@@ -7,11 +7,11 @@ import {
   ClipboardDocumentIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import JSZip from 'jszip';
+import JSZip, { JSZipObject } from 'jszip';
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
-import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
+import type { ReceiveItemMetadata, ReceiveMediaItem, ReceiveMediaKind } from './types';
 interface ResolveSuccessPayload {
   url: string;
   name?: string;
@@ -159,15 +159,88 @@ async function downloadZipWithProgress(
   return new Blob(chunks, { type: 'application/zip' });
 }
 
+function normalizeZipPath(path: string): string {
+  return path.replace(/^\.\//, '').replace(/^\//, '');
+}
+
+function findZipObjectByRelativePath(zip: JSZip, relativePath: string): JSZipObject | undefined {
+  const normalized = normalizeZipPath(relativePath);
+  const direct = zip.file(normalized);
+  if (direct) {
+    return direct;
+  }
+
+  const candidates = Object.values(zip.files).filter((entry) => !entry.dir);
+  return candidates.find((entry) => entry.name === normalized || entry.name.endsWith(`/${normalized}`));
+}
+
+async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItemMetadata>> {
+  const metaEntry = Object.values(zip.files).find(
+    (entry) => !entry.dir && entry.name.endsWith('meta/items.json')
+  );
+  if (!metaEntry) {
+    return {};
+  }
+
+  try {
+    const jsonText = await metaEntry.async('string');
+    const parsed = JSON.parse(jsonText) as Record<string, Omit<ReceiveItemMetadata, 'id'>>;
+    const mapped: Record<string, ReceiveItemMetadata> = {};
+    for (const [id, metadata] of Object.entries(parsed)) {
+      mapped[id] = { id, ...metadata };
+    }
+    return mapped;
+  } catch (error) {
+    console.error('Failed to parse items metadata', error);
+    return {};
+  }
+}
+
 async function extractMediaItems(
   blob: Blob,
   onProgress?: (processed: number, total: number) => void
 ): Promise<ReceiveMediaItem[]> {
   const zip = await JSZip.loadAsync(blob);
-  const entries = Object.entries(zip.files).filter(([, file]) => !file.dir);
-  const mediaItems: ReceiveMediaItem[] = [];
+  const metadataMap = await loadItemsMetadata(zip);
+  const metadataEntries = Object.values(metadataMap);
+
+  if (metadataEntries.length > 0) {
+    const mediaItems: ReceiveMediaItem[] = [];
+    const total = metadataEntries.length;
+    let processed = 0;
+
+    for (const metadata of metadataEntries) {
+      const entry = findZipObjectByRelativePath(zip, metadata.filePath);
+      if (!entry) {
+        processed += 1;
+        onProgress?.(processed, total);
+        continue;
+      }
+
+      const blobEntry = await entry.async('blob');
+      const filename = entry.name.split('/').pop() ?? entry.name;
+      const mimeType = blobEntry.type || undefined;
+      mediaItems.push({
+        id: metadata.id,
+        path: entry.name,
+        filename,
+        size: blobEntry.size,
+        blob: blobEntry,
+        mimeType,
+        kind: detectMediaKind(filename, mimeType),
+        metadata
+      });
+      processed += 1;
+      onProgress?.(processed, total);
+    }
+
+    return mediaItems;
+  }
+
+  const entries = Object.entries(zip.files).filter(([, file]) => !file.dir && /\/items\//.test(file.name));
   const total = entries.length;
   let processed = 0;
+  const mediaItems: ReceiveMediaItem[] = [];
 
   for (const [path, file] of entries) {
     const filename = path.split('/').pop() ?? path;
