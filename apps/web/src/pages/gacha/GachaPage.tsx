@@ -10,11 +10,16 @@ export interface GachaPageProps {
   onDrawGacha?: () => void;
 }
 
-export function GachaPage({ onDrawGacha: _onDrawGacha }: GachaPageProps): JSX.Element {
+export function GachaPage({ onDrawGacha }: GachaPageProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
 
   return (
-    <div className="gacha-page space-y-6 pb-12">
+    <div
+      className={clsx(
+        'gacha-page space-y-6',
+        isMobile ? 'pb-28' : 'pb-12'
+      )}
+    >
       <div
         className={clsx(
           'gacha-page__sections grid gap-6',
@@ -34,6 +39,17 @@ export function GachaPage({ onDrawGacha: _onDrawGacha }: GachaPageProps): JSX.El
           <RiaguSection />
         </div>
       </div>
+      {isMobile && onDrawGacha && (
+        <div className="gacha-page__mobile-actions px-4">
+          <button
+            type="button"
+            onClick={() => onDrawGacha?.()}
+            className="gacha-page__mobile-draw-button btn-primary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3"
+          >
+            ガチャを引く
+          </button>
+        </div>
+      )}
     </div>
   );
 }
