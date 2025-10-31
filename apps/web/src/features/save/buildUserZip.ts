@@ -72,30 +72,56 @@ const MIME_TYPE_EXTENSION_MAP: Record<string, string> = {
   'image/avif': '.avif'
 };
 
-function inferAssetExtension(asset: StoredAssetRecord): string {
-  const fromName = (() => {
-    const name = asset.name?.trim();
-    if (!name) {
-      return null;
-    }
-    const lastDot = name.lastIndexOf('.');
-    if (lastDot <= 0 || lastDot === name.length - 1) {
-      return null;
-    }
-    const rawExtension = name.slice(lastDot);
-    return /^\.[0-9A-Za-z]+$/.test(rawExtension) ? rawExtension.toLowerCase() : null;
-  })();
-
-  if (fromName) {
-    return fromName;
+function extractExtensionFromName(name: string | undefined): string | null {
+  if (!name) {
+    return null;
   }
 
-  const type = asset.type?.toLowerCase();
-  if (type) {
-    const mapped = MIME_TYPE_EXTENSION_MAP[type];
-    if (mapped) {
-      return mapped;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const lastDot = trimmed.lastIndexOf('.');
+  if (lastDot <= 0 || lastDot === trimmed.length - 1) {
+    return null;
+  }
+
+  const extension = trimmed.slice(lastDot);
+  return /^\.[0-9A-Za-z]+$/.test(extension) ? extension : null;
+}
+
+function resolveMimeTypeExtension(type: string | undefined): string | null {
+  if (!type) {
+    return null;
+  }
+
+  const normalized = type.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return MIME_TYPE_EXTENSION_MAP[normalized] ?? null;
+}
+
+function inferAssetExtension(asset: StoredAssetRecord): string {
+  const nameExtension = extractExtensionFromName(asset.name);
+  if (nameExtension) {
+    return nameExtension;
+  }
+
+  const blob = asset.blob;
+  if (blob && 'name' in blob) {
+    const blobName = (blob as File).name;
+    const blobNameExtension = extractExtensionFromName(blobName);
+    if (blobNameExtension) {
+      return blobNameExtension;
     }
+  }
+
+  const mimeExtension = resolveMimeTypeExtension(blob.type || asset.type);
+  if (mimeExtension) {
+    return mimeExtension;
   }
 
   return '.bin';
