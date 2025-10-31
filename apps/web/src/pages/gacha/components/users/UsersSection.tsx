@@ -135,7 +135,9 @@ export function UsersSection(): JSX.Element {
         <p className="text-sm text-muted-foreground">ローカルストレージからユーザーデータを読み込み中です…</p>
       ) : null}
       {status === 'ready' && users.length === 0 ? (
-        <p className="text-sm text-muted-foreground">表示できるユーザーがいません。仮データを投入してから再度開いてください。</p>
+        <p className="text-sm text-muted-foreground">
+          表示できるユーザーがいません。ガチャ履歴を取り込むかガチャを実行してデータを作成してください。
+        </p>
       ) : null}
 
       {users.length > 0 ? (
