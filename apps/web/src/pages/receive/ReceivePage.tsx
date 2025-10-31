@@ -291,6 +291,7 @@ export function ReceivePage(): JSX.Element {
     }
 
     resolveAbortRef.current?.abort();
+    downloadAbortRef.current?.abort();
     const controller = new AbortController();
     resolveAbortRef.current = controller;
 
