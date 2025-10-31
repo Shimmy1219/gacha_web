@@ -33,6 +33,12 @@ interface ZipItemMetadata {
   isNewForUser: boolean;
 }
 
+interface HistorySelectionMetadata {
+  pullId: string;
+  pullCount: number;
+  executedAt: string | null;
+}
+
 interface BuildParams {
   snapshot: GachaLocalStorageSnapshot;
   selection: SaveTargetSelection;
@@ -140,22 +146,32 @@ function aggregateHistoryItems(
   snapshot: GachaLocalStorageSnapshot,
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
   warnings: Set<string>
-): SelectedAsset[] {
+): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[] } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
-    return [];
+    return { assets: [], pulls: [] };
   }
 
   const catalogState = snapshot.catalogState;
   const appState = snapshot.appState;
   const seenAssets = new Set<string>();
   const selected: SelectedAsset[] = [];
+  const pullMetadata: HistorySelectionMetadata[] = [];
   const selectedIds = new Set(selection.pullIds);
 
   Object.entries(history.pulls).forEach(([entryId, entry]) => {
     if (!entry || !selectedIds.has(entryId)) {
       return;
     }
+
+    const normalizedPullCount = Number.isFinite(entry.pullCount)
+      ? Math.max(0, Math.floor(entry.pullCount))
+      : 0;
+    pullMetadata.push({
+      pullId: entryId,
+      pullCount: normalizedPullCount,
+      executedAt: typeof entry.executedAt === 'string' ? entry.executedAt : null
+    });
 
     const gachaId = entry.gachaId;
     const catalogGacha = gachaId ? catalogState?.byGacha?.[gachaId] : undefined;
@@ -197,7 +213,7 @@ function aggregateHistoryItems(
     });
   });
 
-  return selected;
+  return { assets: selected, pulls: pullMetadata };
 }
 
 function resolveRarityLabel(rarityState: GachaRarityStateV3 | undefined, rarityId: string): string {
@@ -251,8 +267,11 @@ export async function buildUserZipFromSelection({
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
 
   let collected: SelectedAsset[] = [];
+  let historySelectionDetails: HistorySelectionMetadata[] = [];
   if (selection.mode === 'history') {
-    collected = aggregateHistoryItems(snapshot, selection, warnings);
+    const historyAggregation = aggregateHistoryItems(snapshot, selection, warnings);
+    collected = historyAggregation.assets;
+    historySelectionDetails = historyAggregation.pulls;
   } else {
     collected = aggregateInventoryItems(inventoriesForUser, catalogState, snapshot.appState, selection, warnings);
   }
@@ -318,21 +337,6 @@ export async function buildUserZipFromSelection({
   const metaFolder = zip.folder('meta');
   const generatedAt = new Date().toISOString();
   if (metaFolder) {
-    if (catalogState) {
-      metaFolder.file('catalog-state-v3.json', JSON.stringify(catalogState, null, 2), {
-        date: new Date(generatedAt),
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
-      });
-    }
-    if (rarityState) {
-      metaFolder.file('rarity-state-v3.json', JSON.stringify(rarityState, null, 2), {
-        date: new Date(generatedAt),
-        compression: 'DEFLATE',
-        compressionOptions: { level: 6 }
-      });
-    }
-
     metaFolder.file(
       'selection.json',
       JSON.stringify(
@@ -345,7 +349,12 @@ export async function buildUserZipFromSelection({
           },
           selection,
           itemCount: availableRecords.length,
-          warnings: Array.from(warnings)
+          warnings: Array.from(warnings),
+          historyPulls: historySelectionDetails.map((detail) => ({
+            pullId: detail.pullId,
+            pullCount: detail.pullCount,
+            executedAt: detail.executedAt
+          }))
         },
         null,
         2
