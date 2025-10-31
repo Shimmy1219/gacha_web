@@ -1,7 +1,6 @@
 import JSZip from 'jszip';
 
 import type {
-  GachaCatalogItemV3,
   GachaCatalogStateV3,
   GachaLocalStorageSnapshot,
   GachaRarityStateV3,
@@ -13,7 +12,7 @@ import type { SaveTargetSelection, ZipBuildResult } from './types';
 
 interface SelectedAsset {
   assetId: string;
-  gachaId: string;
+  gachaId: string | undefined;
   gachaName: string;
   itemId: string;
   itemName: string;
@@ -45,6 +44,13 @@ interface BuildParams {
   userId: string;
   userName: string;
 }
+
+type CatalogGacha = GachaCatalogStateV3['byGacha'][string] | undefined;
+
+type WarningBuilder = (
+  type: 'missingItem' | 'missingAsset',
+  context: { gachaId: string | undefined; itemId: string; itemName?: string }
+) => string;
 
 function ensureBrowserEnvironment(): void {
   if (typeof window === 'undefined') {
@@ -138,6 +144,77 @@ function sanitizeFileName(displayName: string, timestamp: string): string {
   return `${fallback}${timestamp}.zip`;
 }
 
+function resolveCatalogContext(
+  catalogState: GachaCatalogStateV3 | undefined,
+  appState: GachaLocalStorageSnapshot['appState'] | undefined,
+  gachaId: string | undefined
+): { gachaId: string | undefined; gachaName: string; catalogGacha: CatalogGacha } {
+  const catalogGacha = gachaId ? catalogState?.byGacha?.[gachaId] : undefined;
+  const gachaName = gachaId
+    ? appState?.meta?.[gachaId]?.displayName ?? gachaId
+    : 'unknown-gacha';
+
+  return { gachaId, gachaName, catalogGacha };
+}
+
+function createSelectedAsset(
+  context: { gachaId: string | undefined; gachaName: string; catalogGacha: CatalogGacha },
+  itemId: string,
+  fallbackRarityId: string,
+  rawCount: unknown,
+  warnings: Set<string>,
+  seenAssets: Set<string>,
+  buildWarning: WarningBuilder
+): SelectedAsset | null {
+  if (!itemId) {
+    return null;
+  }
+
+  const catalogItem = context.catalogGacha?.items?.[itemId];
+  if (!catalogItem) {
+    warnings.add(
+      buildWarning('missingItem', {
+        gachaId: context.gachaId,
+        itemId
+      })
+    );
+    return null;
+  }
+
+  const assetId = catalogItem.imageAssetId;
+  if (!assetId) {
+    warnings.add(
+      buildWarning('missingAsset', {
+        gachaId: context.gachaId,
+        itemId,
+        itemName: catalogItem.name ?? itemId
+      })
+    );
+    return null;
+  }
+
+  if (seenAssets.has(assetId)) {
+    return null;
+  }
+
+  seenAssets.add(assetId);
+  const normalizedCount =
+    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0
+      ? rawCount
+      : 1;
+
+  return {
+    assetId,
+    gachaId: context.gachaId,
+    gachaName: context.gachaName,
+    itemId,
+    itemName: catalogItem.name ?? itemId,
+    rarityId: catalogItem.rarityId ?? fallbackRarityId,
+    count: normalizedCount,
+    isRiagu: Boolean(catalogItem.riagu)
+  };
+}
+
 function aggregateInventoryItems(
   inventories: Record<string, UserInventorySnapshotV3 | undefined> | undefined,
   catalogState: GachaCatalogStateV3 | undefined,
@@ -161,10 +238,7 @@ function aggregateInventoryItems(
       return;
     }
 
-    const catalogGacha = snapshot.gachaId ? catalogState?.byGacha?.[snapshot.gachaId] : undefined;
-    const gachaName = snapshot.gachaId
-      ? appState?.meta?.[snapshot.gachaId]?.displayName ?? snapshot.gachaId
-      : 'unknown-gacha';
+    const context = resolveCatalogContext(catalogState, appState, snapshot.gachaId);
 
     Object.entries(snapshot.items ?? {}).forEach(([rarityId, itemIds]) => {
       if (!Array.isArray(itemIds) || itemIds.length === 0) {
@@ -172,39 +246,24 @@ function aggregateInventoryItems(
       }
 
       itemIds.forEach((itemId) => {
-        if (!itemId) {
-          return;
-        }
-
-        const catalogItem: GachaCatalogItemV3 | undefined = catalogGacha?.items?.[itemId];
-        if (!catalogItem) {
-          warnings.add(`カタログ情報が見つかりません: ${snapshot.gachaId ?? 'unknown'} / ${itemId}`);
-          return;
-        }
-
-        const assetId = catalogItem.imageAssetId;
-        if (!assetId) {
-          warnings.add(`画像アセットが未設定: ${snapshot.gachaId ?? 'unknown'} / ${catalogItem.name ?? itemId}`);
-          return;
-        }
-
-        if (seenAssets.has(assetId)) {
-          return;
-        }
-
-        seenAssets.add(assetId);
-        const count = snapshot.counts?.[rarityId]?.[itemId];
-        const obtainedCount = typeof count === 'number' && count > 0 ? count : 1;
-        selected.push({
-          assetId,
-          gachaId: snapshot.gachaId,
-          gachaName,
+        const asset = createSelectedAsset(
+          context,
           itemId,
-          itemName: catalogItem.name ?? itemId,
-          rarityId: catalogItem.rarityId ?? rarityId,
-          count: obtainedCount,
-          isRiagu: Boolean(catalogItem.riagu)
-        });
+          rarityId,
+          snapshot.counts?.[rarityId]?.[itemId],
+          warnings,
+          seenAssets,
+          (type, { gachaId, itemId: warningItemId, itemName }) => {
+            const id = gachaId ?? 'unknown';
+            return type === 'missingItem'
+              ? `カタログ情報が見つかりません: ${id} / ${warningItemId}`
+              : `画像アセットが未設定: ${id} / ${itemName ?? warningItemId}`;
+          }
+        );
+
+        if (asset) {
+          selected.push(asset);
+        }
       });
     });
   });
@@ -244,42 +303,31 @@ function aggregateHistoryItems(
     });
 
     const gachaId = entry.gachaId;
-    const catalogGacha = gachaId ? catalogState?.byGacha?.[gachaId] : undefined;
-    const gachaName = gachaId ? appState?.meta?.[gachaId]?.displayName ?? gachaId : 'unknown-gacha';
+    const context = resolveCatalogContext(catalogState, appState, gachaId);
 
     Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
       if (!itemId || !Number.isFinite(count) || count <= 0) {
         return;
       }
 
-      const catalogItem = catalogGacha?.items?.[itemId];
-      if (!catalogItem) {
-        warnings.add(`履歴に対応する景品が見つかりません: ${gachaId ?? 'unknown'} / ${itemId}`);
-        return;
-      }
-
-      const assetId = catalogItem.imageAssetId;
-      if (!assetId) {
-        warnings.add(`履歴の景品に画像が設定されていません: ${gachaId ?? 'unknown'} / ${catalogItem.name ?? itemId}`);
-        return;
-      }
-
-      if (seenAssets.has(assetId)) {
-        return;
-      }
-
-      seenAssets.add(assetId);
-      const obtainedCount = typeof count === 'number' && count > 0 ? count : 1;
-      selected.push({
-        assetId,
-        gachaId,
-        gachaName,
+      const asset = createSelectedAsset(
+        context,
         itemId,
-        itemName: catalogItem.name ?? itemId,
-        rarityId: catalogItem.rarityId ?? 'unknown',
-        count: obtainedCount,
-        isRiagu: Boolean(catalogItem.riagu)
-      });
+        'unknown',
+        count,
+        warnings,
+        seenAssets,
+        (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
+          const id = warningGachaId ?? 'unknown';
+          return type === 'missingItem'
+            ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
+            : `履歴の景品に画像が設定されていません: ${id} / ${itemName ?? warningItemId}`;
+        }
+      );
+
+      if (asset) {
+        selected.push(asset);
+      }
     });
   });
 
@@ -312,9 +360,12 @@ function resolveRiaguType(
 function isItemNewForUser(
   inventoriesState: GachaLocalStorageSnapshot['userInventories'],
   userId: string,
-  gachaId: string,
+  gachaId: string | undefined,
   itemId: string
 ): boolean {
+  if (!gachaId) {
+    return true;
+  }
   const entries = inventoriesState?.byItemId?.[itemId];
   if (!entries || entries.length === 0) {
     return true;
