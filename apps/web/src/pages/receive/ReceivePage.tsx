@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ArrowDownTrayIcon,
   ArrowPathIcon,
   CheckIcon,
   ClipboardDocumentIcon,
@@ -325,6 +326,8 @@ export function ReceivePage(): JSX.Element {
   const [mediaItems, setMediaItems] = useState<ReceiveMediaItem[]>([]);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [isBulkDownloading, setIsBulkDownloading] = useState<boolean>(false);
+  const [bulkDownloadError, setBulkDownloadError] = useState<string | null>(null);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
@@ -445,6 +448,8 @@ export function ReceivePage(): JSX.Element {
     setUnpackProgress(0);
     setDownloadError(null);
     setMediaItems([]);
+    setBulkDownloadError(null);
+    setIsBulkDownloading(false);
 
     try {
       const blob = await downloadZipWithProgress(resolved.url, {
@@ -488,6 +493,42 @@ export function ReceivePage(): JSX.Element {
   const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
   const expiration = useMemo(() => normalizeExpiration(resolved?.exp), [resolved?.exp]);
   const shouldShowSteps = isShareLinkMode || hasAttemptedLoad;
+
+  const handleDownloadAll = useCallback(async () => {
+    if (mediaItems.length === 0) {
+      return;
+    }
+    setIsBulkDownloading(true);
+    setBulkDownloadError(null);
+    try {
+      const zip = new JSZip();
+      for (const item of mediaItems) {
+        const normalizedPath = item.path ? normalizeZipPath(item.path) : '';
+        const targetPath = normalizedPath || item.filename;
+        zip.file(targetPath, item.blob);
+      }
+      const archiveBlob = await zip.generateAsync({ type: 'blob' });
+      const baseName = (resolved?.name && resolved.name.trim().length > 0 ? resolved.name.trim() : 'receive_items').replace(
+        /[\\/:*?"<>|]+/g,
+        '_'
+      );
+      const downloadName = `${baseName}_まとめて保存.zip`;
+      const url = URL.createObjectURL(archiveBlob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = downloadName;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to prepare bulk download archive', error);
+      setBulkDownloadError('まとめて保存の準備に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsBulkDownloading(false);
+    }
+  }, [mediaItems, resolved?.name]);
 
   const handleCopyLink = useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -655,7 +696,27 @@ export function ReceivePage(): JSX.Element {
                   {mediaItems.length} 件 ・ 合計 {formatBytes(totalSize)}
                   {resolved?.purpose ? ` ・ 用途: ${resolved.purpose}` : ''}
                 </span>
-                <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
+                <div className="receive-page-completion-summary-actions flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadAll}
+                    disabled={isBulkDownloading}
+                    className="receive-page-bulk-download-button inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-purple-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-300"
+                  >
+                    {isBulkDownloading ? (
+                      <ArrowPathIcon className="receive-page-bulk-download-spinner h-5 w-5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <ArrowDownTrayIcon className="receive-page-bulk-download-icon h-5 w-5" aria-hidden="true" />
+                    )}
+                    <span className="receive-page-bulk-download-button-text">まとめて保存</span>
+                  </button>
+                  <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
+                </div>
+              </div>
+            ) : null}
+            {bulkDownloadError ? (
+              <div className="receive-page-bulk-download-error mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                {bulkDownloadError}
               </div>
             ) : null}
           </div>

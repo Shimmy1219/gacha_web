@@ -62,10 +62,13 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
   }, [item.kind, item.filename, objectUrl]);
 
   return (
-    <div className="receive-item-card-root group flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
-      <div className="receive-item-card-preview-container relative aspect-video w-full bg-black/60">
+    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
+      <div className="receive-item-card-preview-container relative aspect-video w-full overflow-visible bg-black/60">
         {item.metadata?.rarity ? (
-          <span className="receive-item-card-rarity-badge absolute left-3 top-3 rounded-full bg-rose-500 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50">
+          <span
+            className="receive-item-card-rarity-badge absolute rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50"
+            style={{ top: '-5px', left: '-5px' }}
+          >
             {item.metadata.rarity}
           </span>
         ) : null}
@@ -91,7 +94,7 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
             ) : null}
             {item.metadata?.isRiagu ? (
               <span className="receive-item-card-attribute receive-item-card-attribute-riagu rounded-full border border-amber-400/60 bg-amber-500/20 px-2 py-1 font-medium text-amber-100">
-                リアグ対象
+                リアルグッズ
               </span>
             ) : null}
             {item.metadata?.isNewForUser ? (
