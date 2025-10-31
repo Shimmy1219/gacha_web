@@ -19,6 +19,7 @@ export interface AppHeaderShellProps {
   showRegisterGachaButton?: boolean;
   showRealtimeButton?: boolean;
   showExportButton?: boolean;
+  appearance?: 'default' | 'dark';
 }
 
 export function AppHeaderShell({
@@ -32,7 +33,8 @@ export function AppHeaderShell({
   showDrawGachaButton = true,
   showRegisterGachaButton = true,
   showRealtimeButton = true,
-  showExportButton = true
+  showExportButton = true,
+  appearance = 'default'
 }: AppHeaderShellProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
@@ -148,17 +150,22 @@ export function AppHeaderShell({
     }
   }, [open]);
 
+  const isDarkAppearance = appearance === 'dark';
+
   return (
     <header
       ref={headerRef}
       className={clsx(
-        'app-header-shell sticky top-0 z-40 border-b border-border/60 bg-surface/90 backdrop-blur-md transition-transform duration-300 ease-out will-change-transform',
-        isHidden && '-translate-y-full'
+        'app-header-shell sticky top-0 z-40 border-b backdrop-blur-md transition-transform duration-300 ease-out will-change-transform',
+        isHidden && '-translate-y-full',
+        isDarkAppearance
+          ? 'border-white/10 bg-slate-950/85 text-white shadow-[0_8px_32px_rgba(15,23,42,0.35)]'
+          : 'border-border/60 bg-surface/90 text-surface-foreground shadow-sm'
       )}
     >
       <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
         <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
-          <HeaderBrand title={title} tagline={tagline} />
+          <HeaderBrand title={title} tagline={tagline} appearance={appearance} />
         </div>
         <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
           <ToolbarActions
@@ -187,15 +194,25 @@ export function AppHeaderShell({
         onClose={handleClose}
         id={drawerId}
         labelledBy={drawerTitleId}
+        appearance={appearance}
       >
         <div className="app-header-shell__mobile-header flex items-center justify-between">
-          <h2 id={drawerTitleId} className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+          <h2
+            id={drawerTitleId}
+            className={clsx(
+              'text-xs font-semibold uppercase tracking-[0.3em]',
+              isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
+            )}
+          >
             ツールバー
           </h2>
           <button
             type="button"
             onClick={handleClose}
-            className="text-sm text-muted-foreground transition hover:text-surface-foreground"
+            className={clsx(
+              'text-sm transition',
+              isDarkAppearance ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-surface-foreground'
+            )}
           >
             閉じる
           </button>

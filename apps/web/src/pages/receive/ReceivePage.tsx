@@ -12,8 +12,6 @@ import JSZip from 'jszip';
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
-import { AppHeaderShell } from '../gacha/components/app-shell/AppHeaderShell';
-
 interface ResolveSuccessPayload {
   url: string;
   name?: string;
@@ -252,11 +250,14 @@ export function ReceivePage(): JSX.Element {
   const [downloadProgress, setDownloadProgress] = useState<{ loaded: number; total?: number }>({ loaded: 0 });
   const [unpackProgress, setUnpackProgress] = useState<number>(0);
   const [mediaItems, setMediaItems] = useState<ReceiveMediaItem[]>([]);
-  const [zipBlob, setZipBlob] = useState<Blob | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
+    const tokenParam = searchParams.get('t');
+    return Boolean(tokenParam && tokenParam.trim());
+  });
 
   const activeToken = useMemo(() => {
     const keyParam = searchParams.get('key');
@@ -269,6 +270,16 @@ export function ReceivePage(): JSX.Element {
   }, [searchParams]);
 
   useEffect(() => {
+    if (isShareLinkMode) {
+      setHasAttemptedLoad(true);
+      return;
+    }
+    if (!activeToken) {
+      setHasAttemptedLoad(false);
+    }
+  }, [activeToken, isShareLinkMode]);
+
+  useEffect(() => {
     setTokenInput(activeToken);
     if (!activeToken) {
       setResolved(null);
@@ -276,7 +287,6 @@ export function ReceivePage(): JSX.Element {
       setResolveError(null);
       setDownloadPhase('waiting');
       setMediaItems([]);
-      setZipBlob(null);
       return;
     }
 
@@ -288,7 +298,6 @@ export function ReceivePage(): JSX.Element {
     setResolveError(null);
     setDownloadPhase('waiting');
     setMediaItems([]);
-    setZipBlob(null);
     setDownloadError(null);
 
     resolveReceiveToken(activeToken, controller.signal)
@@ -341,6 +350,7 @@ export function ReceivePage(): JSX.Element {
         setResolveError('受け取りIDを入力してください。');
         return;
       }
+      setHasAttemptedLoad(true);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set('t', parsed);
       nextParams.delete('key');
@@ -370,7 +380,6 @@ export function ReceivePage(): JSX.Element {
           setDownloadProgress({ loaded, total });
         }
       });
-      setZipBlob(blob);
       setDownloadPhase('unpacking');
       const items = await extractMediaItems(blob, (processed, total) => {
         if (total === 0) {
@@ -403,24 +412,9 @@ export function ReceivePage(): JSX.Element {
     URL.revokeObjectURL(url);
   }, []);
 
-  const handleDownloadZip = useCallback(() => {
-    if (!zipBlob) {
-      return;
-    }
-    const fileName = resolved?.name ?? 'receive.zip';
-    const url = URL.createObjectURL(zipBlob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-  }, [resolved?.name, zipBlob]);
-
   const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
   const expiration = useMemo(() => normalizeExpiration(resolved?.exp), [resolved?.exp]);
+  const shouldShowSteps = isShareLinkMode || hasAttemptedLoad;
 
   const handleCopyLink = useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -477,16 +471,6 @@ export function ReceivePage(): JSX.Element {
   return (
     <div className="receive-page-root relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
       <div className="receive-page-background pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(244,114,182,0.18),_transparent_55%)]" aria-hidden="true" />
-      <div className="receive-page-header-wrapper relative z-20">
-        <AppHeaderShell
-          title="景品受け取り"
-          tagline="共有リンクから景品を受け取る"
-          showDrawGachaButton={false}
-          showRegisterGachaButton={false}
-          showRealtimeButton={false}
-          showExportButton={false}
-        />
-      </div>
       <main className="receive-page-content relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-16 lg:px-10">
         <div className="receive-page-hero-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
           <div className="receive-page-hero-header flex flex-wrap items-start justify-between gap-4">
@@ -552,65 +536,57 @@ export function ReceivePage(): JSX.Element {
           ) : null}
         </div>
 
-        <div className="receive-page-steps-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
-          <div className="receive-page-steps-content flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="receive-page-steps-description">
-              <h2 className="receive-page-steps-title text-2xl font-semibold">手順</h2>
-              <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                <li className="receive-page-step-item">「受け取る」ボタンを押すとブラウザ上でZIPのダウンロードが始まります（端末には自動保存されません）。</li>
-                <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
-                <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。元のZIPを保存することも可能です。</li>
-              </ol>
-            </div>
-            <div className="receive-page-steps-actions flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={handleStartDownload}
-                disabled={resolveStatus !== 'success' || downloadPhase === 'downloading' || downloadPhase === 'unpacking'}
-                className="receive-page-start-download-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-8 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
-              >
-                <span className="receive-page-start-download-button-text">受け取る</span>
-              </button>
-              {!isShareLinkMode ? (
+        {shouldShowSteps ? (
+          <div className="receive-page-steps-card rounded-3xl border border-white/10 bg-black/40 p-8 shadow-2xl shadow-black/50 backdrop-blur">
+            <div className="receive-page-steps-content flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="receive-page-steps-description">
+                <h2 className="receive-page-steps-title text-2xl font-semibold">手順</h2>
+                <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                  <li className="receive-page-step-item">「受け取る」ボタンを押すとブラウザ上でZIPのダウンロードが始まります（端末には自動保存されません）。</li>
+                  <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
+                  <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。</li>
+                </ol>
+              </div>
+              <div className="receive-page-steps-actions flex flex-col gap-3">
                 <button
                   type="button"
-                  onClick={handleDownloadZip}
-                  disabled={!zipBlob}
-                  className="receive-page-save-zip-button inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-8 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pink-300"
+                  onClick={handleStartDownload}
+                  disabled={resolveStatus !== 'success' || downloadPhase === 'downloading' || downloadPhase === 'unpacking'}
+                  className="receive-page-start-download-button inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-8 py-3 text-lg font-semibold text-white shadow-xl shadow-rose-900/40 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
                 >
-                  <span className="receive-page-save-zip-button-text">ZIPを保存</span>
+                  <span className="receive-page-start-download-button-text">受け取る</span>
                 </button>
-              ) : null}
-              {downloadError ? (
-                <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{downloadError}</div>
-              ) : null}
+                {downloadError ? (
+                  <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{downloadError}</div>
+                ) : null}
+              </div>
             </div>
+
+            {(downloadPhase === 'downloading' || downloadPhase === 'unpacking') && (
+              <div className="receive-page-progress-section mt-6 space-y-4">
+                <ProgressBar
+                  label="ダウンロード"
+                  value={
+                    downloadProgress.total
+                      ? Math.min(100, Math.round((downloadProgress.loaded / downloadProgress.total) * 100))
+                      : undefined
+                  }
+                />
+                <ProgressBar label="解凍" value={downloadPhase === 'unpacking' ? unpackProgress : 0} />
+              </div>
+            )}
+
+            {downloadPhase === 'complete' && mediaItems.length > 0 ? (
+              <div className="receive-page-completion-summary mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-muted-foreground">
+                <span className="receive-page-completion-summary-text">
+                  {mediaItems.length} 件 ・ 合計 {formatBytes(totalSize)}
+                  {resolved?.purpose ? ` ・ 用途: ${resolved.purpose}` : ''}
+                </span>
+                <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
+              </div>
+            ) : null}
           </div>
-
-          {(downloadPhase === 'downloading' || downloadPhase === 'unpacking') && (
-            <div className="receive-page-progress-section mt-6 space-y-4">
-              <ProgressBar
-                label="ダウンロード"
-                value={
-                  downloadProgress.total
-                    ? Math.min(100, Math.round((downloadProgress.loaded / downloadProgress.total) * 100))
-                    : undefined
-                }
-              />
-              <ProgressBar label="解凍" value={downloadPhase === 'unpacking' ? unpackProgress : 0} />
-            </div>
-          )}
-
-          {downloadPhase === 'complete' && mediaItems.length > 0 ? (
-            <div className="receive-page-completion-summary mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-muted-foreground">
-              <span className="receive-page-completion-summary-text">
-                {mediaItems.length} 件 ・ 合計 {formatBytes(totalSize)}
-                {resolved?.purpose ? ` ・ 用途: ${resolved.purpose}` : ''}
-              </span>
-              <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-pink-200">受け取り完了</span>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
 
         {mediaItems.length > 0 ? (
           <div className="receive-page-media-grid grid gap-6 md:grid-cols-2 xl:grid-cols-3">
