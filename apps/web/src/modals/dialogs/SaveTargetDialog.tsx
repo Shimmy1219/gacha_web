@@ -311,8 +311,14 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       selectedHistoryIds.length === 0 &&
       !historySelectionInitialized
     ) {
+      const defaultHistoryIds = historyEntries
+        .filter((entry) => (entry.status ?? 'new') === 'new')
+        .map((entry) => entry.id);
+
       setHistorySelectionInitialized(true);
-      setSelectedHistoryIds(historyEntries.map((entry) => entry.id));
+      if (defaultHistoryIds.length > 0) {
+        setSelectedHistoryIds(defaultHistoryIds);
+      }
     }
   }, [mode, historyEntries, historySelectionInitialized, selectedHistoryIds.length]);
 
