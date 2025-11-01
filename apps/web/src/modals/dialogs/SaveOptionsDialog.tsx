@@ -15,7 +15,7 @@ import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
-import { useAppPersistence } from '../../features/storage/AppPersistenceProvider';
+import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export interface SaveOptionsUploadResult {
@@ -74,6 +74,7 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
+  const { pullHistory: pullHistoryStore } = useDomainStores();
   const { data: discordSession } = useDiscordSession();
 
   const receiverDisplayName = useMemo(() => {
@@ -226,6 +227,10 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         userName: receiverDisplayName
       });
 
+      if (result.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(result.pullIds, 'ziped');
+      }
+
       const blobUrl = window.URL.createObjectURL(result.blob);
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
@@ -275,6 +280,10 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         userName: receiverDisplayName
       });
 
+      if (zip.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(zip.pullIds, 'ziped');
+      }
+
       const uploadResponse = await uploadZip({
         file: zip.blob,
         fileName: zip.fileName,
@@ -309,6 +318,9 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
         label: uploadResponse.shareUrl,
         expiresAt: expiresAtDisplay
       });
+      if (zip.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(zip.pullIds, 'uploaded');
+      }
       setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

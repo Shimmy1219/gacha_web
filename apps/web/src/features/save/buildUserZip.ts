@@ -5,9 +5,11 @@ import type {
   GachaCatalogStateV3,
   GachaLocalStorageSnapshot,
   GachaRarityStateV3,
+  PullHistoryStateV1,
   UserInventorySnapshotV3
 } from '@domain/app-persistence';
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
+import { generateDeterministicUserId } from '@domain/idGenerators';
 
 import type { SaveTargetSelection, ZipBuildResult } from './types';
 
@@ -77,6 +79,13 @@ function sanitizeFileName(displayName: string, timestamp: string): string {
   const base = sanitizePathComponent(displayName);
   const fallback = base.length > 0 ? base : 'user';
   return `${fallback}${timestamp}.zip`;
+}
+
+const DEFAULT_USER_ID = generateDeterministicUserId('default-user');
+
+function normalizeUserId(value: string | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : DEFAULT_USER_ID;
 }
 
 function aggregateInventoryItems(
@@ -149,14 +158,65 @@ function aggregateInventoryItems(
   return selected;
 }
 
+function collectPullIdsForSelection(
+  history: PullHistoryStateV1 | undefined,
+  normalizedTargetUserId: string,
+  selection: SaveTargetSelection
+): Set<string> {
+  const result = new Set<string>();
+  if (!history?.pulls) {
+    return result;
+  }
+
+  const evaluateEntry = (pullId: string | undefined): void => {
+    const trimmedId = pullId?.trim();
+    if (!trimmedId || result.has(trimmedId)) {
+      return;
+    }
+    const entry = history.pulls?.[trimmedId];
+    if (!entry) {
+      return;
+    }
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+    result.add(trimmedId);
+  };
+
+  if (selection.mode === 'history') {
+    selection.pullIds.forEach((pullId) => {
+      evaluateEntry(pullId);
+    });
+    return result;
+  }
+
+  const allowedGachaIds = selection.mode === 'gacha' ? new Set(selection.gachaIds) : null;
+
+  Object.entries(history.pulls).forEach(([pullId, entry]) => {
+    if (!pullId || !entry) {
+      return;
+    }
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+    if (allowedGachaIds && !allowedGachaIds.has(entry.gachaId)) {
+      return;
+    }
+    evaluateEntry(pullId);
+  });
+
+  return result;
+}
+
 function aggregateHistoryItems(
   snapshot: GachaLocalStorageSnapshot,
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
-  warnings: Set<string>
-): SelectedAsset[] {
+  warnings: Set<string>,
+  normalizedTargetUserId: string
+): { items: SelectedAsset[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
-    return [];
+    return { items: [], includedPullIds: new Set<string>() };
   }
 
   const catalogState = snapshot.catalogState;
@@ -164,15 +224,22 @@ function aggregateHistoryItems(
   const seenAssets = new Set<string>();
   const selected: SelectedAsset[] = [];
   const selectedIds = new Set(selection.pullIds);
+  const includedPullIds = new Set<string>();
 
   Object.entries(history.pulls).forEach(([entryId, entry]) => {
     if (!entry || !selectedIds.has(entryId)) {
       return;
     }
 
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+
     const gachaId = entry.gachaId;
     const catalogGacha = gachaId ? catalogState?.byGacha?.[gachaId] : undefined;
     const gachaName = gachaId ? appState?.meta?.[gachaId]?.displayName ?? gachaId : 'unknown-gacha';
+
+    let entryContributed = false;
 
     Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
       if (!itemId || !Number.isFinite(count) || count <= 0) {
@@ -204,10 +271,15 @@ function aggregateHistoryItems(
         itemName: catalogItem.name ?? itemId,
         rarityId: catalogItem.rarityId ?? 'unknown'
       });
+      entryContributed = true;
     });
+
+    if (entryContributed) {
+      includedPullIds.add(entryId);
+    }
   });
 
-  return selected;
+  return { items: selected, includedPullIds };
 }
 
 export async function buildUserZipFromSelection({
@@ -223,12 +295,17 @@ export async function buildUserZipFromSelection({
   const catalogState = snapshot.catalogState;
   const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
+  const normalizedUserId = normalizeUserId(userId);
 
   let collected: SelectedAsset[] = [];
+  let includedPullIds: Set<string> = new Set();
   if (selection.mode === 'history') {
-    collected = aggregateHistoryItems(snapshot, selection, warnings);
+    const aggregation = aggregateHistoryItems(snapshot, selection, warnings, normalizedUserId);
+    collected = aggregation.items;
+    includedPullIds = aggregation.includedPullIds;
   } else {
     collected = aggregateInventoryItems(inventoriesForUser, catalogState, snapshot.appState, selection, warnings);
+    includedPullIds = collectPullIdsForSelection(snapshot.pullHistory, normalizedUserId, selection);
   }
 
   if (collected.length === 0) {
@@ -284,6 +361,7 @@ export async function buildUserZipFromSelection({
     });
   });
 
+  const pullIds = Array.from(includedPullIds);
   const metaFolder = zip.folder('meta');
   const generatedAt = new Date().toISOString();
   if (metaFolder) {
@@ -314,7 +392,8 @@ export async function buildUserZipFromSelection({
           },
           selection,
           itemCount: availableRecords.length,
-          warnings: Array.from(warnings)
+          warnings: Array.from(warnings),
+          pullIds
         },
         null,
         2
@@ -356,6 +435,7 @@ export async function buildUserZipFromSelection({
     blob,
     fileName,
     fileCount: availableRecords.length,
-    warnings: Array.from(warnings)
+    warnings: Array.from(warnings),
+    pullIds
   };
 }
