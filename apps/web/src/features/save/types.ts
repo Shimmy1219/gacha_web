@@ -15,4 +15,5 @@ export interface ZipBuildResult {
   fileName: string;
   fileCount: number;
   warnings: string[];
+  pullIds: string[];
 }

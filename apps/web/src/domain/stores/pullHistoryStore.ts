@@ -1,6 +1,7 @@
 import {
   AppPersistence,
   type PullHistoryEntrySourceV1,
+  type PullHistoryEntryStatus,
   type PullHistoryEntryV1,
   type PullHistoryStateV1
 } from '../app-persistence';
@@ -72,6 +73,34 @@ function normalizeUserIdValue(userId: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+const PULL_HISTORY_STATUS_VALUES: readonly PullHistoryEntryStatus[] = ['new', 'ziped', 'uploaded'];
+
+function normalizeStatusValue(value: string | undefined): PullHistoryEntryStatus | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return PULL_HISTORY_STATUS_VALUES.find((status) => status === value) ?? undefined;
+}
+
+function normalizeEntry(entry: PullHistoryEntryV1 | undefined): PullHistoryEntryV1 | undefined {
+  if (!entry) {
+    return undefined;
+  }
+
+  const normalizedStatus = normalizeStatusValue(entry.status);
+  const { status: _ignoredStatus, ...rest } = entry;
+  const normalizedEntry: PullHistoryEntryV1 = {
+    ...rest,
+    source: entry.source ?? 'insiteResult'
+  };
+
+  if (normalizedStatus) {
+    normalizedEntry.status = normalizedStatus;
+  }
+
+  return normalizedEntry;
+}
+
 function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryStateV1 {
   if (!state || state.version !== 1) {
     const now = new Date().toISOString();
@@ -92,11 +121,11 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (typeof id !== 'string' || id.length === 0 || seen.has(id)) {
       return;
     }
-    const entry = state.pulls?.[id];
+    const entry = normalizeEntry(state.pulls?.[id]);
     if (!entry) {
       return;
     }
-    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
+    pulls[id] = entry;
     order.push(id);
     seen.add(id);
   });
@@ -105,7 +134,11 @@ function normalizeState(state: PullHistoryStateV1 | undefined): PullHistoryState
     if (!entry || seen.has(id)) {
       return;
     }
-    pulls[id] = { ...entry, source: entry.source ?? 'insiteResult' };
+    const normalizedEntry = normalizeEntry(entry);
+    if (!normalizedEntry) {
+      return;
+    }
+    pulls[id] = normalizedEntry;
     order.push(id);
     seen.add(id);
   });
@@ -166,7 +199,8 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         currencyUsed,
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
-        source: normalizedSource
+        source: normalizedSource,
+        status: 'new'
       };
       nextPulls[entryId] = entry;
 
@@ -274,13 +308,21 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       const normalizedSource: PullHistoryEntrySourceV1 = entry.source ?? 'insiteResult';
 
       const nextPulls = { ...base.pulls };
-      nextPulls[entry.id] = {
-        ...entry,
+      const previousEntry = base.pulls[entry.id];
+      const { status: incomingStatus, ...restEntry } = entry;
+      const normalizedStatus =
+        normalizeStatusValue(incomingStatus) ?? normalizeStatusValue(previousEntry?.status);
+      const nextEntry: PullHistoryEntryV1 = {
+        ...restEntry,
         executedAt: ensureTimestamp(executedAtOverride ?? entry.executedAt),
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
         source: normalizedSource
       };
+      if (normalizedStatus) {
+        nextEntry.status = normalizedStatus;
+      }
+      nextPulls[entry.id] = nextEntry;
 
       const nextOrder = [entry.id, ...base.order.filter((existingId) => existingId !== entry.id)];
 
@@ -456,7 +498,8 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         pullCount: 0,
         currencyUsed: 0,
         itemCounts: { [normalizedItemId]: normalizedDelta },
-        source: normalizedSource
+        source: normalizedSource,
+        status: 'new'
       };
 
       const nextPulls = { ...base.pulls, [entryId]: entry };
@@ -473,6 +516,60 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     }, options);
 
     return resultId;
+  }
+
+  markPullStatus(
+    pullIds: Iterable<string>,
+    status: PullHistoryEntryStatus,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedStatus = normalizeStatusValue(status);
+    if (!normalizedStatus) {
+      return;
+    }
+
+    const uniqueIds = Array.from(
+      new Set(
+        Array.from(pullIds, (id) => (typeof id === 'string' ? id.trim() : '')).filter(
+          (id): id is string => id.length > 0
+        )
+      )
+    );
+
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      let mutated = false;
+      const nextPulls = { ...base.pulls };
+
+      uniqueIds.forEach((pullId) => {
+        const entry = nextPulls[pullId];
+        if (!entry) {
+          return;
+        }
+        if (entry.status === normalizedStatus) {
+          return;
+        }
+        nextPulls[pullId] = { ...entry, status: normalizedStatus };
+        mutated = true;
+      });
+
+      if (!mutated) {
+        return previous;
+      }
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: [...base.order],
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
   }
 
   deleteManualEntriesForItem(
