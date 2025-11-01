@@ -35,7 +35,7 @@ export const STORAGE_KEYS = {
 
 type StorageKey = keyof typeof STORAGE_KEYS;
 
-const SAVE_OPTIONS_PREFIX = 'gacha:save-options:last-upload:v3:';
+const SAVE_OPTIONS_STORAGE_KEY = 'gacha:save-options:last-upload:v3';
 
 export interface StorageLike {
   readonly length: number;
@@ -417,31 +417,7 @@ export class AppPersistence {
       return {};
     }
 
-    const result: Record<string, SaveOptionsSnapshotV3> = {};
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      if (!key || !key.startsWith(SAVE_OPTIONS_PREFIX)) {
-        continue;
-      }
-
-      const userId = key.substring(SAVE_OPTIONS_PREFIX.length);
-      if (!userId) {
-        continue;
-      }
-
-      try {
-        const raw = storage.getItem(key);
-        if (!raw) {
-          continue;
-        }
-        const value = JSON.parse(raw) as SaveOptionsSnapshotV3;
-        result[userId] = value;
-      } catch (error) {
-        console.warn(`Failed to parse save options for key ${key}`, error);
-      }
-    }
-
-    return result;
+    return this.readSaveOptionsMap(storage);
   }
 
   private replaceSaveOptions(map: Record<string, SaveOptionsSnapshotV3> | null): void {
@@ -450,18 +426,21 @@ export class AppPersistence {
       return;
     }
 
-    this.clearSaveOptions();
-
     if (!map) {
+      this.clearSaveOptions();
       return;
     }
 
+    const next: Record<string, SaveOptionsSnapshotV3> = {};
     Object.entries(map).forEach(([userId, value]) => {
-      if (!userId) {
+      if (!userId || value === null || typeof value === 'undefined') {
         return;
       }
-      storage.setItem(this.buildSaveOptionsKey(userId), JSON.stringify(value));
+
+      next[userId] = value;
     });
+
+    this.persistSaveOptionsMap(storage, next);
   }
 
   private mergeSaveOptions(map: SaveOptionsPartial | null | undefined): void {
@@ -479,22 +458,22 @@ export class AppPersistence {
       return;
     }
 
+    const current = this.readSaveOptionsMap(storage);
+    const next: Record<string, SaveOptionsSnapshotV3> = { ...current };
+
     Object.entries(map).forEach(([userId, value]) => {
       if (!userId) {
         return;
       }
 
-      const key = this.buildSaveOptionsKey(userId);
       if (value === null) {
-        storage.removeItem(key);
+        delete next[userId];
       } else if (typeof value !== 'undefined') {
-        storage.setItem(key, JSON.stringify(value));
+        next[userId] = value;
       }
     });
-  }
 
-  private buildSaveOptionsKey(userId: string): string {
-    return `${SAVE_OPTIONS_PREFIX}${userId}`;
+    this.persistSaveOptionsMap(storage, next);
   }
 
   private clearSaveOptions(): void {
@@ -503,17 +482,37 @@ export class AppPersistence {
       return;
     }
 
-    const keysToRemove: string[] = [];
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index);
-      if (key && key.startsWith(SAVE_OPTIONS_PREFIX)) {
-        keysToRemove.push(key);
-      }
+    storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
+  }
+
+  private readSaveOptionsMap(storage: StorageLike): Record<string, SaveOptionsSnapshotV3> {
+    const raw = storage.getItem(SAVE_OPTIONS_STORAGE_KEY);
+    if (!raw) {
+      return {};
     }
 
-    keysToRemove.forEach((key) => {
-      storage.removeItem(key);
-    });
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, SaveOptionsSnapshotV3>;
+      }
+    } catch (error) {
+      console.warn(`Failed to parse save options for key ${SAVE_OPTIONS_STORAGE_KEY}`, error);
+    }
+
+    return {};
+  }
+
+  private persistSaveOptionsMap(
+    storage: StorageLike,
+    map: Record<string, SaveOptionsSnapshotV3>
+  ): void {
+    if (Object.keys(map).length === 0) {
+      storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
+      return;
+    }
+
+    storage.setItem(SAVE_OPTIONS_STORAGE_KEY, JSON.stringify(map));
   }
 
   private emitUpdated(): void {

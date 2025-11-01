@@ -4,9 +4,11 @@ import type {
   GachaCatalogStateV3,
   GachaLocalStorageSnapshot,
   GachaRarityStateV3,
+  PullHistoryStateV1,
   UserInventorySnapshotV3
 } from '@domain/app-persistence';
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
+import { generateDeterministicUserId } from '@domain/idGenerators';
 
 import type { SaveTargetSelection, ZipBuildResult } from './types';
 
@@ -52,17 +54,6 @@ type WarningBuilder = (
   context: { gachaId: string | undefined; itemId: string; itemName?: string }
 ) => string;
 
-function ensureBrowserEnvironment(): void {
-  if (typeof window === 'undefined') {
-    throw new Error('ブラウザ環境でのみ保存処理を実行できます');
-  }
-}
-
-function sanitizePathComponent(value: string): string {
-  const normalized = value.replace(/[\\/:*?"<>|]/g, '_').trim();
-  return normalized.length > 0 ? normalized : 'unknown';
-}
-
 const MIME_TYPE_EXTENSION_MAP: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/jpg': '.jpg',
@@ -77,6 +68,24 @@ const MIME_TYPE_EXTENSION_MAP: Record<string, string> = {
   'image/heif': '.heif',
   'image/avif': '.avif'
 };
+
+const DEFAULT_USER_ID = generateDeterministicUserId('default-user');
+
+function ensureBrowserEnvironment(): void {
+  if (typeof window === 'undefined') {
+    throw new Error('ブラウザ環境でのみ保存処理を実行できます');
+  }
+}
+
+function sanitizePathComponent(value: string): string {
+  const normalized = value.replace(/[\\/:*?"<>|]/g, '_').trim();
+  return normalized.length > 0 ? normalized : 'unknown';
+}
+
+function normalizeUserId(value: string | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : DEFAULT_USER_ID;
+}
 
 function extractExtensionFromName(name: string | undefined): string | null {
   if (!name) {
@@ -150,9 +159,7 @@ function resolveCatalogContext(
   gachaId: string | undefined
 ): { gachaId: string | undefined; gachaName: string; catalogGacha: CatalogGacha } {
   const catalogGacha = gachaId ? catalogState?.byGacha?.[gachaId] : undefined;
-  const gachaName = gachaId
-    ? appState?.meta?.[gachaId]?.displayName ?? gachaId
-    : 'unknown-gacha';
+  const gachaName = gachaId ? appState?.meta?.[gachaId]?.displayName ?? gachaId : 'unknown-gacha';
 
   return { gachaId, gachaName, catalogGacha };
 }
@@ -199,9 +206,7 @@ function createSelectedAsset(
 
   seenAssets.add(assetId);
   const normalizedCount =
-    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0
-      ? rawCount
-      : 1;
+    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0 ? rawCount : 1;
 
   return {
     assetId,
@@ -274,11 +279,12 @@ function aggregateInventoryItems(
 function aggregateHistoryItems(
   snapshot: GachaLocalStorageSnapshot,
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
-  warnings: Set<string>
-): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[] } {
+  warnings: Set<string>,
+  normalizedTargetUserId: string
+): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
-    return { assets: [], pulls: [] };
+    return { assets: [], pulls: [], includedPullIds: new Set<string>() };
   }
 
   const catalogState = snapshot.catalogState;
@@ -286,24 +292,35 @@ function aggregateHistoryItems(
   const seenAssets = new Set<string>();
   const selected: SelectedAsset[] = [];
   const pullMetadata: HistorySelectionMetadata[] = [];
-  const selectedIds = new Set(selection.pullIds);
+  const includedPullIds = new Set<string>();
 
-  Object.entries(history.pulls).forEach(([entryId, entry]) => {
-    if (!entry || !selectedIds.has(entryId)) {
+  selection.pullIds.forEach((rawId) => {
+    const entryId = rawId?.trim();
+    if (!entryId) {
+      return;
+    }
+
+    const entry = history.pulls?.[entryId];
+    if (!entry) {
+      return;
+    }
+
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
       return;
     }
 
     const normalizedPullCount = Number.isFinite(entry.pullCount)
       ? Math.max(0, Math.floor(entry.pullCount))
       : 0;
+
     pullMetadata.push({
       pullId: entryId,
       pullCount: normalizedPullCount,
       executedAt: typeof entry.executedAt === 'string' ? entry.executedAt : null
     });
 
-    const gachaId = entry.gachaId;
-    const context = resolveCatalogContext(catalogState, appState, gachaId);
+    const context = resolveCatalogContext(catalogState, appState, entry.gachaId);
+    let entryContributed = false;
 
     Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
       if (!itemId || !Number.isFinite(count) || count <= 0) {
@@ -327,11 +344,103 @@ function aggregateHistoryItems(
 
       if (asset) {
         selected.push(asset);
+        entryContributed = true;
       }
+    });
+
+    if (entryContributed) {
+      includedPullIds.add(entryId);
+    }
+  });
+
+  return { assets: selected, pulls: pullMetadata, includedPullIds };
+}
+
+function collectPullIdsForSelection(
+  history: PullHistoryStateV1 | undefined,
+  normalizedTargetUserId: string,
+  selection: SaveTargetSelection
+): Set<string> {
+  const result = new Set<string>();
+  if (!history?.pulls) {
+    return result;
+  }
+
+  const evaluateEntry = (pullId: string | undefined): void => {
+    const trimmedId = pullId?.trim();
+    if (!trimmedId || result.has(trimmedId)) {
+      return;
+    }
+    const entry = history.pulls?.[trimmedId];
+    if (!entry) {
+      return;
+    }
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+    result.add(trimmedId);
+  };
+
+  if (selection.mode === 'history') {
+    selection.pullIds.forEach((pullId) => {
+      evaluateEntry(pullId);
+    });
+    return result;
+  }
+
+  const allowedGachaIds = selection.mode === 'gacha' ? new Set(selection.gachaIds) : null;
+
+  Object.entries(history.pulls).forEach(([pullId, entry]) => {
+    if (!pullId || !entry) {
+      return;
+    }
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+    if (allowedGachaIds && !allowedGachaIds.has(entry.gachaId)) {
+      return;
+    }
+    evaluateEntry(pullId);
+  });
+
+  return result;
+}
+
+function collectHistoryMetadataForPullIds(
+  history: PullHistoryStateV1 | undefined,
+  normalizedTargetUserId: string,
+  pullIds: string[]
+): HistorySelectionMetadata[] {
+  if (!history?.pulls || pullIds.length === 0) {
+    return [];
+  }
+
+  const metadata: HistorySelectionMetadata[] = [];
+  pullIds.forEach((rawId) => {
+    const pullId = rawId?.trim();
+    if (!pullId) {
+      return;
+    }
+    const entry = history.pulls?.[pullId];
+    if (!entry) {
+      return;
+    }
+    if (normalizeUserId(entry.userId) !== normalizedTargetUserId) {
+      return;
+    }
+
+    const normalizedPullCount = Number.isFinite(entry.pullCount)
+      ? Math.max(0, Math.floor(entry.pullCount))
+      : 0;
+
+    metadata.push({
+      pullId,
+      pullCount: normalizedPullCount,
+      executedAt: typeof entry.executedAt === 'string' ? entry.executedAt : null
     });
   });
 
-  return { assets: selected, pulls: pullMetadata };
+  return metadata;
 }
 
 function resolveRarityLabel(rarityState: GachaRarityStateV3 | undefined, rarityId: string): string {
@@ -370,7 +479,8 @@ function isItemNewForUser(
   if (!entries || entries.length === 0) {
     return true;
   }
-  return !entries.some((entry) => entry.userId === userId && entry.gachaId === gachaId);
+  const normalizedUserId = normalizeUserId(userId);
+  return !entries.some((entry) => normalizeUserId(entry.userId) === normalizedUserId && entry.gachaId === gachaId);
 }
 
 export async function buildUserZipFromSelection({
@@ -386,15 +496,26 @@ export async function buildUserZipFromSelection({
   const catalogState = snapshot.catalogState;
   const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
+  const normalizedUserId = normalizeUserId(userId);
 
   let collected: SelectedAsset[] = [];
   let historySelectionDetails: HistorySelectionMetadata[] = [];
+  let includedPullIds: Set<string> = new Set();
   if (selection.mode === 'history') {
-    const historyAggregation = aggregateHistoryItems(snapshot, selection, warnings);
+    const historyAggregation = aggregateHistoryItems(snapshot, selection, warnings, normalizedUserId);
     collected = historyAggregation.assets;
     historySelectionDetails = historyAggregation.pulls;
+    includedPullIds = historyAggregation.includedPullIds;
   } else {
     collected = aggregateInventoryItems(inventoriesForUser, catalogState, snapshot.appState, selection, warnings);
+    includedPullIds = collectPullIdsForSelection(snapshot.pullHistory, normalizedUserId, selection);
+    if (includedPullIds.size > 0) {
+      historySelectionDetails = collectHistoryMetadataForPullIds(
+        snapshot.pullHistory,
+        normalizedUserId,
+        Array.from(includedPullIds)
+      );
+    }
   }
 
   if (collected.length === 0) {
@@ -459,6 +580,7 @@ export async function buildUserZipFromSelection({
 
   const metaFolder = zip.folder('meta');
   const generatedAt = new Date().toISOString();
+  const pullIds = Array.from(includedPullIds);
   if (metaFolder) {
     metaFolder.file(
       'selection.json',
@@ -473,6 +595,7 @@ export async function buildUserZipFromSelection({
           selection,
           itemCount: availableRecords.length,
           warnings: Array.from(warnings),
+          pullIds,
           historyPulls: historySelectionDetails.map((detail) => ({
             pullId: detail.pullId,
             pullCount: detail.pullCount,
@@ -508,6 +631,7 @@ export async function buildUserZipFromSelection({
     blob,
     fileName,
     fileCount: availableRecords.length,
-    warnings: Array.from(warnings)
+    warnings: Array.from(warnings),
+    pullIds
   };
 }

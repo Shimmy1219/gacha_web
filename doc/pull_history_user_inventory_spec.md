@@ -22,6 +22,7 @@ pull-history:v1 を単一のソース・オブ・トゥルースとして扱い�
 | `itemCounts` | アイテム ID ごとの獲得数または差分。`source` が `'manual'` の場合のみ負数を許容。 |
 | `rarityCounts` | レアリティ別の集計。手動調整では通常不要。 |
 | `source` | `'insiteResult'`（アプリ内ガチャ結果）、`'realtime'`（リアルタイム貼り付け）、`'manual'`（手動編集）。未指定時は `'insiteResult'` に正規化される。 |
+| `status` | 履歴エントリの利用状況マーカー。`'new'`（未出力）、`'ziped'`（ZIP に同梱済み）、`'uploaded'`（共有リンク発行済み）。省略時は未設定として扱う。 |
 
 `PullHistoryStore` は以下の責務を持つ。【F:apps/web/src/domain/stores/pullHistoryStore.ts†L1-L210】
 
@@ -79,6 +80,11 @@ Pull History の `order` 配列は最近の更新順で並び、プロジェク�
 1. 在庫編集 UI（`UserCard.tsx`）で変更が発生すると、差分値が `recordManualInventoryChange` に渡される。【F:apps/web/src/pages/gacha/components/cards/UserCard.tsx†L120-L228】
 2. `pullCount=0`・`currencyUsed=0` の `'manual'` エントリが追加され、プロジェクションで正負の差分として合算される。
 3. アイテム削除やガチャ削除時には対応する手動エントリも `deleteManualEntriesForItem` 等で除去し、一貫性を保つ。【F:apps/web/src/domain/stores/pullHistoryStore.ts†L314-L398】
+
+### 保存と共有
+1. 保存ダイアログで ZIP を生成すると、同梱対象の履歴エントリに `status: 'ziped'` が付与される。【F:apps/web/src/features/save/buildUserZip.ts†L290-L382】【F:apps/web/src/modals/dialogs/SaveOptionsDialog.tsx†L198-L228】
+2. 共有リンクを発行した場合は、同じエントリの `status` が `'uploaded'` に更新される。【F:apps/web/src/modals/dialogs/SaveOptionsDialog.tsx†L240-L270】
+3. 新規に追加された履歴（ガチャ実行・手動編集）は `status: 'new'` から開始し、エクスポート状況を段階的に追跡できる。【F:apps/web/src/domain/stores/pullHistoryStore.ts†L118-L207】
 
 ## 整合性維持のポイント
 - Pull History は常に完全な履歴を残し、User Inventory は純粋な投影結果に限定する。
