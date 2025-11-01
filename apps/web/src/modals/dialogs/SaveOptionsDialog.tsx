@@ -15,8 +15,13 @@ import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import {
+  DiscordGuildSelectionMissingError,
+  requireDiscordGuildSelection
+} from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -61,7 +66,7 @@ function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: st
   return `${executedAt} / ${gachaName} (${pullCount})`;
 }
 
-export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
+export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
   const { userId, userName, snapshot, selection } = payload;
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -323,6 +328,60 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
     }
   };
 
+  const isDiscordLoggedIn = Boolean(discordSession?.ok && discordSession.loggedIn);
+  const discordActionLabel = !isDiscordLoggedIn
+    ? 'ログインが必要'
+    : !uploadResult?.url
+      ? '共有URLを準備'
+      : 'Discordに共有';
+
+  const handleShareToDiscord = () => {
+    setErrorBanner(null);
+    if (!isDiscordLoggedIn) {
+      setErrorBanner('Discordにログインしてから共有してください。');
+      return;
+    }
+    if (!uploadResult?.url) {
+      setErrorBanner('共有用URLが見つかりません。先にZIPをアップロードして共有リンクを取得してください。');
+      return;
+    }
+
+    try {
+      const loginUserId = discordSession?.user?.id;
+      if (!loginUserId) {
+        setErrorBanner('Discordのログイン情報を取得できませんでした。再度ログインしてから共有してください。');
+        return;
+      }
+      const selection = requireDiscordGuildSelection(loginUserId);
+      push(DiscordMemberPickerDialog, {
+        title: 'Discord共有先の選択',
+        size: 'lg',
+        payload: {
+          guildId: selection.guildId,
+          shareUrl: uploadResult.url,
+          shareLabel: uploadResult.label,
+          receiverName: receiverDisplayName,
+          onShared: ({ memberName }) => {
+            setErrorBanner(null);
+            setUploadNotice({
+              id: Date.now(),
+              message: `${memberName}さんにDiscordで共有しました`
+            });
+          },
+          onShareFailed: (message) => {
+            setErrorBanner(message);
+          }
+        }
+      });
+    } catch (error) {
+      const message =
+        error instanceof DiscordGuildSelectionMissingError
+          ? error.message
+          : 'Discordギルドの選択情報を取得できませんでした。Discord共有設定を確認してください。';
+      setErrorBanner(message);
+    }
+  };
+
   const uploadNoticePortal =
     uploadNotice && noticePortalRef.current
       ? createPortal(
@@ -373,13 +432,11 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="保存したZIPリンクをDiscordの共有チャンネルへ送信します。現在は準備中です。"
-            actionLabel="準備中"
-            disabled
+            description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
+            actionLabel={discordActionLabel}
+            disabled={isProcessing || isUploading}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
-            onClick={() => {
-              console.info('Discord共有処理は後続タスクで実装されます', { userId });
-            }}
+            onClick={handleShareToDiscord}
           />
         </div>
 

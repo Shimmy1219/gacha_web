@@ -24,6 +24,8 @@ export default async function handler(req, res){
 
   const guildId = String(req.query.guild_id || '');
   const memberId = String(req.query.member_id || '');
+  const createParam = String(req.query.create ?? '1').toLowerCase();
+  const allowCreate = createParam !== '0' && createParam !== 'false';
   if (!guildId || !memberId) {
     log.warn('missing identifiers', { guildIdPresent: Boolean(guildId), memberIdPresent: Boolean(memberId) });
     return res.status(400).json({ ok:false, error:'guild_id and member_id required' });
@@ -42,9 +44,10 @@ export default async function handler(req, res){
     token: process.env.DISCORD_BOT_TOKEN, isBot:true
   });
 
-  // カテゴリ取得 or 作成
-  let category = (Array.isArray(chans)?chans:[]).find(c => c.type === 4 && c.name === CATEGORY_NAME);
-  if (!category){
+  const allChannels = Array.isArray(chans)?chans:[];
+  let category = allChannels.find(c => c.type === 4 && c.name === CATEGORY_NAME);
+
+  if (!category && allowCreate){
     category = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
       body: { name: CATEGORY_NAME, type: 4 }
@@ -52,8 +55,9 @@ export default async function handler(req, res){
     log.info('category created', { categoryId: category?.id });
   }
 
-  // 1:1条件を満たす既存チャンネルを探索
-  const kids = (Array.isArray(chans)?chans:[]).filter(c => c.parent_id === category.id && c.type === 0);
+  const kids = category
+    ? allChannels.filter(c => c.parent_id === category.id && c.type === 0)
+    : [];
   const match = kids.find(ch => {
     const ow = ch.permission_overwrites || [];
     const hasOwner = ow.find(x => x.id === sess.uid && x.type === 1);
@@ -65,6 +69,11 @@ export default async function handler(req, res){
   if (match){
     log.info('existing channel found', { channelId: match.id });
     return res.json({ ok:true, channel_id: match.id, created:false });
+  }
+
+  if (!allowCreate || !category){
+    log.info('matching channel not found and creation disabled', { allowCreate, hasCategory: Boolean(category) });
+    return res.json({ ok:true, channel_id: null, created:false });
   }
 
   // 無ければ作成

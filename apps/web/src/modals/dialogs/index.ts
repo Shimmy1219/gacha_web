@@ -1,5 +1,6 @@
 export * from './CreateGachaWizardDialog';
 export * from './DiscordGuildPickerDialog';
+export * from './DiscordMemberPickerDialog';
 export * from './DrawGachaDialog';
 export * from './GachaDeleteConfirmDialog';
 export * from './GuideInfoDialog';
