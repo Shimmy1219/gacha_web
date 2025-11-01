@@ -1,11 +1,18 @@
 import { useMemo } from 'react';
-import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
+  MusicalNoteIcon,
+  PhotoIcon,
+  PlayCircleIcon
+} from '@heroicons/react/24/outline';
 
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
+  onSave: (item: ReceiveMediaItem) => void | Promise<void>;
   onDownload: (item: ReceiveMediaItem) => void;
 }
 
@@ -22,7 +29,7 @@ function resolveKindIcon(kind: ReceiveMediaItem['kind']): JSX.Element {
   }
 }
 
-export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX.Element {
+export function ReceiveItemCard({ item, onSave, onDownload }: ReceiveItemCardProps): JSX.Element {
   const objectUrl = useObjectUrl(item.blob);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
@@ -137,14 +144,24 @@ export function ReceiveItemCard({ item, onDownload }: ReceiveItemCardProps): JSX
                 {kindChipInner}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => onDownload(item)}
-              className="receive-item-card-download-button inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
-            >
-              <ArrowDownTrayIcon className="receive-item-card-download-icon h-5 w-5" aria-hidden="true" />
-              <span className="receive-item-card-download-text">保存</span>
-            </button>
+            <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+              <button
+                type="button"
+                onClick={() => onSave(item)}
+                className="receive-item-card-save-button inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
+              >
+                <ArrowUpTrayIcon className="receive-item-card-save-icon h-5 w-5" aria-hidden="true" />
+                <span className="receive-item-card-save-text">保存</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDownload(item)}
+                className="receive-item-card-download-button inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-black/30 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-300"
+              >
+                <ArrowDownTrayIcon className="receive-item-card-download-icon h-5 w-5" aria-hidden="true" />
+                <span className="receive-item-card-download-text">ダウンロード</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -82,14 +82,14 @@ async function resolveReceiveToken(token: string, signal?: AbortSignal): Promise
       headers: { Accept: 'application/json' },
       signal
     });
-  } catch (error) {
+  } catch {
     throw new ReceiveResolveError('受け取りリンクの確認に失敗しました (ネットワークエラー)', { status: 0 });
   }
 
   let payload: ResolveResponsePayload | null = null;
   try {
     payload = (await response.json()) as ResolveResponsePayload;
-  } catch (error) {
+  } catch {
     throw new ReceiveResolveError('受け取りリンクの確認に失敗しました (無効な応答)', { status: response.status });
   }
 
@@ -300,7 +300,7 @@ function parseInputValue(value: string): string {
     const url = new URL(trimmed);
     const key = url.searchParams.get('key') ?? url.searchParams.get('t');
     return key?.trim() ?? trimmed;
-  } catch (error) {
+  } catch {
     return trimmed;
   }
 }
@@ -341,6 +341,92 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+const DEFAULT_SHARE_FILE_TYPE = 'application/octet-stream';
+const MAX_WEB_SHARE_FILE_COUNT = 30;
+const MAX_WEB_SHARE_TOTAL_BYTES = 200 * 1024 * 1024;
+const BULK_SHARE_TITLE = '受け取りファイル';
+const BULK_ARCHIVE_FILENAME = 'received_files.zip';
+
+function createShareFile(filename: string, blob: Blob): File | null {
+  if (typeof File === 'undefined') {
+    return null;
+  }
+  try {
+    return new File([blob], filename, { type: blob.type || DEFAULT_SHARE_FILE_TYPE });
+  } catch (error) {
+    console.warn('Failed to create share file', error);
+    return null;
+  }
+}
+
+async function shareFilesIfPossible(files: File[], title: string): Promise<boolean> {
+  if (typeof navigator === 'undefined' || typeof navigator.canShare !== 'function' || files.length === 0) {
+    return false;
+  }
+  try {
+    if (navigator.canShare({ files })) {
+      await navigator.share({ files, title });
+      return true;
+    }
+  } catch (error) {
+    console.warn('Web Share API failed', error);
+  }
+  return false;
+}
+
+async function saveOneWithShare(filename: string, blob: Blob): Promise<void> {
+  const file = createShareFile(filename, blob);
+  if (file) {
+    const shared = await shareFilesIfPossible([file], filename);
+    if (shared) {
+      return;
+    }
+  }
+  triggerBlobDownload(blob, filename);
+}
+
+async function saveAllWithShare(items: ReceiveMediaItem[]): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  const canUseWebShare = typeof navigator !== 'undefined' && typeof navigator.canShare === 'function' && typeof File !== 'undefined';
+  if (canUseWebShare) {
+    const files: File[] = [];
+    let totalSize = 0;
+    for (const item of items) {
+      const filename = deriveDownloadFilename(item);
+      const file = createShareFile(filename, item.blob);
+      if (!file) {
+        files.length = 0;
+        break;
+      }
+      files.push(file);
+      totalSize += item.blob.size;
+      if (files.length >= MAX_WEB_SHARE_FILE_COUNT || totalSize > MAX_WEB_SHARE_TOTAL_BYTES) {
+        break;
+      }
+    }
+
+    const shared = await shareFilesIfPossible(files, BULK_SHARE_TITLE);
+    if (shared) {
+      return;
+    }
+  }
+
+  const zip = new JSZip();
+  for (const item of items) {
+    const filename = deriveDownloadFilename(item);
+    zip.file(filename, item.blob, { binary: true, compression: 'STORE' });
+  }
+  const archiveBlob = await zip.generateAsync({
+    type: 'blob',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  await saveOneWithShare(BULK_ARCHIVE_FILENAME, archiveBlob);
 }
 
 export function ReceivePage(): JSX.Element {
@@ -507,6 +593,20 @@ export function ReceivePage(): JSX.Element {
     }
   }, [resolved?.url]);
 
+  const handleSaveItem = useCallback(
+    async (item: ReceiveMediaItem) => {
+      setBulkDownloadError(null);
+      try {
+        const downloadName = deriveDownloadFilename(item);
+        await saveOneWithShare(downloadName, item.blob);
+      } catch (error) {
+        console.error('Failed to save item with Web Share API fallback', error);
+        setBulkDownloadError('保存中にエラーが発生しました。ダウンロードをお試しください。');
+      }
+    },
+    []
+  );
+
   const handleDownloadItem = useCallback((item: ReceiveMediaItem) => {
     const downloadName = deriveDownloadFilename(item);
     triggerBlobDownload(item.blob, downloadName);
@@ -527,19 +627,14 @@ export function ReceivePage(): JSX.Element {
     setIsBulkDownloading(true);
     setBulkDownloadError(null);
     try {
-      for (const item of mediaItems) {
-        handleDownloadItem(item);
-        // Allow the browser event loop to process each download action.
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
+      await saveAllWithShare(mediaItems);
     } catch (error) {
-      console.error('Failed to perform bulk download', error);
+      console.error('Failed to perform bulk save', error);
       setBulkDownloadError('まとめて保存中にエラーが発生しました。個別保存をお試しください。');
     } finally {
       setIsBulkDownloading(false);
     }
-  }, [handleDownloadItem, mediaItems]);
+  }, [mediaItems]);
 
   const handleCopyLink = useCallback(async () => {
     if (typeof window === 'undefined') {
@@ -554,7 +649,7 @@ export function ReceivePage(): JSX.Element {
       } else {
         throw new Error('clipboard unavailable');
       }
-    } catch (error) {
+    } catch {
       setCopyState('error');
       window.prompt('このURLをコピーしてください', url);
       setTimeout(() => setCopyState('idle'), 1600);
@@ -736,7 +831,7 @@ export function ReceivePage(): JSX.Element {
         {mediaItems.length > 0 ? (
           <div className="receive-page-media-grid grid gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
             {mediaItems.map((item) => (
-              <ReceiveItemCard key={item.id} item={item} onDownload={handleDownloadItem} />
+              <ReceiveItemCard key={item.id} item={item} onSave={handleSaveItem} onDownload={handleDownloadItem} />
             ))}
           </div>
         ) : resolveStatus === 'success' && downloadPhase === 'waiting' ? (
