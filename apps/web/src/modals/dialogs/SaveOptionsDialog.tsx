@@ -80,6 +80,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
   const { data: discordSession } = useDiscordSession();
+  const discordUserId = discordSession?.user?.id;
 
   const receiverDisplayName = useMemo(() => {
     const profileName = snapshot.userProfiles?.users?.[userId]?.displayName;
@@ -341,13 +342,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       setErrorBanner('Discordにログインしてから共有してください。');
       return;
     }
+    if (!discordUserId) {
+      setErrorBanner('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      return;
+    }
     if (!uploadResult?.url) {
       setErrorBanner('共有用URLが見つかりません。先にZIPをアップロードして共有リンクを取得してください。');
       return;
     }
 
     try {
-      const selection = requireDiscordGuildSelection(userId);
+      const selection = requireDiscordGuildSelection(discordUserId);
       push(DiscordMemberPickerDialog, {
         title: 'Discord共有先の選択',
         size: 'lg',
