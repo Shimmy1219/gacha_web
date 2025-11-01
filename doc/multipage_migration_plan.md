@@ -16,7 +16,7 @@ apps/web/src/components/dashboard/（DashboardShell.tsx、DashboardDesktopGrid.t
 
 レアリティ: features/rarity/components/ 配下一式を pages/gacha/components/rarity/ へ。PtControlsPanel や RarityTable を利用しているモーダルの import も合わせて更新します。
 
-features/gacha/components/GachaTabs.tsx を pages/gacha/components/common/ に、features/dev/MockStorageButton.tsx を pages/gacha/components/dev/ に移し、ガチャページから直接参照できるようにします。
+features/gacha/components/GachaTabs.tsx を pages/gacha/components/common/ に移し、ガチャページから直接参照できるようにします。
 
 公開ページ用ディレクトリを新設: pages/home/、pages/privacy-policy/、pages/receive/ と、文面・コピーを置く content/{home.ts, privacy-policy.json}、マーケティング専用スタイルの styles/marketing.css を追加します。
 
@@ -34,7 +34,7 @@ AppRoutes の onDrawGacha props を廃止し、GachaLayout の Outlet コンテ�
 3. ガチャ領域のレイアウトとページ
 GachaLayout を新設し、旧 App.tsx で行っていたヘッダー描画、モーダル発火、ジェスチャー阻止、メイン余白計算などの副作用をすべて移植します。useModal、useAppPersistence、useDomainStores の利用箇所もここに集約し、AppHeaderShell や <main> の clsx ロジックを保持します。
 
-GachaPage.tsx では従来の DashboardPage と同様に DashboardShell へセクション配列と MockStorageButton を渡し、Outlet コンテキストから受け取った onDrawGacha を再利用します。
+GachaPage.tsx では従来の DashboardPage と同様に DashboardShell へセクション配列を渡し、Outlet コンテキストから受け取った onDrawGacha を再利用します。
 
 各セクション移行後は、SectionContainer、useTabMotion、GachaTabs、useGachaDeletion 等の相対 import を新しいディレクトリ階層に合わせて更新し、PtControlsPanel や PrizeSettingsDialog などモーダル側の import も追従させます。
 
