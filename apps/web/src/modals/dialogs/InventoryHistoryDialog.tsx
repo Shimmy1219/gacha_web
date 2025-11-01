@@ -8,10 +8,10 @@ import { getRarityTextPresentation } from '../../features/rarity/utils/rarityCol
 import { useStoreValue } from '@domain/stores';
 import {
   type PullHistoryEntrySourceV1,
-  type PullHistoryEntryStatus,
   type PullHistoryEntryV1
 } from '@domain/app-persistence';
 import { generateDeterministicUserId } from '@domain/idGenerators';
+import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
 
 interface InventoryHistoryDialogPayload {
   userId: string;
@@ -45,12 +45,6 @@ const SOURCE_CLASSNAMES: Record<PullHistoryEntrySourceV1, string> = {
   insiteResult: 'border-accent/40 bg-accent/10 text-accent',
   manual: 'border-amber-500/40 bg-amber-500/10 text-amber-600',
   realtime: 'border-sky-500/40 bg-sky-500/10 text-sky-600'
-};
-
-const STATUS_LABELS: Record<PullHistoryEntryStatus, string> = {
-  new: 'new',
-  ziped: 'zip出力済み',
-  uploaded: 'URL発行済み'
 };
 
 function formatExecutedAt(
@@ -167,7 +161,7 @@ export function InventoryHistoryDialog({
             {historyEntries.map((entry) => {
               const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
               const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
-              const statusLabel = entry.status ? STATUS_LABELS[entry.status] : null;
+              const statusLabel = entry.status ? PULL_HISTORY_STATUS_LABELS[entry.status] : null;
               const sourceClassName = SOURCE_CLASSNAMES[entry.source] ?? 'border-border/60 bg-panel-muted text-muted-foreground';
               const pullCountValue =
                 typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount)

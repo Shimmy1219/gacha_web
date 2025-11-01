@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
+import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
@@ -58,7 +59,8 @@ function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: st
   }
   const executedAt = formatExpiresAt(entry.executedAt) ?? '日時不明';
   const pullCount = Number.isFinite(entry.pullCount) ? `${entry.pullCount}連` : '回数不明';
-  return `${executedAt} / ${gachaName} (${pullCount})`;
+  const statusLabel = getPullHistoryStatusLabel(entry.status);
+  return `${executedAt} / ${gachaName} (${pullCount})${statusLabel ? ` / ${statusLabel}` : ''}`;
 }
 
 export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
