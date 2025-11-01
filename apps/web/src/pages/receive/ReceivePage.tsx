@@ -601,16 +601,11 @@ export function ReceivePage(): JSX.Element {
         await saveOneWithShare(downloadName, item.blob);
       } catch (error) {
         console.error('Failed to save item with Web Share API fallback', error);
-        setBulkDownloadError('保存中にエラーが発生しました。ダウンロードをお試しください。');
+        setBulkDownloadError('保存中にエラーが発生しました。もう一度お試しください。');
       }
     },
     []
   );
-
-  const handleDownloadItem = useCallback((item: ReceiveMediaItem) => {
-    const downloadName = deriveDownloadFilename(item);
-    triggerBlobDownload(item.blob, downloadName);
-  }, []);
 
   const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
   const expiration = useMemo(() => normalizeExpiration(resolved?.exp), [resolved?.exp]);
@@ -831,7 +826,7 @@ export function ReceivePage(): JSX.Element {
         {mediaItems.length > 0 ? (
           <div className="receive-page-media-grid grid gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
             {mediaItems.map((item) => (
-              <ReceiveItemCard key={item.id} item={item} onSave={handleSaveItem} onDownload={handleDownloadItem} />
+              <ReceiveItemCard key={item.id} item={item} onSave={handleSaveItem} />
             ))}
           </div>
         ) : resolveStatus === 'success' && downloadPhase === 'waiting' ? (
