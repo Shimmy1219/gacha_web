@@ -10,7 +10,7 @@ import {
 import { clsx } from 'clsx';
 
 import { useDiscordSession } from '../../../../features/discord/useDiscordSession';
-import { useModal, DiscordGuildPickerDialog } from '../../../../modals';
+import { useModal, DiscordBotInviteDialog } from '../../../../modals';
 import {
   loadDiscordGuildSelection,
   type DiscordGuildSelection
@@ -28,6 +28,9 @@ interface DiscordLoginButtonProps {
   onOpenPageSettings?: () => void;
   className?: string;
 }
+
+const BOT_INVITE_URL =
+  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 export function DiscordLoginButton({
   placement = 'toolbar',
@@ -64,18 +67,19 @@ export function DiscordLoginButton({
     setHasLoadedGuildSelection(true);
   }, [userId]);
 
-  const openGuildSelectionModal = useCallback(() => {
+  const openBotInviteModal = useCallback(() => {
     if (!userId) {
       return;
     }
 
-    push(DiscordGuildPickerDialog, {
-      id: 'discord-guild-picker',
-      title: 'お渡し鯖を選択',
+    push(DiscordBotInviteDialog, {
+      id: 'discord-bot-invite',
+      title: 'お渡し鯖の設定',
       size: 'lg',
       payload: {
         userId,
         userName,
+        inviteUrl: BOT_INVITE_URL,
         onGuildSelected: (selection) => {
           setGuildSelection(selection);
         }
@@ -99,9 +103,9 @@ export function DiscordLoginButton({
 
     if (!guildSelection) {
       openedGuildModalUserRef.current = userId;
-      openGuildSelectionModal();
+      openBotInviteModal();
     }
-  }, [guildSelection, hasLoadedGuildSelection, openGuildSelectionModal, userId]);
+  }, [guildSelection, hasLoadedGuildSelection, openBotInviteModal, userId]);
 
   if (isLoading && !data) {
     return (
@@ -203,7 +207,7 @@ export function DiscordLoginButton({
             {({ active }) => (
               <button
                 type="button"
-                onClick={openGuildSelectionModal}
+                onClick={openBotInviteModal}
                 className={clsx(
                   'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
                   active ? 'bg-surface/40' : undefined
@@ -213,7 +217,7 @@ export function DiscordLoginButton({
                 <span className="flex flex-col text-left">
                   <span>お渡し鯖を設定</span>
                   <span className="text-xs text-muted-foreground">
-                    {guildSelection ? `現在: ${guildSelection.guildName}` : '未選択'}
+                    {guildSelection ? `現在: ${guildSelection.guildName}` : 'Bot招待が必要'}
                   </span>
                 </span>
               </button>

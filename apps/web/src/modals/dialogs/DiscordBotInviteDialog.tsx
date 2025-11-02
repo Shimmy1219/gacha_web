@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowPathIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/discord/useDiscordOwnedGuilds';
 import {
   loadDiscordGuildSelection,
   saveDiscordGuildSelection,
-  type DiscordGuildSelection,
+  type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 
-interface DiscordGuildPickerPayload {
+interface DiscordBotInviteDialogPayload {
   userId: string;
   userName?: string;
+  inviteUrl?: string;
   onGuildSelected?: (selection: DiscordGuildSelection) => void;
 }
+
+const DEFAULT_INVITE_URL =
+  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
   if (!guild.icon) {
@@ -22,8 +30,12 @@ function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
   return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128`;
 }
 
-export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps<DiscordGuildPickerPayload>): JSX.Element {
+export function DiscordBotInviteDialog({
+  payload,
+  close
+}: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
+  const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
 
@@ -60,7 +72,7 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
       guildId: guild.id,
       guildName: guild.name,
       guildIcon: guild.icon,
-      selectedAt: new Date().toISOString(),
+      selectedAt: new Date().toISOString()
     };
     saveDiscordGuildSelection(userId, selection);
     payload?.onGuildSelected?.(selection);
@@ -70,18 +82,37 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
   return (
     <>
       <ModalBody className="space-y-6">
-        <section className="rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
-          <p>
-            Discordでログインいただきありがとうございます。以下の一覧から、お渡し鯖（特典鯖・ファン鯖）としてZIPを送信するギルドを選択してください。
-          </p>
-          <p className="mt-2">
-            選択内容はこの端末のローカルストレージに保存され、次回以降の共有設定に利用されます。
-          </p>
+        <section className="space-y-4 rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
+          <header className="space-y-2 text-surface-foreground">
+            <h2 className="text-base font-semibold">Discord Botの招待が必要です</h2>
+            <p>
+              お渡し鯖に共有リンクを送信するには、下記のボタンからShimmy3 Discord Botをギルドへ招待してください。
+            </p>
+          </header>
+          <div>
+            <a
+              href={inviteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-discord-hover"
+            >
+              <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+              Botを招待する
+            </a>
+            <p className="mt-3 text-xs text-muted-foreground">
+              招待先のギルドを選択し、権限を確認して承認してください。完了後、下の「ギルド一覧を再取得」から反映を確認できます。
+            </p>
+          </div>
         </section>
 
         <section className="space-y-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <h3 className="text-sm font-semibold text-surface-foreground">オーナーのギルド一覧</h3>
+            <div>
+              <h3 className="text-sm font-semibold text-surface-foreground">共有先のギルドを選択</h3>
+              <p className="text-xs text-muted-foreground">
+                Botを招待したギルドを選択すると、この端末に保存され今後の共有で利用されます。
+              </p>
+            </div>
             <div className="flex items-center gap-3">
               {isFetching ? (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
@@ -99,7 +130,7 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
                 aria-busy={isFetching}
               >
                 <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                再取得
+                ギルド一覧を再取得
               </button>
             </div>
           </div>
@@ -114,13 +145,13 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
 
           {!isLoading && isError ? (
             <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
-              ギルド一覧の取得に失敗しました。数秒後に再取得をお試しください。
+              ギルド一覧の取得に失敗しました。Botの招待状況を確認し、数秒後に再取得をお試しください。
             </div>
           ) : null}
 
           {!isLoading && !isError && guilds.length === 0 ? (
             <div className="rounded-2xl border border-border/60 bg-surface/30 px-4 py-3 text-sm text-muted-foreground">
-              オーナー権限を持つギルドが見つかりませんでした。Discord上でギルドを作成してから再度お試しください。
+              オーナー権限を持つギルドが見つかりませんでした。Botを招待した後に再取得してください。
             </div>
           ) : null}
 
@@ -172,7 +203,7 @@ export function DiscordGuildPickerDialog({ payload, close }: ModalComponentProps
           onClick={handleSubmit}
           disabled={!selectedGuildId || !guilds.some((guild) => guild.id === selectedGuildId)}
         >
-          このギルドを選択
+          このギルドを保存
         </button>
       </ModalFooter>
     </>
