@@ -9,6 +9,7 @@ import { getRarityTextPresentation } from '../../../../features/rarity/utils/rar
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { ConfirmDialog, InventoryHistoryDialog, useModal } from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
+import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -51,6 +52,9 @@ export interface UserCardProps {
   showCounts?: boolean;
   catalogItemsByGacha?: Record<string, InventoryCatalogItemOption[]>;
   rarityOptionsByGacha?: Record<string, InventoryRarityOption[]>;
+  discordDisplayName?: string | null;
+  discordAvatarAssetId?: string | null;
+  discordAvatarUrl?: string | null;
 }
 
 export function UserCard({
@@ -63,10 +67,25 @@ export function UserCard({
   memo,
   showCounts = true,
   catalogItemsByGacha,
-  rarityOptionsByGacha
+  rarityOptionsByGacha,
+  discordDisplayName,
+  discordAvatarAssetId,
+  discordAvatarUrl
 }: UserCardProps): JSX.Element {
   const catalogItemsMap = catalogItemsByGacha ?? {};
   const rarityOptionsMap = rarityOptionsByGacha ?? {};
+  const normalizedDiscordDisplayName = discordDisplayName?.trim() ?? '';
+  const avatarAssetId = discordAvatarAssetId ?? null;
+  const avatarPreview = useAssetPreview(avatarAssetId);
+  const avatarSrc = avatarPreview.url ?? (discordAvatarUrl ?? null);
+  const avatarFallback = useMemo(() => {
+    const source = normalizedDiscordDisplayName || userName;
+    if (!source) {
+      return '';
+    }
+    const [first] = Array.from(source);
+    return first ? first.toUpperCase() : '';
+  }, [normalizedDiscordDisplayName, userName]);
 
   return (
     <Disclosure defaultOpen={expandedByDefault}>
@@ -75,7 +94,7 @@ export function UserCard({
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
             <Disclosure.Button
               type="button"
-              className="user-card__toggle flex min-w-0 flex-1 items-start gap-2 text-left transition-colors duration-200 ease-linear"
+              className="user-card__toggle flex min-w-0 flex-1 items-start gap-3 text-left transition-colors duration-200 ease-linear"
             >
               <ChevronRightIcon
                 className={clsx(
@@ -83,14 +102,36 @@ export function UserCard({
                   open && 'rotate-90 text-accent'
                 )}
               />
-              <div className="user-card__summary min-w-0 space-y-1">
-                <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
-                {memo ? (
-                  <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                {avatarSrc ? (
+                  <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
+                    <img
+                      src={avatarSrc}
+                      alt={`${userName}のDiscordアイコン`}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : normalizedDiscordDisplayName ? (
+                  <div className="user-card__avatar-fallback relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-surface/50 text-sm font-semibold text-muted-foreground">
+                    <span aria-hidden="true">{avatarFallback}</span>
+                  </div>
                 ) : null}
-                {showCounts && totalSummary ? (
-                  <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
-                ) : null}
+                <div className="user-card__summary min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
+                    {normalizedDiscordDisplayName ? (
+                      <span className="user-card__discord-display text-xs text-muted-foreground">
+                        {normalizedDiscordDisplayName}
+                      </span>
+                    ) : null}
+                  </div>
+                  {memo ? (
+                    <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
+                  ) : null}
+                  {showCounts && totalSummary ? (
+                    <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
+                  ) : null}
+                </div>
               </div>
             </Disclosure.Button>
             <div className="user-card__actions flex shrink-0 items-center gap-2">

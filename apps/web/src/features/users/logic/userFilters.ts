@@ -390,12 +390,25 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       0
     );
 
+    const discordDisplayName = profile.discordDisplayName?.trim();
+    const discordAvatarAssetId =
+      Object.prototype.hasOwnProperty.call(profile, 'discordAvatarAssetId')
+        ? profile.discordAvatarAssetId ?? null
+        : undefined;
+    const discordAvatarUrl =
+      Object.prototype.hasOwnProperty.call(profile, 'discordAvatarUrl')
+        ? profile.discordAvatarUrl ?? null
+        : undefined;
+
     users.push({
       userId,
       userName: profile.displayName || userId,
       totalSummary: `${totalPulls}連`,
       inventories,
-      expandedByDefault: users.length === 0
+      expandedByDefault: users.length === 0,
+      discordDisplayName: discordDisplayName || undefined,
+      discordAvatarAssetId,
+      discordAvatarUrl
     });
   });
 
