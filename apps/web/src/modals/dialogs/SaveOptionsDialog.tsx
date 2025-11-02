@@ -72,6 +72,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDiscordSharing, setIsDiscordSharing] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
   const [uploadNotice, setUploadNotice] = useState<{ id: number; message: string } | null>(null);
