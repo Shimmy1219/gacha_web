@@ -102,7 +102,7 @@ export function UserCard({
                   open && 'rotate-90 text-accent'
                 )}
               />
-              <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-1">
                 {avatarSrc ? (
                   <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
                     <img

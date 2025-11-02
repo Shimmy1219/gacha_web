@@ -359,8 +359,65 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
   };
 
+  const runZipUpload = useCallback(async () => {
+    const zip = await buildUserZipFromSelection({
+      snapshot,
+      selection,
+      userId,
+      userName: receiverDisplayName
+    });
+
+    const uploadResponse = await uploadZip({
+      file: zip.blob,
+      fileName: zip.fileName,
+      userId,
+      receiverName: receiverDisplayName,
+      ownerDiscordId: discordSession?.user?.id,
+      ownerDiscordName: discordSession?.user?.name
+    });
+
+    const expiresAtDisplay = uploadResponse.expiresAt
+      ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
+      : undefined;
+
+    const savedAt = new Date().toISOString();
+
+    persistence.savePartial({
+      saveOptions: {
+        [userId]: {
+          version: 3,
+          key: uploadResponse.token,
+          shareUrl: uploadResponse.shareUrl,
+          downloadUrl: uploadResponse.downloadUrl,
+          expiresAt: uploadResponse.expiresAt,
+          pathname: uploadResponse.pathname,
+          savedAt
+        }
+      }
+    });
+
+    const result: SaveOptionsUploadResult = {
+      url: uploadResponse.shareUrl,
+      label: uploadResponse.shareUrl,
+      expiresAt: expiresAtDisplay
+    };
+
+    setUploadResult(result);
+
+    return { uploadResponse, result };
+  }, [
+    discordSession?.user?.id,
+    discordSession?.user?.name,
+    persistence,
+    receiverDisplayName,
+    selection,
+    snapshot,
+    uploadZip,
+    userId
+  ]);
+
   const handleUploadToShimmy = async () => {
-    if (isProcessing || isUploading) {
+    if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
     setIsUploading(true);
@@ -377,47 +434,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
     });
     try {
-      const zip = await buildUserZipFromSelection({
-        snapshot,
-        selection,
-        userId,
-        userName: receiverDisplayName
-      });
-
-      const uploadResponse = await uploadZip({
-        file: zip.blob,
-        fileName: zip.fileName,
-        userId,
-        receiverName: receiverDisplayName,
-        ownerDiscordId: discordSession?.user?.id,
-        ownerDiscordName: discordSession?.user?.name
-      });
-
-      const expiresAtDisplay = uploadResponse.expiresAt
-        ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
-        : undefined;
-
-      const savedAt = new Date().toISOString();
-
-      persistence.savePartial({
-        saveOptions: {
-          [userId]: {
-            version: 3,
-            key: uploadResponse.token,
-            shareUrl: uploadResponse.shareUrl,
-            downloadUrl: uploadResponse.downloadUrl,
-            expiresAt: uploadResponse.expiresAt,
-            pathname: uploadResponse.pathname,
-            savedAt
-          }
-        }
-      });
-
-      setUploadResult({
-        url: uploadResponse.shareUrl,
-        label: uploadResponse.shareUrl,
-        expiresAt: expiresAtDisplay
-      });
+      await runZipUpload();
       setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -435,11 +452,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const discordActionLabel = !isDiscordLoggedIn
     ? 'ログインが必要'
-    : !uploadResult?.url
-      ? '共有URLを準備'
+    : isDiscordSharing
+      ? '共有準備中…'
       : 'Discordに共有';
 
-  const handleShareToDiscord = () => {
+  const handleShareToDiscord = async () => {
     setErrorBanner(null);
     if (!isDiscordLoggedIn) {
       setErrorBanner('Discordにログインしてから共有してください。');
@@ -449,8 +466,38 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       setErrorBanner('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
       return;
     }
-    if (!uploadResult?.url) {
-      setErrorBanner('共有用URLが見つかりません。先にZIPをアップロードして共有リンクを取得してください。');
+    if (isProcessing || isUploading || isDiscordSharing) {
+      return;
+    }
+
+    setIsDiscordSharing(true);
+    setUploadResult(null);
+    persistence.savePartial({
+      saveOptions: {
+        [userId]: null
+      }
+    });
+
+    let uploadData: SaveOptionsUploadResult | null = null;
+
+    try {
+      const { result } = await runZipUpload();
+      uploadData = result;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.info('Discord共有用ZIPアップロードがキャンセルされました');
+      } else {
+        console.error('Discord共有用ZIPの生成またはアップロードに失敗しました', error);
+        const message = error instanceof Error ? error.message : String(error);
+        setErrorBanner(`Discord共有の準備に失敗しました: ${message}`);
+      }
+      setIsDiscordSharing(false);
+      return;
+    }
+
+    if (!uploadData?.url) {
+      setErrorBanner('Discord共有に必要なURLを取得できませんでした。再度お試しください。');
+      setIsDiscordSharing(false);
       return;
     }
 
@@ -463,8 +510,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           guildId: selection.guildId,
           discordUserId,
           initialCategory: selection.privateChannelCategory ?? null,
-          shareUrl: uploadResult.url,
-          shareLabel: uploadResult.label,
+          shareUrl: uploadData.url,
+          shareLabel: uploadData.label,
           receiverName: receiverDisplayName,
           onShared: ({
             memberId: sharedMemberId,
@@ -500,6 +547,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           ? error.message
           : 'Discordギルドの選択情報を取得できませんでした。Discord共有設定を確認してください。';
       setErrorBanner(message);
+    } finally {
+      setIsDiscordSharing(false);
     }
   };
 
@@ -555,7 +604,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             title="Discordで共有"
             description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
             actionLabel={discordActionLabel}
-            disabled={isProcessing || isUploading}
+            disabled={isProcessing || isUploading || isDiscordSharing}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={handleShareToDiscord}
           />
