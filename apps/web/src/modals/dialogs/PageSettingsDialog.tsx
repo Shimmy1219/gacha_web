@@ -84,6 +84,18 @@ export const PageSettingsDialog: ModalComponent = () => {
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
   const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
+  const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
+      return true;
+    }
+    return window.matchMedia('(min-width: 1024px)').matches;
+  });
+  const [activeView, setActiveView] = useState<'menu' | 'content'>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
+      return 'content';
+    }
+    return window.matchMedia('(min-width: 1024px)').matches ? 'content' : 'menu';
+  });
   const {
     theme,
     setTheme,
@@ -184,6 +196,35 @@ export const PageSettingsDialog: ModalComponent = () => {
   }, []);
 
   useLayoutEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const updateLayout = () => {
+      const matches = mediaQuery.matches;
+      setIsLargeLayout(matches);
+      setActiveView(matches ? 'content' : 'menu');
+    };
+
+    updateLayout();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateLayout);
+    } else {
+      mediaQuery.addListener(updateLayout);
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener('change', updateLayout);
+      } else {
+        mediaQuery.removeListener(updateLayout);
+      }
+    };
+  }, []);
+
+  useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
       return;
     }
@@ -240,6 +281,22 @@ export const PageSettingsDialog: ModalComponent = () => {
   const handleCustomAccentInputBlur = useCallback(() => {
     handleCustomAccentCommit();
   }, [handleCustomAccentCommit]);
+
+  const handleMenuSelect = useCallback(
+    (menu: SettingsMenuKey) => {
+      setActiveMenu(menu);
+      if (!isLargeLayout) {
+        setActiveView('content');
+      }
+    },
+    [isLargeLayout]
+  );
+
+  const handleBackToMenu = useCallback(() => {
+    if (!isLargeLayout) {
+      setActiveView('menu');
+    }
+  }, [isLargeLayout]);
 
   const renderMenuContent = () => {
     switch (activeMenu) {
@@ -544,7 +601,14 @@ export const PageSettingsDialog: ModalComponent = () => {
       }}
     >
       <div className="flex flex-1 flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
-        <nav className="w-full max-w-[220px] shrink-0">
+        <nav
+          className={clsx(
+            'w-full shrink-0',
+            isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
+            activeView === 'menu' ? 'block' : 'hidden',
+            'lg:block'
+          )}
+        >
           <ul className="space-y-2">
             {menuItems.map((item) => {
               const isActive = activeMenu === item.id;
@@ -552,7 +616,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                 <li key={item.id}>
                   <button
                     type="button"
-                    onClick={() => setActiveMenu(item.id)}
+                    onClick={() => handleMenuSelect(item.id)}
                     className={clsx(
                       'w-full rounded-xl border px-4 py-3 text-left transition',
                       isActive
@@ -560,17 +624,41 @@ export const PageSettingsDialog: ModalComponent = () => {
                         : 'border-transparent text-muted-foreground hover:border-border/60 hover:bg-panel-muted/70'
                     )}
                   >
-                    <span className="block text-sm font-semibold">{item.label}</span>
-                    <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                      {item.description}
-                    </span>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <span className="block text-sm font-semibold">{item.label}</span>
+                        <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                          {item.description}
+                        </span>
+                      </div>
+                      <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
+                        〉
+                      </span>
+                    </div>
                   </button>
                 </li>
               );
             })}
           </ul>
         </nav>
-        <div className="flex-1 max-h-full overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm">
+        <div
+          className={clsx(
+            'flex-1 max-h-full overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm',
+            isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
+          )}
+        >
+          {!isLargeLayout ? (
+            <div className="mb-4 flex items-center">
+              <button
+                type="button"
+                onClick={handleBackToMenu}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground lg:hidden"
+              >
+                <span aria-hidden="true">〈</span>
+                <span>メニューに戻る</span>
+              </button>
+            </div>
+          ) : null}
           {renderMenuContent()}
         </div>
       </div>
