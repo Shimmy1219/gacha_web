@@ -9,7 +9,7 @@ export interface DiscordUserProfile {
 
 export interface DiscordSessionData {
   ok: boolean;
-  loggedIn?: boolean;
+  loggedIn: boolean;
   user?: DiscordUserProfile;
 }
 

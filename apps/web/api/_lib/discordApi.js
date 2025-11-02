@@ -42,13 +42,74 @@ export async function assertGuildOwner(userAccessToken, guildId){
   }
 }
 
-export function build1to1Overwrites({ guildId, ownerId, memberId }){
-  return [
+function extractDiscordApiErrorInfo(error) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const match = /->\s+(\d{3}):\s*(.*)$/s.exec(error.message);
+  if (!match) {
+    return { status: null, rawBody: null, message: error.message };
+  }
+  const status = Number.parseInt(match[1], 10);
+  const rawBody = match[2] ?? '';
+  let jsonBody = null;
+  if (rawBody) {
+    try {
+      jsonBody = JSON.parse(rawBody);
+    } catch {
+      jsonBody = null;
+    }
+  }
+  return {
+    status: Number.isNaN(status) ? null : status,
+    rawBody,
+    jsonBody,
+    message: error.message,
+  };
+}
+
+export function parseDiscordApiError(error) {
+  return extractDiscordApiErrorInfo(error);
+}
+
+export function isDiscordUnknownGuildError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 404) {
+    return false;
+  }
+  const code = typeof info?.jsonBody?.code === 'number' ? info.jsonBody.code : null;
+  if (code === 10004) {
+    return true;
+  }
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
+  return raw.includes('unknown guild');
+}
+
+export function build1to1Overwrites({ guildId, ownerId, memberId, botId }){
+  const allowMask = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
+  const overwrites = [
     // @everyone を見えなくする
     { id: guildId, type: 0, allow: '0', deny: String(PERM.VIEW_CHANNEL) },
     // オーナー
-    { id: ownerId, type: 1, allow: String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY), deny: '0' },
+    { id: ownerId, type: 1, allow: allowMask, deny: '0' },
     // メンバー
-    { id: memberId, type: 1, allow: String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY), deny: '0' },
+    { id: memberId, type: 1, allow: allowMask, deny: '0' },
   ];
+
+  const resolvedBotId = (() => {
+    if (typeof botId === 'string' && botId.trim()) {
+      return botId.trim();
+    }
+    const envBotId = process.env.DISCORD_BOT_USER_ID || process.env.DISCORD_CLIENT_ID;
+    return typeof envBotId === 'string' ? envBotId.trim() : '';
+  })();
+
+  if (resolvedBotId) {
+    overwrites.push({ id: resolvedBotId, type: 1, allow: allowMask, deny: '0' });
+  }
+
+  return overwrites;
 }

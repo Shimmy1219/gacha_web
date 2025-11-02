@@ -1,29 +1,52 @@
+export interface DiscordGuildCategorySelection {
+  id: string;
+  name: string;
+  selectedAt?: string;
+}
+
 export interface DiscordGuildSelection {
   guildId: string;
   guildName: string;
   guildIcon?: string | null;
   selectedAt: string;
+  privateChannelCategory?: DiscordGuildCategorySelection | null;
 }
 
 const STORAGE_PREFIX = 'discord.guildSelection';
 
-function getStorageKey(userId: string): string {
-  return `${STORAGE_PREFIX}::${userId}`;
+function getStorageKey(discordUserId: string): string {
+  return `${STORAGE_PREFIX}::${discordUserId}`;
 }
 
-export function loadDiscordGuildSelection(userId: string | undefined | null): DiscordGuildSelection | null {
-  if (!userId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+export class DiscordGuildSelectionMissingError extends Error {
+  constructor(message = 'Discord guild selection is missing') {
+    super(message);
+    this.name = 'DiscordGuildSelectionMissingError';
+  }
+}
+
+export function loadDiscordGuildSelection(
+  discordUserId: string | undefined | null
+): DiscordGuildSelection | null {
+  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(getStorageKey(userId));
+    const raw = window.localStorage.getItem(getStorageKey(discordUserId));
     if (!raw) {
       return null;
     }
     const parsed = JSON.parse(raw) as DiscordGuildSelection;
     if (!parsed || typeof parsed.guildId !== 'string' || typeof parsed.guildName !== 'string') {
       return null;
+    }
+    if (
+      parsed.privateChannelCategory &&
+      (typeof parsed.privateChannelCategory.id !== 'string' ||
+        typeof parsed.privateChannelCategory.name !== 'string')
+    ) {
+      parsed.privateChannelCategory = null;
     }
     return parsed;
   } catch (error) {
@@ -32,14 +55,33 @@ export function loadDiscordGuildSelection(userId: string | undefined | null): Di
   }
 }
 
-export function saveDiscordGuildSelection(userId: string | undefined | null, selection: DiscordGuildSelection): void {
-  if (!userId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+export function saveDiscordGuildSelection(
+  discordUserId: string | undefined | null,
+  selection: DiscordGuildSelection
+): void {
+  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
     return;
   }
 
   try {
-    window.localStorage.setItem(getStorageKey(userId), JSON.stringify(selection));
+    window.localStorage.setItem(getStorageKey(discordUserId), JSON.stringify(selection));
   } catch (error) {
     console.error('Failed to persist Discord guild selection to localStorage', error);
   }
+}
+
+export function getStoredDiscordGuildId(discordUserId: string | undefined | null): string | null {
+  const selection = loadDiscordGuildSelection(discordUserId);
+  return selection?.guildId ?? null;
+}
+
+export function requireDiscordGuildSelection(
+  discordUserId: string | undefined | null,
+  errorMessage = 'Discordギルドが選択されていません。Discordギルドを選択してから再度お試しください。'
+): DiscordGuildSelection {
+  const selection = loadDiscordGuildSelection(discordUserId);
+  if (!selection?.guildId) {
+    throw new DiscordGuildSelectionMissingError(errorMessage);
+  }
+  return selection;
 }
