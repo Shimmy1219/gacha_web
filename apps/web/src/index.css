@@ -258,7 +258,7 @@
 
   .item-card .badge--status {
     @apply border-transparent text-[11px] font-semibold;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .item-card .badge--status-complete {
