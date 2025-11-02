@@ -415,7 +415,8 @@ export function App(): JSX.Element {
       id: 'page-settings',
       title: 'サイト設定',
       description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
-      size: 'xl'
+      size: 'xl',
+      panelPaddingClassName: 'p-2 lg:p-6'
     });
   };
 

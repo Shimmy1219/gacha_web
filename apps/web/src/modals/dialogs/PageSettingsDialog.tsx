@@ -594,7 +594,10 @@ export const PageSettingsDialog: ModalComponent = () => {
   return (
     <ModalBody
       ref={modalBodyRef}
-      className="mt-6 flex flex-col space-y-0 overflow-hidden"
+      className={clsx(
+        'flex flex-col space-y-0 overflow-hidden p-0',
+        isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
+      )}
       style={{
         minHeight: `${effectiveMinHeight}px`,
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
