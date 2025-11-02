@@ -104,7 +104,10 @@ export default async function handler(req, res){
   }
 
   // 無ければ作成
-  const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId });
+  const botUserId = typeof process.env.DISCORD_BOT_USER_ID === 'string' && process.env.DISCORD_BOT_USER_ID.trim()
+    ? process.env.DISCORD_BOT_USER_ID.trim()
+    : (typeof process.env.DISCORD_CLIENT_ID === 'string' ? process.env.DISCORD_CLIENT_ID.trim() : '');
+  const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId, botId: botUserId });
   let created;
   try {
     created = await dFetch(`/guilds/${guildId}/channels`, {
