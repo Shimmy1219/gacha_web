@@ -413,7 +413,17 @@ export function DiscordMemberPickerDialog({
               {sortedMembers.map((member) => {
                 const isSelected = member.id === selectedMemberId;
                 const avatarUrl = getMemberAvatarUrl(member);
-                const displayName = member.displayName;
+                const displayName =
+                  (member.displayName && member.displayName.trim().length > 0
+                    ? member.displayName
+                    : undefined) ??
+                  member.globalName ??
+                  member.username ??
+                  member.id;
+                const fallbackLabel =
+                  member.username && member.username.trim().length > 0
+                    ? member.username
+                    : member.id;
                 return (
                   <li key={member.id}>
                     <button
@@ -434,8 +444,9 @@ export function DiscordMemberPickerDialog({
                           {displayName}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          ID: {member.id}
-                          {member.nick ? ` ／ @${member.username}` : ''}
+                          @
+                          {fallbackLabel}
+                          {member.nick ? ` ／ サーバーニックネーム: ${member.nick}` : ''}
                         </span>
                       </div>
                       {isSelected ? (

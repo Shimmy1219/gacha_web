@@ -5,7 +5,8 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
-  isDiscordUnknownGuildError
+  isDiscordUnknownGuildError,
+  PERM
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
@@ -57,6 +58,36 @@ export default async function handler(req, res){
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
+  const botUserId = (() => {
+    if (typeof process.env.DISCORD_BOT_USER_ID === 'string' && process.env.DISCORD_BOT_USER_ID.trim()) {
+      return process.env.DISCORD_BOT_USER_ID.trim();
+    }
+    if (typeof process.env.DISCORD_CLIENT_ID === 'string' && process.env.DISCORD_CLIENT_ID.trim()) {
+      return process.env.DISCORD_CLIENT_ID.trim();
+    }
+    return '';
+  })();
+
+  const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
+  const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
+
+  const toBigInt = (value) => {
+    if (typeof value === 'string' && value){
+      try {
+        return BigInt(value);
+      } catch {
+        return 0n;
+      }
+    }
+    if (typeof value === 'number'){
+      return BigInt(value);
+    }
+    return 0n;
+  };
+
+  const allowsView = (overwrite) => (toBigInt(overwrite?.allow) & viewChannelBit) === viewChannelBit;
+  const deniesView = (overwrite) => (toBigInt(overwrite?.deny) & viewChannelBit) === viewChannelBit;
+
   // 全チャンネル取得
   let chans;
   try {
@@ -69,21 +100,101 @@ export default async function handler(req, res){
 
   const allChannels = Array.isArray(chans)?chans:[];
   const textChannels = allChannels.filter(c => c.type === 0);
-  const match = textChannels.find(ch => {
-    const ow = ch.permission_overwrites || [];
-    const hasOwner = ow.find(x => x.id === sess.uid && x.type === 1);
-    const hasMember = ow.find(x => x.id === memberId && x.type === 1);
-    const hasEveryone = ow.find(x => x.id === guildId && x.type === 0);
-    return !!(hasOwner && hasMember && hasEveryone);
-  });
+  let matchWithBot = null;
+  let matchWithoutBot = null;
 
-  if (match){
-    log.info('existing channel found', { channelId: match.id, parentId: match.parent_id || null });
+  for (const ch of textChannels){
+    const overwrites = Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : [];
+    if (overwrites.length === 0){
+      continue;
+    }
+    const userOverwrites = overwrites.filter((ow) => ow.type === 1);
+    const ownerOverwrite = userOverwrites.find((ow) => ow.id === sess.uid);
+    const memberOverwrite = userOverwrites.find((ow) => ow.id === memberId);
+    if (!ownerOverwrite || !memberOverwrite){
+      continue;
+    }
+
+    const otherUsers = userOverwrites.filter((ow) => {
+      if (ow.id === sess.uid || ow.id === memberId){
+        return false;
+      }
+      if (botUserId && ow.id === botUserId){
+        return false;
+      }
+      return true;
+    });
+    if (otherUsers.length > 0){
+      continue;
+    }
+
+    const everyoneOverwrite = overwrites.find((ow) => ow.type === 0 && ow.id === guildId);
+    if (!everyoneOverwrite || !deniesView(everyoneOverwrite)){
+      continue;
+    }
+
+    if (!allowsView(ownerOverwrite) || !allowsView(memberOverwrite)){
+      continue;
+    }
+
+    const botOverwrite = botUserId ? userOverwrites.find((ow) => ow.id === botUserId) : null;
+    if (botOverwrite && allowsView(botOverwrite)){
+      matchWithBot = ch;
+      break;
+    }
+
+    if (!matchWithoutBot){
+      matchWithoutBot = ch;
+    }
+  }
+
+  if (matchWithBot){
+    log.info('existing channel found with bot access', {
+      channelId: matchWithBot.id,
+      parentId: matchWithBot.parent_id || null,
+    });
     return res.json({
       ok:true,
-      channel_id: match.id,
+      channel_id: matchWithBot.id,
       created:false,
-      parent_id: match.parent_id || null
+      parent_id: matchWithBot.parent_id || null
+    });
+  }
+
+  if (matchWithoutBot){
+    if (!botUserId){
+      log.error('bot user id missing, cannot grant access to existing channel', {
+        channelId: matchWithoutBot.id,
+      });
+      return res.status(500).json({
+        ok:false,
+        error:'DiscordボットのユーザーIDが設定されていません。',
+      });
+    }
+    try {
+      await dFetch(`/channels/${matchWithoutBot.id}/permissions/${botUserId}`, {
+        token: process.env.DISCORD_BOT_TOKEN,
+        isBot:true,
+        method:'PUT',
+        body: {
+          type: 1,
+          allow: allowMaskString,
+          deny: '0'
+        }
+      });
+      log.info('granted bot permission on existing channel', {
+        channelId: matchWithoutBot.id,
+        parentId: matchWithoutBot.parent_id || null
+      });
+    } catch (error) {
+      return respondDiscordApiError(error, 'guild-channel-grant-bot');
+    }
+
+    return res.json({
+      ok:true,
+      channel_id: matchWithoutBot.id,
+      created:false,
+      parent_id: matchWithoutBot.parent_id || null
     });
   }
 
@@ -104,9 +215,6 @@ export default async function handler(req, res){
   }
 
   // 無ければ作成
-  const botUserId = typeof process.env.DISCORD_BOT_USER_ID === 'string' && process.env.DISCORD_BOT_USER_ID.trim()
-    ? process.env.DISCORD_BOT_USER_ID.trim()
-    : (typeof process.env.DISCORD_CLIENT_ID === 'string' ? process.env.DISCORD_CLIENT_ID.trim() : '');
   const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId, botId: botUserId });
   let created;
   try {

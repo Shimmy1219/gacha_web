@@ -50,20 +50,31 @@ export default async function handler(req, res){
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
+  const toMemberSummary = (m) => {
+    const userId = m?.user?.id != null ? String(m.user.id) : '';
+    const username = m?.user?.username != null ? String(m.user.username) : '';
+    return {
+      id: userId,
+      username,
+      globalName: m?.user?.global_name || null,
+      nick: m?.nick || null,
+      avatar: m?.user?.avatar || null,
+      displayName:
+        m?.display_name ||
+        m?.nick ||
+        m?.user?.global_name ||
+        username ||
+        userId,
+    };
+  };
+
   // まず search API を試す（privileged intentが不要なケースもある）
   if (q){
     try{
       const hits = await dFetch(`/guilds/${guildId}/members/search?query=${encodeURIComponent(q)}&limit=${limit}`, {
         token: process.env.DISCORD_BOT_TOKEN, isBot:true
       });
-      const rows = (Array.isArray(hits)?hits:[]).map(m => ({
-        id: m.user.id,
-        username: m.user.username,
-        globalName: m.user.global_name || null,
-        nick: m.nick || null,
-        avatar: m.user.avatar || null,
-        displayName: m.nick || m.user.global_name || m.user.username || m.user.id
-      }));
+      const rows = (Array.isArray(hits)?hits:[]).map(toMemberSummary);
       log.info('members search succeeded', { count: rows.length, mode: 'search' });
       return res.json({ ok:true, members: rows, mode:'search' });
     }catch(error){
@@ -89,14 +100,7 @@ export default async function handler(req, res){
       });
       const arr = Array.isArray(batch) ? batch : [];
       for (const m of arr){
-        out.push({
-          id:m.user.id,
-          username:m.user.username,
-          globalName: m.user.global_name || null,
-          nick:m.nick || null,
-          avatar:m.user.avatar || null,
-          displayName: m.nick || m.user.global_name || m.user.username || m.user.id
-        });
+        out.push(toMemberSummary(m));
       }
       if (arr.length < take) break;
       after = arr[arr.length-1].user.id;
