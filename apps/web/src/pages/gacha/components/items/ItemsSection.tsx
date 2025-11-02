@@ -31,7 +31,10 @@ import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
-import { formatRarityRate } from '../../../../features/rarity/utils/rarityRate';
+import {
+  MAX_RATE_FRACTION_DIGITS,
+  formatRarityRate
+} from '../../../../features/rarity/utils/rarityRate';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -48,6 +51,45 @@ type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
+
+function clampFractionDigits(value?: number | null): number | undefined {
+  if (value == null || Number.isNaN(value)) {
+    return undefined;
+  }
+
+  const truncated = Math.trunc(value);
+  if (!Number.isFinite(truncated)) {
+    return undefined;
+  }
+
+  if (truncated <= 0) {
+    return 0;
+  }
+
+  if (truncated >= MAX_RATE_FRACTION_DIGITS) {
+    return MAX_RATE_FRACTION_DIGITS;
+  }
+
+  return truncated;
+}
+
+function formatItemRateWithPrecision(rate?: number, fractionDigits?: number): string {
+  if (rate == null || Number.isNaN(rate)) {
+    return '';
+  }
+
+  const percentValue = rate * 100;
+  if (!Number.isFinite(percentValue)) {
+    return '';
+  }
+
+  const digits = clampFractionDigits(fractionDigits);
+  if (digits == null) {
+    return formatRarityRate(rate);
+  }
+
+  return percentValue.toFixed(digits);
+}
 
 function getSequentialItemName(position: number): string {
   if (Number.isNaN(position) || !Number.isFinite(position)) {
@@ -158,6 +200,24 @@ export function ItemsSection(): JSX.Element {
 
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
 
+  const rarityFractionDigits = useMemo(() => {
+    const result = new Map<string, number>();
+    const entities = data?.rarityState?.entities ?? {};
+
+    Object.entries(entities).forEach(([rarityId, entity]) => {
+      const formatted = formatRarityRate(entity?.emitRate);
+      if (!formatted) {
+        return;
+      }
+
+      const dotIndex = formatted.indexOf('.');
+      const digits = dotIndex === -1 ? 0 : formatted.length - dotIndex - 1;
+      result.set(rarityId, digits);
+    });
+
+    return result;
+  }, [data?.rarityState?.entities]);
+
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
     'tab-panel-content',
@@ -205,7 +265,8 @@ export function ItemsSection(): JSX.Element {
           rarityEmitRate != null && Number.isFinite(rarityEmitRate) && rarityCount > 0
             ? rarityEmitRate / rarityCount
             : undefined;
-        const formattedRate = itemRate != null ? formatRarityRate(itemRate) : '';
+        const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
+        const formattedRate = formatItemRateWithPrecision(itemRate, ratePrecision);
         const itemRateDisplay = formattedRate ? `${formattedRate}%` : '';
         const rarity: RarityMeta = {
           rarityId: snapshot.rarityId,
@@ -251,7 +312,7 @@ export function ItemsSection(): JSX.Element {
     });
 
     return { itemsByGacha: entries, flatItems: flat };
-  }, [data]);
+  }, [data, rarityFractionDigits]);
 
   const itemEntryById = useMemo(() => {
     const map = new Map<string, ItemEntry>();
