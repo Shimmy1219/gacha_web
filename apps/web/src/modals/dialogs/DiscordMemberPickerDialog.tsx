@@ -98,13 +98,19 @@ function useDiscordGuildMembers(guildId: string | null | undefined, query: strin
         credentials: 'include'
       });
 
+      const payload = (await response.json().catch(() => null)) as DiscordMembersResponse | null;
+
       if (!response.ok) {
-        throw new Error('Discordメンバー一覧の取得に失敗しました');
+        const message = payload?.error?.trim();
+        throw new Error(
+          message && message.length > 0
+            ? `Discordメンバー一覧の取得に失敗しました: ${message}`
+            : `Discordメンバー一覧の取得に失敗しました (${response.status})`
+        );
       }
 
-      const payload = (await response.json()) as DiscordMembersResponse;
-      if (!payload.ok || !Array.isArray(payload.members)) {
-        throw new Error(payload.error || 'Discordメンバー一覧の取得に失敗しました');
+      if (!payload?.ok || !Array.isArray(payload.members)) {
+        throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
       return payload.members;
@@ -192,16 +198,17 @@ export function DiscordMemberPickerDialog({
         }
       );
 
-      if (!findResponse.ok) {
-        throw new Error(`お渡しチャンネルの確認に失敗しました (${findResponse.status})`);
-      }
-
-      const findPayload = (await findResponse.json()) as {
+      const findPayload = (await findResponse.json().catch(() => null)) as {
         ok: boolean;
         channel_id?: string | null;
         created?: boolean;
         error?: string;
-      };
+      } | null;
+
+      if (!findResponse.ok || !findPayload) {
+        const message = findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+        throw new Error(message);
+      }
 
       if (!findPayload.ok) {
         throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
@@ -339,7 +346,9 @@ export function DiscordMemberPickerDialog({
 
           {!membersQuery.isLoading && membersQuery.isError ? (
             <div className="rounded-2xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
-              Discordメンバー一覧の取得に失敗しました。数秒後に再取得をお試しください。
+              {membersQuery.error instanceof Error
+                ? membersQuery.error.message
+                : 'Discordメンバー一覧の取得に失敗しました。数秒後に再取得をお試しください。'}
             </div>
           ) : null}
 

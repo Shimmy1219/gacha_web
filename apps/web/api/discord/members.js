@@ -1,7 +1,7 @@
 // /api/discord/members.js
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
-import { dFetch, assertGuildOwner } from '../_lib/discordApi.js';
+import { dFetch, assertGuildOwner, isDiscordUnknownGuildError } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
 export default async function handler(req, res){
@@ -37,6 +37,19 @@ export default async function handler(req, res){
     return res.status(403).json({ ok:false, error: e.message || 'forbidden' });
   }
 
+  function respondDiscordApiError(error, context){
+    const message = error instanceof Error ? error.message : String(error);
+    if (isDiscordUnknownGuildError(error)){
+      log.warn('discord guild is not accessible for bot operations', { context, message });
+      return res.status(404).json({
+        ok:false,
+        error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+      });
+    }
+    log.error('discord api request failed', { context, message });
+    return res.status(502).json({ ok:false, error:'discord api request failed' });
+  }
+
   // まず search API を試す（privileged intentが不要なケースもある）
   if (q){
     try{
@@ -49,6 +62,9 @@ export default async function handler(req, res){
       log.info('members search succeeded', { count: rows.length, mode: 'search' });
       return res.json({ ok:true, members: rows, mode:'search' });
     }catch(error){
+      if (isDiscordUnknownGuildError(error)){
+        return respondDiscordApiError(error, 'guild-members-search');
+      }
       log.warn('members search failed, falling back', {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -59,18 +75,22 @@ export default async function handler(req, res){
   // フォールバック：ページングで最大limitまで集める
   const out = [];
   let after = '0';
-  while (out.length < limit){
-    const rest = limit - out.length;
-    const take = Math.min(rest, 1000);
-    const batch = await dFetch(`/guilds/${guildId}/members?limit=${take}&after=${after}`, {
-      token: process.env.DISCORD_BOT_TOKEN, isBot:true
-    });
-    const arr = Array.isArray(batch) ? batch : [];
-    for (const m of arr){
-      out.push({ id:m.user.id, username:m.user.username, nick:m.nick || null, avatar:m.user.avatar || null });
+  try {
+    while (out.length < limit){
+      const rest = limit - out.length;
+      const take = Math.min(rest, 1000);
+      const batch = await dFetch(`/guilds/${guildId}/members?limit=${take}&after=${after}`, {
+        token: process.env.DISCORD_BOT_TOKEN, isBot:true
+      });
+      const arr = Array.isArray(batch) ? batch : [];
+      for (const m of arr){
+        out.push({ id:m.user.id, username:m.user.username, nick:m.nick || null, avatar:m.user.avatar || null });
+      }
+      if (arr.length < take) break;
+      after = arr[arr.length-1].user.id;
     }
-    if (arr.length < take) break;
-    after = arr[arr.length-1].user.id;
+  } catch (error) {
+    return respondDiscordApiError(error, 'guild-members-list');
   }
 
   // クエリがある場合はサーバ側で簡易フィルタ（username / nick に部分一致）

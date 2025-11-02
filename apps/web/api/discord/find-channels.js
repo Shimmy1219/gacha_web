@@ -1,7 +1,7 @@
 // /api/discord/find-channel.js
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
-import { dFetch, assertGuildOwner, build1to1Overwrites } from '../_lib/discordApi.js';
+import { dFetch, assertGuildOwner, build1to1Overwrites, isDiscordUnknownGuildError } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
 const CATEGORY_NAME = '景品お渡し';
@@ -39,20 +39,42 @@ export default async function handler(req, res){
     return res.status(403).json({ ok:false, error: e.message || 'forbidden' });
   }
 
+  function respondDiscordApiError(error, context){
+    const message = error instanceof Error ? error.message : String(error);
+    if (isDiscordUnknownGuildError(error)){
+      log.warn('discord guild is not accessible for bot operations', { context, message });
+      return res.status(404).json({
+        ok:false,
+        error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+      });
+    }
+    log.error('discord api request failed', { context, message });
+    return res.status(502).json({ ok:false, error:'discord api request failed' });
+  }
+
   // 全チャンネル取得
-  const chans = await dFetch(`/guilds/${guildId}/channels`, {
-    token: process.env.DISCORD_BOT_TOKEN, isBot:true
-  });
+  let chans;
+  try {
+    chans = await dFetch(`/guilds/${guildId}/channels`, {
+      token: process.env.DISCORD_BOT_TOKEN, isBot:true
+    });
+  } catch (error) {
+    return respondDiscordApiError(error, 'guild-channels-list');
+  }
 
   const allChannels = Array.isArray(chans)?chans:[];
   let category = allChannels.find(c => c.type === 4 && c.name === CATEGORY_NAME);
 
   if (!category && allowCreate){
-    category = await dFetch(`/guilds/${guildId}/channels`, {
-      token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
-      body: { name: CATEGORY_NAME, type: 4 }
-    });
-    log.info('category created', { categoryId: category?.id });
+    try {
+      category = await dFetch(`/guilds/${guildId}/channels`, {
+        token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
+        body: { name: CATEGORY_NAME, type: 4 }
+      });
+      log.info('category created', { categoryId: category?.id });
+    } catch (error) {
+      return respondDiscordApiError(error, 'guild-category-create');
+    }
   }
 
   const kids = category
@@ -78,15 +100,20 @@ export default async function handler(req, res){
 
   // 無ければ作成
   const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId });
-  const created = await dFetch(`/guilds/${guildId}/channels`, {
-    token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
-    body: {
-      name: `gift-${memberId}`,
-      type: 0,               // text
-      parent_id: category.id,
-      permission_overwrites: overwrites
-    }
-  });
+  let created;
+  try {
+    created = await dFetch(`/guilds/${guildId}/channels`, {
+      token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
+      body: {
+        name: `gift-${memberId}`,
+        type: 0,               // text
+        parent_id: category.id,
+        permission_overwrites: overwrites
+      }
+    });
+  } catch (error) {
+    return respondDiscordApiError(error, 'guild-channel-create');
+  }
 
   log.info('channel created', { channelId: created.id, guildId, memberId });
   return res.json({ ok:true, channel_id: created.id, created:true });

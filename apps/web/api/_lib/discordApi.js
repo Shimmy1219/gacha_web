@@ -42,6 +42,52 @@ export async function assertGuildOwner(userAccessToken, guildId){
   }
 }
 
+function extractDiscordApiErrorInfo(error) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const match = /->\s+(\d{3}):\s*(.*)$/s.exec(error.message);
+  if (!match) {
+    return { status: null, rawBody: null, message: error.message };
+  }
+  const status = Number.parseInt(match[1], 10);
+  const rawBody = match[2] ?? '';
+  let jsonBody = null;
+  if (rawBody) {
+    try {
+      jsonBody = JSON.parse(rawBody);
+    } catch {
+      jsonBody = null;
+    }
+  }
+  return {
+    status: Number.isNaN(status) ? null : status,
+    rawBody,
+    jsonBody,
+    message: error.message,
+  };
+}
+
+export function parseDiscordApiError(error) {
+  return extractDiscordApiErrorInfo(error);
+}
+
+export function isDiscordUnknownGuildError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 404) {
+    return false;
+  }
+  const code = typeof info?.jsonBody?.code === 'number' ? info.jsonBody.code : null;
+  if (code === 10004) {
+    return true;
+  }
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
+  return raw.includes('unknown guild');
+}
+
 export function build1to1Overwrites({ guildId, ownerId, memberId }){
   return [
     // @everyone を見えなくする
