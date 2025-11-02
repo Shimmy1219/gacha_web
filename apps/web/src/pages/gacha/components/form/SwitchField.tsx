@@ -15,7 +15,7 @@ export function SwitchField({ label, description, checked, onChange, name }: Swi
       as="div"
       className="switch-field flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-surface/30 px-4 py-3"
     >
-      <div className="flex flex-col">
+      <div className="flex min-w-0 flex-col">
         <Switch.Label className="text-sm font-medium text-surface-foreground">{label}</Switch.Label>
         {description ? (
           <Switch.Description className="text-xs text-muted-foreground">{description}</Switch.Description>
@@ -26,7 +26,7 @@ export function SwitchField({ label, description, checked, onChange, name }: Swi
         checked={checked}
         onChange={onChange}
         className={clsx(
-          'relative inline-flex h-6 w-11 items-center rounded-full border border-transparent transition-colors duration-150',
+          'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-transparent transition-colors duration-150',
           checked ? 'bg-accent' : 'bg-muted/40'
         )}
       >
