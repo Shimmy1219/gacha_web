@@ -78,6 +78,76 @@ function normalizeState(state: UserProfilesStateV3 | undefined): UserProfilesSta
       if (linkedAtValue) {
         normalizedProfile.discordLinkedAt = linkedAtValue;
       }
+
+      const shareChannelId =
+        typeof profile.discordLastShareChannelId === 'string'
+          ? profile.discordLastShareChannelId.trim()
+          : '';
+      if (shareChannelId) {
+        normalizedProfile.discordLastShareChannelId = shareChannelId;
+      }
+
+      if (profile.discordLastShareChannelName === null) {
+        normalizedProfile.discordLastShareChannelName = null;
+      } else if (typeof profile.discordLastShareChannelName === 'string') {
+        const channelName = profile.discordLastShareChannelName.trim();
+        if (channelName) {
+          normalizedProfile.discordLastShareChannelName = channelName;
+        }
+      }
+
+      if (profile.discordLastShareChannelParentId === null) {
+        normalizedProfile.discordLastShareChannelParentId = null;
+      } else if (typeof profile.discordLastShareChannelParentId === 'string') {
+        const parentId = profile.discordLastShareChannelParentId.trim();
+        if (parentId) {
+          normalizedProfile.discordLastShareChannelParentId = parentId;
+        }
+      }
+
+      if (typeof profile.discordLastShareUrl === 'string') {
+        const shareUrl = profile.discordLastShareUrl.trim();
+        if (shareUrl) {
+          normalizedProfile.discordLastShareUrl = shareUrl;
+        }
+      }
+
+      if (profile.discordLastShareLabel === null) {
+        normalizedProfile.discordLastShareLabel = null;
+      } else if (typeof profile.discordLastShareLabel === 'string') {
+        const shareLabel = profile.discordLastShareLabel.trim();
+        if (shareLabel) {
+          normalizedProfile.discordLastShareLabel = shareLabel;
+        }
+      }
+
+      if (profile.discordLastShareTitle === null) {
+        normalizedProfile.discordLastShareTitle = null;
+      } else if (typeof profile.discordLastShareTitle === 'string') {
+        const shareTitle = profile.discordLastShareTitle.trim();
+        if (shareTitle) {
+          normalizedProfile.discordLastShareTitle = shareTitle;
+        }
+      }
+
+      if (profile.discordLastShareComment === null) {
+        normalizedProfile.discordLastShareComment = null;
+      } else if (typeof profile.discordLastShareComment === 'string') {
+        const shareComment = profile.discordLastShareComment.trim();
+        if (shareComment) {
+          normalizedProfile.discordLastShareComment = shareComment;
+        }
+      }
+
+      if (typeof profile.discordLastShareAt === 'string') {
+        const trimmed = profile.discordLastShareAt.trim();
+        if (trimmed) {
+          const parsed = new Date(trimmed);
+          if (!Number.isNaN(parsed.valueOf())) {
+            normalizedProfile.discordLastShareAt = parsed.toISOString();
+          }
+        }
+      }
     }
 
     normalizedUsers[normalizedId] = normalizedProfile;
@@ -141,6 +211,16 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       discordUserName?: string | null;
       discordAvatarAssetId?: string | null;
       discordAvatarUrl?: string | null;
+      share?: {
+        channelId?: string;
+        channelName?: string | null;
+        channelParentId?: string | null;
+        shareUrl?: string;
+        shareLabel?: string | null;
+        shareTitle?: string | null;
+        shareComment?: string | null;
+        sharedAt?: string;
+      };
     },
     options: UpdateOptions = { persist: 'immediate' }
   ): void {
@@ -155,6 +235,7 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
     const discordUserName = info.discordUserName?.trim();
     const avatarAssetId = info.discordAvatarAssetId;
     const avatarUrl = info.discordAvatarUrl;
+    const shareInfo = info.share;
 
     this.update((previous) => {
       const base = normalizeState(previous);
@@ -187,6 +268,74 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
         nextProfile.discordAvatarUrl = avatarUrl;
       } else if (existing?.discordAvatarUrl !== undefined) {
         nextProfile.discordAvatarUrl = existing.discordAvatarUrl ?? null;
+      }
+
+      if (shareInfo) {
+        const channelId =
+          typeof shareInfo.channelId === 'string' ? shareInfo.channelId.trim() : '';
+        if (channelId) {
+          nextProfile.discordLastShareChannelId = channelId;
+        }
+
+        if (shareInfo.channelName === null) {
+          nextProfile.discordLastShareChannelName = null;
+        } else if (typeof shareInfo.channelName === 'string') {
+          const channelName = shareInfo.channelName.trim();
+          if (channelName) {
+            nextProfile.discordLastShareChannelName = channelName;
+          }
+        }
+
+        if (shareInfo.channelParentId === null) {
+          nextProfile.discordLastShareChannelParentId = null;
+        } else if (typeof shareInfo.channelParentId === 'string') {
+          const parentId = shareInfo.channelParentId.trim();
+          if (parentId) {
+            nextProfile.discordLastShareChannelParentId = parentId;
+          }
+        }
+
+        if (typeof shareInfo.shareUrl === 'string') {
+          const shareUrl = shareInfo.shareUrl.trim();
+          if (shareUrl) {
+            nextProfile.discordLastShareUrl = shareUrl;
+          }
+        }
+
+        if (shareInfo.shareLabel === null) {
+          nextProfile.discordLastShareLabel = null;
+        } else if (typeof shareInfo.shareLabel === 'string') {
+          const label = shareInfo.shareLabel.trim();
+          if (label) {
+            nextProfile.discordLastShareLabel = label;
+          }
+        }
+
+        if (shareInfo.shareTitle === null) {
+          nextProfile.discordLastShareTitle = null;
+        } else if (typeof shareInfo.shareTitle === 'string') {
+          const title = shareInfo.shareTitle.trim();
+          if (title) {
+            nextProfile.discordLastShareTitle = title;
+          }
+        }
+
+        if (shareInfo.shareComment === null) {
+          nextProfile.discordLastShareComment = null;
+        } else if (typeof shareInfo.shareComment === 'string') {
+          const comment = shareInfo.shareComment.trim();
+          if (comment) {
+            nextProfile.discordLastShareComment = comment;
+          }
+        }
+
+        const sharedAtRaw =
+          typeof shareInfo.sharedAt === 'string' ? shareInfo.sharedAt.trim() : '';
+        const parsedSharedAt = sharedAtRaw ? new Date(sharedAtRaw) : null;
+        nextProfile.discordLastShareAt =
+          parsedSharedAt && !Number.isNaN(parsedSharedAt.valueOf())
+            ? parsedSharedAt.toISOString()
+            : now;
       }
 
       const nextUsers = {

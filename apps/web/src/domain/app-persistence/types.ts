@@ -66,6 +66,14 @@ export interface UserProfileCardV3 {
   discordAvatarAssetId?: string | null;
   discordAvatarUrl?: string | null;
   discordLinkedAt?: string;
+  discordLastShareChannelId?: string;
+  discordLastShareChannelName?: string | null;
+  discordLastShareChannelParentId?: string | null;
+  discordLastShareUrl?: string;
+  discordLastShareLabel?: string | null;
+  discordLastShareTitle?: string | null;
+  discordLastShareComment?: string | null;
+  discordLastShareAt?: string;
 }
 
 export interface UserProfilesStateV3 {

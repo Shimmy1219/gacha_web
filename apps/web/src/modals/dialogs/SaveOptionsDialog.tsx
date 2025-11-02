@@ -105,6 +105,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       discordDisplayName?: string;
       discordUserName?: string;
       avatarUrl?: string | null;
+      share?: {
+        channelId: string;
+        channelName?: string | null;
+        channelParentId?: string | null;
+        shareUrl: string;
+        shareLabel?: string | null;
+        shareTitle?: string | null;
+        shareComment?: string | null;
+        sharedAt?: string;
+      };
     }) => {
       if (!userProfilesStore || !userId) {
         return;
@@ -189,7 +199,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             discordDisplayName: params.discordDisplayName ?? receiverDisplayName,
             discordUserName: params.discordUserName,
             discordAvatarAssetId: avatarAssetId,
-            discordAvatarUrl: normalizedAvatarUrl
+            discordAvatarUrl: normalizedAvatarUrl,
+            share: params.share
           },
           { persist: 'immediate' }
         );
@@ -520,17 +531,45 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             memberDisplayName,
             memberUsername,
             memberAvatarHash,
-            memberAvatarUrl
+            memberAvatarUrl,
+            channelId,
+            channelName,
+            channelParentId,
+            shareUrl: sharedUrl,
+            shareLabel,
+            shareTitle,
+            shareComment,
+            sharedAt
           }) => {
             setErrorBanner(null);
             const resolvedAvatarUrl = sharedMemberId && memberAvatarHash
               ? `https://cdn.discordapp.com/avatars/${sharedMemberId}/${memberAvatarHash}.png?size=256`
               : memberAvatarUrl ?? null;
+            const rawShareUrl = sharedUrl || uploadData?.url || '';
+            const resolvedShareUrl = rawShareUrl.trim();
+            const resolvedShareLabelRaw =
+              shareLabel ?? uploadData?.label ?? (sharedUrl && sharedUrl !== rawShareUrl ? sharedUrl : null);
+            const resolvedShareLabel =
+              typeof resolvedShareLabelRaw === 'string' ? resolvedShareLabelRaw.trim() : resolvedShareLabelRaw;
+            const shareInfo = resolvedShareUrl
+              ? {
+                  channelId,
+                  channelName: channelName ?? null,
+                  channelParentId: channelParentId ?? null,
+                  shareUrl: resolvedShareUrl,
+                  shareLabel: resolvedShareLabel ? resolvedShareLabel : null,
+                  shareTitle: shareTitle ?? null,
+                  shareComment: shareComment ?? null,
+                  sharedAt: sharedAt ?? new Date().toISOString()
+                }
+              : undefined;
+
             void linkDiscordProfileToStore({
               discordUserId: sharedMemberId,
               discordDisplayName: memberDisplayName ?? memberName,
               discordUserName: memberUsername,
-              avatarUrl: resolvedAvatarUrl
+              avatarUrl: resolvedAvatarUrl,
+              share: shareInfo
             });
             setUploadNotice({
               id: Date.now(),

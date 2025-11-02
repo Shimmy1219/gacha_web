@@ -175,6 +175,7 @@ export default async function handler(req, res){
     return res.json({
       ok:true,
       channel_id: matchWithBot.id,
+      channel_name: typeof matchWithBot.name === 'string' ? matchWithBot.name : null,
       created:false,
       parent_id: matchWithBot.parent_id || null
     });
@@ -212,6 +213,7 @@ export default async function handler(req, res){
     return res.json({
       ok:true,
       channel_id: matchWithoutBot.id,
+      channel_name: typeof matchWithoutBot.name === 'string' ? matchWithoutBot.name : null,
       created:false,
       parent_id: matchWithoutBot.parent_id || null
     });
@@ -254,6 +256,7 @@ export default async function handler(req, res){
   return res.json({
     ok:true,
     channel_id: created.id,
+    channel_name: typeof created?.name === 'string' ? created.name : null,
     created:true,
     parent_id: category.id
   });

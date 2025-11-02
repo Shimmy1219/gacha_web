@@ -44,7 +44,14 @@ interface DiscordMemberPickerPayload {
     memberAvatarHash?: string | null;
     memberAvatarUrl?: string | null;
     channelId: string;
+    channelName?: string | null;
+    channelParentId?: string | null;
     created: boolean;
+    shareUrl: string;
+    shareLabel?: string | null;
+    shareTitle: string;
+    shareComment?: string | null;
+    sharedAt: string;
   }) => void;
   onShareFailed?: (message: string) => void;
 }
@@ -246,6 +253,8 @@ export function DiscordMemberPickerDialog({
       const findPayload = (await findResponse.json().catch(() => null)) as {
         ok: boolean;
         channel_id?: string | null;
+        channel_name?: string | null;
+        parent_id?: string | null;
         created?: boolean;
         error?: string;
       } | null;
@@ -303,6 +312,8 @@ export function DiscordMemberPickerDialog({
       const memberName = memberDisplayName;
       const memberAvatarUrl = selectedMember ? getMemberAvatarUrl(selectedMember) : null;
 
+      const sharedAt = new Date().toISOString();
+
       payload?.onShared?.({
         memberId: selectedMemberId,
         memberName,
@@ -312,7 +323,14 @@ export function DiscordMemberPickerDialog({
         memberAvatarHash: selectedMember?.avatar ?? null,
         memberAvatarUrl,
         channelId,
-        created: Boolean(findPayload.created)
+        channelName: findPayload.channel_name ?? null,
+        channelParentId: findPayload.parent_id ?? null,
+        created: Boolean(findPayload.created),
+        shareUrl: payload.shareUrl,
+        shareLabel: payload.shareLabel ?? null,
+        shareTitle: title,
+        shareComment: comment ?? null,
+        sharedAt
       });
       close();
     } catch (error) {
