@@ -42,12 +42,13 @@ export const ModalOverlay = forwardRef<
 
 interface ModalPanelProps extends ComponentPropsWithoutRef<typeof DialogPanel> {
   size?: ModalSize;
+  paddingClassName?: string;
 }
 
 export const ModalPanel = forwardRef<
   ElementRef<typeof DialogPanel>,
   ModalPanelProps
->(function ModalPanel({ size = 'md', className, ...props }, ref) {
+>(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   return (
     <DialogPanel
       {...props}
@@ -56,7 +57,7 @@ export const ModalPanel = forwardRef<
         'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur md:max-h-none md:overflow-hidden',
         'max-h-[calc(100vh-2rem)]',
         SIZE_CLASS_MAP[size],
-        'p-6',
+        paddingClassName,
         className
       )}
     />

@@ -5,12 +5,14 @@ import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
+  PullHistoryEntryStatus,
   PullHistoryEntryV1,
   PullHistoryStateV1,
   GachaRarityStateV3,
   UserInventoriesStateV3,
   UserInventorySnapshotV3
 } from '@domain/app-persistence';
+import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { useGachaLocalStorage } from '../../features/storage/useGachaLocalStorage';
 import type { SaveTargetSelection, SaveTargetSelectionMode } from '../../features/save/types';
@@ -35,6 +37,7 @@ interface HistorySelectionEntry {
   gachaName: string;
   executedAt: string;
   pullCount: number;
+  status?: PullHistoryEntryStatus;
   itemTypeCount: number;
   items: HistorySelectionItem[];
   rarityGroups: HistorySelectionRarityGroup[];
@@ -244,6 +247,7 @@ function buildHistoryEntries(
       gachaName: getGachaDisplayName(entry.gachaId, appMeta),
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
+      status: entry.status,
       itemTypeCount: normalizedItems.length,
       items,
       rarityGroups
@@ -307,8 +311,14 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       selectedHistoryIds.length === 0 &&
       !historySelectionInitialized
     ) {
+      const defaultHistoryIds = historyEntries
+        .filter((entry) => (entry.status ?? 'new') === 'new')
+        .map((entry) => entry.id);
+
       setHistorySelectionInitialized(true);
-      setSelectedHistoryIds(historyEntries.map((entry) => entry.id));
+      if (defaultHistoryIds.length > 0) {
+        setSelectedHistoryIds(defaultHistoryIds);
+      }
     }
   }, [mode, historyEntries, historySelectionInitialized, selectedHistoryIds.length]);
 
@@ -548,36 +558,39 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
               <p className="text-sm text-muted-foreground">保存できる履歴がありません。</p>
             ) : (
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
-                {historyEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className={clsx(
-                      'overflow-hidden rounded-xl border text-sm transition',
-                      selectedHistoryIds.includes(entry.id)
-                        ? 'border-accent bg-accent/10'
-                        : 'border-border/60 bg-surface/40 hover:border-border/80 hover:bg-surface/50'
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left"
-                      onClick={() => toggleHistoryExpanded(entry.id)}
-                      aria-expanded={expandedHistoryIds.includes(entry.id)}
-                      aria-controls={`history-entry-${entry.id}`}
+                {historyEntries.map((entry) => {
+                  const statusLabel = getPullHistoryStatusLabel(entry.status);
+                  return (
+                    <div
+                      key={entry.id}
+                      className={clsx(
+                        'overflow-hidden rounded-xl border text-sm transition',
+                        selectedHistoryIds.includes(entry.id)
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border/60 bg-surface/40 hover:border-border/80 hover:bg-surface/50'
+                      )}
                     >
-                      <div className="flex flex-1 flex-col">
-                        <span className="font-semibold text-surface-foreground/90">{entry.gachaName}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {formatExecutedAt(entry.executedAt)} ・ {entry.pullCount}連
-                        </span>
-                      </div>
-                      <ChevronDownIcon
-                        className={clsx(
-                          'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-                          expandedHistoryIds.includes(entry.id) ? 'rotate-180' : 'rotate-0'
-                        )}
-                      />
-                    </button>
+                      <button
+                        type="button"
+                        className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left"
+                        onClick={() => toggleHistoryExpanded(entry.id)}
+                        aria-expanded={expandedHistoryIds.includes(entry.id)}
+                        aria-controls={`history-entry-${entry.id}`}
+                      >
+                        <div className="flex flex-1 flex-col">
+                          <span className="font-semibold text-surface-foreground/90">{entry.gachaName}</span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {formatExecutedAt(entry.executedAt)} ・ {entry.pullCount}連
+                            {statusLabel ? ` ・ ${statusLabel}` : ''}
+                          </span>
+                        </div>
+                        <ChevronDownIcon
+                          className={clsx(
+                            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                            expandedHistoryIds.includes(entry.id) ? 'rotate-180' : 'rotate-0'
+                          )}
+                        />
+                      </button>
                     <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface/30 px-3 py-2 text-xs">
                       <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/80">
                         <input
@@ -640,7 +653,8 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

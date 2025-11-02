@@ -11,6 +11,7 @@ import {
   type PullHistoryEntryV1
 } from '@domain/app-persistence';
 import { generateDeterministicUserId } from '@domain/idGenerators';
+import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
 
 interface InventoryHistoryDialogPayload {
   userId: string;
@@ -160,6 +161,7 @@ export function InventoryHistoryDialog({
             {historyEntries.map((entry) => {
               const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
               const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
+              const statusLabel = entry.status ? PULL_HISTORY_STATUS_LABELS[entry.status] : null;
               const sourceClassName = SOURCE_CLASSNAMES[entry.source] ?? 'border-border/60 bg-panel-muted text-muted-foreground';
               const pullCountValue =
                 typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount)
@@ -217,7 +219,12 @@ export function InventoryHistoryDialog({
                 >
                   <header className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium text-surface-foreground">{executedAtLabel}</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-surface-foreground">{executedAtLabel}</span>
+                        {statusLabel ? (
+                          <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
+                        ) : null}
+                      </div>
                       <span className="text-[11px] text-muted-foreground">{pullCountLabel}</span>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">

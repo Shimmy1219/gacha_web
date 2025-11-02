@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 import { saveAsset } from '@domain/assets/assetStorage';
+import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
@@ -64,7 +65,8 @@ function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: st
   }
   const executedAt = formatExpiresAt(entry.executedAt) ?? '日時不明';
   const pullCount = Number.isFinite(entry.pullCount) ? `${entry.pullCount}連` : '回数不明';
-  return `${executedAt} / ${gachaName} (${pullCount})`;
+  const statusLabel = getPullHistoryStatusLabel(entry.status);
+  return `${executedAt} / ${gachaName} (${pullCount})${statusLabel ? ` / ${statusLabel}` : ''}`;
 }
 
 export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
@@ -82,6 +84,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
   const { userProfiles: userProfilesStore } = useDomainStores();
+  const { pullHistory: pullHistoryStore } = useDomainStores();
   const { data: discordSession } = useDiscordSession();
   const discordUserId = discordSession?.user?.id;
 
@@ -347,6 +350,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         userName: receiverDisplayName
       });
 
+      if (result.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(result.pullIds, 'ziped');
+      }
+
       const blobUrl = window.URL.createObjectURL(result.blob);
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
@@ -447,6 +454,54 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
     try {
       await runZipUpload();
+      const zip = await buildUserZipFromSelection({
+        snapshot,
+        selection,
+        userId,
+        userName: receiverDisplayName
+      });
+
+      if (zip.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(zip.pullIds, 'ziped');
+      }
+
+      const uploadResponse = await uploadZip({
+        file: zip.blob,
+        fileName: zip.fileName,
+        userId,
+        receiverName: receiverDisplayName,
+        ownerDiscordId: discordSession?.user?.id,
+        ownerDiscordName: discordSession?.user?.name
+      });
+
+      const expiresAtDisplay = uploadResponse.expiresAt
+        ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
+        : undefined;
+
+      const savedAt = new Date().toISOString();
+
+      persistence.savePartial({
+        saveOptions: {
+          [userId]: {
+            version: 3,
+            key: uploadResponse.token,
+            shareUrl: uploadResponse.shareUrl,
+            downloadUrl: uploadResponse.downloadUrl,
+            expiresAt: uploadResponse.expiresAt,
+            pathname: uploadResponse.pathname,
+            savedAt
+          }
+        }
+      });
+
+      setUploadResult({
+        url: uploadResponse.shareUrl,
+        label: uploadResponse.shareUrl,
+        expiresAt: expiresAtDisplay
+      });
+      if (zip.pullIds.length > 0) {
+        pullHistoryStore.markPullStatus(zip.pullIds, 'uploaded');
+      }
       setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

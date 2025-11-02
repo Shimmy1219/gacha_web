@@ -107,7 +107,11 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
             leaveFrom="translate-y-0 opacity-100"
             leaveTo="translate-y-4 opacity-0"
           >
-            <ModalPanel size={entry.props.size ?? 'md'}>
+            <ModalPanel
+              size={entry.props.size ?? 'md'}
+              className={entry.props.panelClassName}
+              paddingClassName={entry.props.panelPaddingClassName}
+            >
               {dismissible ? (
                 <button
                   type="button"
