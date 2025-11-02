@@ -68,11 +68,18 @@ export function DiscordBotInviteDialog({
       return;
     }
 
+    const storedSelection = loadDiscordGuildSelection(userId);
+    const preservedCategory =
+      storedSelection && storedSelection.guildId === guild.id
+        ? storedSelection.privateChannelCategory ?? null
+        : null;
+
     const selection: DiscordGuildSelection = {
       guildId: guild.id,
       guildName: guild.name,
       guildIcon: guild.icon,
-      selectedAt: new Date().toISOString()
+      selectedAt: new Date().toISOString(),
+      privateChannelCategory: preservedCategory
     };
     saveDiscordGuildSelection(userId, selection);
     payload?.onGuildSelected?.(selection);

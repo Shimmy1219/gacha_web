@@ -1,8 +1,15 @@
+export interface DiscordGuildCategorySelection {
+  id: string;
+  name: string;
+  selectedAt?: string;
+}
+
 export interface DiscordGuildSelection {
   guildId: string;
   guildName: string;
   guildIcon?: string | null;
   selectedAt: string;
+  privateChannelCategory?: DiscordGuildCategorySelection | null;
 }
 
 const STORAGE_PREFIX = 'discord.guildSelection';
@@ -33,6 +40,13 @@ export function loadDiscordGuildSelection(
     const parsed = JSON.parse(raw) as DiscordGuildSelection;
     if (!parsed || typeof parsed.guildId !== 'string' || typeof parsed.guildName !== 'string') {
       return null;
+    }
+    if (
+      parsed.privateChannelCategory &&
+      (typeof parsed.privateChannelCategory.id !== 'string' ||
+        typeof parsed.privateChannelCategory.name !== 'string')
+    ) {
+      parsed.privateChannelCategory = null;
     }
     return parsed;
   } catch (error) {

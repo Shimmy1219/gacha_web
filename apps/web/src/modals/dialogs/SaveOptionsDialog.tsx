@@ -358,6 +358,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         size: 'lg',
         payload: {
           guildId: selection.guildId,
+          discordUserId,
+          initialCategory: selection.privateChannelCategory ?? null,
           shareUrl: uploadResult.url,
           shareLabel: uploadResult.label,
           receiverName: receiverDisplayName,

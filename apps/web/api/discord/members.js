@@ -57,7 +57,12 @@ export default async function handler(req, res){
         token: process.env.DISCORD_BOT_TOKEN, isBot:true
       });
       const rows = (Array.isArray(hits)?hits:[]).map(m => ({
-        id: m.user.id, username: m.user.username, nick: m.nick || null, avatar: m.user.avatar || null
+        id: m.user.id,
+        username: m.user.username,
+        globalName: m.user.global_name || null,
+        nick: m.nick || null,
+        avatar: m.user.avatar || null,
+        displayName: m.nick || m.user.global_name || m.user.username || m.user.id
       }));
       log.info('members search succeeded', { count: rows.length, mode: 'search' });
       return res.json({ ok:true, members: rows, mode:'search' });
@@ -84,7 +89,14 @@ export default async function handler(req, res){
       });
       const arr = Array.isArray(batch) ? batch : [];
       for (const m of arr){
-        out.push({ id:m.user.id, username:m.user.username, nick:m.nick || null, avatar:m.user.avatar || null });
+        out.push({
+          id:m.user.id,
+          username:m.user.username,
+          globalName: m.user.global_name || null,
+          nick:m.nick || null,
+          avatar:m.user.avatar || null,
+          displayName: m.nick || m.user.global_name || m.user.username || m.user.id
+        });
       }
       if (arr.length < take) break;
       after = arr[arr.length-1].user.id;

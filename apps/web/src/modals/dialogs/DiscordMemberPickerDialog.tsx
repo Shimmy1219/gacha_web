@@ -7,12 +7,18 @@ import {
 import { useQuery } from '@tanstack/react-query';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import {
+  type DiscordGuildCategorySelection
+} from '../../features/discord/discordGuildSelectionStorage';
+import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 
 interface DiscordMemberSummary {
   id: string;
   username: string;
+  globalName: string | null;
   nick: string | null;
   avatar: string | null;
+  displayName: string;
 }
 
 interface DiscordMembersResponse {
@@ -23,6 +29,8 @@ interface DiscordMembersResponse {
 
 interface DiscordMemberPickerPayload {
   guildId: string;
+  discordUserId: string;
+  initialCategory?: DiscordGuildCategorySelection | null;
   shareUrl: string;
   shareLabel?: string;
   shareTitle?: string;
@@ -34,18 +42,6 @@ interface DiscordMemberPickerPayload {
     created: boolean;
   }) => void;
   onShareFailed?: (message: string) => void;
-}
-
-function getMemberDisplayName(member: DiscordMemberSummary): string {
-  const nick = member.nick?.trim();
-  if (nick) {
-    return nick;
-  }
-  const username = member.username?.trim();
-  if (username) {
-    return username;
-  }
-  return member.id;
 }
 
 function getMemberAvatarUrl(member: DiscordMemberSummary): string | null {
@@ -124,13 +120,18 @@ function useDiscordGuildMembers(guildId: string | null | undefined, query: strin
 
 export function DiscordMemberPickerDialog({
   payload,
-  close
+  close,
+  push
 }: ModalComponentProps<DiscordMemberPickerPayload>): JSX.Element {
   const guildId = payload?.guildId ?? null;
+  const discordUserId = payload?.discordUserId ?? '';
   const [searchInput, setSearchInput] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<DiscordGuildCategorySelection | null>(
+    payload?.initialCategory ?? null
+  );
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
   const membersQuery = useDiscordGuildMembers(guildId, debouncedQuery);
@@ -149,8 +150,8 @@ export function DiscordMemberPickerDialog({
 
   const sortedMembers = useMemo(() => {
     return [...members].sort((a, b) => {
-      const nameA = getMemberDisplayName(a).toLowerCase();
-      const nameB = getMemberDisplayName(b).toLowerCase();
+      const nameA = a.displayName.toLowerCase();
+      const nameB = b.displayName.toLowerCase();
       if (nameA < nameB) {
         return -1;
       }
@@ -166,7 +167,34 @@ export function DiscordMemberPickerDialog({
     setSubmitError(null);
   };
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (!payload?.initialCategory) {
+      return;
+    }
+    setSelectedCategory(payload.initialCategory);
+  }, [payload?.initialCategory?.id]);
+
+  const openCategoryDialog = () => {
+    if (!guildId || !discordUserId) {
+      setSubmitError('Discordギルドまたはアカウント情報を取得できませんでした。');
+      return;
+    }
+    push(DiscordPrivateChannelCategoryDialog, {
+      title: 'お渡しカテゴリの選択',
+      size: 'lg',
+      payload: {
+        guildId,
+        discordUserId,
+        initialCategory: selectedCategory,
+        onCategorySelected: (category) => {
+          setSelectedCategory(category);
+          setSubmitError(null);
+        }
+      }
+    });
+  };
+
+  const performShare = async (category: DiscordGuildCategorySelection) => {
     if (!payload?.shareUrl) {
       const message = '共有URLが見つかりませんでした。ZIPをアップロードしてから再度お試しください。';
       setSubmitError(message);
@@ -183,20 +211,28 @@ export function DiscordMemberPickerDialog({
       setSubmitError('共有先のメンバーを選択してください。');
       return;
     }
+    if (!category?.id) {
+      setSubmitError('お渡し用のカテゴリが選択されていません。');
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const findResponse = await fetch(
-        `/api/discord/find-channels?guild_id=${encodeURIComponent(guildId)}&member_id=${encodeURIComponent(selectedMemberId)}&create=0`,
-        {
-          headers: {
-            Accept: 'application/json'
-          },
-          credentials: 'include'
-        }
-      );
+      const params = new URLSearchParams({
+        guild_id: guildId,
+        member_id: selectedMemberId,
+        create: '1'
+      });
+      params.set('category_id', category.id);
+
+      const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
+        headers: {
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
 
       const findPayload = (await findResponse.json().catch(() => null)) as {
         ok: boolean;
@@ -216,12 +252,7 @@ export function DiscordMemberPickerDialog({
 
       const channelId = findPayload.channel_id ?? null;
       if (!channelId) {
-        console.log('お渡しチャンネルがありません', { guildId, memberId: selectedMemberId });
-        const missingMessage =
-          'お渡しチャンネルが見つかりませんでした。Discord側でチャンネルを作成してから再度お試しください。';
-        setSubmitError(missingMessage);
-        payload?.onShareFailed?.(missingMessage);
-        return;
+        throw new Error('お渡しチャンネルの作成に失敗しました。');
       }
 
       const title =
@@ -259,9 +290,7 @@ export function DiscordMemberPickerDialog({
       }
 
       const selectedMember = members.find((member) => member.id === selectedMemberId);
-      const memberName = selectedMember
-        ? getMemberDisplayName(selectedMember)
-        : selectedMemberId;
+      const memberName = selectedMember ? selectedMember.displayName : selectedMemberId;
 
       payload?.onShared?.({
         memberId: selectedMemberId,
@@ -283,6 +312,18 @@ export function DiscordMemberPickerDialog({
     }
   };
 
+  const handleSubmit = async () => {
+    if (!selectedMemberId) {
+      setSubmitError('共有先のメンバーを選択してください。');
+      return;
+    }
+    if (!selectedCategory?.id) {
+      openCategoryDialog();
+      return;
+    }
+    await performShare(selectedCategory);
+  };
+
   return (
     <>
       <ModalBody className="space-y-6">
@@ -291,8 +332,17 @@ export function DiscordMemberPickerDialog({
             Discordギルドのメンバーから共有先を選択し、お渡し用のテキストチャンネルへ共有リンクを送信します。
           </p>
           <p className="mt-2">
-            お渡しチャンネルが事前に用意されているメンバーのみ共有可能です。該当チャンネルが見つからない場合は、Discord側でチャンネルを作成してから再度お試しください。
+            選択したメンバーとの1:1お渡しチャンネルが見つからない場合は、保存済みのカテゴリ配下に自動で作成します。カテゴリは事前に設定しておく必要があります。
           </p>
+          {selectedCategory ? (
+            <p className="mt-2 text-xs text-surface-foreground">
+              現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-danger">
+              お渡しカテゴリが未設定です。「Discordに共有」を押すとカテゴリ選択モーダルが表示されます。
+            </p>
+          )}
         </section>
 
         <section className="space-y-4">
@@ -363,7 +413,7 @@ export function DiscordMemberPickerDialog({
               {sortedMembers.map((member) => {
                 const isSelected = member.id === selectedMemberId;
                 const avatarUrl = getMemberAvatarUrl(member);
-                const displayName = getMemberDisplayName(member);
+                const displayName = member.displayName;
                 return (
                   <li key={member.id}>
                     <button

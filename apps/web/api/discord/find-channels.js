@@ -1,10 +1,13 @@
 // /api/discord/find-channel.js
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
-import { dFetch, assertGuildOwner, build1to1Overwrites, isDiscordUnknownGuildError } from '../_lib/discordApi.js';
+import {
+  dFetch,
+  assertGuildOwner,
+  build1to1Overwrites,
+  isDiscordUnknownGuildError
+} from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
-
-const CATEGORY_NAME = '景品お渡し';
 
 export default async function handler(req, res){
   const log = createRequestLogger('api/discord/find-channels', req);
@@ -25,6 +28,8 @@ export default async function handler(req, res){
   const guildId = String(req.query.guild_id || '');
   const memberId = String(req.query.member_id || '');
   const createParam = String(req.query.create ?? '1').toLowerCase();
+  const categoryIdParam = req.query.category_id;
+  const categoryId = typeof categoryIdParam === 'string' ? categoryIdParam.trim() : '';
   const allowCreate = createParam !== '0' && createParam !== 'false';
   if (!guildId || !memberId) {
     log.warn('missing identifiers', { guildIdPresent: Boolean(guildId), memberIdPresent: Boolean(memberId) });
@@ -63,24 +68,8 @@ export default async function handler(req, res){
   }
 
   const allChannels = Array.isArray(chans)?chans:[];
-  let category = allChannels.find(c => c.type === 4 && c.name === CATEGORY_NAME);
-
-  if (!category && allowCreate){
-    try {
-      category = await dFetch(`/guilds/${guildId}/channels`, {
-        token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
-        body: { name: CATEGORY_NAME, type: 4 }
-      });
-      log.info('category created', { categoryId: category?.id });
-    } catch (error) {
-      return respondDiscordApiError(error, 'guild-category-create');
-    }
-  }
-
-  const kids = category
-    ? allChannels.filter(c => c.parent_id === category.id && c.type === 0)
-    : [];
-  const match = kids.find(ch => {
+  const textChannels = allChannels.filter(c => c.type === 0);
+  const match = textChannels.find(ch => {
     const ow = ch.permission_overwrites || [];
     const hasOwner = ow.find(x => x.id === sess.uid && x.type === 1);
     const hasMember = ow.find(x => x.id === memberId && x.type === 1);
@@ -89,13 +78,29 @@ export default async function handler(req, res){
   });
 
   if (match){
-    log.info('existing channel found', { channelId: match.id });
-    return res.json({ ok:true, channel_id: match.id, created:false });
+    log.info('existing channel found', { channelId: match.id, parentId: match.parent_id || null });
+    return res.json({
+      ok:true,
+      channel_id: match.id,
+      created:false,
+      parent_id: match.parent_id || null
+    });
   }
 
-  if (!allowCreate || !category){
-    log.info('matching channel not found and creation disabled', { allowCreate, hasCategory: Boolean(category) });
+  if (!allowCreate){
+    log.info('matching channel not found and creation disabled', { allowCreate });
     return res.json({ ok:true, channel_id: null, created:false });
+  }
+
+  if (!categoryId) {
+    log.warn('category id missing for channel creation');
+    return res.status(400).json({ ok:false, error:'category_id required to create private channel' });
+  }
+
+  const category = allChannels.find(c => c.type === 4 && c.id === categoryId);
+  if (!category) {
+    log.warn('specified category not found in guild', { categoryId });
+    return res.status(404).json({ ok:false, error:'指定されたカテゴリが見つかりません。' });
   }
 
   // 無ければ作成
@@ -115,6 +120,11 @@ export default async function handler(req, res){
     return respondDiscordApiError(error, 'guild-channel-create');
   }
 
-  log.info('channel created', { channelId: created.id, guildId, memberId });
-  return res.json({ ok:true, channel_id: created.id, created:true });
+  log.info('channel created', { channelId: created.id, guildId, memberId, parentId: category.id });
+  return res.json({
+    ok:true,
+    channel_id: created.id,
+    created:true,
+    parent_id: category.id
+  });
 }
