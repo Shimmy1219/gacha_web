@@ -256,6 +256,17 @@
     padding-bottom: 0.2rem;
   }
 
+  .item-card__status-badges {
+    position: absolute;
+    top: -18px;
+    right: -18px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+
   .item-card .badge--status {
     @apply border-transparent text-[11px] font-semibold;
     overflow: visible;
