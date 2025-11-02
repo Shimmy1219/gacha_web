@@ -32,9 +32,10 @@ import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDelet
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
 import {
-  MAX_RATE_FRACTION_DIGITS,
-  formatRarityRate
-} from '../../../../features/rarity/utils/rarityRate';
+  buildGachaPools,
+  formatItemRateWithPrecision,
+  inferRarityFractionDigits
+} from '../../../../logic/gacha';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -51,45 +52,6 @@ type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
-
-function clampFractionDigits(value?: number | null): number | undefined {
-  if (value == null || Number.isNaN(value)) {
-    return undefined;
-  }
-
-  const truncated = Math.trunc(value);
-  if (!Number.isFinite(truncated)) {
-    return undefined;
-  }
-
-  if (truncated <= 0) {
-    return 0;
-  }
-
-  if (truncated >= MAX_RATE_FRACTION_DIGITS) {
-    return MAX_RATE_FRACTION_DIGITS;
-  }
-
-  return truncated;
-}
-
-function formatItemRateWithPrecision(rate?: number, fractionDigits?: number): string {
-  if (rate == null || Number.isNaN(rate)) {
-    return '';
-  }
-
-  const percentValue = rate * 100;
-  if (!Number.isFinite(percentValue)) {
-    return '';
-  }
-
-  const digits = clampFractionDigits(fractionDigits);
-  if (digits == null) {
-    return formatRarityRate(rate);
-  }
-
-  return percentValue.toFixed(digits);
-}
 
 function getSequentialItemName(position: number): string {
   if (Number.isNaN(position) || !Number.isFinite(position)) {
@@ -200,23 +162,20 @@ export function ItemsSection(): JSX.Element {
 
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
 
-  const rarityFractionDigits = useMemo(() => {
-    const result = new Map<string, number>();
-    const entities = data?.rarityState?.entities ?? {};
+  const rarityFractionDigits = useMemo(
+    () => inferRarityFractionDigits(data?.rarityState),
+    [data?.rarityState]
+  );
 
-    Object.entries(entities).forEach(([rarityId, entity]) => {
-      const formatted = formatRarityRate(entity?.emitRate);
-      if (!formatted) {
-        return;
-      }
-
-      const dotIndex = formatted.indexOf('.');
-      const digits = dotIndex === -1 ? 0 : formatted.length - dotIndex - 1;
-      result.set(rarityId, digits);
-    });
-
-    return result;
-  }, [data?.rarityState?.entities]);
+  const { poolsByGachaId, itemsById } = useMemo(
+    () =>
+      buildGachaPools({
+        catalogState: data?.catalogState,
+        rarityState: data?.rarityState,
+        rarityFractionDigits
+      }),
+    [data?.catalogState, data?.rarityState, rarityFractionDigits]
+  );
 
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
@@ -226,55 +185,61 @@ export function ItemsSection(): JSX.Element {
   );
 
   const { itemsByGacha, flatItems } = useMemo(() => {
-    if (!data?.appState || !data?.catalogState || !data?.rarityState) {
+    if (!data?.catalogState) {
       return { itemsByGacha: {} as ItemsByGacha, flatItems: [] as ItemEntry[] };
     }
 
     const catalogByGacha = data.catalogState.byGacha ?? {};
     const riaguCards = data.riaguState?.riaguCards ?? {};
     const riaguIndex = data.riaguState?.indexByItemId ?? {};
+    const rarityEntities = data.rarityState?.entities ?? {};
     const entries: ItemsByGacha = {};
     const flat: ItemEntry[] = [];
 
     Object.keys(catalogByGacha).forEach((gachaId) => {
-      const gachaMeta = data.appState?.meta?.[gachaId];
       const catalog = catalogByGacha[gachaId];
+      if (!catalog?.order?.length) {
+        return;
+      }
+
+      const pool = poolsByGachaId.get(gachaId);
+      if (!pool) {
+        return;
+      }
+
+      const gachaMeta = data.appState?.meta?.[gachaId];
       const results: ItemEntry[] = [];
 
-      const rarityCounts = new Map<string, number>();
       catalog.order.forEach((itemId) => {
         const snapshot = catalog.items[itemId];
         if (!snapshot) {
           return;
         }
 
-        const previous = rarityCounts.get(snapshot.rarityId) ?? 0;
-        rarityCounts.set(snapshot.rarityId, previous + 1);
-      });
+        const poolItem = itemsById.get(snapshot.itemId);
+        const rarityEntity = rarityEntities[snapshot.rarityId];
+        const rarityGroup = pool.rarityGroups.get(snapshot.rarityId);
 
-      catalog.order.forEach((itemId) => {
-        const snapshot = catalog.items[itemId];
-        if (!snapshot) {
-          return;
-        }
-
-        const rarityEntity = data.rarityState?.entities?.[snapshot.rarityId];
-        const rarityEmitRate = rarityEntity?.emitRate;
-        const rarityCount = rarityCounts.get(snapshot.rarityId) ?? 0;
-        const itemRate =
-          rarityEmitRate != null && Number.isFinite(rarityEmitRate) && rarityCount > 0
-            ? rarityEmitRate / rarityCount
-            : undefined;
+        const emitRate = poolItem?.rarityEmitRate ?? rarityEntity?.emitRate;
+        const computedItemRate = poolItem?.itemRate ?? (rarityGroup?.emitRate && rarityGroup.itemCount
+          ? rarityGroup.emitRate / rarityGroup.itemCount
+          : undefined);
         const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
-        const formattedRate = formatItemRateWithPrecision(itemRate, ratePrecision);
+        const baseDisplay = poolItem?.itemRateDisplay
+          ? poolItem.itemRateDisplay.replace(/%$/, '')
+          : '';
+        const formattedRate = baseDisplay
+          ? baseDisplay
+          : formatItemRateWithPrecision(computedItemRate, ratePrecision);
         const itemRateDisplay = formattedRate ? `${formattedRate}%` : '';
+
         const rarity: RarityMeta = {
           rarityId: snapshot.rarityId,
-          label: rarityEntity?.label ?? snapshot.rarityId,
-          color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR,
-          emitRate: rarityEmitRate,
+          label: poolItem?.rarityLabel ?? rarityEntity?.label ?? snapshot.rarityId,
+          color: poolItem?.rarityColor ?? rarityEntity?.color ?? FALLBACK_RARITY_COLOR,
+          emitRate,
           rarityNum: rarityEntity?.rarityNum,
-          itemRate,
+          itemRate: computedItemRate,
           itemRateDisplay
         };
 
@@ -303,7 +268,13 @@ export function ItemsSection(): JSX.Element {
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
         };
 
-        const entry: ItemEntry = { model, rarity, riaguCard, itemRate, itemRateDisplay };
+        const entry: ItemEntry = {
+          model,
+          rarity,
+          riaguCard,
+          itemRate: computedItemRate,
+          itemRateDisplay
+        };
         results.push(entry);
         flat.push(entry);
       });
@@ -312,7 +283,7 @@ export function ItemsSection(): JSX.Element {
     });
 
     return { itemsByGacha: entries, flatItems: flat };
-  }, [data, rarityFractionDigits]);
+  }, [data?.appState, data?.catalogState, data?.rarityState, itemsById, poolsByGachaId, rarityFractionDigits]);
 
   const itemEntryById = useMemo(() => {
     const map = new Map<string, ItemEntry>();

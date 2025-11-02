@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 const toPosixPath = (value: string) => value.replace(/\\/g, '/');
@@ -36,5 +36,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',     // 明示（デフォルトと同じだが、Vercel側の設定と揃える意味で）
     assetsDir: 'assets' // 任意（既定でも可）。CDN等に分けないならそのままでOK
+  },
+  test: {
+    environment: 'node',
+    include: ['src/**/*.{test,spec}.ts'],
+    globals: true
   }
 });
