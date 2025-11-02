@@ -109,7 +109,10 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       onMouseDown={onCardMouseDown}
       onContextMenu={onCardContextMenu}
     >
-      <div className="item-card__status-badges">
+      <div
+        className="absolute z-10 flex flex-col items-end gap-2"
+        style={{ top: '-0.3rem', right: '-0.3rem' }}
+      >
         {model.completeTarget ? <span className="badge badge--status badge--status-complete">完走対象</span> : null}
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
