@@ -8,7 +8,8 @@ import { useStoreValue } from '@domain/stores';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
-  GachaRarityStateV3
+  GachaRarityStateV3,
+  UserProfileCardV3
 } from '@domain/app-persistence';
 import type { GachaResultPayload } from '@domain/gacha/gachaResult';
 import {
@@ -141,6 +142,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControls);
+  const userProfilesState = useStoreValue(userProfiles);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -150,6 +152,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => gachaOptions[0]?.value);
   const [pointsInput, setPointsInput] = useState('100');
   const [userName, setUserName] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [lastPullId, setLastPullId] = useState<string | null>(null);
@@ -191,6 +194,26 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
     const value = Number(pointsInput);
     return Number.isFinite(value) ? value : NaN;
   }, [pointsInput]);
+
+  const normalizedUserName = userName.trim();
+
+  const userSuggestions = useMemo(() => {
+    const users = userProfilesState?.users ?? {};
+    const entries: UserProfileCardV3[] = Object.values(users);
+
+    if (!entries.length) {
+      return [] as UserProfileCardV3[];
+    }
+
+    const query = normalizedUserName.toLowerCase();
+    const filtered = query
+      ? entries.filter((profile) => profile.displayName.toLowerCase().includes(query))
+      : entries;
+
+    const sorted = [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'));
+
+    return sorted.slice(0, 8);
+  }, [normalizedUserName, userProfilesState]);
 
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
@@ -267,7 +290,6 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       }));
 
       const executedAt = new Date().toISOString();
-      const normalizedUserName = userName.trim();
       const userId = normalizedUserName ? userProfiles.ensureProfile(normalizedUserName) : undefined;
 
       const payload: GachaResultPayload = {
@@ -358,16 +380,51 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                 placeholder="100"
               />
             </label>
-            <label className="space-y-2">
-              <span className="block text-sm font-semibold text-muted-foreground">名前</span>
-              <input
-                type="text"
-                value={userName}
-                onChange={(event) => setUserName(event.currentTarget.value)}
-                className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
-                placeholder="ユーザー名（任意）"
-              />
-            </label>
+            <div className="space-y-2">
+              <label className="space-y-2">
+                <span className="block text-sm font-semibold text-muted-foreground">名前</span>
+                <input
+                  type="text"
+                  value={userName}
+                  onChange={(event) => {
+                    setUserName(event.currentTarget.value);
+                    setSelectedUserId(null);
+                  }}
+                  className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+                  placeholder="ユーザー名（任意）"
+                />
+              </label>
+              {normalizedUserName && userSuggestions.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground">既存のユーザー候補</p>
+                  <div className="flex flex-wrap gap-2">
+                    {userSuggestions.map((profile) => {
+                      const isSelected = selectedUserId === profile.id;
+                      return (
+                        <button
+                          key={profile.id}
+                          type="button"
+                          onClick={() => {
+                            setUserName(profile.displayName);
+                            setSelectedUserId(profile.id);
+                          }}
+                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 ${
+                            isSelected
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border/60 text-muted-foreground hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          {profile.displayName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {normalizedUserName && userSuggestions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">一致する既存ユーザーはいません。</p>
+              ) : null}
+            </div>
           </div>
           {selectedGacha && drawPlan ? (
             <div className="space-y-2 rounded-xl border border-border/60 bg-surface-alt p-3 text-xs text-muted-foreground">
