@@ -10,6 +10,24 @@ import {
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
+function buildChannelNameFromDisplayName(displayName, memberId){
+  const fallback = `gift-${memberId}`;
+  if (typeof displayName !== 'string'){ return fallback; }
+  const trimmed = displayName.trim();
+  if (!trimmed){ return fallback; }
+
+  const normalized = trimmed.normalize('NFKC').toLowerCase();
+  const whitespaceCollapsed = normalized.replace(/\s+/gu, '-');
+  const sanitized = whitespaceCollapsed
+    .replace(/[^-\p{Letter}\p{Number}_]+/gu, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^_+|_+$/g, '');
+
+  const candidate = sanitized || fallback;
+  return candidate.length > 90 ? candidate.slice(0, 90) : candidate;
+}
+
 export default async function handler(req, res){
   const log = createRequestLogger('api/discord/find-channels', req);
   log.info('request received', { query: req.query });
@@ -28,6 +46,7 @@ export default async function handler(req, res){
 
   const guildId = String(req.query.guild_id || '');
   const memberId = String(req.query.member_id || '');
+  const memberDisplayNameParam = typeof req.query.display_name === 'string' ? req.query.display_name : '';
   const createParam = String(req.query.create ?? '1').toLowerCase();
   const categoryIdParam = req.query.category_id;
   const categoryId = typeof categoryIdParam === 'string' ? categoryIdParam.trim() : '';
@@ -221,7 +240,7 @@ export default async function handler(req, res){
     created = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
       body: {
-        name: `gift-${memberId}`,
+        name: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
         type: 0,               // text
         parent_id: category.id,
         permission_overwrites: overwrites

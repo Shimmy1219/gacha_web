@@ -225,6 +225,10 @@ export function DiscordMemberPickerDialog({
         member_id: selectedMemberId,
         create: '1'
       });
+      const selectedMemberSummary = members.find((member) => member.id === selectedMemberId);
+      if (selectedMemberSummary?.displayName) {
+        params.set('display_name', selectedMemberSummary.displayName);
+      }
       params.set('category_id', category.id);
 
       const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
@@ -289,7 +293,7 @@ export function DiscordMemberPickerDialog({
         throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
       }
 
-      const selectedMember = members.find((member) => member.id === selectedMemberId);
+      const selectedMember = selectedMemberSummary ?? members.find((member) => member.id === selectedMemberId);
       const memberName = selectedMember ? selectedMember.displayName : selectedMemberId;
 
       payload?.onShared?.({
