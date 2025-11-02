@@ -59,6 +59,13 @@ export interface UserProfileCardV3 {
   id: string;
   displayName: string;
   joinedAt?: string;
+  updatedAt?: string;
+  discordUserId?: string;
+  discordUserName?: string;
+  discordDisplayName?: string;
+  discordAvatarAssetId?: string | null;
+  discordAvatarUrl?: string | null;
+  discordLinkedAt?: string;
 }
 
 export interface UserProfilesStateV3 {

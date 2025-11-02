@@ -6,17 +6,23 @@ import {
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
+import { saveAsset } from '@domain/assets/assetStorage';
 
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
-import { useAppPersistence } from '../../features/storage/AppPersistenceProvider';
+import {
+  DiscordGuildSelectionMissingError,
+  requireDiscordGuildSelection
+} from '../../features/discord/discordGuildSelectionStorage';
+import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -61,7 +67,7 @@ function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: st
   return `${executedAt} / ${gachaName} (${pullCount})`;
 }
 
-export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
+export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
   const { userId, userName, snapshot, selection } = payload;
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -74,7 +80,9 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
+  const { userProfiles: userProfilesStore } = useDomainStores();
   const { data: discordSession } = useDiscordSession();
+  const discordUserId = discordSession?.user?.id;
 
   const receiverDisplayName = useMemo(() => {
     const profileName = snapshot.userProfiles?.users?.[userId]?.displayName;
@@ -89,6 +97,107 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
     }
     return userId;
   }, [snapshot.userProfiles?.users, userId, userName]);
+
+  const linkDiscordProfileToStore = useCallback(
+    async (params: {
+      discordUserId: string;
+      discordDisplayName?: string;
+      discordUserName?: string;
+      avatarUrl?: string | null;
+    }) => {
+      if (!userProfilesStore || !userId) {
+        return;
+      }
+
+      const trimmedDiscordId = params.discordUserId?.trim();
+      if (!trimmedDiscordId) {
+        return;
+      }
+
+      const profilesState = userProfilesStore.getState();
+      const existingProfile = profilesState?.users?.[userId];
+
+      const normalizeAvatarUrl = (
+        value: string | null | undefined
+      ): string | null | undefined => {
+        if (value === undefined) {
+          return undefined;
+        }
+        if (value === null) {
+          return null;
+        }
+        const trimmed = value.trim();
+        return trimmed ? trimmed : null;
+      };
+
+      const normalizedAvatarUrl = normalizeAvatarUrl(params.avatarUrl);
+      let avatarAssetId: string | null | undefined = undefined;
+
+      if (normalizedAvatarUrl === null) {
+        avatarAssetId = null;
+      } else if (typeof normalizedAvatarUrl === 'string') {
+        const existingAvatarUrl = existingProfile?.discordAvatarUrl ?? null;
+        if (normalizedAvatarUrl !== existingAvatarUrl) {
+          if (
+            typeof window !== 'undefined' &&
+            typeof fetch === 'function' &&
+            typeof File !== 'undefined'
+          ) {
+            try {
+              const response = await fetch(normalizedAvatarUrl, { credentials: 'omit' });
+              if (response.ok) {
+                const blob = await response.blob();
+                const mimeType = blob.type || 'image/png';
+                let extension = 'png';
+                if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+                  extension = 'jpg';
+                } else if (mimeType.includes('gif')) {
+                  extension = 'gif';
+                } else if (mimeType.includes('webp')) {
+                  extension = 'webp';
+                }
+                const fileName = `discord-avatar-${trimmedDiscordId}.${extension}`;
+                const file = new File([blob], fileName, { type: mimeType });
+                const record = await saveAsset(file);
+                avatarAssetId = record.id;
+              } else {
+                console.warn('Discordアバターの取得に失敗しました', {
+                  status: response.status
+                });
+                avatarAssetId = null;
+              }
+            } catch (error) {
+              console.warn('Discordアバターの保存に失敗しました', error);
+              avatarAssetId = null;
+            }
+          } else {
+            avatarAssetId = null;
+          }
+        } else {
+          avatarAssetId = existingProfile?.discordAvatarAssetId ?? undefined;
+        }
+      } else {
+        avatarAssetId = existingProfile?.discordAvatarAssetId ?? undefined;
+      }
+
+      try {
+        userProfilesStore.linkDiscordProfile(
+          userId,
+          {
+            discordUserId: trimmedDiscordId,
+            discordDisplayName: params.discordDisplayName ?? receiverDisplayName,
+            discordUserName: params.discordUserName,
+            discordAvatarAssetId: avatarAssetId,
+            discordAvatarUrl: normalizedAvatarUrl
+          },
+          { persist: 'immediate' }
+        );
+      } catch (error) {
+        console.error('Discordプロフィール情報の保存に失敗しました', error);
+      }
+    },
+    [userProfilesStore, userId, receiverDisplayName]
+  );
 
   const storedUpload: SaveOptionsUploadResult | null = useMemo(() => {
     const saved = snapshot.saveOptions?.[userId];
@@ -323,6 +432,77 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
     }
   };
 
+  const isDiscordLoggedIn = discordSession?.loggedIn === true;
+  const discordActionLabel = !isDiscordLoggedIn
+    ? 'ログインが必要'
+    : !uploadResult?.url
+      ? '共有URLを準備'
+      : 'Discordに共有';
+
+  const handleShareToDiscord = () => {
+    setErrorBanner(null);
+    if (!isDiscordLoggedIn) {
+      setErrorBanner('Discordにログインしてから共有してください。');
+      return;
+    }
+    if (!discordUserId) {
+      setErrorBanner('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      return;
+    }
+    if (!uploadResult?.url) {
+      setErrorBanner('共有用URLが見つかりません。先にZIPをアップロードして共有リンクを取得してください。');
+      return;
+    }
+
+    try {
+      const selection = requireDiscordGuildSelection(discordUserId);
+      push(DiscordMemberPickerDialog, {
+        title: 'Discord共有先の選択',
+        size: 'lg',
+        payload: {
+          guildId: selection.guildId,
+          discordUserId,
+          initialCategory: selection.privateChannelCategory ?? null,
+          shareUrl: uploadResult.url,
+          shareLabel: uploadResult.label,
+          receiverName: receiverDisplayName,
+          onShared: ({
+            memberId: sharedMemberId,
+            memberName,
+            memberDisplayName,
+            memberUsername,
+            memberAvatarHash,
+            memberAvatarUrl
+          }) => {
+            setErrorBanner(null);
+            const resolvedAvatarUrl = sharedMemberId && memberAvatarHash
+              ? `https://cdn.discordapp.com/avatars/${sharedMemberId}/${memberAvatarHash}.png?size=256`
+              : memberAvatarUrl ?? null;
+            void linkDiscordProfileToStore({
+              discordUserId: sharedMemberId,
+              discordDisplayName: memberDisplayName ?? memberName,
+              discordUserName: memberUsername,
+              avatarUrl: resolvedAvatarUrl
+            });
+            setUploadNotice({
+              id: Date.now(),
+              message: `${memberName}さんにDiscordで共有しました`
+            });
+          },
+          onShareFailed: (message) => {
+            setErrorBanner(message);
+          }
+        }
+      });
+    } catch (error) {
+      const message =
+        error instanceof DiscordGuildSelectionMissingError
+          ? error.message
+          : 'Discordギルドの選択情報を取得できませんでした。Discord共有設定を確認してください。';
+      setErrorBanner(message);
+    }
+  };
+
   const uploadNoticePortal =
     uploadNotice && noticePortalRef.current
       ? createPortal(
@@ -373,13 +553,11 @@ export function SaveOptionsDialog({ payload, close }: ModalComponentProps<SaveOp
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="保存したZIPリンクをDiscordの共有チャンネルへ送信します。現在は準備中です。"
-            actionLabel="準備中"
-            disabled
+            description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
+            actionLabel={discordActionLabel}
+            disabled={isProcessing || isUploading}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
-            onClick={() => {
-              console.info('Discord共有処理は後続タスクで実装されます', { userId });
-            }}
+            onClick={handleShareToDiscord}
           />
         </div>
 
