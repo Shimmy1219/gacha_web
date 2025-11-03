@@ -1,10 +1,9 @@
-import { MusicalNoteIcon, PhotoIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { forwardRef, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
-import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
+import { ItemPreviewButton } from '../../../../components/ItemPreviewThumbnail';
 
 export type ItemId = string;
 export type GachaId = string;
@@ -77,14 +76,9 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
 ): JSX.Element {
   const { imageAsset } = model;
   const { isMobile } = useResponsiveDashboard();
-  const preview = useAssetPreview(imageAsset?.assetHash ?? null);
-  const isImageAsset = Boolean(preview.type?.startsWith('image/'));
-  const isVideoAsset = Boolean(preview.type?.startsWith('video/'));
-  const isAudioAsset = Boolean(preview.type?.startsWith('audio/'));
+  const assetId = imageAsset?.assetHash ?? null;
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
-  const previewUrl = preview.url ?? fallbackUrl;
-  const hasImage = Boolean(imageAsset?.hasImage && (isImageAsset ? previewUrl : fallbackUrl));
-  const canPreviewAsset = Boolean(onPreviewAsset && (previewUrl || fallbackUrl));
+  const canPreviewAsset = Boolean(onPreviewAsset && (assetId || fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -102,7 +96,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       itemName: model.name,
       gachaId: model.gachaId,
       gachaDisplayName: model.gachaDisplayName,
-      assetHash: imageAsset?.assetHash ?? null,
+      assetHash: assetId,
       thumbnailUrl: fallbackUrl
     });
   };
@@ -138,31 +132,16 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           isMobile ? 'flex-row items-start' : 'flex-col'
         )}
       >
-        <button
-          type="button"
+        <ItemPreviewButton
           onClick={handlePreviewClick}
-          disabled={!canPreviewAsset}
+          canPreview={canPreviewAsset}
+          assetId={assetId}
+          fallbackUrl={fallbackUrl}
+          alt={model.name}
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
-          className={clsx(
-            'flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-border/60 bg-panel-muted text-muted-foreground transition hover:bg-panel-contrast focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep disabled:cursor-default disabled:opacity-90',
-            isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full',
-            hasImage && isImageAsset && previewUrl && 'border-transparent',
-            canPreviewAsset && 'cursor-zoom-in',
-            canPreviewAsset && 'group-hover/item:bg-panel-contrast'
-          )}
-          data-preview-button="true"
-        >
-          {isImageAsset && previewUrl ? (
-            <img src={previewUrl} alt={model.name} className="h-full w-full object-contain" />
-          ) : isVideoAsset ? (
-            <VideoCameraIcon className="h-10 w-10" />
-          ) : isAudioAsset ? (
-            <MusicalNoteIcon className="h-10 w-10" />
-          ) : (
-            <PhotoIcon className="h-10 w-10" />
-          )}
-        </button>
+          className={clsx(isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}
+        />
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-3')}>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
