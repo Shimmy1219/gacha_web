@@ -68,7 +68,7 @@ export function RarityTable({
                     value={label}
                     onChange={(event) => onLabelChange?.(row.id, event.target.value)}
                     className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-sm transition focus:border-accent focus:outline-none',
+                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none',
                       presentation.className ?? 'text-surface-foreground'
                     )}
                     style={presentation.style}
