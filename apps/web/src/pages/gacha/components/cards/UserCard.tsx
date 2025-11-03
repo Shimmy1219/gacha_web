@@ -552,7 +552,7 @@ function GachaInventoryCard({
           return (
             <div
               key={rarityId}
-              className="user-card__rarity-row grid gap-2 sm:grid-cols-[minmax(5rem,auto),1fr] sm:items-start"
+              className="user-card__rarity-row grid grid-cols-[minmax(5rem,auto),1fr] items-start gap-2"
             >
               <div className="user-card__rarity-label flex items-center gap-2">
                 <span className={clsx('user-card__rarity-name text-sm font-semibold', className)} style={style}>

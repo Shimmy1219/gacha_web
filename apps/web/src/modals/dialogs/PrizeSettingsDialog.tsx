@@ -369,11 +369,50 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     });
   };
 
+  const renderFileSelectionContent = () => (
+    <>
+      <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
+          <PlusCircleIcon className="h-4 w-4" />
+          ファイルを選ぶ
+          <input
+            type="file"
+            accept="image/*,video/*,audio/*"
+            className="sr-only"
+            onChange={handleFileInputChange}
+          />
+        </label>
+        {selectedFile ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+            onClick={handleClearImage}
+          >
+            <XMarkIcon className="h-4 w-4" />
+            取り消す
+          </button>
+        ) : null}
+      </div>
+      {selectedFile ? (
+        <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
+      ) : existingAssetPreview.name ? (
+        <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {existingAssetPreview.name}</p>
+      ) : null}
+      {isProcessingAsset ? (
+        <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
+      ) : null}
+    </>
+  );
+
   return (
     <>
       <ModalBody className="rounded-2xl p-2">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <label className="flex-1 space-y-2">
+        <div className="flex flex-row items-end gap-4 lg:justify-between">
+          <label className="flex-1 min-w-0 space-y-2">
             <span className="block text-sm font-medium text-surface-foreground">対象アイテム</span>
             <input
               type="text"
@@ -383,7 +422,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               placeholder="煌めく星屑ブレスレット"
             />
           </label>
-          <div className="flex w-full flex-col gap-2 lg:max-w-[14rem]">
+          <div className="flex min-w-[11rem] shrink-0 flex-col gap-2 lg:max-w-[14rem]">
             <span className="text-sm font-medium text-surface-foreground">レアリティ</span>
             <SingleSelectDropdown<string>
               value={rarityId}
@@ -433,11 +472,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         </div>
         <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
           <div className="space-y-5">
-            <div className="rounded-2xl p-3">
+            <div className="rounded-2xl">
               <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
-              <div className="mt-3 grid gap-4 lg:grid-cols-1">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-xl bg-border/20">
+              <div className="mt-3 flex flex-col gap-4 lg:items-center lg:text-center">
+                <div className="flex w-full items-start gap-4 lg:flex-col lg:items-center">
+                  <div className="relative flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-border/20 lg:h-40 lg:w-40">
                     {currentPreview ? (
                       isImagePreview ? (
                         <img
@@ -459,17 +498,20 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                       <PhotoIcon className="h-12 w-12 text-muted-foreground" />
                     )}
                   </div>
-                  <div className="space-y-1 text-center">
-                    <p className="text-sm font-semibold text-surface-foreground">{name || '未設定'}</p>
-                    <span
-                      className={clsx(
-                        'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold',
-                        rarityPreviewPresentation.className
-                      )}
-                      style={rarityBadgeStyle}
-                    >
-                      {currentRarityLabel}
-                    </span>
+                  <div className="flex w-full flex-1 flex-col gap-3 text-left lg:mt-4 lg:w-auto lg:items-center lg:text-center">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-surface-foreground">{name || '未設定'}</p>
+                      <span
+                        className={clsx(
+                          'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold',
+                          rarityPreviewPresentation.className
+                        )}
+                        style={rarityBadgeStyle}
+                      >
+                        {currentRarityLabel}
+                      </span>
+                    </div>
+                    <div className="space-y-2 lg:hidden">{renderFileSelectionContent()}</div>
                   </div>
                 </div>
               </div>
@@ -477,42 +519,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           </div>
 
           <div className="space-y-1">
-            <div className="rounded-2xl p-3">
-              <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
-              <p className="mt-2 text-xs text-muted-foreground">画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
-                  <PlusCircleIcon className="h-4 w-4" />
-                  ファイルを選ぶ
-                  <input
-                    type="file"
-                    accept="image/*,video/*,audio/*"
-                    className="sr-only"
-                    onChange={handleFileInputChange}
-                  />
-                </label>
-                {selectedFile ? (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-                    onClick={handleClearImage}
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                    取り消す
-                  </button>
-                ) : null}
-              </div>
-              {selectedFile ? (
-                <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
-              ) : existingAssetPreview.name ? (
-                <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {existingAssetPreview.name}</p>
-              ) : null}
-              {isProcessingAsset ? (
-                <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
-              ) : null}
-            </div>
+            <div className="hidden rounded-2xl p-3 lg:block">{renderFileSelectionContent()}</div>
             <div className="rounded-2xl p-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-3">
                 <SwitchField
                   label="ピックアップ対象"
                   description="ピックアップ一覧に表示します"
