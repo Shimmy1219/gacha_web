@@ -472,11 +472,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         </div>
         <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
           <div className="space-y-5">
-            <div className="rounded-2xl p-3">
+            <div className="rounded-2xl">
               <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
               <div className="mt-3 flex flex-col gap-4 lg:items-center lg:text-center">
                 <div className="flex w-full items-start gap-4 lg:flex-col lg:items-center">
-                  <div className="relative flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-border/20">
+                  <div className="relative flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-border/20 lg:h-40 lg:w-40">
                     {currentPreview ? (
                       isImagePreview ? (
                         <img
