@@ -31,6 +31,7 @@ export default async function handler(req, res) {
 
   return res.status(200).json({
     ok: true,
+    loggedIn: true,
     user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
   });
 }

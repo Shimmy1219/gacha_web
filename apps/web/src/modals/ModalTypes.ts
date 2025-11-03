@@ -10,6 +10,8 @@ export interface ModalBaseProps<T = unknown> {
   dismissible?: boolean;
   payload?: T;
   onClose?: () => void;
+  panelClassName?: string;
+  panelPaddingClassName?: string;
 }
 
 export interface ModalComponentProps<T = unknown> extends ModalBaseProps<T> {

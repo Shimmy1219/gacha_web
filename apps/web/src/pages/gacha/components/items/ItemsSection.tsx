@@ -7,7 +7,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type MouseEvent as ReactMouseEvent
+  type MouseEvent as ReactMouseEvent,
+  type CSSProperties
 } from 'react';
 
 import {
@@ -80,6 +81,7 @@ export function ItemsSection(): JSX.Element {
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
+  const { isMobile } = useResponsiveDashboard();
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
     'repeat(auto-fit,minmax(150px,181px))'
   );
@@ -814,7 +816,15 @@ export function ItemsSection(): JSX.Element {
     [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
   );
 
-  const gridClassName = useMemo(() => clsx('items-section__grid grid gap-4'), []);
+  const gridClassName = useMemo(
+    () => clsx('items-section__grid gap-4', isMobile ? 'flex flex-col' : 'grid'),
+    [isMobile]
+  );
+
+  const gridStyle = useMemo<CSSProperties | undefined>(
+    () => (isMobile ? undefined : { gridTemplateColumns }),
+    [isMobile, gridTemplateColumns]
+  );
 
   const handleEditImage = useCallback(
     (itemId: string) => {
