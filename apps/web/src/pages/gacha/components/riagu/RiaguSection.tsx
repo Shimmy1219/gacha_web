@@ -7,6 +7,7 @@ import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocal
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
+import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
 
 interface RiaguDisplayEntry {
   id: string;
@@ -14,6 +15,8 @@ interface RiaguDisplayEntry {
   typeLabel?: string;
   rarityLabel: string;
   rarityColor: string;
+  assetId: string | null;
+  thumbnailUrl: string | null;
   unitCost?: number;
   requiredQuantity: number;
   totalCost?: number;
@@ -70,6 +73,10 @@ export function RiaguSection(): JSX.Element {
       const rarityLabel = rarityEntity?.label ?? '未分類';
       const rarityColor = rarityEntity?.color ?? '#a855f7';
       const typeLabel = card.typeLabel ?? undefined;
+      const assetId = catalogItem?.imageAssetId ?? null;
+      const thumbnailUrl = assetId
+        ? `https://picsum.photos/seed/${encodeURIComponent(assetId)}/400/400`
+        : null;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const sanitizedUnitCost =
@@ -91,6 +98,8 @@ export function RiaguSection(): JSX.Element {
         typeLabel,
         rarityLabel,
         rarityColor,
+        assetId,
+        thumbnailUrl,
         unitCost: sanitizedUnitCost,
         requiredQuantity,
         totalCost: sanitizedUnitCost != null ? sanitizedUnitCost * requiredQuantity : undefined,
@@ -213,11 +222,22 @@ export function RiaguSection(): JSX.Element {
                         className="riagu-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5 shadow-sm"
                       >
                         <header className="riagu-card__header flex items-start justify-between gap-3">
-                          <div className="riagu-card__meta space-y-2">
-                            <span className={clsx('riagu-card__rarity badge', className)} style={style}>
-                              {entry.rarityLabel}
-                            </span>
-                            <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
+                          <div className="riagu-card__meta flex flex-1 flex-col gap-3">
+                            <div className="riagu-card__meta-heading flex items-center gap-3">
+                              <ItemPreview
+                                assetId={entry.assetId}
+                                fallbackUrl={entry.thumbnailUrl}
+                                alt={`${entry.itemName}のプレビュー`}
+                                kindHint="image"
+                                className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
+                              />
+                              <div className="riagu-card__meta-text flex-1 space-y-2">
+                                <span className={clsx('riagu-card__rarity badge', className)} style={style}>
+                                  {entry.rarityLabel}
+                                </span>
+                                <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
+                              </div>
+                            </div>
                             <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
                               <div className="riagu-card__summary-item space-y-1">
                                 <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">

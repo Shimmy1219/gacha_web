@@ -27,6 +27,7 @@ import {
   SingleSelectDropdown,
   type SingleSelectOption
 } from '../../pages/gacha/components/select/SingleSelectDropdown';
+import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -630,19 +631,14 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                     className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3 sm:flex-row sm:items-center"
                   >
                     <div className="flex w-full items-start gap-3 sm:w-auto">
-                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-surface-deep">
-                        {item.previewUrl ? (
-                          <img
-                            src={item.previewUrl}
-                            alt={`${item.name}のプレビュー`}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                            画像なし
-                          </div>
-                        )}
-                      </div>
+                      <ItemPreview
+                        assetId={item.assetId}
+                        previewUrl={item.previewUrl || undefined}
+                        alt={`${item.name}のプレビュー`}
+                        emptyLabel="画像なし"
+                        kindHint="image"
+                        className="h-16 w-16 shrink-0 bg-surface-deep"
+                      />
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
                         <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
                         <div className="w-full max-w-full sm:max-w-[12rem]">
