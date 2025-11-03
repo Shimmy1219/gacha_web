@@ -12,6 +12,8 @@ interface ItemPreviewState {
   hasImage: boolean;
 }
 
+type ItemPreviewImageFit = 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
+
 interface ItemPreviewBaseProps {
   assetId?: string | null;
   fallbackUrl?: string | null;
@@ -19,6 +21,7 @@ interface ItemPreviewBaseProps {
   alt: string;
   className?: string;
   imageClassName?: string;
+  imageFit?: ItemPreviewImageFit;
   iconClassName?: string;
   emptyLabel?: string;
   kindHint?: ItemPreviewKind;
@@ -64,11 +67,23 @@ function ItemPreviewVisual({
   kind,
   hasImage,
   imageClassName,
+  imageFit = 'contain',
   iconClassName,
   emptyLabel
 }: ItemPreviewVisualProps): JSX.Element {
+  const fitClassName =
+    imageFit === 'cover'
+      ? 'object-cover'
+      : imageFit === 'fill'
+        ? 'object-fill'
+        : imageFit === 'none'
+          ? 'object-none'
+          : imageFit === 'scale-down'
+            ? 'object-scale-down'
+            : 'object-contain';
+
   if (kind === 'image' && hasImage && url) {
-    return <img src={url} alt={alt} className={clsx('h-full w-full object-contain', imageClassName)} />;
+    return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
   }
 
   if (kind === 'video') {
@@ -80,7 +95,7 @@ function ItemPreviewVisual({
   }
 
   if (url) {
-    return <img src={url} alt={alt} className={clsx('h-full w-full object-contain', imageClassName)} />;
+    return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
   }
 
   if (emptyLabel) {
@@ -105,6 +120,7 @@ export const ItemPreviewButton = forwardRef<HTMLButtonElement, ItemPreviewButton
       alt,
       className,
       imageClassName,
+      imageFit,
       iconClassName,
       emptyLabel,
       kindHint,
@@ -139,6 +155,7 @@ export const ItemPreviewButton = forwardRef<HTMLButtonElement, ItemPreviewButton
           previewUrl={previewUrl}
           alt={alt}
           imageClassName={imageClassName}
+          imageFit={imageFit}
           iconClassName={iconClassName}
           emptyLabel={emptyLabel}
           kindHint={kindHint}
@@ -164,6 +181,7 @@ export const ItemPreview = forwardRef<HTMLDivElement, ItemPreviewProps>(
       alt,
       className,
       imageClassName,
+      imageFit,
       iconClassName,
       emptyLabel,
       kindHint,
@@ -189,6 +207,7 @@ export const ItemPreview = forwardRef<HTMLDivElement, ItemPreviewProps>(
           previewUrl={previewUrl}
           alt={alt}
           imageClassName={imageClassName}
+          imageFit={imageFit}
           iconClassName={iconClassName}
           emptyLabel={emptyLabel}
           kindHint={kindHint}

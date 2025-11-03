@@ -638,7 +638,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                         emptyLabel="画像なし"
                         kindHint="image"
                         className="h-16 w-16 shrink-0 bg-surface-deep"
-                        imageClassName="h-full w-full object-cover"
                       />
                       <div className="flex min-w-0 flex-1 flex-col gap-1">
                         <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>

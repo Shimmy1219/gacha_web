@@ -230,7 +230,6 @@ export function RiaguSection(): JSX.Element {
                                 alt={`${entry.itemName}のプレビュー`}
                                 kindHint="image"
                                 className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
-                                imageClassName="h-full w-full object-cover"
                               />
                               <div className="riagu-card__meta-text flex-1 space-y-2">
                                 <span className={clsx('riagu-card__rarity badge', className)} style={style}>
