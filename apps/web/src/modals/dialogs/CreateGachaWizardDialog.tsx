@@ -576,7 +576,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         </div>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
-          <div className="max-h-[45vh] overflow-y-auto pr-1">
+          <div className="sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
             <RarityTable
               rows={rarityTableRows}
               onLabelChange={handleLabelChange}
@@ -623,77 +623,79 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             {items.length === 0 ? (
               <p className="text-sm text-muted-foreground">まだ画像が登録されていません。</p>
             ) : (
-              <ul className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+              <ul className="space-y-2 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
                 {items.map((item) => (
                   <li
                     key={item.assetId}
-                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3"
+                    className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3 sm:flex-row sm:items-center"
                   >
-                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-surface-deep">
-                      {item.previewUrl ? (
-                        <img
-                          src={item.previewUrl}
-                          alt={`${item.name}のプレビュー`}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                          画像なし
+                    <div className="flex w-full items-start gap-3 sm:w-auto">
+                      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-surface-deep">
+                        {item.previewUrl ? (
+                          <img
+                            src={item.previewUrl}
+                            alt={`${item.name}のプレビュー`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                            画像なし
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
+                        <div className="w-full max-w-full sm:max-w-[12rem]">
+                          <SingleSelectDropdown
+                            value={item.rarityId ?? undefined}
+                            options={rarityOptions}
+                            onChange={(value) => handleChangeItemRarity(item.assetId, value)}
+                            placeholder="レアリティ未設定"
+                            fallbackToFirstOption={false}
+                            classNames={{
+                              root: 'pt-controls-panel__select-wrapper relative inline-block w-full',
+                              button:
+                                'pt-controls-panel__select-button inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-1.5 text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                              buttonOpen: 'border-accent text-accent',
+                              buttonClosed: 'hover:border-accent/70',
+                              icon: 'pt-controls-panel__select-icon h-3.5 w-3.5 text-muted-foreground transition-transform',
+                              iconOpen: 'rotate-180 text-accent',
+                              menu:
+                                'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+                              option:
+                                'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition',
+                              optionActive: 'bg-accent/10 text-surface-foreground',
+                              optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
+                              optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left',
+                              checkIcon: 'pt-controls-panel__select-check h-3.5 w-3.5 text-accent transition'
+                            }}
+                            renderButtonLabel={({ selectedOption }) => {
+                              const option = selectedOption as RaritySelectOption | undefined;
+                              const label = option?.label ?? 'レアリティ未設定';
+                              const color = option?.color;
+                              return (
+                                <span className="flex w-full items-center truncate">
+                                  <span className="truncate" style={color ? { color } : undefined}>
+                                    {label}
+                                  </span>
+                                </span>
+                              );
+                            }}
+                            renderOptionContent={(option) => {
+                              const rarityOption = option as RaritySelectOption;
+                              return (
+                                <span className="flex w-full items-center truncate">
+                                  <span className="flex-1 truncate" style={rarityOption.color ? { color: rarityOption.color } : undefined}>
+                                    {rarityOption.label}
+                                  </span>
+                                </span>
+                              );
+                            }}
+                          />
                         </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
-                      <div className="mt-1 max-w-[12rem]">
-                        <SingleSelectDropdown
-                          value={item.rarityId ?? undefined}
-                          options={rarityOptions}
-                          onChange={(value) => handleChangeItemRarity(item.assetId, value)}
-                          placeholder="レアリティ未設定"
-                          fallbackToFirstOption={false}
-                          classNames={{
-                            root: 'pt-controls-panel__select-wrapper relative inline-block w-full',
-                            button:
-                              'pt-controls-panel__select-button inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-1.5 text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
-                            buttonOpen: 'border-accent text-accent',
-                            buttonClosed: 'hover:border-accent/70',
-                            icon: 'pt-controls-panel__select-icon h-3.5 w-3.5 text-muted-foreground transition-transform',
-                            iconOpen: 'rotate-180 text-accent',
-                            menu:
-                              'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
-                            option:
-                              'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition',
-                            optionActive: 'bg-accent/10 text-surface-foreground',
-                            optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
-                            optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left',
-                            checkIcon: 'pt-controls-panel__select-check h-3.5 w-3.5 text-accent transition'
-                          }}
-                          renderButtonLabel={({ selectedOption }) => {
-                            const option = selectedOption as RaritySelectOption | undefined;
-                            const label = option?.label ?? 'レアリティ未設定';
-                            const color = option?.color;
-                            return (
-                              <span className="flex w-full items-center truncate">
-                                <span className="truncate" style={color ? { color } : undefined}>
-                                  {label}
-                                </span>
-                              </span>
-                            );
-                          }}
-                          renderOptionContent={(option) => {
-                            const rarityOption = option as RaritySelectOption;
-                            return (
-                              <span className="flex w-full items-center truncate">
-                                <span className="flex-1 truncate" style={rarityOption.color ? { color: rarityOption.color } : undefined}>
-                                  {rarityOption.label}
-                                </span>
-                              </span>
-                            );
-                          }}
-                        />
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex w-full shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:w-auto sm:flex-row sm:items-center sm:gap-4">
                       <label className="inline-flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -715,10 +717,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                         <span>コンプ対象</span>
                       </label>
                     </div>
-                    <div className="flex shrink-0">
+                    <div className="flex shrink-0 w-full sm:w-auto">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
                         onClick={() => handleRemoveItem(item.assetId)}
                       >
                         削除
@@ -740,7 +742,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         <p className="text-sm text-muted-foreground">
           ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
         </p>
-        <div className="max-h-[45vh] overflow-y-auto rounded-2xl border border-border/60 bg-surface/50 p-4 pr-1">
+        <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
           <PtControlsPanel settings={ptSettings} rarityOptions={rarityOptions} onSettingsChange={setPtSettings} />
         </div>
       </div>
