@@ -14,8 +14,10 @@ export interface RarityMeta {
   rarityId: RarityId;
   label: string;
   color: string;
-  emitRate?: string;
+  emitRate?: number;
   rarityNum?: number;
+  itemRate?: number;
+  itemRateDisplay?: string;
 }
 
 export interface ItemCardImageAsset {
@@ -51,6 +53,7 @@ export interface ItemCardPreviewPayload {
 export interface ItemCardProps {
   model: ItemCardModel;
   rarity: RarityMeta;
+  rarityRateLabel?: string;
   onToggleRiagu?: (itemId: ItemId) => void;
   onEditImage?: (itemId: ItemId) => void;
   onPreviewAsset?: (payload: ItemCardPreviewPayload) => void;
@@ -60,7 +63,16 @@ export interface ItemCardProps {
 }
 
 export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemCard(
-  { model, rarity, onEditImage, onPreviewAsset, isSelected = false, onCardMouseDown, onCardContextMenu },
+  {
+    model,
+    rarity,
+    rarityRateLabel,
+    onEditImage,
+    onPreviewAsset,
+    isSelected = false,
+    onCardMouseDown,
+    onCardContextMenu
+  },
   ref
 ): JSX.Element {
   const { imageAsset } = model;
@@ -94,6 +106,9 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       thumbnailUrl: fallbackUrl
     });
   };
+
+  const rateDisplay = rarityRateLabel ?? rarity.itemRateDisplay ?? '';
+  const hasRate = rateDisplay.trim().length > 0;
 
   return (
     <article
@@ -151,8 +166,13 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-3')}>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-            <span className={clsx('text-[11px] font-medium', rarityClassName)} style={rarityStyle}>
-              {rarity.label}
+            <span className="flex items-baseline justify-between gap-2 text-[11px] font-medium text-surface-foreground">
+              <span className={clsx('flex-1 truncate', rarityClassName)} style={rarityStyle}>
+                {rarity.label}
+              </span>
+              <span className="ml-2 shrink-0 text-right text-[10px] font-normal text-muted-foreground tabular-nums">
+                {hasRate ? rateDisplay : '—'}
+              </span>
             </span>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">

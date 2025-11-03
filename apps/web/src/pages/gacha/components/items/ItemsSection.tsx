@@ -32,11 +32,22 @@ import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
+import {
+  buildGachaPools,
+  formatItemRateWithPrecision,
+  inferRarityFractionDigits
+} from '../../../../logic/gacha';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
 
-type ItemEntry = { model: ItemCardModel; rarity: RarityMeta; riaguCard?: RiaguCardModelV3 };
+type ItemEntry = {
+  model: ItemCardModel;
+  rarity: RarityMeta;
+  riaguCard?: RiaguCardModelV3;
+  itemRate?: number;
+  itemRateDisplay?: string;
+};
 type ItemsByGacha = Record<string, ItemEntry[]>;
 type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -153,6 +164,21 @@ export function ItemsSection(): JSX.Element {
 
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
 
+  const rarityFractionDigits = useMemo(
+    () => inferRarityFractionDigits(data?.rarityState),
+    [data?.rarityState]
+  );
+
+  const { poolsByGachaId, itemsById } = useMemo(
+    () =>
+      buildGachaPools({
+        catalogState: data?.catalogState,
+        rarityState: data?.rarityState,
+        rarityFractionDigits
+      }),
+    [data?.catalogState, data?.rarityState, rarityFractionDigits]
+  );
+
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
     'tab-panel-content',
@@ -161,19 +187,29 @@ export function ItemsSection(): JSX.Element {
   );
 
   const { itemsByGacha, flatItems } = useMemo(() => {
-    if (!data?.appState || !data?.catalogState || !data?.rarityState) {
+    if (!data?.catalogState) {
       return { itemsByGacha: {} as ItemsByGacha, flatItems: [] as ItemEntry[] };
     }
 
     const catalogByGacha = data.catalogState.byGacha ?? {};
     const riaguCards = data.riaguState?.riaguCards ?? {};
     const riaguIndex = data.riaguState?.indexByItemId ?? {};
+    const rarityEntities = data.rarityState?.entities ?? {};
     const entries: ItemsByGacha = {};
     const flat: ItemEntry[] = [];
 
     Object.keys(catalogByGacha).forEach((gachaId) => {
-      const gachaMeta = data.appState?.meta?.[gachaId];
       const catalog = catalogByGacha[gachaId];
+      if (!catalog?.order?.length) {
+        return;
+      }
+
+      const pool = poolsByGachaId.get(gachaId);
+      if (!pool) {
+        return;
+      }
+
+      const gachaMeta = data.appState?.meta?.[gachaId];
       const results: ItemEntry[] = [];
 
       catalog.order.forEach((itemId) => {
@@ -182,11 +218,31 @@ export function ItemsSection(): JSX.Element {
           return;
         }
 
-        const rarityEntity = data.rarityState?.entities?.[snapshot.rarityId];
+        const poolItem = itemsById.get(snapshot.itemId);
+        const rarityEntity = rarityEntities[snapshot.rarityId];
+        const rarityGroup = pool.rarityGroups.get(snapshot.rarityId);
+
+        const emitRate = poolItem?.rarityEmitRate ?? rarityEntity?.emitRate;
+        const computedItemRate = poolItem?.itemRate ?? (rarityGroup?.emitRate && rarityGroup.itemCount
+          ? rarityGroup.emitRate / rarityGroup.itemCount
+          : undefined);
+        const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
+        const baseDisplay = poolItem?.itemRateDisplay
+          ? poolItem.itemRateDisplay.replace(/%$/, '')
+          : '';
+        const formattedRate = baseDisplay
+          ? baseDisplay
+          : formatItemRateWithPrecision(computedItemRate, ratePrecision);
+        const itemRateDisplay = formattedRate ? `${formattedRate}%` : '';
+
         const rarity: RarityMeta = {
           rarityId: snapshot.rarityId,
-          label: rarityEntity?.label ?? snapshot.rarityId,
-          color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR
+          label: poolItem?.rarityLabel ?? rarityEntity?.label ?? snapshot.rarityId,
+          color: poolItem?.rarityColor ?? rarityEntity?.color ?? FALLBACK_RARITY_COLOR,
+          emitRate,
+          rarityNum: rarityEntity?.rarityNum,
+          itemRate: computedItemRate,
+          itemRateDisplay
         };
 
         const riaguId = riaguIndex[snapshot.itemId];
@@ -214,7 +270,13 @@ export function ItemsSection(): JSX.Element {
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
         };
 
-        const entry = { model, rarity, riaguCard };
+        const entry: ItemEntry = {
+          model,
+          rarity,
+          riaguCard,
+          itemRate: computedItemRate,
+          itemRateDisplay
+        };
         results.push(entry);
         flat.push(entry);
       });
@@ -223,7 +285,7 @@ export function ItemsSection(): JSX.Element {
     });
 
     return { itemsByGacha: entries, flatItems: flat };
-  }, [data]);
+  }, [data?.appState, data?.catalogState, data?.rarityState, itemsById, poolsByGachaId, rarityFractionDigits]);
 
   const itemEntryById = useMemo(() => {
     const map = new Map<string, ItemEntry>();
@@ -911,108 +973,109 @@ export function ItemsSection(): JSX.Element {
   const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
 
   return (
-    <div ref={sectionWrapperRef} className="h-full">
-      <SectionContainer
-      id="items"
-      title="アイテム画像の設定"
-      description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
-      actions={
-        <button
-          type="button"
-          className="items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
-          onClick={() => console.info('フィルタモーダルは未実装です')}
-        >
-          <AdjustmentsHorizontalIcon className="h-4 w-4" />
-          フィルタ
-        </button>
-      }
-      footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
-      contentClassName="items-section__content"
-      forceMobile={forceMobileSection}
-    >
-      <GachaTabs
-        tabs={gachaTabs}
-        activeId={activeGachaId}
-        onSelect={(gachaId) => setActiveGachaId(gachaId)}
-        onDelete={(tab) => confirmDeleteGacha(tab)}
-        className="items-section__tabs"
-      />
-
-      <div className="items-section__scroll section-scroll flex-1">
-        <div className="items-section__scroll-content space-y-4">
-          {gachaTabs.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">表示できるガチャがありません。</p>
-          ) : null}
-
-          <div className="tab-panel-viewport">
-            <div
-              key={activeGachaId ?? 'items-empty'}
-              className={panelAnimationClass}
+      <div ref={sectionWrapperRef} className="h-full">
+        <SectionContainer
+          id="items"
+          title="アイテム画像の設定"
+          description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
+          actions={
+            <button
+              type="button"
+              className="items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
+              onClick={() => console.info('フィルタモーダルは未実装です')}
             >
-              {status !== 'ready' ? (
-                <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
-              ) : null}
-              {status === 'ready' && activeGachaId && items.length === 0 ? (
-                <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+              <AdjustmentsHorizontalIcon className="h-4 w-4" />
+              フィルタ
+            </button>
+          }
+          footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
+          contentClassName="items-section__content"
+          forceMobile={forceMobileSection}
+        >
+          <GachaTabs
+            tabs={gachaTabs}
+            activeId={activeGachaId}
+            onSelect={(gachaId) => setActiveGachaId(gachaId)}
+            onDelete={(tab) => confirmDeleteGacha(tab)}
+            className="items-section__tabs"
+          />
+
+          <div className="items-section__scroll section-scroll flex-1">
+            <div className="items-section__scroll-content space-y-4">
+              {gachaTabs.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">表示できるガチャがありません。</p>
               ) : null}
 
-              {showAddCard || items.length > 0 ? (
-                <div onMouseDown={handleSurfaceMouseDown}>
-                  <div className={gridClassName} style={gridStyle}>
-                    {showAddCard ? (
-                      <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
-                    ) : null}
-                    {items.map(({ model, rarity }) => (
-                      <ItemCard
-                        key={model.itemId}
-                        model={model}
-                        rarity={rarity}
-                        onEditImage={handleEditImage}
-                        onPreviewAsset={handlePreviewAsset}
-                        isSelected={selectedIdSet.has(model.itemId)}
-                        onCardMouseDown={(event) => handleCardMouseDown(event, model.itemId)}
-                        onCardContextMenu={(event) => handleCardContextMenu(event, model.itemId)}
-                      />
-                    ))}
-                  </div>
+              <div className="tab-panel-viewport">
+                <div
+                  key={activeGachaId ?? 'items-empty'}
+                  className={panelAnimationClass}
+                >
+                  {status !== 'ready' ? (
+                    <p className="text-sm text-muted-foreground">ローカルストレージからデータを読み込み中です…</p>
+                  ) : null}
+                  {status === 'ready' && activeGachaId && items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+                  ) : null}
+
+                  {showAddCard || items.length > 0 ? (
+                    <div onMouseDown={handleSurfaceMouseDown}>
+                      <div className={gridClassName} style={{ gridTemplateColumns }}>
+                        {showAddCard ? (
+                          <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
+                        ) : null}
+                        {items.map(({ model, rarity, itemRateDisplay }) => (
+                          <ItemCard
+                            key={model.itemId}
+                            model={model}
+                            rarity={rarity}
+                            rarityRateLabel={itemRateDisplay}
+                            onEditImage={handleEditImage}
+                            onPreviewAsset={handlePreviewAsset}
+                            isSelected={selectedIdSet.has(model.itemId)}
+                            onCardMouseDown={(event) => handleCardMouseDown(event, model.itemId)}
+                            onCardContextMenu={(event) => handleCardContextMenu(event, model.itemId)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,video/*,audio/*"
-        multiple
-        className="hidden"
-        onChange={handleFileInputChange}
-      />
-      {contextMenuState ? (
-        <ItemContextMenu
-          anchor={contextMenuState.anchor}
-          selectedCount={contextMenuState.targetIds.length}
-          rarityOptions={rarityOptionsForActiveGacha}
-          currentRarityId={selectionSummary.currentRarityId}
-          pickupLabel={pickupActionLabel}
-          completeLabel={completeActionLabel}
-          riaguLabel={riaguActionLabel}
-          onSelectRarity={(rarityId) => applyRarityToItems(contextMenuState.targetIds, rarityId)}
-          onEditImage={() => handleEditImage(contextMenuState.anchorId)}
-          onTogglePickup={() =>
-            applyFlagToItems(contextMenuState.targetIds, 'pickupTarget', !selectionSummary.allPickup)
-          }
-          onToggleComplete={() =>
-            applyFlagToItems(contextMenuState.targetIds, 'completeTarget', !selectionSummary.allComplete)
-          }
-          onToggleRiagu={() => applyRiaguToItems(contextMenuState.targetIds, !selectionSummary.allRiagu)}
-          onDelete={() => handleDeleteRequest(contextMenuState.targetIds)}
-          onClose={closeContextMenu}
-          disableEditImage={contextMenuState.targetIds.length !== 1}
-        />
-      ) : null}
-      </SectionContainer>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,audio/*"
+            multiple
+            className="hidden"
+            onChange={handleFileInputChange}
+          />
+          {contextMenuState ? (
+            <ItemContextMenu
+              anchor={contextMenuState.anchor}
+              selectedCount={contextMenuState.targetIds.length}
+              rarityOptions={rarityOptionsForActiveGacha}
+              currentRarityId={selectionSummary.currentRarityId}
+              pickupLabel={pickupActionLabel}
+              completeLabel={completeActionLabel}
+              riaguLabel={riaguActionLabel}
+              onSelectRarity={(rarityId) => applyRarityToItems(contextMenuState.targetIds, rarityId)}
+              onEditImage={() => handleEditImage(contextMenuState.anchorId)}
+              onTogglePickup={() =>
+                applyFlagToItems(contextMenuState.targetIds, 'pickupTarget', !selectionSummary.allPickup)
+              }
+              onToggleComplete={() =>
+                applyFlagToItems(contextMenuState.targetIds, 'completeTarget', !selectionSummary.allComplete)
+              }
+              onToggleRiagu={() => applyRiaguToItems(contextMenuState.targetIds, !selectionSummary.allRiagu)}
+              onDelete={() => handleDeleteRequest(contextMenuState.targetIds)}
+              onClose={closeContextMenu}
+              disableEditImage={contextMenuState.targetIds.length !== 1}
+            />
+          ) : null}
+        </SectionContainer>
     </div>
   );
 }

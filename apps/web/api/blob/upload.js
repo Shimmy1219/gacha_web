@@ -59,7 +59,7 @@ function sanitizeDirectoryName(value, fallback) {
   if (!normalized) return fallback;
   const limited = limitGraphemes(normalized, 64);
   const replaced = limited
-    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');
@@ -71,7 +71,7 @@ function sanitizeZipFileNameBase(value) {
   const ensured = normalized.endsWith('.zip') ? normalized.slice(0, -4) : normalized;
   const limited = limitGraphemes(ensured, 120);
   return limited
-    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');
@@ -89,7 +89,7 @@ function sanitizeZipFileName(value, fallback) {
   const basePart = ensured.slice(0, -4);
   const limitedBase = limitGraphemes(basePart, 120);
   const sanitizedBase = limitedBase
-    .replace(/[\\\/?%*:|"<>]/g, '-')
+    .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '');

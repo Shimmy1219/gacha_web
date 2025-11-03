@@ -164,6 +164,13 @@ export interface UiPreferencesStateV3 {
   };
   toolbar?: Record<string, unknown>;
   users?: Record<string, unknown>;
+  gacha?: {
+    drawDialog?: {
+      lastSelectedGachaId?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   riagu?: Record<string, unknown>;
   lastSeenRelease?: string | null;
 }
