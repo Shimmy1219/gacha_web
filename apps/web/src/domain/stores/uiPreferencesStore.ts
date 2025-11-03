@@ -71,6 +71,15 @@ function normalizeKeyword(value: unknown): string {
   return '';
 }
 
+function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizeHexColor(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -252,6 +261,26 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
   return true;
 }
 
+function readDrawDialogLastSelectedGachaId(
+  state: UiPreferencesStateV3 | undefined
+): string | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  return normalizeDrawDialogLastSelectedGachaId(drawDialog.lastSelectedGachaId);
+}
+
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
   const nowIso = new Date().toISOString();
   if (!previous) {
@@ -367,6 +396,74 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
             customBaseTone: tone
           }
         };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getLastSelectedDrawGachaId(): string | null {
+    return readDrawDialogLastSelectedGachaId(this.state);
+  }
+
+  setLastSelectedDrawGachaId(
+    nextId: string | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeDrawDialogLastSelectedGachaId(nextId);
+
+    this.update(
+      (previous) => {
+        const current = readDrawDialogLastSelectedGachaId(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                lastSelectedGachaId: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.lastSelectedGachaId;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
       },
       { persist: persistMode, emit }
     );

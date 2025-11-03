@@ -1,5 +1,5 @@
 import { SparklesIcon } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -136,20 +136,45 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
     rarities: rarityStore,
     ptControls,
     userProfiles,
-    pullHistory
+    pullHistory,
+    uiPreferences: uiPreferencesStore
   } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControls);
   const userProfilesState = useStoreValue(userProfiles);
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
     [appState, catalogState, rarityState]
   );
 
-  const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => gachaOptions[0]?.value);
+  const lastPreferredGachaId = useMemo(
+    () => uiPreferencesStore.getLastSelectedDrawGachaId() ?? undefined,
+    [uiPreferencesState, uiPreferencesStore]
+  );
+
+  const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
+    if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
+      return lastPreferredGachaId;
+    }
+    return gachaOptions[0]?.value;
+  });
+  const applySelectedGacha = useCallback(
+    (nextId: string | undefined) => {
+      setSelectedGachaId((previous) => (previous === nextId ? previous : nextId));
+      uiPreferencesStore.setLastSelectedDrawGachaId(nextId ?? null, { persist: 'debounced' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleGachaChange = useCallback(
+    (value: string) => {
+      applySelectedGacha(value);
+    },
+    [applySelectedGacha]
+  );
   const [pointsInput, setPointsInput] = useState('100');
   const [userName, setUserName] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -166,13 +191,34 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
 
   useEffect(() => {
     if (!gachaOptions.length) {
-      setSelectedGachaId(undefined);
+      if (selectedGachaId !== undefined || lastPreferredGachaId !== undefined) {
+        applySelectedGacha(undefined);
+      }
       return;
     }
-    if (!selectedGachaId || !gachaMap.has(selectedGachaId)) {
-      setSelectedGachaId(gachaOptions[0]?.value);
+
+    if (selectedGachaId && gachaMap.has(selectedGachaId)) {
+      return;
     }
-  }, [gachaOptions, gachaMap, selectedGachaId]);
+
+    if (lastPreferredGachaId && gachaMap.has(lastPreferredGachaId)) {
+      if (selectedGachaId !== lastPreferredGachaId) {
+        applySelectedGacha(lastPreferredGachaId);
+      }
+      return;
+    }
+
+    const fallbackId = gachaOptions[0]?.value;
+    if (fallbackId && selectedGachaId !== fallbackId) {
+      applySelectedGacha(fallbackId);
+    }
+  }, [
+    applySelectedGacha,
+    gachaMap,
+    gachaOptions,
+    lastPreferredGachaId,
+    selectedGachaId
+  ]);
 
   const selectedGacha = selectedGachaId ? gachaMap.get(selectedGachaId) : undefined;
   const selectedPtSetting = selectedGachaId ? ptSettingsState?.byGachaId?.[selectedGachaId] : undefined;
@@ -368,7 +414,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
             <SingleSelectDropdown
               value={selectedGachaId}
               options={gachaOptions}
-              onChange={setSelectedGachaId}
+              onChange={handleGachaChange}
               placeholder="ガチャを選択"
               fallbackToFirstOption={false}
             />
