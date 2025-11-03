@@ -627,7 +627,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 {items.map((item) => (
                   <li
                     key={item.assetId}
-                    className="flex items-center gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3"
+                    className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3 sm:flex-row sm:items-center"
                   >
                     <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-border/60 bg-surface-deep">
                       {item.previewUrl ? (
@@ -644,7 +644,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
-                      <div className="mt-1 max-w-[12rem]">
+                      <div className="mt-1 w-full max-w-full sm:max-w-[12rem]">
                         <SingleSelectDropdown
                           value={item.rarityId ?? undefined}
                           options={rarityOptions}
@@ -693,7 +693,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                         />
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex w-full shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:w-auto sm:flex-row sm:items-center sm:gap-4">
                       <label className="inline-flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -715,10 +715,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                         <span>コンプ対象</span>
                       </label>
                     </div>
-                    <div className="flex shrink-0">
+                    <div className="flex shrink-0 w-full sm:w-auto">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
                         onClick={() => handleRemoveItem(item.assetId)}
                       >
                         削除
