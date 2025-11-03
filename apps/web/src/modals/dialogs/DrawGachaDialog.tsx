@@ -335,16 +335,27 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
-      return [] as string[];
+      return [] as Array<{
+        rarityId: string;
+        threshold: number;
+        description: string;
+        applies: boolean;
+      }>;
     }
 
     return drawPlan.normalizedSettings.guarantees.map((guarantee) => {
       const rarity = selectedGacha.pool.rarityGroups.get(guarantee.rarityId);
       const label = rarity?.label ?? guarantee.rarityId;
-      if (guarantee.pityStep && guarantee.pityStep !== guarantee.threshold) {
-        return `${label}: ${guarantee.threshold}連目で保証、以後${guarantee.pityStep}連ごとに保証`;
-      }
-      return `${label}: ${guarantee.threshold}連ごとに保証`;
+      const description = guarantee.pityStep && guarantee.pityStep !== guarantee.threshold
+        ? `${label}: ${guarantee.threshold}連目で保証、以後${guarantee.pityStep}連ごとに保証`
+        : `${label}: ${guarantee.threshold}連ごとに保証`;
+      const applies = drawPlan.randomPulls >= guarantee.threshold;
+      return {
+        rarityId: guarantee.rarityId,
+        threshold: guarantee.threshold,
+        description,
+        applies
+      };
     });
   }, [drawPlan, selectedGacha]);
 
@@ -396,7 +407,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
               </label>
               {normalizedUserName && userSuggestions.length > 0 ? (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">既存のユーザー候補</p>
+                  <p className="text-xs font-semibold text-muted-foreground">候補</p>
                   <div className="flex flex-wrap gap-2">
                     {userSuggestions.map((profile) => {
                       const isSelected = selectedUserId === profile.id;
@@ -422,7 +433,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                 </div>
               ) : null}
               {normalizedUserName && userSuggestions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">一致する既存ユーザーはいません。</p>
+                <p className="text-xs text-muted-foreground">一致する候補はありません。</p>
               ) : null}
             </div>
           </div>
@@ -430,7 +441,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
             <div className="space-y-2 rounded-xl border border-border/60 bg-surface-alt p-3 text-xs text-muted-foreground">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  想定消費:
+                  消費:
                   <span className="ml-1 font-mono text-surface-foreground">
                     {formatNumber(drawPlan.pointsUsed)} pt
                   </span>
@@ -444,15 +455,9 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
-                  想定排出:
+                  連数:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.totalPulls)} 回
-                  </span>
-                </span>
-                <span>
-                  ランダム:
-                  <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.randomPulls)} 回
+                    {formatNumber(drawPlan.totalPulls)} 連
                   </span>
                 </span>
               </div>
@@ -467,9 +472,23 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
               {guaranteeSummaries.length ? (
                 <div className="space-y-1">
                   <span>保証設定:</span>
-                  <ul className="list-disc space-y-1 pl-5 text-[11px] text-surface-foreground/80">
-                    {guaranteeSummaries.map((summary) => (
-                      <li key={summary}>{summary}</li>
+                  <ul className="space-y-1 text-[11px] text-surface-foreground/80">
+                    {guaranteeSummaries.map((summary, index) => (
+                      <li
+                        key={`${summary.rarityId}-${summary.threshold}-${index}`}
+                        className="flex items-start justify-between gap-2 rounded-lg border border-border/40 bg-surface-alt px-2 py-1"
+                      >
+                        <span className="leading-snug">{summary.description}</span>
+                        <span
+                          className={`whitespace-nowrap text-xs font-semibold ${
+                            summary.applies
+                              ? 'text-emerald-600'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          {summary.applies ? '適用' : '適用外'}
+                        </span>
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -538,17 +557,12 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                   </span>
                 ) : null}
               </div>
-              {lastPlan ? (
+              {lastPlan && lastPlan.completeExecutions > 0 ? (
                 <div>
                   抽選内訳:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    ランダム {formatNumber(lastPlan.randomPulls)} 回
+                    コンプリート {formatNumber(lastPlan.completeExecutions)} 回
                   </span>
-                  {lastPlan.completeExecutions > 0 ? (
-                    <span className="ml-2 font-mono text-surface-foreground">
-                      コンプリート {formatNumber(lastPlan.completeExecutions)} 回
-                    </span>
-                  ) : null}
                 </div>
               ) : null}
               <div>
