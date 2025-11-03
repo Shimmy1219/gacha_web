@@ -576,7 +576,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         </div>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
-          <div className="max-h-[45vh] overflow-y-auto pr-1">
+          <div className="sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
             <RarityTable
               rows={rarityTableRows}
               onLabelChange={handleLabelChange}
@@ -623,7 +623,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             {items.length === 0 ? (
               <p className="text-sm text-muted-foreground">まだ画像が登録されていません。</p>
             ) : (
-              <ul className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+              <ul className="space-y-2 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
                 {items.map((item) => (
                   <li
                     key={item.assetId}
@@ -742,7 +742,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         <p className="text-sm text-muted-foreground">
           ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
         </p>
-        <div className="max-h-[45vh] overflow-y-auto rounded-2xl border border-border/60 bg-surface/50 p-4 pr-1">
+        <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
           <PtControlsPanel settings={ptSettings} rarityOptions={rarityOptions} onSettingsChange={setPtSettings} />
         </div>
       </div>
