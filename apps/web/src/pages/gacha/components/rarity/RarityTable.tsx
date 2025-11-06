@@ -22,6 +22,10 @@ interface RarityLabelFieldProps {
   onValueChange?: (nextValue: string) => void;
 }
 
+function sanitizeSingleLineText(text: string): string {
+  return text.replace(/[\r\n]+/g, '');
+}
+
 function RarityLabelField({
   value,
   gradientClassName,
@@ -45,14 +49,30 @@ function RarityLabelField({
   }, [value]);
 
   const handleInput = (event: FormEvent<HTMLSpanElement>) => {
-    const nextValue = event.currentTarget.textContent ?? '';
+    const rawValue = event.currentTarget.textContent ?? '';
+    const nextValue = sanitizeSingleLineText(rawValue);
+
+    if (nextValue !== rawValue) {
+      event.currentTarget.textContent = nextValue;
+    }
+
     onValueChange?.(nextValue);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && !event.isComposing) {
       event.preventDefault();
       event.currentTarget.blur();
+    }
+  };
+
+  const handleBeforeInput = (event: FormEvent<HTMLSpanElement>) => {
+    const nativeEvent = event.nativeEvent;
+    if (
+      nativeEvent instanceof InputEvent &&
+      (nativeEvent.inputType === 'insertLineBreak' || nativeEvent.inputType === 'insertParagraph')
+    ) {
+      event.preventDefault();
     }
   };
 
@@ -70,7 +90,7 @@ function RarityLabelField({
 
     selection.deleteFromDocument();
     const range = selection.getRangeAt(0);
-    range.insertNode(document.createTextNode(text));
+    range.insertNode(document.createTextNode(sanitizeSingleLineText(text)));
     range.collapse(false);
 
     const node = editableRef.current;
@@ -78,7 +98,12 @@ function RarityLabelField({
       return;
     }
 
-    onValueChange?.(node.textContent ?? '');
+    const nextValue = sanitizeSingleLineText(node.textContent ?? '');
+    if (node.textContent !== nextValue) {
+      node.textContent = nextValue;
+    }
+
+    onValueChange?.(nextValue);
   };
 
   const displayGradientClass = gradientClassName && value ? gradientClassName : undefined;
@@ -112,6 +137,7 @@ function RarityLabelField({
         data-placeholder={placeholder}
         className={clsx('rarity-section__label-field', displayGradientClass)}
         style={style}
+        onBeforeInput={handleBeforeInput}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
