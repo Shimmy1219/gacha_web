@@ -12,13 +12,23 @@ interface DeleteTarget {
   name?: string;
 }
 
-export function useGachaDeletion(): (target: DeleteTarget | GachaTabOption) => void {
-  const { appState, catalog, rarities, riagu, ptControls, pullHistory } = useDomainStores();
+interface UseGachaDeletionOptions {
+  mode?: 'archive' | 'delete';
+}
+
+export function useGachaDeletion(options: UseGachaDeletionOptions = {}): (target: DeleteTarget | GachaTabOption) => void {
+  const mode = options.mode ?? 'archive';
+  const { appState, catalog, rarities, riagu, ptControls, pullHistory, userInventories } = useDomainStores();
   const { push } = useModal();
 
   const performDeletion = useCallback(
     (gachaId: string) => {
       if (!gachaId) {
+        return;
+      }
+
+      if (mode === 'archive') {
+        appState.archiveGacha(gachaId);
         return;
       }
 
@@ -34,18 +44,19 @@ export function useGachaDeletion(): (target: DeleteTarget | GachaTabOption) => v
           )
         : [];
 
-      appState.removeGacha(gachaId);
+      appState.purgeGacha(gachaId);
       catalog.removeGacha(gachaId);
       rarities.removeGacha(gachaId);
       riagu.removeGacha(gachaId);
       ptControls.removeGacha(gachaId);
+      userInventories.removeGacha(gachaId);
       pullHistory.deletePullsForInventory({ gachaId });
 
       if (assetIds.length > 0) {
         void Promise.allSettled(assetIds.map((assetId) => deleteAsset(assetId)));
       }
     },
-    [appState, catalog, rarities, riagu, ptControls, pullHistory]
+    [appState, catalog, mode, ptControls, pullHistory, rarities, riagu, userInventories]
   );
 
   return useCallback(
@@ -62,12 +73,13 @@ export function useGachaDeletion(): (target: DeleteTarget | GachaTabOption) => v
         payload: {
           gachaId,
           gachaName,
+          mode,
           onConfirm: (confirmedId) => {
             performDeletion(confirmedId);
           }
         }
       });
     },
-    [performDeletion, push]
+    [mode, performDeletion, push]
   );
 }

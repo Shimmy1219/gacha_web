@@ -5,6 +5,7 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 export interface GachaDeleteConfirmDialogPayload {
   gachaId: string;
   gachaName: string;
+  mode?: 'archive' | 'delete';
   onConfirm?: (gachaId: string) => void;
 }
 
@@ -14,6 +15,9 @@ export function GachaDeleteConfirmDialog({ payload, close }: ModalComponentProps
     close();
   };
 
+  const mode = payload?.mode ?? 'archive';
+  const isDelete = mode === 'delete';
+
   return (
     <>
       <ModalBody className="space-y-4">
@@ -21,15 +25,22 @@ export function GachaDeleteConfirmDialog({ payload, close }: ModalComponentProps
           <ExclamationTriangleIcon className="mt-0.5 h-5 w-5" aria-hidden="true" />
           <div className="space-y-2">
             <p>
-              以下のガチャを削除します：
+              {isDelete ? '以下のガチャを完全に削除します：' : '以下のガチャをアーカイブします：'}
               <span className="ml-2 inline-flex items-center rounded-full border border-red-500/50 bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-100">
                 {payload.gachaName}
               </span>
             </p>
-            <p className="text-xs text-red-200/90">この操作は取り消せません。削除すると、このガチャに紐づくすべてのデータが完全に失われます。</p>
-            <p className="text-xs text-red-200/90">
-              獲得した人からもこのガチャの獲得情報は無くなります。必要であれば保存オプションからZIPを出力しておいてください。
-            </p>
+            {isDelete ? (
+              <>
+                <p className="text-xs text-red-200/90">この操作は取り消せません。関連するアイテム、レアリティ、リアグ、ポイント設定、履歴やユーザーの獲得情報もまとめて削除されます。</p>
+                <p className="text-xs text-red-200/90">必要であれば削除前にバックアップを取得してください。</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-red-200/90">アーカイブすると、このガチャはガチャ管理画面やユーザーごとの獲得内訳には表示されなくなります。</p>
+                <p className="text-xs text-red-200/90">サイト設定の「登録済みのガチャ」から再表示したり、完全に削除したりできます。</p>
+              </>
+            )}
           </div>
         </div>
       </ModalBody>
@@ -38,7 +49,7 @@ export function GachaDeleteConfirmDialog({ payload, close }: ModalComponentProps
           キャンセル
         </button>
         <button type="button" className="btn btn-primary" onClick={handleConfirm}>
-          削除する
+          {isDelete ? '削除する' : 'アーカイブする'}
         </button>
       </ModalFooter>
     </>

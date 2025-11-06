@@ -108,17 +108,23 @@ export const PageSettingsDialog: ModalComponent = () => {
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
   const { appState: appStateStore } = useDomainStores();
   const appState = useStoreValue(appStateStore);
-  const confirmDeleteGacha = useGachaDeletion();
+  const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
+  const handleRestoreGacha = useCallback(
+    (gachaId: string) => {
+      appStateStore.restoreGacha(gachaId);
+    },
+    [appStateStore]
+  );
 
   const gachaEntries = useMemo(() => {
     if (!appState) {
-      return [] as Array<{ id: string; name: string; isSelected: boolean }>;
+      return [] as Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }>;
     }
 
     const order = appState.order ?? [];
     const meta = appState.meta ?? {};
     const seen = new Set<string>();
-    const entries: Array<{ id: string; name: string; isSelected: boolean }> = [];
+    const entries: Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }> = [];
 
     const append = (gachaId: string | undefined | null) => {
       if (!gachaId || seen.has(gachaId)) {
@@ -129,14 +135,18 @@ export const PageSettingsDialog: ModalComponent = () => {
       entries.push({
         id: gachaId,
         name: displayName && displayName.length > 0 ? displayName : gachaId,
-        isSelected: appState.selectedGachaId === gachaId
+        isSelected: appState.selectedGachaId === gachaId,
+        isArchived: meta[gachaId]?.isArchived === true
       });
     };
 
     order.forEach(append);
     Object.keys(meta).forEach(append);
 
-    return entries;
+    const active = entries.filter((entry) => !entry.isArchived);
+    const archived = entries.filter((entry) => entry.isArchived);
+
+    return [...active, ...archived];
   }, [appState]);
 
   const accentScheme: 'light' | 'dark' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
@@ -332,30 +342,46 @@ export const PageSettingsDialog: ModalComponent = () => {
               </div>
               {gachaEntries.length > 0 ? (
                 <ul className="space-y-2">
-                  {gachaEntries.map((entry) => (
-                    <li key={entry.id}>
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
-                        <div className="space-y-1">
-                          <p className="font-semibold leading-tight">{entry.name}</p>
-                          <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {entry.isSelected ? (
-                            <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                              選択中
-                            </span>
-                          ) : null}
+                  {gachaEntries
+                    .filter((entry) => showArchived || !entry.isArchived)
+                    .map((entry) => (
+                      <li key={entry.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
+                          <div className="space-y-1">
+                            <p className="font-semibold leading-tight">{entry.name}</p>
+                            <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {entry.isSelected ? (
+                              <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                選択中
+                              </span>
+                            ) : null}
+                            {entry.isArchived ? (
+                              <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
+                                アーカイブ済み
+                              </span>
+                            ) : null}
+                            {entry.isArchived ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                onClick={() => handleRestoreGacha(entry.id)}
+                              >
+                                戻す
+                              </button>
+                            ) : null}
                           <button
                             type="button"
                             className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
-                            onClick={() => confirmDeleteGacha({ id: entry.id, name: entry.name })}
+                            onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
                           >
                             削除
                           </button>
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    ))}
                 </ul>
               ) : (
                 <p className="rounded-xl border border-border/50 bg-panel px-4 py-3 text-xs text-muted-foreground">
