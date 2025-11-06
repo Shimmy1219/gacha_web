@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { HomeIcon } from '@heroicons/react/24/outline';
 
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 import { HeaderBrand } from './HeaderBrand';
@@ -163,7 +165,7 @@ export function AppHeaderShell({
           : 'border-border/60 bg-surface/90 text-surface-foreground shadow-sm'
       )}
     >
-      <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
+      <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-2 py-2 sm:px-6">
         <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
           <HeaderBrand title={title} tagline={tagline} appearance={appearance} />
         </div>
@@ -196,40 +198,65 @@ export function AppHeaderShell({
         labelledBy={drawerTitleId}
         appearance={appearance}
       >
-        <div className="app-header-shell__mobile-header flex items-center justify-between">
-          <h2
-            id={drawerTitleId}
+        <div className="app-header-shell__mobile-layout flex h-full flex-col">
+          <div className="app-header-shell__mobile-main flex flex-col gap-6 pb-6">
+            <div className="app-header-shell__mobile-header flex items-center justify-between">
+              <h2
+                id={drawerTitleId}
+                className={clsx(
+                  'text-xs font-semibold uppercase tracking-[0.3em]',
+                  isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
+                )}
+              >
+                ツールバー
+              </h2>
+              <button
+                type="button"
+                onClick={handleClose}
+                className={clsx(
+                  'text-sm transition',
+                  isDarkAppearance ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-surface-foreground'
+                )}
+              >
+                閉じる
+              </button>
+            </div>
+            <ToolbarActions
+              mode="mobile"
+              onDrawGacha={onDrawGacha}
+              onRegisterGacha={onRegisterGacha}
+              onOpenRealtime={onOpenRealtime}
+              onExportAll={onExportAll}
+              showDrawGachaButton={showDrawGachaButton}
+              showRegisterGachaButton={showRegisterGachaButton}
+              showRealtimeButton={showRealtimeButton}
+              showExportButton={showExportButton}
+            />
+            <div className="app-header-shell__mobile-login lg:hidden">
+              <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+            </div>
+          </div>
+          <div
             className={clsx(
-              'text-xs font-semibold uppercase tracking-[0.3em]',
-              isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
+              'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
+              isDarkAppearance
+                ? 'border-white/10 bg-slate-950/90'
+                : 'border-border/60 bg-panel bg-opacity-95'
             )}
           >
-            ツールバー
-          </h2>
-          <button
-            type="button"
-            onClick={handleClose}
-            className={clsx(
-              'text-sm transition',
-              isDarkAppearance ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-surface-foreground'
-            )}
-          >
-            閉じる
-          </button>
-        </div>
-        <ToolbarActions
-          mode="mobile"
-          onDrawGacha={onDrawGacha}
-          onRegisterGacha={onRegisterGacha}
-          onOpenRealtime={onOpenRealtime}
-          onExportAll={onExportAll}
-          showDrawGachaButton={showDrawGachaButton}
-          showRegisterGachaButton={showRegisterGachaButton}
-          showRealtimeButton={showRealtimeButton}
-          showExportButton={showExportButton}
-        />
-        <div className="app-header-shell__mobile-login lg:hidden">
-          <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+            <Link
+              to="/home"
+              className={clsx(
+                'app-header-shell__mobile-home-button inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                isDarkAppearance
+                  ? 'border border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950'
+                  : 'border border-border bg-panel text-surface-foreground hover:border-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
+              )}
+            >
+              <HomeIcon className="h-5 w-5" />
+              ホームに戻る
+            </Link>
+          </div>
         </div>
       </ResponsiveToolbarRail>
     </header>
