@@ -5,7 +5,8 @@ import {
   type ClipboardEvent,
   type CSSProperties,
   type FormEvent,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type MouseEvent
 } from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
@@ -82,28 +83,40 @@ function RarityLabelField({
 
   const displayGradientClass = gradientClassName && value ? gradientClassName : undefined;
 
+  const handleWrapperMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === editableRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    editableRef.current?.focus();
+  };
+
   return (
-    <span
-      ref={editableRef}
-      contentEditable
-      suppressContentEditableWarning
-      role="textbox"
-      aria-label={ariaLabel}
-      aria-multiline={false}
-      spellCheck={false}
-      tabIndex={0}
-      data-placeholder={placeholder}
+    <div
       className={clsx(
-        'rarity-section__label-field block w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold text-surface-foreground transition focus:border-accent focus:outline-none',
-        'whitespace-pre-wrap break-words',
-        displayGradientClass,
+        'rarity-section__label-field-wrapper flex w-full min-w-0 items-center rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold text-surface-foreground transition focus-within:border-accent focus-within:outline-none',
         className
       )}
-      style={style}
-      onInput={handleInput}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-    />
+      onMouseDown={handleWrapperMouseDown}
+    >
+      <span
+        ref={editableRef}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-label={ariaLabel}
+        aria-multiline={false}
+        spellCheck={false}
+        tabIndex={0}
+        data-placeholder={placeholder}
+        className={clsx('rarity-section__label-field', displayGradientClass)}
+        style={style}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+      />
+    </div>
   );
 }
 

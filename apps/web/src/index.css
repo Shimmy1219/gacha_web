@@ -466,6 +466,14 @@
   min-width: 6ch;
 }
 
+.rarity-section__label-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  outline: none;
+}
+
 .rarity-section__label-field[data-placeholder]:empty {
   color: rgb(var(--color-muted-foreground) / 0.85);
   background-image: none;
