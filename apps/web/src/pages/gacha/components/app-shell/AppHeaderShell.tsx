@@ -238,7 +238,7 @@ export function AppHeaderShell({
           </div>
           <div
             className={clsx(
-              'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[env(safe-area-inset-bottom)] pt-4 backdrop-blur',
+              'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
               isDarkAppearance
                 ? 'border-white/10 bg-slate-950/90'
                 : 'border-border/60 bg-panel bg-opacity-95'
