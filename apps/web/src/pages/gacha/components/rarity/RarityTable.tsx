@@ -1,7 +1,94 @@
 import { clsx } from 'clsx';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
+
+const RARITY_LABEL_GRADIENT_WIDTH_VAR = '--rarity-label-gradient-width';
+
+type CSSVarStyle = CSSProperties & Record<string, string | number | undefined>;
+
+interface RarityLabelInputProps extends Omit<JSX.IntrinsicElements['input'], 'value'> {
+  value: string;
+  gradientClassName?: string;
+  style?: CSSProperties;
+}
+
+function RarityLabelInput({
+  gradientClassName,
+  className,
+  style,
+  value,
+  ...props
+}: RarityLabelInputProps): JSX.Element {
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [gradientWidth, setGradientWidth] = useState<number>();
+  const stringValue = value ?? '';
+  const shouldMeasureGradient = Boolean(gradientClassName && stringValue);
+
+  useEffect(() => {
+    if (!shouldMeasureGradient) {
+      setGradientWidth(undefined);
+      return;
+    }
+
+    const node = measureRef.current;
+    if (!node) {
+      return;
+    }
+
+    const updateWidth = () => {
+      const width = node.getBoundingClientRect().width;
+      if (!width) {
+        setGradientWidth(undefined);
+        return;
+      }
+
+      const nextWidth = Math.ceil(width) + 2;
+      setGradientWidth((previous) => (previous === nextWidth ? previous : nextWidth));
+    };
+
+    updateWidth();
+
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateWidth) : undefined;
+    observer?.observe(node);
+
+    const handleResize = () => updateWidth();
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [shouldMeasureGradient, stringValue]);
+
+  const gradientStyle = shouldMeasureGradient && gradientWidth
+    ? ({
+        ...style,
+        [RARITY_LABEL_GRADIENT_WIDTH_VAR]: `${gradientWidth}px`
+      } as CSSVarStyle)
+    : style;
+
+  return (
+    <div className="relative">
+      {gradientClassName ? (
+        <span
+          ref={measureRef}
+          aria-hidden
+          className="pointer-events-none invisible absolute -z-10 whitespace-pre text-base font-semibold"
+        >
+          {stringValue}
+        </span>
+      ) : null}
+      <input
+        value={stringValue}
+        className={clsx(className, gradientClassName ?? 'text-surface-foreground')}
+        style={gradientStyle}
+        {...props}
+      />
+    </div>
+  );
+}
 
 export interface RarityTableRow {
   id: string;
@@ -63,14 +150,12 @@ export function RarityTable({
             return (
               <tr key={row.id} className="rarity-section__row text-sm text-surface-foreground">
                 <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
-                  <input
+                  <RarityLabelInput
                     type="text"
                     value={label}
                     onChange={(event) => onLabelChange?.(row.id, event.target.value)}
-                    className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none',
-                      presentation.className ?? 'text-surface-foreground'
-                    )}
+                    className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none"
+                    gradientClassName={presentation.className}
                     style={presentation.style}
                     aria-label={ariaLabel}
                     placeholder={row.placeholder ?? row.id}

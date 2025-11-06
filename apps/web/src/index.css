@@ -531,6 +531,9 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: var(--rarity-label-gradient-width, 100%) 100%;
   }
 
   .text-gradient-silver {
@@ -538,6 +541,9 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: var(--rarity-label-gradient-width, 100%) 100%;
   }
 
   .text-gradient-rainbow {
@@ -545,5 +551,8 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: var(--rarity-label-gradient-width, 100%) 100%;
   }
 }
