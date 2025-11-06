@@ -165,7 +165,7 @@ export function AppHeaderShell({
           : 'border-border/60 bg-surface/90 text-surface-foreground shadow-sm'
       )}
     >
-      <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-4 py-4 sm:px-6">
+      <div className="app-header-shell__inner flex w-full flex-wrap items-center gap-4 px-2 py-2 sm:px-6">
         <div className="app-header-shell__brand flex flex-1 flex-wrap items-center gap-4">
           <HeaderBrand title={title} tagline={tagline} appearance={appearance} />
         </div>
@@ -235,8 +235,10 @@ export function AppHeaderShell({
         </div>
         <div
           className={clsx(
-            'app-header-shell__mobile-home mt-4 border-t pt-4',
-            isDarkAppearance ? 'border-white/10' : 'border-border/60'
+            'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-4 border-t px-6 pb-[max(1.5rem,calc(1rem+env(safe-area-inset-bottom)))] pt-4 backdrop-blur',
+            isDarkAppearance
+              ? 'border-white/10 bg-slate-950/90'
+              : 'border-border/60 bg-panel bg-opacity-95'
           )}
         >
           <Link
