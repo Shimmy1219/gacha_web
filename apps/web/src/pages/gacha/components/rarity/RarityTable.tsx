@@ -1,92 +1,109 @@
 import { clsx } from 'clsx';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  type ClipboardEvent,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent
+} from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
 
-const RARITY_LABEL_GRADIENT_WIDTH_VAR = '--rarity-label-gradient-width';
-
-type CSSVarStyle = CSSProperties & Record<string, string | number | undefined>;
-
-interface RarityLabelInputProps extends Omit<JSX.IntrinsicElements['input'], 'value'> {
+interface RarityLabelFieldProps {
   value: string;
   gradientClassName?: string;
+  className?: string;
   style?: CSSProperties;
+  placeholder?: string;
+  ariaLabel?: string;
+  onValueChange?: (nextValue: string) => void;
 }
 
-function RarityLabelInput({
+function RarityLabelField({
+  value,
   gradientClassName,
   className,
   style,
-  value,
-  ...props
-}: RarityLabelInputProps): JSX.Element {
-  const measureRef = useRef<HTMLSpanElement>(null);
-  const [gradientWidth, setGradientWidth] = useState<number>();
-  const stringValue = value ?? '';
-  const shouldMeasureGradient = Boolean(gradientClassName && stringValue);
+  placeholder,
+  ariaLabel,
+  onValueChange
+}: RarityLabelFieldProps): JSX.Element {
+  const editableRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!shouldMeasureGradient) {
-      setGradientWidth(undefined);
-      return;
-    }
-
-    const node = measureRef.current;
+    const node = editableRef.current;
     if (!node) {
       return;
     }
 
-    const updateWidth = () => {
-      const width = node.getBoundingClientRect().width;
-      if (!width) {
-        setGradientWidth(undefined);
-        return;
-      }
+    if (node.textContent !== value) {
+      node.textContent = value;
+    }
+  }, [value]);
 
-      const nextWidth = Math.ceil(width) + 2;
-      setGradientWidth((previous) => (previous === nextWidth ? previous : nextWidth));
-    };
+  const handleInput = (event: FormEvent<HTMLSpanElement>) => {
+    const nextValue = event.currentTarget.textContent ?? '';
+    onValueChange?.(nextValue);
+  };
 
-    updateWidth();
+  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  };
 
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateWidth) : undefined;
-    observer?.observe(node);
+  const handlePaste = (event: ClipboardEvent<HTMLSpanElement>) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text) {
+      return;
+    }
 
-    const handleResize = () => updateWidth();
-    window.addEventListener('resize', handleResize);
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
 
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [shouldMeasureGradient, stringValue]);
+    selection.deleteFromDocument();
+    const range = selection.getRangeAt(0);
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false);
 
-  const gradientStyle = shouldMeasureGradient && gradientWidth
-    ? ({
-        ...style,
-        [RARITY_LABEL_GRADIENT_WIDTH_VAR]: `${gradientWidth}px`
-      } as CSSVarStyle)
-    : style;
+    const node = editableRef.current;
+    if (!node) {
+      return;
+    }
+
+    onValueChange?.(node.textContent ?? '');
+  };
+
+  const displayGradientClass = gradientClassName && value ? gradientClassName : undefined;
 
   return (
-    <div className="relative">
-      {gradientClassName ? (
-        <span
-          ref={measureRef}
-          aria-hidden
-          className="pointer-events-none invisible absolute -z-10 whitespace-pre text-base font-semibold"
-        >
-          {stringValue}
-        </span>
-      ) : null}
-      <input
-        value={stringValue}
-        className={clsx(className, gradientClassName ?? 'text-surface-foreground')}
-        style={gradientStyle}
-        {...props}
-      />
-    </div>
+    <span
+      ref={editableRef}
+      contentEditable
+      suppressContentEditableWarning
+      role="textbox"
+      aria-label={ariaLabel}
+      aria-multiline={false}
+      spellCheck={false}
+      tabIndex={0}
+      data-placeholder={placeholder}
+      className={clsx(
+        'rarity-section__label-field block w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold text-surface-foreground transition focus:border-accent focus:outline-none',
+        'whitespace-pre-wrap break-words',
+        displayGradientClass,
+        className
+      )}
+      style={style}
+      onInput={handleInput}
+      onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
+    />
   );
 }
 
@@ -150,14 +167,13 @@ export function RarityTable({
             return (
               <tr key={row.id} className="rarity-section__row text-sm text-surface-foreground">
                 <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
-                  <RarityLabelInput
-                    type="text"
+                  <RarityLabelField
                     value={label}
-                    onChange={(event) => onLabelChange?.(row.id, event.target.value)}
-                    className="rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none"
+                    onValueChange={(next) => onLabelChange?.(row.id, next)}
+                    className="rarity-section__label-input"
                     gradientClassName={presentation.className}
                     style={presentation.style}
-                    aria-label={ariaLabel}
+                    ariaLabel={ariaLabel}
                     placeholder={row.placeholder ?? row.id}
                   />
                 </td>

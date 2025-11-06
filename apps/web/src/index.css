@@ -466,6 +466,17 @@
   min-width: 6ch;
 }
 
+.rarity-section__label-field[data-placeholder]:empty {
+  color: rgb(var(--color-muted-foreground) / 0.85);
+  background-image: none;
+}
+
+.rarity-section__label-field[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: inherit;
+  pointer-events: none;
+}
+
 .rarity-section__rate-control {
   display: flex;
   flex-wrap: nowrap;
