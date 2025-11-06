@@ -281,7 +281,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           <DashboardDesktopGrid sections={sections} />
         </div>
 
-        <div className="dashboard-shell__mobile space-y-4 lg:hidden">
+        <div className="dashboard-shell__mobile lg:hidden">
           {sections.map((section) => (
             <div
               key={section.id}
