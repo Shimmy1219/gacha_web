@@ -6,6 +6,82 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     super(persistence);
   }
 
+  removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        let changed = false;
+        const nextInventories: UserInventoriesStateV3['inventories'] = {};
+
+        Object.entries(previous.inventories ?? {}).forEach(([userId, snapshots]) => {
+          if (!snapshots) {
+            return;
+          }
+
+          const filteredEntries = Object.entries(snapshots).filter(([, snapshot]) => snapshot?.gachaId !== gachaId);
+          if (filteredEntries.length === 0) {
+            if (Object.keys(snapshots).length > 0) {
+              changed = true;
+            }
+            return;
+          }
+
+          if (filteredEntries.length !== Object.keys(snapshots).length) {
+            changed = true;
+          }
+
+          nextInventories[userId] = Object.fromEntries(filteredEntries);
+        });
+
+        const nextByItemId: UserInventoriesStateV3['byItemId'] = {};
+        Object.entries(previous.byItemId ?? {}).forEach(([itemId, entries]) => {
+          if (!entries) {
+            return;
+          }
+
+          const filteredEntries = entries.filter((entry) => entry?.gachaId !== gachaId);
+          if (filteredEntries.length === 0) {
+            if (entries.length > 0) {
+              changed = true;
+            }
+            return;
+          }
+
+          if (filteredEntries.length !== entries.length) {
+            changed = true;
+          }
+
+          nextByItemId[itemId] = filteredEntries;
+        });
+
+        if (!changed) {
+          return previous;
+        }
+
+        if (Object.keys(nextInventories).length === 0 && Object.keys(nextByItemId).length === 0) {
+          return undefined;
+        }
+
+        const timestamp = new Date().toISOString();
+
+        return {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: timestamp,
+          inventories: nextInventories,
+          byItemId: nextByItemId
+        } satisfies UserInventoriesStateV3;
+      },
+      options
+    );
+  }
+
   applyProjectionResult(
     state: UserInventoriesStateV3 | undefined,
     options: UpdateOptions = {}

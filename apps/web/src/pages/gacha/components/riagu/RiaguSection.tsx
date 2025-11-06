@@ -129,6 +129,10 @@ export function RiaguSection(): JSX.Element {
       if (!gachaId || seen.has(gachaId)) {
         return;
       }
+      const meta = data?.appState?.meta?.[gachaId];
+      if (meta?.isArchived) {
+        return;
+      }
       seen.add(gachaId);
       orderedIds.push(gachaId);
     };

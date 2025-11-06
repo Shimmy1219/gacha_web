@@ -8,6 +8,7 @@ export interface GachaAppStateV3 {
       displayName: string;
       createdAt?: string;
       updatedAt?: string;
+      isArchived?: boolean;
     }
   >;
   order: string[];

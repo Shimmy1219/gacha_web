@@ -90,7 +90,7 @@ export function RaritySection(): JSX.Element {
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
 
   useEffect(() => {
-    const availableIds = appState?.order ?? [];
+    const availableIds = (appState?.order ?? []).filter((id) => appState?.meta?.[id]?.isArchived !== true);
     if (availableIds.length === 0) {
       setActiveGachaId(null);
       return;
@@ -112,7 +112,7 @@ export function RaritySection(): JSX.Element {
       return [];
     }
 
-    const ordered = appState.order ?? [];
+    const ordered = (appState.order ?? []).filter((gachaId) => appState.meta?.[gachaId]?.isArchived !== true);
     return ordered.map((gachaId) => ({
       id: gachaId,
       label: appState.meta?.[gachaId]?.displayName ?? gachaId
