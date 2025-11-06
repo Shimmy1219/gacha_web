@@ -122,7 +122,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
           <InformationCircleIcon className="mt-0.5 h-5 w-5 text-accent" aria-hidden="true" />
           <div className="space-y-2">
             <p className="text-[13px] leading-relaxed">
-              リアルタイムで結果を貼り付ける場合は、画面上部の「リアルタイム入力」ボタンから専用モーダルを開いてください。
+              手動入力で結果を貼り付ける場合は、画面上部の「手動入力」ボタンから専用モーダルを開いてください。
             </p>
             <button
               type="button"
@@ -138,7 +138,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
                   size: 'sm',
                   payload: {
                     message:
-                      'ガチャ結果は画面上部の「リアルタイム入力」ボタンを押してペーストしてください。',
+                      'ガチャ結果は画面上部の「手動入力」ボタンを押してペーストしてください。',
                     confirmLabel: '分かった'
                   }
                 });

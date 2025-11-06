@@ -160,7 +160,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
               className="badge badge--action"
               onClick={() => onEditImage?.(model.itemId)}
             >
-              画像を設定
+              詳細設定
             </button>
           </div>
         </div>

@@ -524,7 +524,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               <div className="flex flex-col gap-3">
                 <SwitchField
                   label="ピックアップ対象"
-                  description="ピックアップ一覧に表示します"
+                  description="同レアリティのアイテムより排出率が少し上がります"
                   checked={pickupTarget}
                   onChange={setPickupTarget}
                   name="pickupTarget"

@@ -26,7 +26,7 @@ export function parseCatalogText(text){
   return items;
 }
 
-/* ====== 解析: リアルタイム結果（1ブロック） ====== */
+/* ====== 解析: 手動入力（1ブロック） ====== */
 export function splitLiveBlocks(text){
   const clean = text.replace(/\r/g, '').trim();
   // 「#なまずつーるず」(末尾に空白があっても可) だけを区切りに採用

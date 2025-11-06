@@ -39,7 +39,7 @@ interface HitCountState {
   byItemId: Record<ItemId, number>;
 }
 ```
-- リアルタイム貼り付けやガチャシミュレーター結果を元に、抽選ヒット数を蓄積する。
+- 手動入力貼り付けやガチャシミュレーター結果を元に、抽選ヒット数を蓄積する。
 - `setHitCount(itemId, count)` や `incrementHit(itemId)` が `useRiaguAssignment` の再評価を誘発する。
 
 ### 2.4 UserStore
@@ -84,7 +84,7 @@ interface RarityState {
 ## 4. 同期フロー
 1. **ユーザー名変更**
    - `UserCard` で編集 → `UserStore.updateUser` → `users[userId]` が更新 → `UserChip` が再レンダー → `RiaguCard` の獲得者ラベルが即時更新。
-2. **リアルタイム入力 / ガチャ排出**
+2. **手動入力 / ガチャ排出**
    - `RealtimePastePanel` や `GachaSimulator` で結果を入力 → `UserInventoryStore.incrementCount({ userId, gachaId, rarityId, itemId, delta })` → `inventories` と `byItemId` が更新 → `useRiaguAssignment` が再評価 → `winners`・`totalCount`・`effectiveOrderQty`・`totalCost` が更新。
 3. **抽選ヒット更新**
    - `HitCountStore.setHitCount(itemId, n)` → `useRiaguAssignment` のステップ 4 で `Math.max(count, hitCount ? 1 : 0)` が再計算され、最低保証数が補正される。

@@ -3,12 +3,12 @@
 ## 1. 計画の目的
 - 既存の手続き型 UI を React コンポーネント指向へ移行し、画面機能の再利用性と保守性を高める。
 - Tailwind CSS をベースにデザインシステムを構築し、`item-card`・`user-card`・`riagu-item` 等のカード UI をユーティリティスタイルで再定義する。【F:index.css†L78-L118】【F:index.css†L405-L413】
-- ガチャデータ管理・レアリティ設定・リアルタイム入力・インポート/エクスポートをドメインごとに整理し、React Context + Hooks で状態を共有する。【F:docs/site_spec.md†L31-L48】
+- ガチャデータ管理・レアリティ設定・手動入力・インポート/エクスポートをドメインごとに整理し、React Context + Hooks で状態を共有する。【F:docs/site_spec.md†L31-L48】
 
 ## 2. 現状整理
 - 単一の `index.html` にヘッダー/ドロワー/スプラッシュ/メインツールバー/モバイルタブ/大量のモーダルが内包されており、DOM 直接操作とイベントベースで画面を更新している。【F:docs/site_spec.md†L20-L29】
 - アプリ状態は `AppStateService` が `meta`・`catalogs`・`data`・`counts`・`selected` を管理し、レアリティ・画像・リアグは独立サービスとしてローカルストレージと IndexedDB を同期している。【F:docs/site_spec.md†L31-L43】
-- TXT/JSON インポート、リアルタイム貼り付け、ZIP エクスポート/共有、Discord ログイン等の処理が `/src` 直下の手続き型スクリプトで実装されている。【F:docs/site_spec.md†L44-L76】
+- TXT/JSON インポート、手動入力貼り付け、ZIP エクスポート/共有、Discord ログイン等の処理が `/src` 直下の手続き型スクリプトで実装されている。【F:docs/site_spec.md†L44-L76】
 - API は Blob 保存・共有トークン発行・Discord 認証を提供し、PWA 更新制御が `sw.js` / `manifest.webmanifest` に存在する。【F:docs/site_spec.md†L49-L64】
 
 ## 3. 目指すアーキテクチャ
@@ -366,7 +366,7 @@ export interface ItemCardModel {
 ### 6.1 アプリシェル
 - `AppShell`: ヘッダー、ハンバーガー、メインレイアウト、レスポンシブ drawer を管理。【F:docs/site_spec.md†L20-L22】
 - `MobileTabs`: `data-page` ベースの現在のセクションを React Router で表現し、`lg:` ブレークポイント以上でタブを非表示。
-- `ToolbarPanel`: ファイルドロップ、リアルタイム入力、エクスポート/インポート、Discord ログイン UI を含むコンポーネント。【F:docs/site_spec.md†L22-L23】
+- `ToolbarPanel`: ファイルドロップ、手動入力、エクスポート/インポート、Discord ログイン UI を含むコンポーネント。【F:docs/site_spec.md†L22-L23】
 
 ### 6.2 再利用コンポーネント
 - `Card` / `Panel`: 基本的な枠スタイル。
@@ -395,7 +395,7 @@ export interface ItemCardModel {
 
 ### 6.4 モーダル管理
 - `ModalHost` をアプリルートに設置し、Context でモーダルを push/pop。
-- 各機能モーダル（開始、リアルタイム入力、画像設定、リアグ編集、ガチャ削除確認等）を `feature/*/dialogs` に分割。
+- 各機能モーダル（開始、手動入力、画像設定、リアグ編集、ガチャ削除確認等）を `feature/*/dialogs` に分割。
 
 ### 6.5 ルーティング
 - SPA 内部でセクションを `/app/:page`（`rarity`, `items`, `gacha`, `users`, `riagu`）として扱い、React Router の `useSearchParams` でガチャ ID やフィルタを同期。
@@ -427,7 +427,7 @@ export interface ItemCardModel {
    - `users` ページ: ユーザーカード（折りたたみ、集計テーブル）。
    - `riagu` ページ: リアググループと当選者表示。
    - `gacha` ページ: ガチャ作成/削除/コピーの管理 UI。
-6. **ワークフロー機能**: TXT/JSON インポートウィザード、リアルタイム貼り付け、ZIP エクスポート、受け取りリンク発行を React Query + モーダルで実装。
+6. **ワークフロー機能**: TXT/JSON インポートウィザード、手動入力貼り付け、ZIP エクスポート、受け取りリンク発行を React Query + モーダルで実装。
 7. **API 連携・認証**: Discord ログインボタン、CSRF トークン取得、Blob アップロードの統合テスト。
 8. **受け取りページ React 化**: `/receive` を独立バンドルとして再構築し、共有トークン処理・ZIP 展開 UI を Tailwind でデザイン。
 9. **PWA 対応**: サービスワーカーと manifest を調整し、更新通知と precache を検証。

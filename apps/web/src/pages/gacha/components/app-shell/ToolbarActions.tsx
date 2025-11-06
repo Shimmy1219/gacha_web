@@ -60,7 +60,7 @@ export function ToolbarActions({
           className="toolbar-actions__realtime-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
         >
           <PlayIcon className="h-4 w-4" />
-          リアルタイム入力
+          手動入力
         </button>
       ) : null}
       {showExportButton ? (

@@ -177,7 +177,7 @@ export function App(): JSX.Element {
       title: '次のステップ',
       size: 'sm',
       payload: {
-        message: 'ガチャ結果は画面上部の「リアルタイム入力」ボタンを押してペーストしてください。',
+        message: 'ガチャ結果は画面上部の「手動入力」ボタンを押してペーストしてください。',
         confirmLabel: '分かった'
       }
     });
@@ -276,8 +276,8 @@ export function App(): JSX.Element {
   const handleOpenRealtime = () => {
     push(LivePasteDialog, {
       id: 'live-paste',
-      title: 'リアルタイム結果を貼り付け',
-      description: 'リアルタイムの結果テキストを貼り付けて解析・同期します。',
+      title: '手動で結果を貼り付け',
+      description: '他のガチャサイトで引いた結果のテキストを貼り付けて解析・同期します。',
       size: 'lg',
       payload: {
         onApply: async (value) => {
@@ -291,11 +291,11 @@ export function App(): JSX.Element {
 
           try {
             const result = applyLivePasteText(trimmed, { persistence, stores });
-            console.info('リアルタイム結果を反映しました', result);
+            console.info('手動入力の結果を反映しました', result);
             return true;
           } catch (error) {
             if (error instanceof LivePasteCatalogMismatchError) {
-              console.error('リアルタイム結果のカタログ整合性チェックで失敗しました', error);
+              console.error('手動入力結果のカタログ整合性チェックで失敗しました', error);
               const detail = formatCatalogIssueMessage(error.issue);
               push(LivePasteCatalogErrorDialog, {
                 id: 'live-paste-catalog-error',
@@ -321,7 +321,7 @@ export function App(): JSX.Element {
                       const resultWithSelection = applyLivePasteText(trimmed, { persistence, stores }, {
                         gachaSelections: selection
                       });
-                      console.info('ガチャ選択後にリアルタイム結果を反映しました', resultWithSelection);
+                      console.info('ガチャ選択後に手動入力を反映しました', resultWithSelection);
                       dismissAll();
                       return false;
                     } catch (innerError) {
@@ -352,17 +352,17 @@ export function App(): JSX.Element {
                       return false;
                     }
                   },
-                  helperText: '反映先のガチャを選択するとリアルタイム結果を同期します。'
+                  helperText: '反映先のガチャを選択すると手動入力を同期します。'
                 }
               });
               return false;
             }
-            console.error('リアルタイム結果の反映に失敗しました', error);
+            console.error('手動入力の反映に失敗しました', error);
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               const message =
                 error instanceof Error
                   ? error.message
-                  : 'リアルタイム結果の反映に失敗しました。再度お試しください。';
+                  : '手動入力の反映に失敗しました。再度お試しください。';
               window.alert(message);
             }
             return false;

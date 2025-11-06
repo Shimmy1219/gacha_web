@@ -21,7 +21,7 @@ pull-history:v1 を単一のソース・オブ・トゥルースとして扱い�
 | `currencyUsed` | 消費通貨。手動調整では常に 0。 |
 | `itemCounts` | アイテム ID ごとの獲得数または差分。`source` が `'manual'` の場合のみ負数を許容。 |
 | `rarityCounts` | レアリティ別の集計。手動調整では通常不要。 |
-| `source` | `'insiteResult'`（アプリ内ガチャ結果）、`'realtime'`（リアルタイム貼り付け）、`'manual'`（手動編集）。未指定時は `'insiteResult'` に正規化される。 |
+| `source` | `'insiteResult'`（アプリ内ガチャ結果）、`'realtime'`（手動入力貼り付け）、`'manual'`（手動編集）。未指定時は `'insiteResult'` に正規化される。 |
 | `status` | 履歴エントリの利用状況マーカー。`'new'`（未出力）、`'ziped'`（ZIP に同梱済み）、`'uploaded'`（共有リンク発行済み）。省略時は未設定として扱う。 |
 
 `PullHistoryStore` は以下の責務を持つ。【F:apps/web/src/domain/stores/pullHistoryStore.ts†L1-L210】
@@ -72,7 +72,7 @@ Pull History の `order` 配列は最近の更新順で並び、プロジェク�
 1. UI でガチャを実行すると、`appendPull` が呼ばれ `source: 'insiteResult'` の履歴が追加される。
 2. Pull History 更新を検知した `createDomainStores` がプロジェクションを再実行し、在庫が更新される。
 
-### リアルタイム貼り付け
+### 手動入力貼り付け
 1. `livePaste` が解析した結果を `appendPull` に渡し、`source: 'realtime'` のエントリを追加する。【F:apps/web/src/logic/livePaste.ts†L1-L120】
 2. 以降の流れはガチャ結果と同一。
 

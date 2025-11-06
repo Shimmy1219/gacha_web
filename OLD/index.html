@@ -152,7 +152,7 @@
         <ul style="margin:.3rem 0 .6rem 1.2rem;line-height:1.5">
           <li>まずは <strong>設定データ</strong>（アイテム一覧）か <strong>最終履歴</strong> を読み込みます。</li>
           <li>外部サイトのエクスポート <code>.txt</code>（base64）や本ツールの <code>.json</code> をそのまま取り込めます。</li>
-          <li>途中経過は「リアルタイム入力」からどんどん貼り付け可能。</li>
+          <li>途中経過は「手動入力」からどんどん貼り付け可能。</li>
         </ul>
         <p>迷ったら <strong>「TXTを読み込む」</strong>から始めるのが簡単です。</p>
       </div>
@@ -177,7 +177,7 @@
           <div class="tag" id="summaryTag">未読込</div>
           <div style="flex:1"></div>
 
-          <button class="btn" id="openLivePaste" title="リアルタイム入力パネルを開く">リアルタイム入力</button>
+          <button class="btn" id="openLivePaste" title="手動入力パネルを開く">手動入力</button>
           
           <!-- 追加: アプリ状態の完全エクスポート / インポート -->
           <button class="btn subtle" id="exportAllBtn" title="画像・動画・音声・履歴・設定を丸ごと書き出し">
@@ -196,7 +196,7 @@
           <!-- 内容は rarity.js の initRarityUI() が描画します -->
         </section>
         <section class="panel" id="itemsPanel" data-page="items">
-          <h2 style="margin-bottom:.25rem">アイテム画像の設定</h2>
+          <h2 style="margin-bottom:.25rem">アイテム設定</h2>
           <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとに設定。</div>
           <div class="tabs" id="gachaTabs"></div>
           <div id="itemGrid" class="item-grid"></div>
@@ -343,12 +343,12 @@
     </div>
   </div>
 
-  <!-- NEW: 案内モーダル（リアルタイム結果は上部ボタンから） -->
+  <!-- NEW: 案内モーダル（手動入力は上部ボタンから） -->
   <div class="modal" id="guideModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
       <h3 id="guideTitle">次のステップ</h3>
       <div class="muted">
-        ガチャ結果は画面上部の<strong>「リアルタイム入力」</strong>ボタンを押してペーストしてください。
+        ガチャ結果は画面上部の<strong>「手動入力」</strong>ボタンを押してペーストしてください。
       </div>
       <div class="sep"></div>
       <div class="row" style="justify-content:flex-end">
@@ -360,7 +360,7 @@
   <!-- Live Paste Panel（随時） -->
   <div class="modal" id="liveModal" aria-hidden="true">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="liveTitle">
-      <h3 id="liveTitle">リアルタイム結果を貼り付け</h3>
+      <h3 id="liveTitle">手動入力を貼り付け</h3>
       <div class="muted">形式例：<span class="kbd">ガチャ名</span> → <span class="kbd">名前100連</span> → <span class="kbd">【R】C　4個</span>… → <span class="kbd">#なまずつーるず</span></div>
       <div class="sep"></div>
       <textarea id="liveText" placeholder="ここに結果テキストを貼り付け（複数ブロック可）"></textarea>
@@ -952,7 +952,7 @@ function renderUsersList(){
 
   const empty = Object.keys(data).length===0;
   if(empty){
-    wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたはリアルタイム入力から反映してください。</div>';
+    wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたは手動入力から反映してください。</div>';
     return;
   }
 
