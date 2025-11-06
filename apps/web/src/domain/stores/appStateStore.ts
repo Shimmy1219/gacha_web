@@ -53,8 +53,23 @@ export class AppStateStore extends PersistedStore<GachaAppStateV3 | undefined> {
 
         const timestamp = new Date().toISOString();
         const nextMeta = { ...(previous.meta ?? {}) };
-        if (hasMeta) {
-          delete nextMeta[gachaId];
+        const currentMeta = nextMeta[gachaId];
+
+        if (!currentMeta || currentMeta.isArchived !== true) {
+          const archivedMeta = {
+            ...(currentMeta ?? {}),
+            id: currentMeta?.id ?? gachaId,
+            displayName: currentMeta?.displayName ?? gachaId,
+            createdAt: currentMeta?.createdAt,
+            updatedAt: timestamp,
+            isArchived: true
+          };
+          nextMeta[gachaId] = archivedMeta;
+        } else {
+          nextMeta[gachaId] = {
+            ...currentMeta,
+            updatedAt: timestamp
+          };
         }
 
         const nextOrder = (previous.order ?? []).filter((id) => id !== gachaId);

@@ -56,7 +56,7 @@ function buildGachaOptions(state?: GachaAppStateV3): UserFilterOption[] {
     return [];
   }
 
-  const ids = [...state.order];
+  const ids = state.order.filter((id) => state.meta?.[id]?.isArchived !== true);
   ids.sort((a, b) => {
     const nameA = state.meta?.[a]?.displayName ?? a;
     const nameB = state.meta?.[b]?.displayName ?? b;
@@ -81,7 +81,8 @@ function buildRarityOptions(appState?: GachaAppStateV3, rarityState?: GachaRarit
     return [];
   }
 
-  const gachaOrder = appState?.order ?? Object.keys(rarityState.byGacha ?? {});
+  const baseGachaOrder = appState?.order ?? Object.keys(rarityState.byGacha ?? {});
+  const gachaOrder = baseGachaOrder.filter((gachaId) => appState?.meta?.[gachaId]?.isArchived !== true);
   const rarityMap = new Map<string, { id: string; label: string }>();
 
   gachaOrder.forEach((gachaId) => {
@@ -270,7 +271,9 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
   const catalogByGacha = snapshot.catalogState?.byGacha ?? {};
   const appMeta = snapshot.appState?.meta ?? {};
   const rarityEntities = snapshot.rarityState?.entities ?? {};
-  const gachaOrder = snapshot.appState?.order ?? [];
+  const gachaOrder = (snapshot.appState?.order ?? []).filter(
+    (gachaId) => snapshot.appState?.meta?.[gachaId]?.isArchived !== true
+  );
   const gachaOrderIndex = new Map<string, number>();
   gachaOrder.forEach((gachaId, index) => {
     gachaOrderIndex.set(gachaId, index);
@@ -316,6 +319,11 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
 
     inventoriesList.forEach((inventory) => {
       if (!matchesSelection(gachaSelection, inventory.gachaId)) {
+        return;
+      }
+
+      const meta = appMeta[inventory.gachaId];
+      if (meta?.isArchived) {
         return;
       }
 
@@ -376,7 +384,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       inventories.push({
         inventoryId: inventory.inventoryId,
         gachaId: inventory.gachaId,
-        gachaName: appMeta[inventory.gachaId]?.displayName ?? inventory.gachaId,
+        gachaName: meta?.displayName ?? inventory.gachaId,
         pulls
       });
     });
