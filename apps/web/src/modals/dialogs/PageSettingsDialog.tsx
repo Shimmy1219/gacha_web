@@ -417,7 +417,17 @@ export const PageSettingsDialog: ModalComponent = () => {
                               </>
                             ) : (
                               <>
-                                <p className="font-semibold leading-tight">{entry.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold leading-tight">{entry.name}</p>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                    onClick={() => handleStartEditingGacha(entry.id, entry.name)}
+                                    aria-label={`${entry.name}を編集`}
+                                  >
+                                    <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                </div>
                                 <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
                               </>
                             )}
@@ -432,16 +442,6 @@ export const PageSettingsDialog: ModalComponent = () => {
                               <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
                                 アーカイブ済み
                               </span>
-                            ) : null}
-                            {editingGachaId !== entry.id ? (
-                              <button
-                                type="button"
-                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                onClick={() => handleStartEditingGacha(entry.id, entry.name)}
-                                aria-label={`${entry.name}を編集`}
-                              >
-                                <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-                              </button>
                             ) : null}
                             {entry.isArchived ? (
                               <button
