@@ -21,10 +21,10 @@ export function GachaDeleteConfirmDialog({ payload, close }: ModalComponentProps
   return (
     <>
       <ModalBody className="space-y-4">
-        <div className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/5 px-4 py-3 text-sm leading-relaxed text-black dark:text-white">
+        <div className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/5 px-4 py-3 text-sm leading-relaxed text-surface-foreground dark:text-white">
           <ExclamationTriangleIcon className="mt-0.5 h-5 w-5" aria-hidden="true" />
           <div className="space-y-2">
-            <p>
+            <p className="text-surface-foreground dark:text-white">
               {isDelete ? '以下のガチャを完全に削除します：' : '以下のガチャをアーカイブします：'}
               <span className="ml-2 inline-flex items-center rounded-full border border-red-500/50 bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-100">
                 {payload.gachaName}
