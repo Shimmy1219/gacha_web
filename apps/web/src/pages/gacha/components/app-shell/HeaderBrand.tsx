@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { Link } from 'react-router-dom';
 
 interface HeaderBrandProps {
   title: string;
@@ -11,7 +12,15 @@ export function HeaderBrand({ title, tagline, appearance = 'default' }: HeaderBr
 
   return (
     <div className="header-brand flex items-center">
-      <div className="header-brand__text space-y-1">
+      <Link
+        to="/home"
+        className={clsx(
+          'header-brand__text block space-y-1 rounded-md px-1 py-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition',
+          isDarkAppearance
+            ? 'focus-visible:ring-white/60 focus-visible:ring-offset-slate-950'
+            : 'focus-visible:ring-accent/60 focus-visible:ring-offset-white'
+        )}
+      >
         <p
           className={clsx(
             'header-brand__title text-lg font-semibold leading-tight sm:text-xl',
@@ -30,7 +39,7 @@ export function HeaderBrand({ title, tagline, appearance = 'default' }: HeaderBr
             {tagline}
           </p>
         ) : null}
-      </div>
+      </Link>
     </div>
   );
 }

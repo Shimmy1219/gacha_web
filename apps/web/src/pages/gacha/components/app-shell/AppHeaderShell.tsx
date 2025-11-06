@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
+import { HomeIcon } from '@heroicons/react/24/outline';
 
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 import { HeaderBrand } from './HeaderBrand';
@@ -230,6 +232,25 @@ export function AppHeaderShell({
         />
         <div className="app-header-shell__mobile-login lg:hidden">
           <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+        </div>
+        <div
+          className={clsx(
+            'app-header-shell__mobile-home mt-4 border-t pt-4',
+            isDarkAppearance ? 'border-white/10' : 'border-border/60'
+          )}
+        >
+          <Link
+            to="/home"
+            className={clsx(
+              'app-header-shell__mobile-home-button inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+              isDarkAppearance
+                ? 'border border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950'
+                : 'border border-border bg-panel text-surface-foreground hover:border-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
+            )}
+          >
+            <HomeIcon className="h-5 w-5" />
+            ホームに戻る
+          </Link>
         </div>
       </ResponsiveToolbarRail>
     </header>
