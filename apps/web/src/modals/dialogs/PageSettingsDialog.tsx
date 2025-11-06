@@ -9,6 +9,7 @@ import {
   type KeyboardEvent
 } from 'react';
 import { RadioGroup } from '@headlessui/react';
+import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
@@ -79,7 +80,6 @@ export const PageSettingsDialog: ModalComponent = () => {
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
-  const [groupBySeries, setGroupBySeries] = useState(false);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
@@ -108,17 +108,45 @@ export const PageSettingsDialog: ModalComponent = () => {
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
   const { appState: appStateStore } = useDomainStores();
   const appState = useStoreValue(appStateStore);
-  const confirmDeleteGacha = useGachaDeletion();
+  const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
+  const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
+  const [editingGachaName, setEditingGachaName] = useState('');
+  const handleRestoreGacha = useCallback(
+    (gachaId: string) => {
+      appStateStore.restoreGacha(gachaId);
+    },
+    [appStateStore]
+  );
+  const handleStartEditingGacha = useCallback((gachaId: string, currentName: string) => {
+    setEditingGachaId(gachaId);
+    setEditingGachaName(currentName);
+  }, []);
+  const handleEditingGachaNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setEditingGachaName(event.target.value);
+  }, []);
+  const handleCancelEditingGacha = useCallback(() => {
+    setEditingGachaId(null);
+    setEditingGachaName('');
+  }, []);
+  const handleCommitEditingGacha = useCallback(() => {
+    if (!editingGachaId) {
+      return;
+    }
+
+    appStateStore.renameGacha(editingGachaId, editingGachaName);
+    setEditingGachaId(null);
+    setEditingGachaName('');
+  }, [appStateStore, editingGachaId, editingGachaName]);
 
   const gachaEntries = useMemo(() => {
     if (!appState) {
-      return [] as Array<{ id: string; name: string; isSelected: boolean }>;
+      return [] as Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }>;
     }
 
     const order = appState.order ?? [];
     const meta = appState.meta ?? {};
     const seen = new Set<string>();
-    const entries: Array<{ id: string; name: string; isSelected: boolean }> = [];
+    const entries: Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }> = [];
 
     const append = (gachaId: string | undefined | null) => {
       if (!gachaId || seen.has(gachaId)) {
@@ -129,15 +157,31 @@ export const PageSettingsDialog: ModalComponent = () => {
       entries.push({
         id: gachaId,
         name: displayName && displayName.length > 0 ? displayName : gachaId,
-        isSelected: appState.selectedGachaId === gachaId
+        isSelected: appState.selectedGachaId === gachaId,
+        isArchived: meta[gachaId]?.isArchived === true
       });
     };
 
     order.forEach(append);
     Object.keys(meta).forEach(append);
 
-    return entries;
+    const active = entries.filter((entry) => !entry.isArchived);
+    const archived = entries.filter((entry) => entry.isArchived);
+
+    return [...active, ...archived];
   }, [appState]);
+
+  useEffect(() => {
+    if (!editingGachaId) {
+      return;
+    }
+
+    const exists = gachaEntries.some((entry) => entry.id === editingGachaId);
+    if (!exists) {
+      setEditingGachaId(null);
+      setEditingGachaName('');
+    }
+  }, [editingGachaId, gachaEntries]);
 
   const accentScheme: 'light' | 'dark' = theme === 'light' ? 'light' : theme === 'dark' ? 'dark' : customBaseTone;
   const normalizedAccent = customAccentColor.toLowerCase();
@@ -316,12 +360,6 @@ export const PageSettingsDialog: ModalComponent = () => {
                 checked={showArchived}
                 onChange={setShowArchived}
               />
-              <SwitchField
-                label="シリーズ別にカードをグループ化"
-                description="同じシリーズのガチャをまとめて表示し、カテゴリ見出しを追加します。"
-                checked={groupBySeries}
-                onChange={setGroupBySeries}
-              />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
               <div className="space-y-1">
@@ -332,30 +370,99 @@ export const PageSettingsDialog: ModalComponent = () => {
               </div>
               {gachaEntries.length > 0 ? (
                 <ul className="space-y-2">
-                  {gachaEntries.map((entry) => (
-                    <li key={entry.id}>
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
-                        <div className="space-y-1">
-                          <p className="font-semibold leading-tight">{entry.name}</p>
-                          <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                  {gachaEntries
+                    .filter((entry) => showArchived || !entry.isArchived)
+                    .map((entry) => (
+                      <li key={entry.id}>
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
+                          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+                            {editingGachaId === entry.id ? (
+                              <>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                  <input
+                                    type="text"
+                                    value={editingGachaName}
+                                    onChange={handleEditingGachaNameChange}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        handleCommitEditingGacha();
+                                      }
+                                      if (event.key === 'Escape') {
+                                        event.preventDefault();
+                                        handleCancelEditingGacha();
+                                      }
+                                    }}
+                                    autoFocus
+                                    className="w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                                  />
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                      onClick={handleCommitEditingGacha}
+                                    >
+                                      保存
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                      onClick={handleCancelEditingGacha}
+                                    >
+                                      キャンセル
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold leading-tight">{entry.name}</p>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                    onClick={() => handleStartEditingGacha(entry.id, entry.name)}
+                                    aria-label={`${entry.name}を編集`}
+                                  >
+                                    <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {entry.isSelected ? (
+                              <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                選択中
+                              </span>
+                            ) : null}
+                            {entry.isArchived ? (
+                              <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
+                                アーカイブ済み
+                              </span>
+                            ) : null}
+                            {entry.isArchived ? (
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                onClick={() => handleRestoreGacha(entry.id)}
+                              >
+                                戻す
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+                              onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
+                            >
+                              削除
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {entry.isSelected ? (
-                            <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                              選択中
-                            </span>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
-                            onClick={() => confirmDeleteGacha({ id: entry.id, name: entry.name })}
-                          >
-                            削除
-                          </button>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    ))}
                 </ul>
               ) : (
                 <p className="rounded-xl border border-border/50 bg-panel px-4 py-3 text-xs text-muted-foreground">

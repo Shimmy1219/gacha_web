@@ -154,9 +154,12 @@ export function ItemsSection(): JSX.Element {
 
     const knownGachaIds = ordered.filter((gachaId) => catalogByGacha[gachaId]);
     const rest = Object.keys(catalogByGacha).filter((gachaId) => !knownGachaIds.includes(gachaId));
-    const finalOrder = [...knownGachaIds, ...rest];
+    const activeOrder = [...knownGachaIds, ...rest].filter((gachaId) => {
+      const meta = data.appState?.meta?.[gachaId];
+      return meta?.isArchived !== true;
+    });
 
-    return finalOrder.map((gachaId) => ({
+    return activeOrder.map((gachaId) => ({
       id: gachaId,
       label: data.appState?.meta?.[gachaId]?.displayName ?? gachaId
     }));
