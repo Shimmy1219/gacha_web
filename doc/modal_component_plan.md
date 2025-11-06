@@ -1,7 +1,7 @@
 # Modal Components React 移行詳細計画
 
 ## 1. 目的
-- 既存の `index.html` に散在する 8 種類のモーダル（開始、ガイド、リアルタイム入力、景品設定、リアグ設定、ガチャ削除、アイテム削除、保存オプション）を React + Tailwind CSS へ集約し、共通のベースコンポーネントを構築する。旧カタログ貼り付けモーダルは導線がなくなったため、React 移行時に削除する。【F:index.html†L291-L517】
+- 既存の `index.html` に散在する 8 種類のモーダル（開始、ガイド、手動入力、景品設定、リアグ設定、ガチャ削除、アイテム削除、保存オプション）を React + Tailwind CSS へ集約し、共通のベースコンポーネントを構築する。旧カタログ貼り付けモーダルは導線がなくなったため、React 移行時に削除する。【F:index.html†L291-L517】
 - `modal` / `dialog` クラスに依存する現在の表示・レイアウト・スタッキング制御を Tailwind ユーティリティと React 状態管理へ移し、重複コードとグローバル副作用を削減する。【F:index.css†L31-L141】【F:index.html†L1727-L1758】
 - モーダル機能を `ModalProvider` として抽象化し、今後追加されるダイアログでも再利用できる設計を整える。React 全体構成のモーダルホスト方針と整合させ、各機能フォルダで具体モーダルを保守できるようにする。【F:doc/react_migration_plan.md†L174-L176】
 
@@ -9,7 +9,7 @@
 - **Start Modal (`#startModal`)**: TXT/JSON 読込と新規開始タイル、ファイル入力、閉じるボタンを提供するオンボーディング入口。【F:index.html†L291-L325】
 - **Catalog Paste (`#catalogModal`)**: 現在は導線がなく、React 移行後に削除予定。カタログ解析ロジックは別のインポート手段へ統合する。【F:index.html†L328-L344】
 - **Guide (`#guideModal`)**: 次のステップ案内のみのシンプルな承諾ダイアログ。【F:index.html†L346-L357】
-- **Live Paste (`#liveModal`)**: リアルタイム結果テキスト入力と反映ボタンを提供する大きなテキストエリアモーダル。【F:index.html†L360-L371】
+- **Live Paste (`#liveModal`)**: 手動入力テキスト入力と反映ボタンを提供する大きなテキストエリアモーダル。【F:index.html†L360-L371】
 - **Prize Settings (`#imageModal`, 移行後 `PrizeSettingsDialog`)**: 対象情報、プレビュー、ファイル選択、保存・閉じる操作をまとめた最大幅 880px の 2 カラムレイアウトモーダル。React 移行時に景品名・レアリティ入力、プレビュー、ファイル選択、「ピックアップ対象」「コンプリートガチャ対象」トグル、リアグ設定起動ボタンを内包する仕様へ拡張する。【F:index.html†L374-L415】
 - **Riagu (`#riaguModal`)**: リアグ原価・タイプ入力、保存/解除/閉じるボタンを備える設定モーダル。【F:index.html†L417-L435】
 - **Gacha Delete (`#deleteModal`)**: ガチャ削除確認とターゲット表示、キャンセル/削除ボタンを持つ確認ダイアログ。【F:index.html†L439-L448】
@@ -101,13 +101,13 @@ interface ModalState {
    - アップロード結果セクションは `grid gap-3 sm:grid-cols-[minmax(0,1fr),auto]` でリンクとコピーを整列し、コピー後 2 秒間はボタン文言を「コピーしました」に切り替える実装になっている。【F:index.html†L479-L515】
 
 ### 5.3 2025-10-17 時点の React 実装状況メモ
-- `StartWizardDialog`／`GuideInfoDialog`／`LivePasteDialog` は `App.tsx` のヘッダー操作から `useModal().push` で呼び出し済み。TXT/JSON 読み込み・新規作成・リアルタイム貼り付けはいずれも `console.info` でダミー処理を差し込んでおり、実処理の接続が未完了。【F:apps/web/src/app/App.tsx†L6-L102】
+- `StartWizardDialog`／`GuideInfoDialog`／`LivePasteDialog` は `App.tsx` のヘッダー操作から `useModal().push` で呼び出し済み。TXT/JSON 読み込み・新規作成・手動入力貼り付けはいずれも `console.info` でダミー処理を差し込んでおり、実処理の接続が未完了。【F:apps/web/src/app/App.tsx†L6-L102】
 - `PrizeSettingsDialog` は `ItemsSection` のサンプルカードから `push` できるが、保存・ピックアップ指定などもダミーの `console.info` のまま。`usePrizeSettings` 相当のデータフローは未導入で、今後の hook 実装が必要。【F:apps/web/src/pages/gacha/components/items/ItemsSection.tsx†L8-L198】【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L13-L247】
 - `SaveOptionsDialog` は `UsersSection` 内の「エクスポート」ボタンから開ける。`uploadResult` はダミー値、保存／アップロード／Discord 送信はすべて `console.info` のスタブ。AppStateStore 連携と実サービス呼び出しを後続タスクに残している。【F:apps/web/src/pages/gacha/components/users/UsersSection.tsx†L82-L139】【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
 - `GachaDeleteConfirmDialog`／`ItemDeleteConfirmDialog` はコンポーネント実装のみ完了し、UI からの導線がまだ存在しない。ガチャ・景品一覧の削除アクションを React 化するタイミングで `push` を接続する必要がある。【F:apps/web/src/features/gacha/dialogs/GachaDeleteConfirmDialog.tsx†L1-L66】【F:apps/web/src/features/items/dialogs/ItemDeleteConfirmDialog.tsx†L1-L84】
 
 #### TODO（導線・仕様差分）
-- ヘッダーメニューの TXT/JSON 読込・新規作成・リアルタイム貼り付け操作から実際の import/export ロジックを接続する。特に TXT/JSON 読込は `onPickTxt`／`onPickJson` で受け取った `File` をパーサーへ渡す実装が未着手。【F:apps/web/src/app/App.tsx†L44-L80】
+- ヘッダーメニューの TXT/JSON 読込・新規作成・手動入力貼り付け操作から実際の import/export ロジックを接続する。特に TXT/JSON 読込は `onPickTxt`／`onPickJson` で受け取った `File` をパーサーへ渡す実装が未着手。【F:apps/web/src/app/App.tsx†L44-L80】
 - アイテムカードおよびガチャ一覧に削除ボタンを配置し、`ItemDeleteConfirmDialog`／`GachaDeleteConfirmDialog` を開く導線を作る。削除確定時に AppStateStore を更新する reducer も必要。【F:apps/web/src/features/items/dialogs/ItemDeleteConfirmDialog.tsx†L1-L84】【F:apps/web/src/features/gacha/dialogs/GachaDeleteConfirmDialog.tsx†L1-L66】
 - `PrizeSettingsDialog` からの保存・リアグ設定起動を本番ストアへ接続し、変更破棄時の確認モーダルを仕様通り `push` する。現在は `console.info` のスタブのみで確認モーダルも未実装。【F:apps/web/src/features/items/dialogs/PrizeSettingsDialog.tsx†L112-L223】
 - `SaveOptionsDialog` の ZIP 生成・アップロード・Discord 送信処理を `useSaveJob`（仮）などの専用 Hook にまとめ、アップロード結果の永続化とエラー表示を追加する。【F:apps/web/src/features/users/dialogs/SaveOptionsDialog.tsx†L1-L164】
@@ -132,7 +132,7 @@ interface ModalState {
 ## 9. 移行ステップ
 1. `ModalProvider` / ベース UI を作成し、Storybook にプレビューを追加。
 2. Onboarding モーダル（Start, Guide）を React へ移植し、既存 DOM から該当セクションを削除。
-3. リアルタイム貼り付けモーダルを React 化し、`parseLiveInput` など既存ユーティリティを Hook へ再配置する。【F:index.html†L360-L371】【F:index.html†L1812-L1820】
+3. 手動入力貼り付けモーダルを React 化し、`parseLiveInput` など既存ユーティリティを Hook へ再配置する。【F:index.html†L360-L371】【F:index.html†L1812-L1820】
 4. カタログ貼り付けモーダルの DOM・イベントバインディングを撤去し、必要なロジックは別ページ用サービスへ移す。【F:index.html†L328-L344】【F:index.html†L842-L854】
 5. 景品設定・リアグ・削除確認モーダルを順次置換し、旧 `openXxxModal` 関数を `ModalProvider` 経由の呼び出しに書き換える。【F:index.html†L374-L1343】
 6. 保存オプションモーダルと FAB 連携を React へ移行し、`body.modal-open` 依存を排除。【F:index.css†L424-L437】

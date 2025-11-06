@@ -35,7 +35,7 @@ export function ControlsPanel(): JSX.Element {
           <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">Step 1</p>
           <h2 className="mt-1 text-sm font-semibold text-surface-foreground">データを取り込む</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            TXT/JSONファイル、リアルタイム貼り付け、ZIP共有からデータを同期し、AppStateへ反映します。
+            TXT/JSONファイル、手動入力貼り付け、ZIP共有からデータを同期し、AppStateへ反映します。
           </p>
         </div>
         <div className="controls-panel__step-card rounded-2xl border border-border/60 bg-surface/25 p-4">

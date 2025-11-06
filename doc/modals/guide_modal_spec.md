@@ -1,7 +1,7 @@
 # Guide Modal (GuideInfoDialog) 仕様書
 
 ## 1. 概要
-- カタログ貼り付け完了後にリアルタイム入力導線を案内するインフォメーションモーダル。
+- カタログ貼り付け完了後に手動入力導線を案内するインフォメーションモーダル。
 - React 版では `GuideInfoDialog` として `StartWizardDialog` から遷移、またはライブ貼り付け完了時のトースト代わりに表示する。
 
 ## 2. 現行実装
@@ -32,7 +32,7 @@
 ## 4. 状態遷移
 1. カタログ解析完了時またはユーザーがガイドをリクエストしたときに `push(GuideInfoDialog)`。
 2. ユーザーが「分かった」を押すと `onAcknowledge` → `pop()`。
-3. `context` が `catalog-complete` の場合、モーダルを閉じた後にリアルタイム入力ボタンへフォーカスを移動させる。
+3. `context` が `catalog-complete` の場合、モーダルを閉じた後に手動入力ボタンへフォーカスを移動させる。
 
 ## 5. 必要なメソッド
 - `useGuidePrompt()` Hook: `context` に応じて文章とフォーカス遷移ターゲットを決定。

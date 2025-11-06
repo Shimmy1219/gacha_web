@@ -856,7 +856,7 @@ export function ItemsSection(): JSX.Element {
 
       push(PrizeSettingsDialog, {
         id: `prize-settings-${model.itemId}`,
-        title: '景品画像を設定',
+        title: 'アイテムの詳細設定',
         description: 'プレビュー・レアリティ・リアグ設定をまとめて更新します。',
         size: 'lg',
         payload: {
@@ -976,7 +976,7 @@ export function ItemsSection(): JSX.Element {
       <div ref={sectionWrapperRef} className="h-full">
         <SectionContainer
           id="items"
-          title="アイテム画像の設定"
+          title="アイテム設定"
           description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
           actions={
             <button

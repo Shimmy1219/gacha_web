@@ -14,7 +14,7 @@ export function GuideInfoDialog({ payload, close }: ModalComponentProps<GuideInf
     return {
       message:
         payload?.message ??
-        'ガチャ結果は画面上部の「リアルタイム入力」ボタンを押してペーストしてください。',
+        'ガチャ結果は画面上部の「手動入力」ボタンを押してペーストしてください。',
       confirmLabel: payload?.confirmLabel ?? '了解',
       onConfirm: payload?.onConfirm
     };
