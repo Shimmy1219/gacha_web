@@ -33,6 +33,52 @@ export class AppStateStore extends PersistedStore<GachaAppStateV3 | undefined> {
     );
   }
 
+  renameGacha(
+    gachaId: string,
+    nextDisplayName: string | null | undefined,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    if (!gachaId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const timestamp = new Date().toISOString();
+        const trimmed = (nextDisplayName ?? '').trim();
+        const resolvedDisplayName = trimmed.length > 0 ? trimmed : gachaId;
+
+        const nextMeta = { ...(previous.meta ?? {}) };
+        const currentMeta = nextMeta[gachaId];
+        const updatedMeta = {
+          ...(currentMeta ?? {}),
+          id: currentMeta?.id ?? gachaId,
+          displayName: resolvedDisplayName,
+          createdAt: currentMeta?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+          isArchived: currentMeta?.isArchived ?? false
+        } satisfies NonNullable<GachaAppStateV3['meta'][string]>;
+        nextMeta[gachaId] = updatedMeta;
+
+        const currentOrder = previous.order ?? [];
+        const hasOrder = currentOrder.includes(gachaId);
+        const nextOrder = hasOrder ? currentOrder : [...currentOrder, gachaId];
+
+        return {
+          ...previous,
+          meta: nextMeta,
+          order: nextOrder,
+          updatedAt: timestamp
+        };
+      },
+      options
+    );
+  }
+
   archiveGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
     if (!gachaId) {
       return;
