@@ -5,7 +5,7 @@ import { useStoreValue } from '@domain/stores';
 
 import { useDomainStores } from '../../../features/storage/AppPersistenceProvider';
 
-function hasRegisteredGacha(appState: GachaAppStateV3 | undefined): boolean {
+function determineHasRegisteredGacha(appState: GachaAppStateV3 | undefined): boolean {
   if (!appState) {
     return false;
   }
@@ -28,7 +28,10 @@ export function useGachaRegistrationState(): {
   const { appState: appStateStore } = useDomainStores();
   const appState = useStoreValue(appStateStore);
 
-  const hasRegisteredGacha = useMemo(() => hasRegisteredGacha(appState), [appState]);
+  const hasRegisteredGacha = useMemo(
+    () => determineHasRegisteredGacha(appState),
+    [appState]
+  );
   const isHydrated = appStateStore.isHydrated();
   const shouldShowSplash = isHydrated && !hasRegisteredGacha;
 
