@@ -10,6 +10,9 @@ const PRECACHE_URLS = [
   '/icons/icon-512.png'
 ];
 
+const getAppShellFromCache = async () =>
+  (await caches.match('/index.html')) || (await caches.match('/'));
+
 const isRedirectResponse = (response) =>
   response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400);
 
@@ -60,19 +63,30 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          const fresh = await fetch(new Request(request.url, { cache: 'reload' }));
+          const fresh = await fetch(request, { cache: 'reload' });
           const cache = await caches.open(RUNTIME_CACHE);
           if (!isRedirectResponse(fresh)) {
             cache.put(request, fresh.clone());
+            return fresh;
           }
-          return fresh;
+
+          const appShell = await getAppShellFromCache();
+          if (appShell) {
+            return appShell;
+          }
+
+          return fetch(request);
         } catch {
           const cache = await caches.open(RUNTIME_CACHE);
           const cached = await cache.match(request);
           if (cached && !isRedirectResponse(cached)) {
             return cached;
           }
-          return (await caches.match('/index.html')) || (await caches.match('/'));
+          const appShell = await getAppShellFromCache();
+          if (appShell) {
+            return appShell;
+          }
+          throw new Error('App shell cache is unavailable');
         }
       })(),
     );
