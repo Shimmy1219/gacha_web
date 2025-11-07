@@ -1023,7 +1023,7 @@ export function ItemsSection(): JSX.Element {
 
                   {showAddCard || items.length > 0 ? (
                     <div onMouseDown={handleSurfaceMouseDown}>
-                      <div className={gridClassName} style={{ gridTemplateColumns }}>
+                      <div className={gridClassName} style={gridStyle}>
                         {showAddCard ? (
                           <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                         ) : null}
