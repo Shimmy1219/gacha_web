@@ -11,12 +11,12 @@ import {
 import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
 import { generateGachaId, generateItemId, generateRarityId } from '@domain/idGenerators';
 
-import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { ModalBody, ModalFooter, type ModalComponentProps, useModal } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { PtControlsPanel } from '../../pages/gacha/components/rarity/PtControlsPanel';
 import { RarityTable, type RarityTableRow } from '../../pages/gacha/components/rarity/RarityTable';
 import { DEFAULT_PALETTE } from '../../pages/gacha/components/rarity/color-picker/palette';
-import { formatRarityRate, parseRarityRateInput } from '../../features/rarity/utils/rarityRate';
+import { formatRarityRate } from '../../features/rarity/utils/rarityRate';
 import {
   FALLBACK_RARITY_COLOR,
   generateRandomRarityColor,
@@ -24,18 +24,24 @@ import {
   generateRandomRarityLabel
 } from '../../features/rarity/utils/raritySeed';
 import {
+  RATE_TOLERANCE,
+  getAutoAdjustRarityId,
+  sortRarityRows,
+  type RarityRateRow
+} from '../../logic/rarityTable';
+import { useRarityTableController } from '../../features/rarity/hooks/useRarityTableController';
+import {
   SingleSelectDropdown,
   type SingleSelectOption
 } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { RarityRateErrorDialog } from './RarityRateErrorDialog';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
-interface DraftRarity {
-  id: string;
+interface DraftRarity extends RarityRateRow {
   label: string;
   color: string;
-  emitRateInput: string;
 }
 
 interface DraftItem {
@@ -91,7 +97,8 @@ function createInitialRarities(): DraftRarity[] {
       id: generateRarityId(),
       label: preset.label,
       color,
-      emitRateInput: formatRarityRate(preset.emitRate)
+      emitRate: preset.emitRate,
+      sortOrder: index
     } satisfies DraftRarity;
   });
 }
@@ -106,6 +113,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     ptControls: ptControlsStore,
     riagu: riaguStore
   } = useDomainStores();
+  const { push } = useModal();
 
   const [step, setStep] = useState<WizardStep>('basic');
   const [gachaName, setGachaName] = useState('');
@@ -116,6 +124,12 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNameError, setShowNameError] = useState(false);
+
+  const sortedRarities = useMemo(() => sortRarityRows(rarities), [rarities]);
+  const autoAdjustRarityId = useMemo(
+    () => getAutoAdjustRarityId(sortedRarities),
+    [sortedRarities]
+  );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
@@ -156,37 +170,131 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     };
   }, [step]);
 
-  const rarityTableRows = useMemo<RarityTableRow[]>(
-    () =>
-      rarities.map((rarity) => ({
+  const applyEmitRateUpdates = useCallback(
+    (updates: ReadonlyArray<{ rarityId: string; emitRate: number | undefined }>) => {
+      if (updates.length === 0) {
+        return;
+      }
+
+      setRarities((previous) => {
+        if (previous.length === 0) {
+          return previous;
+        }
+
+        const updateMap = new Map(updates.map((update) => [update.rarityId, update.emitRate] as const));
+        let changed = false;
+
+        const next = previous.map((rarity) => {
+          if (!updateMap.has(rarity.id)) {
+            return rarity;
+          }
+          const nextEmitRate = updateMap.get(rarity.id);
+          const currentEmitRate = rarity.emitRate;
+          const noChange =
+            (nextEmitRate == null && currentEmitRate == null) ||
+            (nextEmitRate != null &&
+              currentEmitRate != null &&
+              Math.abs(currentEmitRate - nextEmitRate) <= RATE_TOLERANCE);
+
+          if (noChange) {
+            return rarity;
+          }
+
+          changed = true;
+          return { ...rarity, emitRate: nextEmitRate };
+        });
+
+        return changed ? next : previous;
+      });
+    },
+    []
+  );
+
+  const handleAutoAdjustRate = useCallback((rarityId: string, rate: number) => {
+    setRarities((previous) => {
+      let changed = false;
+      const next = previous.map((rarity) => {
+        if (rarity.id !== rarityId) {
+          return rarity;
+        }
+        const currentRate = rarity.emitRate ?? 0;
+        if (Math.abs(currentRate - rate) <= RATE_TOLERANCE) {
+          return rarity;
+        }
+        changed = true;
+        return { ...rarity, emitRate: rate };
+      });
+      return changed ? next : previous;
+    });
+  }, []);
+
+  const { emitRateInputs, handleEmitRateInputChange, handleEmitRateInputCommit } =
+    useRarityTableController({
+      rows: rarities,
+      autoAdjustRarityId,
+      onApplyRateUpdates: applyEmitRateUpdates,
+      onAutoAdjustRate: handleAutoAdjustRate,
+      onPrecisionExceeded: ({ fractionDigits, input }) => {
+        push(RarityRateErrorDialog, {
+          id: 'rarity-rate-error',
+          size: 'sm',
+          payload: {
+            reason: 'precision-exceeded',
+            detail: `入力値「${input}」は小数点以下が${fractionDigits}桁あります。`
+          }
+        });
+      },
+      onTotalExceedsLimit: (error) => {
+        const detail = `他のレアリティの合計が${formatRarityRate(error.total)}%になっています。`;
+        push(RarityRateErrorDialog, {
+          id: 'rarity-rate-error',
+          title: '排出率エラー',
+          size: 'sm',
+          payload: { detail }
+        });
+      }
+    });
+
+  const rarityTableRows = useMemo<RarityTableRow[]>(() => {
+    const hasAutoAdjust = autoAdjustRarityId != null && sortedRarities.length > 1;
+    return sortedRarities.map((rarity) => {
+      const entry = emitRateInputs[rarity.id];
+      const emitRateInput = entry?.value ?? formatRarityRate(rarity.emitRate);
+      const isAutoAdjust = hasAutoAdjust && rarity.id === autoAdjustRarityId;
+      const label = rarity.label;
+      const emitRateAriaLabel = `${label || rarity.id} の排出率${isAutoAdjust ? '（自動調整）' : ''}`;
+
+      return {
         id: rarity.id,
         label: rarity.label,
         color: rarity.color,
-        emitRateInput: rarity.emitRateInput,
-        placeholder: rarity.label || 'レアリティ名'
-      })),
-    [rarities]
-  );
+        emitRateInput,
+        placeholder: rarity.label || 'レアリティ名',
+        emitRateAriaLabel,
+        isEmitRateReadOnly: isAutoAdjust
+      } satisfies RarityTableRow;
+    });
+  }, [autoAdjustRarityId, emitRateInputs, sortedRarities]);
 
   type RaritySelectOption = SingleSelectOption & { color?: string };
 
   const rarityOptions = useMemo<RaritySelectOption[]>(
     () =>
-      rarities.length > 0
-        ? rarities.map((rarity) => ({
+      sortedRarities.length > 0
+        ? sortedRarities.map((rarity) => ({
             value: rarity.id,
             label: rarity.label || rarity.id,
             color: rarity.color
           }))
         : [{ value: '', label: 'レアリティ未設定' }],
-    [rarities]
+    [sortedRarities]
   );
 
   const stepIndex = step === 'basic' ? 1 : step === 'assets' ? 2 : 3;
   const totalSteps = 3;
   const canProceedToAssets = rarities.length > 0;
   const canProceedToPt = !isProcessingAssets;
-  const highestRarity = rarities[rarities.length - 1] ?? rarities[0] ?? null;
+  const highestRarity = sortedRarities[sortedRarities.length - 1] ?? sortedRarities[0] ?? null;
 
   const rarityCount = rarities.length;
 
@@ -207,20 +315,23 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           id: generateRarityId(),
           label,
           color,
-          emitRateInput: formatRarityRate(generateRandomRarityEmitRate())
+          emitRate: generateRandomRarityEmitRate(),
+          sortOrder: previous.length
         }
       ];
     });
   }, []);
 
-  const handleRemoveRarity = useCallback((rarityId: string) => {
-    setRarities((previous) => {
-      if (previous.length <= 1) {
-        return previous;
+  const handleRemoveRarity = useCallback(
+    (rarityId: string) => {
+      if (rarityCount <= 1) {
+        return;
       }
-      return previous.filter((rarity) => rarity.id !== rarityId);
-    });
-  }, []);
+
+      setRarities((previous) => previous.filter((rarity) => rarity.id !== rarityId));
+    },
+    [rarityCount]
+  );
 
   const handleLabelChange = useCallback((rarityId: string, value: string) => {
     setRarities((previous) =>
@@ -231,12 +342,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const handleColorChange = useCallback((rarityId: string, color: string) => {
     setRarities((previous) =>
       previous.map((rarity) => (rarity.id === rarityId ? { ...rarity, color } : rarity))
-    );
-  }, []);
-
-  const handleEmitRateChange = useCallback((rarityId: string, value: string) => {
-    setRarities((previous) =>
-      previous.map((rarity) => (rarity.id === rarityId ? { ...rarity, emitRateInput: value } : rarity))
     );
   }, []);
 
@@ -258,7 +363,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         Array.from(fileList, async (file) => await saveAsset(file))
       );
 
-      const defaultRarityId = rarities[rarities.length - 1]?.id ?? rarities[0]?.id ?? null;
+      const defaultRarityId =
+        sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
 
       setItems((previous) => {
         const nextItems = [...previous];
@@ -295,7 +401,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     } finally {
       setIsProcessingAssets(false);
     }
-  }, [rarities]);
+  }, [sortedRarities]);
 
   const handleRemoveItem = useCallback((assetId: string) => {
     setItems((previous) => {
@@ -333,8 +439,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, []);
 
   useEffect(() => {
-    const availableRarityIds = new Set(rarities.map((rarity) => rarity.id));
-    const fallbackRarityId = rarities[rarities.length - 1]?.id ?? rarities[0]?.id ?? null;
+    const availableRarityIds = new Set(sortedRarities.map((rarity) => rarity.id));
+    const fallbackRarityId =
+      sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
 
     if (!fallbackRarityId) {
       return;
@@ -348,7 +455,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         return { ...item, rarityId: fallbackRarityId };
       })
     );
-  }, [rarities]);
+  }, [sortedRarities]);
 
   const handleProceedFromBasicStep = useCallback(() => {
     const trimmedName = gachaName.trim();
@@ -414,19 +521,17 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       const newGachaIndex: Record<string, string> = {};
       const rarityOrder: string[] = [];
 
-      rarities.forEach((rarity, index) => {
+      sortedRarities.forEach((rarity, index) => {
         const label = rarity.label.trim();
         const color = rarity.color?.trim() || FALLBACK_RARITY_COLOR;
-        const emitRate = rarity.emitRateInput.trim()
-          ? parseRarityRateInput(rarity.emitRateInput.trim()) ?? undefined
-          : undefined;
+        const emitRate = typeof rarity.emitRate === 'number' ? rarity.emitRate : undefined;
 
         const entity: GachaRarityEntityV3 = {
           id: rarity.id,
           gachaId,
           label,
           color,
-          ...(typeof emitRate === 'number' ? { emitRate } : {}),
+          ...(emitRate != null ? { emitRate } : {}),
           sortOrder: index,
           updatedAt: timestamp
         };
@@ -582,7 +687,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               rows={rarityTableRows}
               onLabelChange={handleLabelChange}
               onColorChange={handleColorChange}
-              onEmitRateChange={handleEmitRateChange}
+              onEmitRateChange={handleEmitRateInputChange}
+              onEmitRateCommit={handleEmitRateInputCommit}
               onDelete={handleRemoveRarity}
               onAdd={handleAddRarity}
               canDeleteRow={canDeleteRarityRow}

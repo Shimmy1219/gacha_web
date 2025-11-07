@@ -15,60 +15,20 @@ import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDelet
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityInUseDialog } from '../../../../modals/dialogs/RarityInUseDialog';
 import { RarityRateErrorDialog } from '../../../../modals/dialogs/RarityRateErrorDialog';
-import {
-  MAX_RATE_FRACTION_DIGITS,
-  formatRarityRate,
-  parseRarityRateInput
-} from '../../../../features/rarity/utils/rarityRate';
-import {
-  RATE_TOLERANCE,
-  buildEmitRateUpdates,
-  computeAutoAdjustRate,
-  getAutoAdjustRarityId,
-  sortRarityRows,
-  type RarityRateRow
-} from '../../../../logic/rarityTable';
+import { formatRarityRate } from '../../../../features/rarity/utils/rarityRate';
+import { getAutoAdjustRarityId, sortRarityRows, type RarityRateRow } from '../../../../logic/rarityTable';
 import {
   FALLBACK_RARITY_COLOR,
   generateRandomRarityColor,
   generateRandomRarityEmitRate,
   generateRandomRarityLabel
 } from '../../../../features/rarity/utils/raritySeed';
+import { useRarityTableController } from '../../../../features/rarity/hooks/useRarityTableController';
 
 interface RarityRow extends RarityRateRow {
   id: string;
   label: string;
   color: string;
-}
-
-interface EmitRateInputStateEntry {
-  value: string;
-  lastSyncedRate: number | undefined;
-}
-
-function countFractionDigits(value: string): number | null {
-  const normalized = value.replace(/,/g, '').trim();
-
-  if (normalized === '') {
-    return null;
-  }
-
-  const exponentIndex = normalized.toLowerCase().indexOf('e');
-  if (exponentIndex !== -1) {
-    return null;
-  }
-
-  let unsigned = normalized;
-  if (unsigned.startsWith('-') || unsigned.startsWith('+')) {
-    unsigned = unsigned.slice(1);
-  }
-
-  const decimalPointIndex = unsigned.indexOf('.');
-  if (decimalPointIndex === -1) {
-    return 0;
-  }
-
-  return unsigned.slice(decimalPointIndex + 1).length;
 }
 
 export function RaritySection(): JSX.Element {
@@ -127,8 +87,6 @@ export function RaritySection(): JSX.Element {
     panelMotion === 'backward' && 'animate-tab-slide-from-left'
   );
 
-  const [emitRateInputs, setEmitRateInputs] = useState<Record<string, EmitRateInputStateEntry>>({});
-
   const rarityRows = useMemo(() => {
     if (!rarityState || !activeGachaId) {
       return [] as RarityRow[];
@@ -168,86 +126,6 @@ export function RaritySection(): JSX.Element {
       })),
     [sortedRarityRows]
   );
-
-  const tableRows = useMemo<RarityTableRow[]>(() => {
-    const hasAutoAdjust = autoAdjustRarityId != null && sortedRarityRows.length > 1;
-    return sortedRarityRows.map((rarity) => {
-      const entry = emitRateInputs[rarity.id];
-      const emitRateInput = entry?.value ?? formatRarityRate(rarity.emitRate);
-      const isAutoAdjust = hasAutoAdjust && rarity.id === autoAdjustRarityId;
-      const emitRateAriaLabel = `${rarity.label || rarity.id} の排出率${
-        isAutoAdjust ? '（自動調整）' : ''
-      }`;
-
-      return {
-        id: rarity.id,
-        label: rarity.label,
-        color: rarity.color,
-        emitRateInput,
-        placeholder: rarity.label ? rarity.label : rarity.id,
-        emitRateAriaLabel,
-        isEmitRateReadOnly: isAutoAdjust
-      };
-    });
-  }, [autoAdjustRarityId, emitRateInputs, sortedRarityRows]);
-
-  useEffect(() => {
-    setEmitRateInputs((previous) => {
-      let changed = false;
-      const next: Record<string, EmitRateInputStateEntry> = {};
-
-      rarityRows.forEach((rarity) => {
-        const prevEntry = previous[rarity.id];
-        const formatted = formatRarityRate(rarity.emitRate);
-
-        if (!prevEntry) {
-          next[rarity.id] = { value: formatted, lastSyncedRate: rarity.emitRate };
-          changed = true;
-          return;
-        }
-
-        if (rarity.emitRate !== prevEntry.lastSyncedRate && formatted !== prevEntry.value) {
-          next[rarity.id] = { value: formatted, lastSyncedRate: rarity.emitRate };
-          changed = true;
-          return;
-        }
-
-        const shouldUpdateSync = rarity.emitRate !== prevEntry.lastSyncedRate;
-        next[rarity.id] = { value: prevEntry.value, lastSyncedRate: rarity.emitRate };
-        if (shouldUpdateSync) {
-          changed = true;
-        }
-      });
-
-      if (Object.keys(previous).length !== rarityRows.length) {
-        changed = true;
-      }
-
-      if (!changed) {
-        return previous;
-      }
-
-      return next;
-    });
-  }, [rarityRows]);
-
-  useEffect(() => {
-    if (!autoAdjustRarityId) {
-      return;
-    }
-
-    const computation = computeAutoAdjustRate(rarityRows, autoAdjustRarityId);
-    if (!computation) {
-      return;
-    }
-
-    const autoAdjustRow = rarityRows.find((rarity) => rarity.id === autoAdjustRarityId);
-    const currentRate = autoAdjustRow?.emitRate ?? 0;
-
-    if (Math.abs(currentRate - computation.desiredRate) > RATE_TOLERANCE) {
-      rarityStore.setRarityEmitRate(autoAdjustRarityId, computation.desiredRate);
-    }
-  }, [autoAdjustRarityId, rarityRows, rarityStore]);
 
   const ptSettings = activeGachaId ? ptSettingsState?.byGachaId?.[activeGachaId] : undefined;
 
@@ -303,151 +181,60 @@ export function RaritySection(): JSX.Element {
     }
   }, [activeGachaId, rarityRows, rarityStore]);
 
-  const revertEmitRateInput = useCallback(
-    (rarityId: string) => {
-      const previousRow = rarityRows.find((row) => row.id === rarityId);
-      const previousRate = previousRow?.emitRate;
-      const formatted = formatRarityRate(previousRate);
-      setEmitRateInputs((previousInputs) => ({
-        ...previousInputs,
-        [rarityId]: {
-          value: formatted,
-          lastSyncedRate: previousRate
-        }
-      }));
-    },
-    [rarityRows]
-  );
-
-  const handleEmitRateInputChange = useCallback(
-    (rarityId: string, value: string) => {
-      const previousRow = rarityRows.find((row) => row.id === rarityId);
-      const fallbackRate = previousRow?.emitRate;
-      setEmitRateInputs((previousInputs) => {
-        const prevEntry = previousInputs[rarityId];
-        const nextSyncedRate = prevEntry?.lastSyncedRate ?? fallbackRate;
-        return {
-          ...previousInputs,
-          [rarityId]: {
-            value,
-            lastSyncedRate: nextSyncedRate
-          }
-        };
-      });
-    },
-    [rarityRows]
-  );
-
-  const handleEmitRateInputCommit = useCallback(
-    (rarityId: string) => {
-      const entry = emitRateInputs[rarityId];
-      const value = entry?.value ?? '';
-      const trimmed = value.trim();
-      if (trimmed !== '') {
-        const fractionDigits = countFractionDigits(trimmed);
-        if (fractionDigits != null && fractionDigits > MAX_RATE_FRACTION_DIGITS) {
-          revertEmitRateInput(rarityId);
-          push(RarityRateErrorDialog, {
-            id: 'rarity-rate-error',
-            size: 'sm',
-            payload: {
-              reason: 'precision-exceeded',
-              detail: `入力値「${trimmed}」は小数点以下が${fractionDigits}桁あります。`
-            }
-          });
-          return;
-        }
-      }
-      const parsedRate = trimmed === '' ? null : parseRarityRateInput(trimmed);
-
-      if (trimmed !== '' && parsedRate == null) {
-        revertEmitRateInput(rarityId);
-        return;
-      }
-
-      const nextRate = trimmed === '' ? 0 : parsedRate ?? undefined;
-      const previousRow = rarityRows.find((row) => row.id === rarityId);
-      const currentRate = previousRow?.emitRate;
-      const sanitizedValue = formatRarityRate(nextRate);
-
-      const noChange =
-        (nextRate == null && currentRate == null) ||
-        (nextRate != null && currentRate != null && Math.abs(currentRate - nextRate) <= RATE_TOLERANCE);
-
-      if (noChange) {
-        setEmitRateInputs((previousInputs) => {
-          const prevEntry = previousInputs[rarityId];
-          if (prevEntry?.value === sanitizedValue && prevEntry?.lastSyncedRate === nextRate) {
-            return previousInputs;
-          }
-          return {
-            ...previousInputs,
-            [rarityId]: {
-              value: sanitizedValue,
-              lastSyncedRate: nextRate
-            }
-          };
+  const { emitRateInputs, handleEmitRateInputChange, handleEmitRateInputCommit } =
+    useRarityTableController({
+      rows: rarityRows,
+      autoAdjustRarityId,
+      onApplyRateUpdates: (updates) => {
+        updates.forEach(({ rarityId: targetId, emitRate: nextEmitRate }) => {
+          rarityStore.setRarityEmitRate(targetId, nextEmitRate);
         });
-        return;
-      }
-
-      const result = buildEmitRateUpdates({
-        rarityId,
-        nextRate,
-        autoAdjustRarityId,
-        rows: rarityRows
-      });
-
-      if (result.error) {
-        revertEmitRateInput(rarityId);
-        if (result.error.type === 'total-exceeds-limit') {
-          const detail = `他のレアリティの合計が${formatRarityRate(result.error.total)}%になっています。`;
-          push(RarityRateErrorDialog, {
-            id: 'rarity-rate-error',
-            title: '排出率エラー',
-            size: 'sm',
-            payload: { detail }
-          });
-        }
-        return;
-      }
-
-      result.updates.forEach(({ rarityId: targetId, emitRate: nextEmitRate }) => {
-        rarityStore.setRarityEmitRate(targetId, nextEmitRate);
-      });
-
-      setEmitRateInputs((previousInputs) => ({
-        ...previousInputs,
-        [rarityId]: {
-          value: sanitizedValue,
-          lastSyncedRate: nextRate
-        }
-      }));
-
-      if (result.autoAdjustRate != null && autoAdjustRarityId) {
-        setEmitRateInputs((previousInputs) => {
-          const prevEntry = previousInputs[autoAdjustRarityId];
-          const formatted = formatRarityRate(result.autoAdjustRate);
-          if (
-            prevEntry &&
-            prevEntry.value === formatted &&
-            Math.abs((prevEntry.lastSyncedRate ?? 0) - result.autoAdjustRate) <= RATE_TOLERANCE
-          ) {
-            return previousInputs;
+      },
+      onAutoAdjustRate: (rarityId, rate) => {
+        rarityStore.setRarityEmitRate(rarityId, rate);
+      },
+      onPrecisionExceeded: ({ fractionDigits, input }) => {
+        push(RarityRateErrorDialog, {
+          id: 'rarity-rate-error',
+          size: 'sm',
+          payload: {
+            reason: 'precision-exceeded',
+            detail: `入力値「${input}」は小数点以下が${fractionDigits}桁あります。`
           }
-
-          return {
-            ...previousInputs,
-            [autoAdjustRarityId]: {
-              value: formatted,
-              lastSyncedRate: result.autoAdjustRate
-            }
-          };
+        });
+      },
+      onTotalExceedsLimit: (error) => {
+        const detail = `他のレアリティの合計が${formatRarityRate(error.total)}%になっています。`;
+        push(RarityRateErrorDialog, {
+          id: 'rarity-rate-error',
+          title: '排出率エラー',
+          size: 'sm',
+          payload: { detail }
         });
       }
-    },
-    [autoAdjustRarityId, emitRateInputs, push, rarityRows, rarityStore, revertEmitRateInput]
-  );
+    });
+
+  const tableRows = useMemo<RarityTableRow[]>(() => {
+    const hasAutoAdjust = autoAdjustRarityId != null && sortedRarityRows.length > 1;
+    return sortedRarityRows.map((rarity) => {
+      const entry = emitRateInputs[rarity.id];
+      const emitRateInput = entry?.value ?? formatRarityRate(rarity.emitRate);
+      const isAutoAdjust = hasAutoAdjust && rarity.id === autoAdjustRarityId;
+      const emitRateAriaLabel = `${rarity.label || rarity.id} の排出率${
+        isAutoAdjust ? '（自動調整）' : ''
+      }`;
+
+      return {
+        id: rarity.id,
+        label: rarity.label,
+        color: rarity.color,
+        emitRateInput,
+        placeholder: rarity.label ? rarity.label : rarity.id,
+        emitRateAriaLabel,
+        isEmitRateReadOnly: isAutoAdjust
+      };
+    });
+  }, [autoAdjustRarityId, emitRateInputs, sortedRarityRows]);
 
   const handleDeleteRarity = useCallback(
     (rarityId: string) => {
