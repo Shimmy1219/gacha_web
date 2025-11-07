@@ -122,7 +122,22 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
                   <XMarkIcon className="h-5 w-5" aria-hidden="true" />
                 </button>
               ) : null}
-              <ModalHeader title={entry.props.title} description={entry.props.description} />
+              <ModalHeader
+                title={entry.props.title}
+                description={entry.props.description}
+                actions={
+                  dismissible ? (
+                    <button
+                      type="button"
+                      onClick={handleClose}
+                      className="btn btn-muted hidden items-center gap-2 rounded-full px-4 py-2 text-sm md:inline-flex"
+                    >
+                      <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                      <span>閉じる</span>
+                    </button>
+                  ) : undefined
+                }
+              />
               {entry.component(componentProps)}
             </ModalPanel>
           </Transition.Child>

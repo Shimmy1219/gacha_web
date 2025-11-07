@@ -9,16 +9,20 @@ import {
   type KeyboardEvent
 } from 'react';
 import { RadioGroup } from '@headlessui/react';
-import { PencilSquareIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
-import { ModalBody } from '../ModalComponents';
+import { ConfirmDialog, ModalBody } from '..';
 import { type ModalComponent } from '../ModalTypes';
-import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
+import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
+import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
+import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 
 interface MenuItem {
@@ -76,12 +80,14 @@ const VIEWPORT_PADDING_REM = 12;
 const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
 const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
 
-export const PageSettingsDialog: ModalComponent = () => {
+export const PageSettingsDialog: ModalComponent = (props) => {
+  const { close, push } = props;
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
+  const [isDeletingAllData, setIsDeletingAllData] = useState(false);
   const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
   const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
@@ -106,7 +112,18 @@ export const PageSettingsDialog: ModalComponent = () => {
     setCustomBaseTone
   } = useSiteTheme();
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
-  const { appState: appStateStore } = useDomainStores();
+  const persistence = useAppPersistence();
+  const {
+    appState: appStateStore,
+    catalog: catalogStore,
+    rarities: rarityStore,
+    riagu: riaguStore,
+    ptControls: ptControlsStore,
+    uiPreferences: uiPreferencesStore,
+    pullHistory: pullHistoryStore,
+    userInventories: userInventoriesStore,
+    userProfiles: userProfilesStore
+  } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
@@ -137,6 +154,83 @@ export const PageSettingsDialog: ModalComponent = () => {
     setEditingGachaId(null);
     setEditingGachaName('');
   }, [appStateStore, editingGachaId, editingGachaName]);
+
+  const handleDeleteAllData = useCallback(async () => {
+    if (isDeletingAllData) {
+      return;
+    }
+
+    setIsDeletingAllData(true);
+    let succeeded = false;
+
+    try {
+      appStateStore.setState(undefined);
+      catalogStore.setState(undefined);
+      rarityStore.setState(undefined);
+      riaguStore.setState(undefined);
+      ptControlsStore.setState(undefined);
+      uiPreferencesStore.setState(undefined);
+      pullHistoryStore.setState(undefined);
+      userInventoriesStore.setState(undefined);
+      userProfilesStore.setState(undefined);
+
+      persistence.clearAllData();
+      clearToolbarPreferencesStorage();
+      clearDashboardControlsPositionStorage();
+      clearAllDiscordGuildSelections();
+
+      await deleteAllAssets();
+      succeeded = true;
+    } catch (error) {
+      console.error('Failed to delete all data', error);
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert('全てのデータを削除できませんでした。ブラウザのストレージ設定をご確認の上、再度お試しください。');
+      }
+    } finally {
+      setIsDeletingAllData(false);
+      if (succeeded) {
+        close();
+      }
+    }
+  }, [
+    appStateStore,
+    catalogStore,
+    close,
+    clearAllDiscordGuildSelections,
+    clearDashboardControlsPositionStorage,
+    clearToolbarPreferencesStorage,
+    deleteAllAssets,
+    isDeletingAllData,
+    persistence,
+    ptControlsStore,
+    pullHistoryStore,
+    rarityStore,
+    riaguStore,
+    uiPreferencesStore,
+    userInventoriesStore,
+    userProfilesStore
+  ]);
+
+  const handleRequestDeleteAllData = useCallback(() => {
+    if (isDeletingAllData) {
+      return;
+    }
+
+    push(ConfirmDialog, {
+      id: 'confirm-delete-all-data',
+      title: '全てのデータを削除',
+      size: 'sm',
+      payload: {
+        message:
+          '端末に保存されているガチャ、景品、ユーザー情報、履歴、設定など全てのデータを削除します。この操作は取り消せません。必要な場合は事前にバックアップを取得してください。',
+        confirmLabel: '削除する',
+        cancelLabel: 'キャンセル',
+        onConfirm: () => {
+          void handleDeleteAllData();
+        }
+      }
+    });
+  }, [handleDeleteAllData, isDeletingAllData, push]);
 
   const gachaEntries = useMemo(() => {
     if (!appState) {
@@ -675,7 +769,7 @@ export const PageSettingsDialog: ModalComponent = () => {
                 ガイドやセキュリティに関する動作を切り替えできます。変更内容はすぐに適用されます。
               </p>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <SwitchField
                 label="最新機能のヒントを表示"
                 description="開発中の機能やリリースノートをダッシュボード上で通知します。"
@@ -688,6 +782,38 @@ export const PageSettingsDialog: ModalComponent = () => {
                 checked={confirmLogout}
                 onChange={setConfirmLogout}
               />
+              <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-surface-foreground">全てのデータを削除</h3>
+                  <p className="text-xs leading-relaxed text-surface-foreground">
+                    端末に保存されているガチャ、景品、ユーザー情報、履歴、設定など全てのデータを削除します。この操作は取り消せません。必要なデータがある場合は削除前に必ずバックアップを取得してください。
+                  </p>
+                  <p className="text-xs leading-relaxed text-surface-foreground">
+                    削除が完了するとサイトは初期状態に戻ります。再度利用する場合はガチャの登録からやり直してください。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-100"
+                  onClick={handleRequestDeleteAllData}
+                  disabled={isDeletingAllData}
+                  aria-busy={isDeletingAllData}
+                >
+                  <span className="flex items-center gap-2">
+                    {isDeletingAllData ? (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>削除しています…</span>
+                      </>
+                    ) : (
+                      <>
+                        <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                        <span>全てのデータを削除する</span>
+                      </>
+                    )}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         );

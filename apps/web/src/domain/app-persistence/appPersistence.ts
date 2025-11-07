@@ -286,6 +286,33 @@ export class AppPersistence {
     this.saveDebounced({ pullHistory: state });
   }
 
+  clearAllData(): void {
+    this.pending = null;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+
+    const storage = this.ensureStorage();
+    if (!storage) {
+      throw new Error('Local storage is unavailable');
+    }
+
+    try {
+      Object.values(STORAGE_KEYS).forEach((key) => {
+        storage.removeItem(key);
+      });
+      storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
+    } catch (error) {
+      console.error('Failed to clear application storage', error);
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to clear application storage');
+    }
+
+    this.emitUpdated();
+  }
+
   saveDebounced(partial: PersistPartialSnapshot = {}): void {
     this.pending = this.mergePending(this.pending, partial);
 
