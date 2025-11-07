@@ -40,7 +40,16 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
       path: '/',
       element: <GachaLayoutContainer layoutProps={gachaLayoutProps} />,
       children: [
-        { path: 'gacha', element: <GachaPage onDrawGacha={gachaLayoutProps.onDrawGacha} /> },
+        {
+          path: 'gacha',
+          element: (
+            <GachaPage
+              onDrawGacha={gachaLayoutProps.onDrawGacha}
+              onRegisterGacha={gachaLayoutProps.onRegisterGacha}
+              onOpenPageSettings={gachaLayoutProps.onOpenPageSettings}
+            />
+          )
+        },
         { path: 'receive', element: <ReceivePage /> }
       ]
     },
