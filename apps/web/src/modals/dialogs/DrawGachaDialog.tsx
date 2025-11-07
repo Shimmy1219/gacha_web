@@ -144,6 +144,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControls);
   const userProfilesState = useStoreValue(userProfiles);
+  const pullHistoryState = useStoreValue(pullHistory);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
@@ -251,15 +252,39 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       return [] as UserProfileCardV3[];
     }
 
+    const historyOrder = pullHistoryState?.order ?? [];
+    const historyEntries = pullHistoryState?.pulls ?? {};
+    const latestIndexByUserId = new Map<string, number>();
+    historyOrder.forEach((pullId, index) => {
+      const entry = historyEntries[pullId];
+      const userId = entry?.userId;
+      if (userId && !latestIndexByUserId.has(userId)) {
+        latestIndexByUserId.set(userId, index);
+      }
+    });
+
     const query = normalizedUserName.toLowerCase();
     const filtered = query
       ? entries.filter((profile) => profile.displayName.toLowerCase().includes(query))
       : entries;
 
-    const sorted = [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'));
+    const sorted = [...filtered].sort((a, b) => {
+      const indexA = latestIndexByUserId.get(a.id);
+      const indexB = latestIndexByUserId.get(b.id);
+      if (indexA != null && indexB != null) {
+        return indexA - indexB;
+      }
+      if (indexA != null) {
+        return -1;
+      }
+      if (indexB != null) {
+        return 1;
+      }
+      return a.displayName.localeCompare(b.displayName, 'ja');
+    });
 
     return sorted.slice(0, 8);
-  }, [normalizedUserName, userProfilesState]);
+  }, [normalizedUserName, pullHistoryState, userProfilesState]);
 
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
@@ -451,7 +476,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                   placeholder="ユーザー名（任意）"
                 />
               </label>
-              {normalizedUserName && userSuggestions.length > 0 ? (
+              {userSuggestions.length > 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground">候補</p>
                   <div className="flex flex-wrap gap-2">
