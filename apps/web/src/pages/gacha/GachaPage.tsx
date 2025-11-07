@@ -1,15 +1,10 @@
-import { useMemo } from 'react';
-
-import { useStoreValue } from '@domain/stores';
-
-import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
-
 import { DashboardShell } from './components/dashboard/DashboardShell';
 import { ItemsSection } from './components/items/ItemsSection';
 import { RaritySection } from './components/rarity/RaritySection';
 import { RiaguSection } from './components/riagu/RiaguSection';
 import { UsersSection } from './components/users/UsersSection';
 import { GachaSplashScreen } from './components/splash/GachaSplashScreen';
+import { useGachaRegistrationState } from './hooks/useGachaRegistrationState';
 
 export interface GachaPageProps {
   onDrawGacha?: () => void;
@@ -18,29 +13,7 @@ export interface GachaPageProps {
 }
 
 export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: GachaPageProps): JSX.Element {
-  const { appState: appStateStore } = useDomainStores();
-  const appState = useStoreValue(appStateStore);
-
-  const hasRegisteredGacha = useMemo(() => {
-    if (!appState) {
-      return false;
-    }
-
-    const order = Array.isArray(appState.order) ? appState.order : [];
-    const metaEntries = appState.meta ? Object.values(appState.meta) : [];
-
-    if (order.length > 0) {
-      return true;
-    }
-
-    if (metaEntries.some((entry) => entry && typeof entry === 'object')) {
-      return true;
-    }
-
-    return false;
-  }, [appState]);
-
-  const shouldShowSplash = appStateStore.isHydrated() && !hasRegisteredGacha;
+  const { shouldShowSplash } = useGachaRegistrationState();
 
   if (shouldShowSplash) {
     return (

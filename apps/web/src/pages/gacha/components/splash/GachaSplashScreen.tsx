@@ -27,28 +27,30 @@ export function GachaSplashScreen({
           まだガチャが登録されていません。ガチャの登録やDiscordログイン、サイトカラーの設定からスタートできます。
         </p>
       </div>
-      <div className="mt-12 flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-center">
+      <div className="mt-12 flex w-full flex-col items-center gap-6">
         <button
           type="button"
           onClick={() => onRegisterGacha?.()}
-          className="btn btn-primary flex-1 rounded-2xl px-6 py-3 text-base shadow-lg transition hover:shadow-xl sm:flex-none"
+          className="btn btn-primary w-full max-w-md rounded-3xl px-8 py-4 text-lg font-semibold shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
         >
           ガチャを登録
         </button>
-        <div className="w-full sm:w-auto">
-          <DiscordLoginButton
-            placement="splash"
-            onOpenPageSettings={onOpenPageSettings}
-            className="w-full justify-center sm:w-auto"
-          />
+        <div className="flex w-full flex-col gap-3 sm:max-w-2xl sm:flex-row sm:items-stretch sm:justify-center">
+          <div className="flex-1">
+            <DiscordLoginButton
+              placement="splash"
+              onOpenPageSettings={onOpenPageSettings}
+              className="w-full justify-center"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenPageSettings?.()}
+            className="btn btn-muted flex-1 rounded-2xl px-6 py-3 text-base font-semibold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            サイトカラーの設定
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onOpenPageSettings?.()}
-          className="btn btn-muted flex-1 rounded-2xl px-6 py-3 text-base shadow-sm transition hover:shadow-md sm:flex-none"
-        >
-          サイトカラーの設定
-        </button>
       </div>
     </section>
   );

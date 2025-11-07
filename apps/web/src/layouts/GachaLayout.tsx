@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 
 import { AppHeaderShell } from '../pages/gacha/components/app-shell/AppHeaderShell';
+import { useGachaRegistrationState } from '../pages/gacha/hooks/useGachaRegistrationState';
 
 export interface GachaLayoutProps {
   title: string;
@@ -31,6 +32,10 @@ export function GachaLayout({
 }: GachaLayoutProps): JSX.Element {
   const location = useLocation();
   const isReceiveRoute = location.pathname.startsWith('/receive');
+  const { shouldShowSplash } = useGachaRegistrationState();
+
+  const shouldShowToolbarActions = !isReceiveRoute && !shouldShowSplash;
+  const shouldShowDiscordLoginButton = !shouldShowSplash;
 
   return (
     <div className="app min-h-screen bg-transparent text-surface-foreground">
@@ -42,10 +47,11 @@ export function GachaLayout({
         onOpenRealtime={onOpenRealtime}
         onExportAll={onExportAll}
         onOpenPageSettings={onOpenPageSettings}
-        showDrawGachaButton={!isReceiveRoute}
-        showRegisterGachaButton={!isReceiveRoute}
-        showRealtimeButton={!isReceiveRoute}
-        showExportButton={!isReceiveRoute}
+        showDrawGachaButton={shouldShowToolbarActions}
+        showRegisterGachaButton={shouldShowToolbarActions}
+        showRealtimeButton={shouldShowToolbarActions}
+        showExportButton={shouldShowToolbarActions}
+        showDiscordLoginButton={shouldShowDiscordLoginButton}
         appearance={isReceiveRoute ? 'dark' : 'default'}
       />
       <main ref={mainRef} className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}>
