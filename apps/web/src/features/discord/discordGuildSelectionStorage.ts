@@ -85,3 +85,22 @@ export function requireDiscordGuildSelection(
   }
   return selection;
 }
+
+export function clearAllDiscordGuildSelections(): void {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return;
+  }
+
+  const prefix = `${STORAGE_PREFIX}::`;
+
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith(prefix)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to clear Discord guild selections from storage', error);
+  }
+}

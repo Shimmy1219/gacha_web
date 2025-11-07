@@ -13,6 +13,10 @@ import { clsx } from 'clsx';
 import { DashboardDesktopGrid } from './DashboardDesktopGrid';
 import { DashboardMobileTabs } from './DashboardMobileTabs';
 import { useResponsiveDashboard } from './useResponsiveDashboard';
+import {
+  loadStoredDashboardControlsPosition,
+  saveDashboardControlsPosition
+} from './dashboardControlsPositionStorage';
 
 export interface DashboardSectionConfig {
   id: string;
@@ -35,7 +39,6 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue | undefined>(undefined);
 
-const CONTROLS_POSITION_STORAGE_KEY = 'dashboard-shell__controls-position';
 const DEFAULT_CONTROLS_PADDING = 16;
 
 type ControlsPosition = { top: number; left: number };
@@ -95,28 +98,9 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
     const containerRect = container.getBoundingClientRect();
     const controlsRect = controls.getBoundingClientRect();
 
-    let storedPosition: ControlsPosition | null = null;
-    if (typeof window !== 'undefined') {
-      try {
-        const persisted = window.localStorage.getItem(CONTROLS_POSITION_STORAGE_KEY);
-        if (persisted) {
-          const parsed = JSON.parse(persisted);
-          if (
-            typeof parsed === 'object' &&
-            parsed !== null &&
-            typeof parsed.top === 'number' &&
-            typeof parsed.left === 'number'
-          ) {
-            storedPosition = clampControlsPosition(parsed, containerRect, controlsRect);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse dashboard controls position from localStorage', error);
-      }
-    }
-
+    const storedPosition = loadStoredDashboardControlsPosition();
     if (storedPosition) {
-      setControlsPosition(storedPosition);
+      setControlsPosition(clampControlsPosition(storedPosition, containerRect, controlsRect));
       return;
     }
 
@@ -227,16 +211,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
         const currentControlsRect = controlsRef.current?.getBoundingClientRect() ?? controlsRect;
         const constrained = clampControlsPosition(previous, containerRect, currentControlsRect);
 
-        if (typeof window !== 'undefined') {
-          try {
-            window.localStorage.setItem(
-              CONTROLS_POSITION_STORAGE_KEY,
-              JSON.stringify(constrained)
-            );
-          } catch (error) {
-            console.error('Failed to persist dashboard controls position', error);
-          }
-        }
+        saveDashboardControlsPosition(constrained);
 
         return constrained;
       });

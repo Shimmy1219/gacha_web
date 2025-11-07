@@ -1,7 +1,10 @@
 import type { PropsWithChildren } from 'react';
 import { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
 
-const STORAGE_KEY = 'user_subcontrols_collapsed_v1';
+import {
+  loadToolbarSubcontrolsCollapsed,
+  saveToolbarSubcontrolsCollapsed
+} from './toolbarStorage';
 
 interface ToolbarState {
   subcontrolsCollapsed: boolean;
@@ -65,27 +68,14 @@ const ToolbarContext = createContext<ToolbarContextValue | undefined>(undefined)
 
 export function ToolbarStateProvider({ children }: PropsWithChildren): JSX.Element {
   const [state, dispatch] = useReducer(reducer, initialState, (baseState) => {
-    if (typeof window === 'undefined') {
-      return baseState;
-    }
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored != null) {
-      return {
-        ...baseState,
-        subcontrolsCollapsed: stored === '1' || stored === 'true'
-      };
-    }
-    return baseState;
+    return {
+      ...baseState,
+      subcontrolsCollapsed: loadToolbarSubcontrolsCollapsed(baseState.subcontrolsCollapsed)
+    };
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      state.subcontrolsCollapsed ? '1' : '0'
-    );
+    saveToolbarSubcontrolsCollapsed(state.subcontrolsCollapsed);
   }, [state.subcontrolsCollapsed]);
 
   const actions = useMemo(

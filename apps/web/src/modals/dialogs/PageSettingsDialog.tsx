@@ -20,6 +20,9 @@ import { type ModalComponent } from '../ModalTypes';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
+import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
+import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
+import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 
 interface MenuItem {
@@ -172,21 +175,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       userProfilesStore.setState(undefined);
 
       persistence.clearAllData();
-
-      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-        try {
-          window.localStorage.removeItem('user_subcontrols_collapsed_v1');
-          window.localStorage.removeItem('dashboard-shell__controls-position');
-          for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-            const key = window.localStorage.key(index);
-            if (key && key.startsWith('discord.guildSelection::')) {
-              window.localStorage.removeItem(key);
-            }
-          }
-        } catch (storageError) {
-          console.warn('Failed to clear auxiliary localStorage entries', storageError);
-        }
-      }
+      clearToolbarPreferencesStorage();
+      clearDashboardControlsPositionStorage();
+      clearAllDiscordGuildSelections();
 
       await deleteAllAssets();
       succeeded = true;
@@ -205,6 +196,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     appStateStore,
     catalogStore,
     close,
+    clearAllDiscordGuildSelections,
+    clearDashboardControlsPositionStorage,
+    clearToolbarPreferencesStorage,
     deleteAllAssets,
     isDeletingAllData,
     persistence,
