@@ -3,6 +3,7 @@ import type { PtSettingV3 } from '@domain/app-persistence';
 import type {
   BundleApplication,
   CalculateDrawPlanArgs,
+  CompleteDrawMode,
   DrawPlan,
   NormalizePtSettingResult,
   NormalizedBundleSetting,
@@ -49,7 +50,16 @@ export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizeP
     if (!price) {
       warnings.push('コンプリート価格が無効なため、設定を無視しました。');
     } else {
-      normalized.complete = { price };
+      let mode: CompleteDrawMode = 'repeat';
+      const requestedMode = setting.complete.mode;
+      if (requestedMode) {
+        if (requestedMode === 'repeat' || requestedMode === 'frontload') {
+          mode = requestedMode;
+        } else {
+          warnings.push('コンプリート排出モードが無効なため、既定値を使用しました。');
+        }
+      }
+      normalized.complete = { price, mode };
     }
   }
 
@@ -227,7 +237,8 @@ export function calculateDrawPlan({
   if (normalized.complete) {
     const maxExecutions = Math.floor(pointsRemaining / normalized.complete.price);
     if (maxExecutions > 0) {
-      completeExecutions = maxExecutions;
+      completeExecutions =
+        normalized.complete.mode === 'frontload' ? 1 : maxExecutions;
       if (totalItemTypes > 0) {
         completePulls = totalItemTypes * completeExecutions;
       } else {

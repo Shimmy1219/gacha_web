@@ -5,7 +5,7 @@ import { type PtBundleV3, type PtGuaranteeV3, type PtSettingV3 } from '@domain/a
 import { generatePtBundleId, generatePtGuaranteeId } from '@domain/idGenerators';
 
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
-import { SingleSelectDropdown } from '../select/SingleSelectDropdown';
+import { SingleSelectDropdown, type SingleSelectOption } from '../select/SingleSelectDropdown';
 
 interface PtBundleRowState {
   id: string;
@@ -18,6 +18,21 @@ interface PtGuaranteeRowState {
   minPulls: string;
   minRarity: string;
 }
+
+type CompleteModeOption = 'repeat' | 'frontload';
+
+const COMPLETE_MODE_OPTIONS: Array<{ value: CompleteModeOption; label: string; description: string }> = [
+  {
+    value: 'repeat',
+    label: 'コンプ回数分すべて排出',
+    description: 'コンプ購入の回数だけ全アイテムを1個ずつ排出します。'
+  },
+  {
+    value: 'frontload',
+    label: '初回のみ全種→残りは通常抽選',
+    description: '最初のコンプ分は全アイテムを配布し、以降は通常抽選になります。'
+  }
+];
 
 function areBundleRowsEqual(a: PtBundleRowState[], b: PtBundleRowState[]): boolean {
   if (a.length !== b.length) {
@@ -50,6 +65,7 @@ function areGuaranteeRowsEqual(a: PtGuaranteeRowState[], b: PtGuaranteeRowState[
 type PanelSnapshot = {
   perPull: string;
   complete: string;
+  completeMode: CompleteModeOption;
   bundles: PtBundleRowState[];
   guarantees: PtGuaranteeRowState[];
 };
@@ -282,7 +298,7 @@ function buildSettingsFromSnapshot(
 
   const completePrice = parseNonNegativeNumber(snapshot.complete);
   if (completePrice != null) {
-    next.complete = { price: completePrice };
+    next.complete = { price: completePrice, mode: snapshot.completeMode ?? 'repeat' };
   }
 
   const bundles = snapshot.bundles
@@ -339,6 +355,7 @@ function buildSettingsFromSnapshot(
 export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
   const [complete, setComplete] = useState('');
+  const [completeMode, setCompleteMode] = useState<CompleteModeOption>('repeat');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([]);
 
@@ -347,6 +364,15 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
     initialComparableSettings ? JSON.stringify(initialComparableSettings) : ''
   );
   const syncingFromSettingsRef = useRef(false);
+  const completeModeDropdownOptions = useMemo<SingleSelectOption<CompleteModeOption>[]>(
+    () =>
+      COMPLETE_MODE_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description
+      })),
+    []
+  );
 
   useEffect(() => {
     syncingFromSettingsRef.current = true;
@@ -356,6 +382,10 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
 
     const nextComplete = settings?.complete?.price != null ? String(settings.complete.price) : '';
     setComplete((previous) => (previous === nextComplete ? previous : nextComplete));
+
+    const nextCompleteMode: CompleteModeOption =
+      settings?.complete?.mode === 'frontload' ? 'frontload' : 'repeat';
+    setCompleteMode((previous) => (previous === nextCompleteMode ? previous : nextCompleteMode));
 
     const nextBundles = settings?.bundles
       ? settings.bundles.map((bundle) =>
@@ -411,10 +441,11 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
     emitSettingsChange({
       perPull,
       complete,
+      completeMode,
       bundles,
       guarantees
     });
-  }, [perPull, complete, bundles, guarantees, emitSettingsChange]);
+  }, [perPull, complete, completeMode, bundles, guarantees, emitSettingsChange]);
 
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel p-3 shadow-sm">
@@ -437,6 +468,51 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
           }}
           placeholder="1000"
           className="ml-auto w-[12ch]"
+        />
+      </ControlsRow>
+
+      <ControlsRow label="コンプ排出モード" alignTop>
+        <SingleSelectDropdown
+          value={completeMode}
+          onChange={(value) => {
+            setCompleteMode(value);
+          }}
+          options={completeModeDropdownOptions}
+          disabled={!complete.trim()}
+          classNames={{
+            root: 'pt-controls-panel__select-wrapper relative',
+            button:
+              'pt-controls-panel__select-button inline-flex min-w-[16rem] items-start justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-left text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+            buttonOpen: 'border-accent text-accent',
+            buttonClosed: 'hover:border-accent/70',
+            icon: 'pt-controls-panel__select-icon h-4 w-4 transition-transform text-muted-foreground',
+            iconOpen: 'rotate-180 text-accent',
+            menu:
+              'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+            option:
+              'pt-controls-panel__select-option flex w-full items-start justify-between rounded-lg px-3 py-2 text-left transition',
+            optionActive: 'bg-accent/10 text-surface-foreground',
+            optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
+            optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left text-xs font-semibold',
+            optionDescription: 'pt-controls-panel__select-option-description block text-[10px] text-muted-foreground',
+            checkIcon: 'pt-controls-panel__select-check h-4 w-4 transition text-accent'
+          }}
+          renderButtonLabel={({ selectedOption }) =>
+            selectedOption ? (
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-semibold leading-snug text-surface-foreground">
+                  {selectedOption.label}
+                </span>
+                {selectedOption.description ? (
+                  <span className="text-[10px] text-muted-foreground">
+                    {selectedOption.description}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">モードを選択</span>
+            )
+          }
         />
       </ControlsRow>
 

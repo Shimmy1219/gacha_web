@@ -26,7 +26,9 @@ function isCompleteEqual(a: PtSettingV3['complete'], b: PtSettingV3['complete'])
   if (!a || !b) {
     return false;
   }
-  return a.price === b.price;
+  const aMode = a.mode ?? 'repeat';
+  const bMode = b.mode ?? 'repeat';
+  return a.price === b.price && aMode === bMode;
 }
 
 function areBundlesEqual(a: PtBundleV3[] | undefined, b: PtBundleV3[] | undefined): boolean {
