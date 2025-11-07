@@ -3,12 +3,27 @@ import { ItemsSection } from './components/items/ItemsSection';
 import { RaritySection } from './components/rarity/RaritySection';
 import { RiaguSection } from './components/riagu/RiaguSection';
 import { UsersSection } from './components/users/UsersSection';
+import { GachaSplashScreen } from './components/splash/GachaSplashScreen';
+import { useGachaRegistrationState } from './hooks/useGachaRegistrationState';
 
 export interface GachaPageProps {
   onDrawGacha?: () => void;
+  onRegisterGacha?: () => void;
+  onOpenPageSettings?: () => void;
 }
 
-export function GachaPage({ onDrawGacha }: GachaPageProps): JSX.Element {
+export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: GachaPageProps): JSX.Element {
+  const { shouldShowSplash } = useGachaRegistrationState();
+
+  if (shouldShowSplash) {
+    return (
+      <GachaSplashScreen
+        onRegisterGacha={onRegisterGacha}
+        onOpenPageSettings={onOpenPageSettings}
+      />
+    );
+  }
+
   const sections = [
     {
       id: 'rarity',
