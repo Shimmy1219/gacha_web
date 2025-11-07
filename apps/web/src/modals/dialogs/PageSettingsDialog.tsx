@@ -784,11 +784,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               />
               <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-accent-foreground">全てのデータを削除</h3>
-                  <p className="text-xs leading-relaxed text-accent-foreground">
+                  <h3 className="text-sm font-semibold text-black dark:text-white">全てのデータを削除</h3>
+                  <p className="text-xs leading-relaxed text-black dark:text-white">
                     端末に保存されているガチャ、景品、ユーザー情報、履歴、設定など全てのデータを削除します。この操作は取り消せません。必要なデータがある場合は削除前に必ずバックアップを取得してください。
                   </p>
-                  <p className="text-xs leading-relaxed text-accent-foreground">
+                  <p className="text-xs leading-relaxed text-black dark:text-white">
                     削除が完了するとサイトは初期状態に戻ります。再度利用する場合はガチャの登録からやり直してください。
                   </p>
                 </div>
