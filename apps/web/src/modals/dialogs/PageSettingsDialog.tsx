@@ -784,17 +784,17 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               />
               <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold text-red-700 dark:text-red-100">全てのデータを削除</h3>
-                  <p className="text-xs leading-relaxed text-red-700/80 dark:text-red-100/80">
+                  <h3 className="text-sm font-semibold text-accent-foreground">全てのデータを削除</h3>
+                  <p className="text-xs leading-relaxed text-accent-foreground">
                     端末に保存されているガチャ、景品、ユーザー情報、履歴、設定など全てのデータを削除します。この操作は取り消せません。必要なデータがある場合は削除前に必ずバックアップを取得してください。
                   </p>
-                  <p className="text-xs leading-relaxed text-red-700/80 dark:text-red-100/80">
+                  <p className="text-xs leading-relaxed text-accent-foreground">
                     削除が完了するとサイトは初期状態に戻ります。再度利用する場合はガチャの登録からやり直してください。
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-100"
+                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:border-red-500 hover:bg-red-500/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-100"
                   onClick={handleRequestDeleteAllData}
                   disabled={isDeletingAllData}
                   aria-busy={isDeletingAllData}
