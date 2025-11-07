@@ -209,6 +209,9 @@ export async function deleteAllAssets(): Promise<void> {
     });
   } catch (error) {
     console.error('Failed to clear assets from IndexedDB', error);
+    throw error instanceof Error
+      ? error
+      : new Error('Failed to clear assets from IndexedDB');
   }
 }
 
