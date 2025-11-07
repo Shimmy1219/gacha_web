@@ -20,3 +20,41 @@ root.render(
     </AppProviders>
   </StrictMode>
 );
+
+const registerServiceWorker = () => {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+
+  const sendSkipWaitingMessage = (registration: ServiceWorkerRegistration) => {
+    registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+  };
+
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        if (registration.waiting) {
+          sendSkipWaitingMessage(registration);
+        }
+
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (!newWorker) {
+            return;
+          }
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed') {
+              sendSkipWaitingMessage(registration);
+            }
+          });
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to register service worker', error);
+      });
+  });
+};
+
+registerServiceWorker();
