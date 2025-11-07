@@ -5,12 +5,13 @@ const RUNTIME_CACHE = `runtime-${VERSION}`;
 const PRECACHE_URLS = [
   '/',
   '/index.html',
-  '/gacha',
-  '/gacha/',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
 ];
+
+const isRedirectResponse = (response) =>
+  response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -61,16 +62,17 @@ self.addEventListener('fetch', (event) => {
         try {
           const fresh = await fetch(new Request(request.url, { cache: 'reload' }));
           const cache = await caches.open(RUNTIME_CACHE);
-          cache.put(request, fresh.clone());
+          if (!isRedirectResponse(fresh)) {
+            cache.put(request, fresh.clone());
+          }
           return fresh;
         } catch {
           const cache = await caches.open(RUNTIME_CACHE);
-          return (
-            (await cache.match(request)) ||
-            (await caches.match('/gacha/')) ||
-            (await caches.match('/')) ||
-            (await caches.match('/index.html'))
-          );
+          const cached = await cache.match(request);
+          if (cached && !isRedirectResponse(cached)) {
+            return cached;
+          }
+          return (await caches.match('/index.html')) || (await caches.match('/'));
         }
       })(),
     );
@@ -88,7 +90,7 @@ self.addEventListener('fetch', (event) => {
 
         try {
           const response = await fetch(request);
-          if (response && response.ok) {
+          if (response && response.ok && !isRedirectResponse(response)) {
             cache.put(request, response.clone());
           }
           return response;
@@ -114,7 +116,7 @@ self.addEventListener('fetch', (event) => {
       const cached = await cache.match(request);
       const updatePromise = fetch(request)
         .then((response) => {
-          if (response && response.ok) {
+          if (response && response.ok && !isRedirectResponse(response)) {
             cache.put(request, response.clone());
           }
           return response;
