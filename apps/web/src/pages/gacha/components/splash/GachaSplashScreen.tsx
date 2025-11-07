@@ -1,6 +1,6 @@
 import { SparklesIcon } from '@heroicons/react/24/outline';
 
-import { DiscordLoginButton } from '../../auth/DiscordLoginButton';
+import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 
 interface GachaSplashScreenProps {
   onRegisterGacha?: () => void;
