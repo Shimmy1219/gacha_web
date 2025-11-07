@@ -295,7 +295,7 @@ export class AppPersistence {
 
     const storage = this.ensureStorage();
     if (!storage) {
-      return;
+      throw new Error('Local storage is unavailable');
     }
 
     try {
@@ -305,6 +305,9 @@ export class AppPersistence {
       storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
     } catch (error) {
       console.error('Failed to clear application storage', error);
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to clear application storage');
     }
 
     this.emitUpdated();
