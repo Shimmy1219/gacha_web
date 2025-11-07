@@ -193,6 +193,25 @@ export async function deleteAsset(assetId: string): Promise<void> {
   }
 }
 
+export async function deleteAllAssets(): Promise<void> {
+  if (!isBrowserEnvironment()) {
+    return;
+  }
+
+  try {
+    await runTransaction('readwrite', async (store) => {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error ?? new Error('Failed to clear assets'));
+      });
+      return undefined;
+    });
+  } catch (error) {
+    console.error('Failed to clear assets from IndexedDB', error);
+  }
+}
+
 export async function getAssetMetadata(assetId: string): Promise<StoredAssetMetadata | null> {
   const record = await loadAsset(assetId);
   if (!record) {
