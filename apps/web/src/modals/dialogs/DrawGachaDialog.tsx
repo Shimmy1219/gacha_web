@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { PageSettingsDialog } from './PageSettingsDialog';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import type {
@@ -20,6 +21,12 @@ import {
   type DrawPlan,
   type GachaPoolDefinition
 } from '../../logic/gacha';
+import type { CompleteDrawMode } from '../../logic/gacha/types';
+
+const COMPLETE_MODE_LABELS: Record<CompleteDrawMode, string> = {
+  repeat: 'コンプ回数分すべて排出',
+  frontload: '初回のみ全種→残り通常抽選'
+};
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -129,7 +136,7 @@ function formatExecutedAt(value: string | undefined): string {
   }).format(date);
 }
 
-export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
+export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -404,6 +411,10 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const totalCount = resultItems?.reduce((total, item) => total + item.count, 0) ?? 0;
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
+  const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
+  const completeMode: CompleteDrawMode =
+    normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
+  const completeModeLabel = COMPLETE_MODE_LABELS[completeMode];
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{
@@ -429,6 +440,16 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       };
     });
   }, [drawPlan, selectedGacha]);
+
+  const handleOpenSettings = useCallback(() => {
+    push(PageSettingsDialog, {
+      id: 'page-settings',
+      title: 'サイト設定',
+      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
+      size: 'xl',
+      panelPaddingClassName: 'p-2 lg:p-6'
+    });
+  }, [push]);
 
   return (
     <>
@@ -538,6 +559,23 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                   <span className="ml-1 font-mono text-surface-foreground">
                     {formatNumber(drawPlan.completeExecutions)} 回
                   </span>
+                </div>
+              ) : null}
+              {normalizedCompleteSetting ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    コンプリート排出モード:
+                    <span className="ml-1 font-semibold text-surface-foreground">
+                      {completeModeLabel}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenSettings}
+                    className="inline-flex items-center rounded-lg border border-border/60 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    モードを変更
+                  </button>
                 </div>
               ) : null}
               {guaranteeSummaries.length ? (

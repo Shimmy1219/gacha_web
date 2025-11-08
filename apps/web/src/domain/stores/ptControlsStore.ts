@@ -7,6 +7,8 @@ import {
 } from '../app-persistence';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
+type LegacyPtSetting = PtSettingV3 & { complate?: PtSettingV3['complete'] };
+
 function isPerPullEqual(a: PtSettingV3['perPull'], b: PtSettingV3['perPull']): boolean {
   if (!a && !b) {
     return true;
@@ -105,6 +107,11 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
     super(persistence);
   }
 
+  hydrate(initialState: PtSettingsStateV3 | undefined): void {
+    const sanitized = this.sanitizeState(initialState);
+    super.hydrate(sanitized);
+  }
+
   setGachaSettings(
     gachaId: string,
     nextSetting: PtSettingV3 | undefined,
@@ -159,5 +166,50 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
 
   removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
     this.setGachaSettings(gachaId, undefined, options);
+  }
+
+  private sanitizeState(state: PtSettingsStateV3 | undefined): PtSettingsStateV3 | undefined {
+    if (!state?.byGachaId) {
+      return state;
+    }
+
+    let mutated = false;
+    const nextByGacha: Record<string, PtSettingV3> = {};
+
+    Object.entries(state.byGachaId).forEach(([gachaId, setting]) => {
+      const sanitized = this.sanitizeSetting(setting as LegacyPtSetting);
+      nextByGacha[gachaId] = sanitized;
+      if (sanitized !== setting) {
+        mutated = true;
+      }
+    });
+
+    if (!mutated) {
+      return state;
+    }
+
+    return {
+      ...state,
+      byGachaId: nextByGacha
+    };
+  }
+
+  private sanitizeSetting(setting: LegacyPtSetting): PtSettingV3 {
+    const legacyComplete = setting.complate;
+    if (!legacyComplete || typeof legacyComplete !== 'object') {
+      return setting;
+    }
+
+    const mergedComplete = setting.complete
+      ? { ...legacyComplete, ...setting.complete }
+      : { ...legacyComplete };
+
+    const next: PtSettingV3 = {
+      ...setting,
+      complete: mergedComplete
+    };
+
+    delete (next as LegacyPtSetting).complate;
+    return next;
   }
 }

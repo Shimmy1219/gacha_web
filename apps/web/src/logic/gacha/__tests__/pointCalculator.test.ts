@@ -85,6 +85,20 @@ describe('calculateDrawPlan', () => {
     expect(plan.pointsRemainder).toBe(0);
   });
 
+  test('accepts legacy complate field for complete settings', () => {
+    const settings = {
+      complate: { price: 90, mode: 'frontload' }
+    } as PtSettingV3 & { complate: PtSettingV3['complete'] };
+
+    const plan = calculateDrawPlan({ points: 180, settings, totalItemTypes: 6 });
+
+    expect(plan.errors).toHaveLength(0);
+    expect(plan.completeExecutions).toBe(2);
+    expect(plan.completePulls).toBe(6);
+    expect(plan.randomPulls).toBe(6);
+    expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
+  });
+
   test('reports errors when no purchasable settings are provided', () => {
     const plan = calculateDrawPlan({ points: 50, settings: {}, totalItemTypes: 4 });
 

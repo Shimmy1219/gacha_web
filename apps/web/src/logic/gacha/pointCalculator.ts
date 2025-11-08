@@ -1,5 +1,7 @@
 import type { PtSettingV3 } from '@domain/app-persistence';
 
+type LegacyPtSetting = PtSettingV3 & { complate?: PtSettingV3['complete'] };
+
 import type {
   BundleApplication,
   CalculateDrawPlanArgs,
@@ -45,13 +47,15 @@ export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizeP
     }
   }
 
-  if (setting.complete) {
-    const price = toPositiveNumber(setting.complete.price);
+  const completeSetting = (setting as LegacyPtSetting)?.complete ?? (setting as LegacyPtSetting)?.complate;
+
+  if (completeSetting) {
+    const price = toPositiveNumber(completeSetting.price);
     if (!price) {
       warnings.push('コンプリート価格が無効なため、設定を無視しました。');
     } else {
       let mode: CompleteDrawMode = 'repeat';
-      const requestedMode = setting.complete.mode;
+      const requestedMode = completeSetting.mode;
       if (requestedMode) {
         if (requestedMode === 'repeat' || requestedMode === 'frontload') {
           mode = requestedMode;

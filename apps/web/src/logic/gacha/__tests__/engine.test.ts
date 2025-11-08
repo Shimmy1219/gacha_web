@@ -125,4 +125,16 @@ describe('executeGacha', () => {
       expect(aggregated?.count ?? 0).toBeGreaterThanOrEqual(1);
     });
   });
+
+  test('supports legacy complate complete settings when executing gacha', () => {
+    const settings = {
+      complate: { price: 120, mode: 'frontload' }
+    } as PtSettingV3 & { complate: PtSettingV3['complete'] };
+
+    const result = executeGacha({ gachaId: 'sample', pool, settings, points: 240 });
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.plan.completeExecutions).toBe(2);
+    expect(result.plan.normalizedSettings.complete?.mode).toBe('frontload');
+  });
 });
