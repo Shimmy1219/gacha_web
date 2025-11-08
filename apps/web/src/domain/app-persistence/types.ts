@@ -143,6 +143,7 @@ export interface PtSettingV3 {
   };
   complete?: {
     price: number;
+    mode?: 'repeat' | 'frontload';
   };
   bundles?: PtBundleV3[];
   guarantees?: PtGuaranteeV3[];

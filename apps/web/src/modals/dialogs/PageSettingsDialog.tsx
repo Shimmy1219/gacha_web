@@ -13,6 +13,7 @@ import { ArrowPathIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/
 import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
+import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ConfirmDialog, ModalBody } from '..';
@@ -24,6 +25,7 @@ import { clearAllDiscordGuildSelections } from '../../features/discord/discordGu
 import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
+import type { CompleteDrawMode } from '../../logic/gacha/types';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -48,6 +50,19 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'misc',
     label: 'その他の設定',
     description: '通知やガイドの表示方法をカスタマイズします。'
+  }
+];
+
+const COMPLETE_MODE_OPTIONS: Array<{ value: CompleteDrawMode; label: string; description: string }> = [
+  {
+    value: 'repeat',
+    label: 'コンプ回数分すべて排出',
+    description: 'コンプ購入の回数だけ全アイテムを1個ずつ排出します。'
+  },
+  {
+    value: 'frontload',
+    label: '初回のみ全種→残りは通常抽選',
+    description: '最初のコンプ分は全アイテムを配布し、以降は通常抽選になります。'
   }
 ];
 
@@ -125,6 +140,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     userProfiles: userProfilesStore
   } = useDomainStores();
   const appState = useStoreValue(appStateStore);
+  const ptSettingsState = useStoreValue(ptControlsStore);
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -154,6 +170,34 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaId(null);
     setEditingGachaName('');
   }, [appStateStore, editingGachaId, editingGachaName]);
+
+  const handleCompleteModeChange = useCallback(
+    (gachaId: string, mode: CompleteDrawMode) => {
+      const currentSetting = ptSettingsState?.byGachaId?.[gachaId];
+      const completeSetting = currentSetting?.complete;
+      if (
+        !currentSetting ||
+        !completeSetting ||
+        typeof completeSetting.price !== 'number' ||
+        completeSetting.price <= 0
+      ) {
+        return;
+      }
+
+      ptControlsStore.setGachaSettings(
+        gachaId,
+        {
+          ...currentSetting,
+          complete: {
+            ...completeSetting,
+            mode
+          }
+        },
+        { persist: 'immediate' }
+      );
+    },
+    [ptControlsStore, ptSettingsState]
+  );
 
   const handleDeleteAllData = useCallback(async () => {
     if (isDeletingAllData) {
@@ -308,6 +352,16 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [accentScheme, normalizedAccent, selectedPalette, setCustomAccentColor]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
+
+  const completeModeDropdownOptions = useMemo<SingleSelectOption<CompleteDrawMode>[]>(
+    () =>
+      COMPLETE_MODE_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description
+      })),
+    []
+  );
 
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
@@ -466,97 +520,162 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 <ul className="space-y-2">
                   {gachaEntries
                     .filter((entry) => showArchived || !entry.isArchived)
-                    .map((entry) => (
-                      <li key={entry.id}>
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
-                          <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-                            {editingGachaId === entry.id ? (
-                              <>
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                  <input
-                                    type="text"
-                                    value={editingGachaName}
-                                    onChange={handleEditingGachaNameChange}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter') {
-                                        event.preventDefault();
-                                        handleCommitEditingGacha();
-                                      }
-                                      if (event.key === 'Escape') {
-                                        event.preventDefault();
-                                        handleCancelEditingGacha();
-                                      }
-                                    }}
-                                    autoFocus
-                                    className="w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                                  />
-                                  <div className="flex flex-wrap items-center gap-2">
+                    .map((entry) => {
+                      const ptSetting = ptSettingsState?.byGachaId?.[entry.id];
+                      const completeSetting = ptSetting?.complete;
+                      const hasCompletePrice =
+                        typeof completeSetting?.price === 'number' && completeSetting.price > 0;
+                      const completeMode: CompleteDrawMode =
+                        completeSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
+                      const completeModeMeta = COMPLETE_MODE_OPTIONS.find(
+                        (option) => option.value === completeMode
+                      );
+
+                      return (
+                        <li key={entry.id}>
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
+                            <div className="flex min-w-[200px] flex-1 flex-col gap-2">
+                              {editingGachaId === entry.id ? (
+                                <>
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                    <input
+                                      type="text"
+                                      value={editingGachaName}
+                                      onChange={handleEditingGachaNameChange}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                          event.preventDefault();
+                                          handleCommitEditingGacha();
+                                        }
+                                        if (event.key === 'Escape') {
+                                          event.preventDefault();
+                                          handleCancelEditingGacha();
+                                        }
+                                      }}
+                                      autoFocus
+                                      className="w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                        onClick={handleCommitEditingGacha}
+                                      >
+                                        保存
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                        onClick={handleCancelEditingGacha}
+                                      >
+                                        キャンセル
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold leading-tight">{entry.name}</p>
                                     <button
                                       type="button"
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                      onClick={handleCommitEditingGacha}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                      onClick={() => handleStartEditingGacha(entry.id, entry.name)}
+                                      aria-label={`${entry.name}を編集`}
                                     >
-                                      保存
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
-                                      onClick={handleCancelEditingGacha}
-                                    >
-                                      キャンセル
+                                      <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
                                     </button>
                                   </div>
+                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
+                                </>
+                              )}
+
+                              <div className="rounded-xl border border-border/60 bg-panel-contrast/70 p-3 text-xs">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+                                  コンプリート排出モード
+                                </p>
+                                <div className="mt-2">
+                                  <SingleSelectDropdown<CompleteDrawMode>
+                                    value={completeMode}
+                                    onChange={(value) => handleCompleteModeChange(entry.id, value)}
+                                    options={completeModeDropdownOptions}
+                                    disabled={!hasCompletePrice}
+                                    classNames={{
+                                      root: 'relative w-full',
+                                      button:
+                                        'inline-flex w-full items-start justify-between gap-2 rounded-lg border border-border/60 bg-panel px-3 py-2 text-left text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:border-border/60 disabled:hover:bg-panel',
+                                      buttonOpen: 'border-accent text-accent',
+                                      buttonClosed: 'hover:border-accent/70',
+                                      icon: 'h-4 w-4 text-muted-foreground transition-transform',
+                                      iconOpen: 'rotate-180 text-accent',
+                                      menu:
+                                        'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+                                      option:
+                                        'flex w-full items-start justify-between rounded-lg px-3 py-2 text-left transition',
+                                      optionActive: 'bg-accent/10 text-surface-foreground',
+                                      optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
+                                      optionLabel: 'flex-1 text-left text-xs font-semibold',
+                                      optionDescription: 'block text-[10px] text-muted-foreground',
+                                      checkIcon: 'h-4 w-4 text-accent transition'
+                                    }}
+                                    renderButtonLabel={({ selectedOption }) =>
+                                      selectedOption ? (
+                                        <div className="flex flex-col text-left">
+                                          <span className="text-xs font-semibold leading-snug text-surface-foreground">
+                                            {selectedOption.label}
+                                          </span>
+                                          {selectedOption.description ? (
+                                            <span className="text-[10px] text-muted-foreground">
+                                              {selectedOption.description}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">モードを選択</span>
+                                      )
+                                    }
+                                  />
                                 </div>
-                                <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <p className="font-semibold leading-tight">{entry.name}</p>
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                    onClick={() => handleStartEditingGacha(entry.id, entry.name)}
-                                    aria-label={`${entry.name}を編集`}
-                                  >
-                                    <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-                                  </button>
-                                </div>
-                                <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                              </>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {entry.isSelected ? (
-                              <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                                選択中
-                              </span>
-                            ) : null}
-                            {entry.isArchived ? (
-                              <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
-                                アーカイブ済み
-                              </span>
-                            ) : null}
-                            {entry.isArchived ? (
+                                <p className="mt-2 text-[10px] text-muted-foreground">
+                                  {hasCompletePrice
+                                    ? completeModeMeta?.description ?? 'モードを選択すると挙動を切り替えられます。'
+                                    : 'コンプリートptを設定すると選択できます。'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {entry.isSelected ? (
+                                <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                  選択中
+                                </span>
+                              ) : null}
+                              {entry.isArchived ? (
+                                <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
+                                  アーカイブ済み
+                                </span>
+                              ) : null}
+                              {entry.isArchived ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                  onClick={() => handleRestoreGacha(entry.id)}
+                                >
+                                  戻す
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                onClick={() => handleRestoreGacha(entry.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+                                onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
                               >
-                                戻す
+                                削除
                               </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
-                              onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
-                            >
-                              削除
-                            </button>
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
+                        </li>
+                      );
+                    })}
                 </ul>
               ) : (
                 <p className="rounded-xl border border-border/50 bg-panel px-4 py-3 text-xs text-muted-foreground">

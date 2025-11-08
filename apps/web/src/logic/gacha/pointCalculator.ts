@@ -1,8 +1,11 @@
 import type { PtSettingV3 } from '@domain/app-persistence';
 
+type LegacyPtSetting = PtSettingV3 & { complate?: PtSettingV3['complete'] };
+
 import type {
   BundleApplication,
   CalculateDrawPlanArgs,
+  CompleteDrawMode,
   DrawPlan,
   NormalizePtSettingResult,
   NormalizedBundleSetting,
@@ -44,12 +47,23 @@ export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizeP
     }
   }
 
-  if (setting.complete) {
-    const price = toPositiveNumber(setting.complete.price);
+  const completeSetting = (setting as LegacyPtSetting)?.complete ?? (setting as LegacyPtSetting)?.complate;
+
+  if (completeSetting) {
+    const price = toPositiveNumber(completeSetting.price);
     if (!price) {
       warnings.push('コンプリート価格が無効なため、設定を無視しました。');
     } else {
-      normalized.complete = { price };
+      let mode: CompleteDrawMode = 'repeat';
+      const requestedMode = completeSetting.mode;
+      if (requestedMode) {
+        if (requestedMode === 'repeat' || requestedMode === 'frontload') {
+          mode = requestedMode;
+        } else {
+          warnings.push('コンプリート排出モードが無効なため、既定値を使用しました。');
+        }
+      }
+      normalized.complete = { price, mode };
     }
   }
 
@@ -176,6 +190,21 @@ function purchasePerPull(
   };
 }
 
+function estimateRandomPullsFromPoints(
+  points: number,
+  normalized: NormalizedPtSetting,
+  baseEfficiency: number | null
+): number {
+  if (points <= 0) {
+    return 0;
+  }
+
+  const { pullsGained, pointsRemaining } = applyBundles(normalized.bundles, points, baseEfficiency);
+  const perPullResult = purchasePerPull(normalized.perPull, pointsRemaining);
+
+  return pullsGained + perPullResult.pullsGained;
+}
+
 function createEmptyPlan(normalized: NormalizedPtSetting, warnings: string[]): DrawPlan {
   return {
     completeExecutions: 0,
@@ -223,15 +252,37 @@ export function calculateDrawPlan({
   let pointsUsed = 0;
   let completeExecutions = 0;
   let completePulls = 0;
+  let randomPullsFromFrontload = 0;
+  const baseEfficiency = normalized.perPull
+    ? normalized.perPull.pulls / normalized.perPull.price
+    : null;
 
   if (normalized.complete) {
     const maxExecutions = Math.floor(pointsRemaining / normalized.complete.price);
     if (maxExecutions > 0) {
       completeExecutions = maxExecutions;
+      const guaranteedExecutions =
+        normalized.complete.mode === 'frontload' ? Math.min(1, maxExecutions) : maxExecutions;
       if (totalItemTypes > 0) {
-        completePulls = totalItemTypes * completeExecutions;
+        completePulls = totalItemTypes * guaranteedExecutions;
       } else {
         warnings.push('アイテムが未登録のため、コンプリート購入は結果に反映されません。');
+      }
+      if (normalized.complete.mode === 'frontload') {
+        const estimatedPulls = estimateRandomPullsFromPoints(
+          normalized.complete.price,
+          normalized,
+          baseEfficiency
+        );
+        const pullsPerExecution =
+          totalItemTypes > 0 ? Math.max(totalItemTypes, estimatedPulls) : estimatedPulls;
+        const guaranteedPulls = totalItemTypes > 0 ? totalItemTypes : 0;
+        if (guaranteedExecutions > 0) {
+          randomPullsFromFrontload += Math.max(0, pullsPerExecution - guaranteedPulls);
+        }
+        if (maxExecutions > guaranteedExecutions) {
+          randomPullsFromFrontload += pullsPerExecution * (maxExecutions - guaranteedExecutions);
+        }
       }
       const usedForComplete = normalized.complete.price * completeExecutions;
       pointsRemaining -= usedForComplete;
@@ -239,9 +290,6 @@ export function calculateDrawPlan({
     }
   }
 
-  const baseEfficiency = normalized.perPull
-    ? normalized.perPull.pulls / normalized.perPull.price
-    : null;
   const { applications, pointsUsed: bundlePoints, pullsGained: bundlePulls, pointsRemaining: afterBundles } =
     applyBundles(normalized.bundles, pointsRemaining, baseEfficiency);
   pointsRemaining = afterBundles;
@@ -260,7 +308,7 @@ export function calculateDrawPlan({
     pointsUsed += perPullPoints;
   }
 
-  const randomPulls = bundlePulls + perPullPulls;
+  const randomPulls = randomPullsFromFrontload + bundlePulls + perPullPulls;
   const totalPulls = completePulls + randomPulls;
 
   if (totalPulls <= 0) {

@@ -32,8 +32,11 @@ export interface NormalizedPerPullSetting {
   unitPrice: number;
 }
 
+export type CompleteDrawMode = 'repeat' | 'frontload';
+
 export interface NormalizedCompleteSetting {
   price: number;
+  mode: CompleteDrawMode;
 }
 
 export interface NormalizedBundleSetting {

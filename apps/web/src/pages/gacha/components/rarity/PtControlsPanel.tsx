@@ -282,7 +282,10 @@ function buildSettingsFromSnapshot(
 
   const completePrice = parseNonNegativeNumber(snapshot.complete);
   if (completePrice != null) {
-    next.complete = { price: completePrice };
+    const previousMode = previous?.complete?.mode;
+    next.complete = previousMode
+      ? { price: completePrice, mode: previousMode }
+      : { price: completePrice };
   }
 
   const bundles = snapshot.bundles
