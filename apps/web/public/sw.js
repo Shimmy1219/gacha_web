@@ -6,8 +6,8 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icon/icon-192.png',
+  '/icon/icon-512.png'
 ];
 
 const getAppShellFromCache = async () =>
