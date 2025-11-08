@@ -94,4 +94,47 @@ describe('executeGacha', () => {
     expect(rareItem?.count).toBe(2);
     expect(rareItem?.guaranteedCount).toBe(1);
   });
+
+  test('frontload mode guarantees only the first completion', () => {
+    const settings: PtSettingV3 = {
+      complete: { price: 100, mode: 'frontload' }
+    };
+
+    const rng = (() => {
+      const sequence = [0.1, 0.5, 0.9];
+      let index = 0;
+      return () => {
+        const value = sequence[index % sequence.length];
+        index += 1;
+        return value;
+      };
+    })();
+
+    const result = executeGacha({ gachaId: 'sample', pool, settings, points: 300, rng });
+
+    expect(result.plan.completeExecutions).toBe(3);
+    expect(result.plan.completePulls).toBe(pool.items.length);
+    expect(result.plan.randomPulls).toBe(pool.items.length * 2);
+    expect(result.totalPulls).toBe(result.plan.totalPulls);
+    expect(result.pointsSpent).toBe(300);
+    expect(result.pointsRemainder).toBe(0);
+
+    pool.items.forEach((item) => {
+      const aggregated = result.items.find((entry) => entry.itemId === item.itemId);
+      expect(aggregated).toBeDefined();
+      expect(aggregated?.count ?? 0).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  test('supports legacy complate complete settings when executing gacha', () => {
+    const settings = {
+      complate: { price: 120, mode: 'frontload' }
+    } as PtSettingV3 & { complate: PtSettingV3['complete'] };
+
+    const result = executeGacha({ gachaId: 'sample', pool, settings, points: 240 });
+
+    expect(result.errors).toHaveLength(0);
+    expect(result.plan.completeExecutions).toBe(2);
+    expect(result.plan.normalizedSettings.complete?.mode).toBe('frontload');
+  });
 });

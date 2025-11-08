@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { PageSettingsDialog } from './PageSettingsDialog';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import type {
@@ -20,6 +21,12 @@ import {
   type DrawPlan,
   type GachaPoolDefinition
 } from '../../logic/gacha';
+import type { CompleteDrawMode } from '../../logic/gacha/types';
+
+const COMPLETE_MODE_LABELS: Record<CompleteDrawMode, string> = {
+  repeat: 'コンプ回数分すべて排出',
+  frontload: '初回のみ全種→残り通常抽選'
+};
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -129,7 +136,7 @@ function formatExecutedAt(value: string | undefined): string {
   }).format(date);
 }
 
-export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
+export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -144,6 +151,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControls);
   const userProfilesState = useStoreValue(userProfiles);
+  const pullHistoryState = useStoreValue(pullHistory);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
@@ -251,15 +259,39 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       return [] as UserProfileCardV3[];
     }
 
+    const historyOrder = pullHistoryState?.order ?? [];
+    const historyEntries = pullHistoryState?.pulls ?? {};
+    const latestIndexByUserId = new Map<string, number>();
+    historyOrder.forEach((pullId, index) => {
+      const entry = historyEntries[pullId];
+      const userId = entry?.userId;
+      if (userId && !latestIndexByUserId.has(userId)) {
+        latestIndexByUserId.set(userId, index);
+      }
+    });
+
     const query = normalizedUserName.toLowerCase();
     const filtered = query
       ? entries.filter((profile) => profile.displayName.toLowerCase().includes(query))
       : entries;
 
-    const sorted = [...filtered].sort((a, b) => a.displayName.localeCompare(b.displayName, 'ja'));
+    const sorted = [...filtered].sort((a, b) => {
+      const indexA = latestIndexByUserId.get(a.id);
+      const indexB = latestIndexByUserId.get(b.id);
+      if (indexA != null && indexB != null) {
+        return indexA - indexB;
+      }
+      if (indexA != null) {
+        return -1;
+      }
+      if (indexB != null) {
+        return 1;
+      }
+      return a.displayName.localeCompare(b.displayName, 'ja');
+    });
 
     return sorted.slice(0, 8);
-  }, [normalizedUserName, userProfilesState]);
+  }, [normalizedUserName, pullHistoryState, userProfilesState]);
 
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
@@ -379,6 +411,10 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
   const totalCount = resultItems?.reduce((total, item) => total + item.count, 0) ?? 0;
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
+  const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
+  const completeMode: CompleteDrawMode =
+    normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
+  const completeModeLabel = COMPLETE_MODE_LABELS[completeMode];
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{
@@ -404,6 +440,16 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
       };
     });
   }, [drawPlan, selectedGacha]);
+
+  const handleOpenSettings = useCallback(() => {
+    push(PageSettingsDialog, {
+      id: 'page-settings',
+      title: 'サイト設定',
+      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
+      size: 'xl',
+      panelPaddingClassName: 'p-2 lg:p-6'
+    });
+  }, [push]);
 
   return (
     <>
@@ -451,7 +497,7 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                   placeholder="ユーザー名（任意）"
                 />
               </label>
-              {normalizedUserName && userSuggestions.length > 0 ? (
+              {userSuggestions.length > 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground">候補</p>
                   <div className="flex flex-wrap gap-2">
@@ -513,6 +559,23 @@ export function DrawGachaDialog({ close }: ModalComponentProps): JSX.Element {
                   <span className="ml-1 font-mono text-surface-foreground">
                     {formatNumber(drawPlan.completeExecutions)} 回
                   </span>
+                </div>
+              ) : null}
+              {normalizedCompleteSetting ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    コンプリート排出モード:
+                    <span className="ml-1 font-semibold text-surface-foreground">
+                      {completeModeLabel}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenSettings}
+                    className="inline-flex items-center rounded-lg border border-border/60 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    モードを変更
+                  </button>
                 </div>
               ) : null}
               {guaranteeSummaries.length ? (
