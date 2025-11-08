@@ -233,14 +233,19 @@ export function calculateDrawPlan({
   let pointsUsed = 0;
   let completeExecutions = 0;
   let completePulls = 0;
+  let randomPullsFromFrontload = 0;
 
   if (normalized.complete) {
     const maxExecutions = Math.floor(pointsRemaining / normalized.complete.price);
     if (maxExecutions > 0) {
-      completeExecutions =
-        normalized.complete.mode === 'frontload' ? 1 : maxExecutions;
+      completeExecutions = maxExecutions;
+      const guaranteedExecutions =
+        normalized.complete.mode === 'frontload' ? Math.min(1, maxExecutions) : maxExecutions;
       if (totalItemTypes > 0) {
-        completePulls = totalItemTypes * completeExecutions;
+        completePulls = totalItemTypes * guaranteedExecutions;
+        if (normalized.complete.mode === 'frontload' && maxExecutions > 1) {
+          randomPullsFromFrontload = totalItemTypes * (maxExecutions - 1);
+        }
       } else {
         warnings.push('アイテムが未登録のため、コンプリート購入は結果に反映されません。');
       }
@@ -271,7 +276,7 @@ export function calculateDrawPlan({
     pointsUsed += perPullPoints;
   }
 
-  const randomPulls = bundlePulls + perPullPulls;
+  const randomPulls = randomPullsFromFrontload + bundlePulls + perPullPulls;
   const totalPulls = completePulls + randomPulls;
 
   if (totalPulls <= 0) {

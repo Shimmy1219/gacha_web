@@ -52,7 +52,7 @@ describe('calculateDrawPlan', () => {
     expect(plan.pointsRemainder).toBe(0);
   });
 
-  test('limits complete executions to one when using frontload mode', () => {
+  test('frontload mode only guarantees the first completion', () => {
     const settings: PtSettingV3 = {
       perPull: { price: 10, pulls: 1 },
       complete: { price: 100, mode: 'frontload' }
@@ -61,12 +61,28 @@ describe('calculateDrawPlan', () => {
     const plan = calculateDrawPlan({ points: 250, settings, totalItemTypes: 5 });
 
     expect(plan.errors).toHaveLength(0);
-    expect(plan.completeExecutions).toBe(1);
+    expect(plan.completeExecutions).toBe(2);
     expect(plan.completePulls).toBe(5);
-    expect(plan.randomPulls).toBe(15);
+    expect(plan.randomPulls).toBe(10);
     expect(plan.pointsUsed).toBe(250);
     expect(plan.pointsRemainder).toBe(0);
     expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
+  });
+
+  test('frontload mode converts additional completions into random pulls', () => {
+    const settings: PtSettingV3 = {
+      complete: { price: 80, mode: 'frontload' }
+    };
+
+    const plan = calculateDrawPlan({ points: 240, settings, totalItemTypes: 4 });
+
+    expect(plan.errors).toHaveLength(0);
+    expect(plan.completeExecutions).toBe(3);
+    expect(plan.completePulls).toBe(4);
+    expect(plan.randomPulls).toBe(8);
+    expect(plan.totalPulls).toBe(12);
+    expect(plan.pointsUsed).toBe(240);
+    expect(plan.pointsRemainder).toBe(0);
   });
 
   test('reports errors when no purchasable settings are provided', () => {

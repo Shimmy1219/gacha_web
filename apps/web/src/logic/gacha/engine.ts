@@ -173,7 +173,10 @@ export function executeGacha({
   const draws: ExecuteGachaDrawInstance[] = [];
 
   if (plan.completeExecutions > 0) {
-    for (let execution = 0; execution < plan.completeExecutions; execution += 1) {
+    const completeMode = plan.normalizedSettings.complete?.mode ?? 'repeat';
+    const guaranteedExecutions =
+      completeMode === 'frontload' ? Math.min(1, plan.completeExecutions) : plan.completeExecutions;
+    for (let execution = 0; execution < guaranteedExecutions; execution += 1) {
       pool.items.forEach((item) => {
         draws.push({ itemId: item.itemId, rarityId: item.rarityId, wasGuaranteed: false });
       });
