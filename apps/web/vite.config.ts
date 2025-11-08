@@ -9,21 +9,12 @@ const toPosixPath = (value: string) => value.replace(/\\/g, '/');
 
 const projectRoot = fs.realpathSync(path.dirname(fileURLToPath(import.meta.url)));
 const domainDir = toPosixPath(path.join(projectRoot, 'src/domain'));
-const iconsSourceDir = path.resolve(projectRoot, '../../icons');
-const iconsPublicDir = path.resolve(projectRoot, 'public/icons');
+const iconsSourceDir = path.resolve(projectRoot, '../../icon');
+const iconsPublicDir = path.resolve(projectRoot, 'public/icon');
 
 const copyRootIconsPlugin = (): PluginOption => {
   const syncIcons = () => {
     if (!fs.existsSync(iconsSourceDir)) {
-      if (fs.existsSync(iconsPublicDir)) {
-        for (const entry of fs.readdirSync(iconsPublicDir, { withFileTypes: true })) {
-          if (entry.name === '.gitignore') {
-            continue;
-          }
-
-          fs.rmSync(path.join(iconsPublicDir, entry.name), { recursive: true, force: true });
-        }
-      }
       return;
     }
 
