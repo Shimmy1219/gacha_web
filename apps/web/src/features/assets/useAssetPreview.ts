@@ -1,20 +1,34 @@
 import { useEffect, useState } from 'react';
 
-import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
+import {
+  loadAsset,
+  loadAssetPreview,
+  type StoredAssetPreviewRecord,
+  type StoredAssetRecord
+} from '@domain/assets/assetStorage';
 
 export interface AssetPreviewState {
   url: string | null;
   type: string | null;
+  previewType: string | null;
   name: string | null;
 }
 
 const INITIAL_STATE: AssetPreviewState = {
   url: null,
   type: null,
+  previewType: null,
   name: null
 };
 
-export function useAssetPreview(assetId: string | null | undefined): AssetPreviewState {
+export interface UseAssetPreviewOptions {
+  loadOriginal?: boolean;
+}
+
+export function useAssetPreview(
+  assetId: string | null | undefined,
+  options: UseAssetPreviewOptions = {}
+): AssetPreviewState {
   const [state, setState] = useState<AssetPreviewState>(INITIAL_STATE);
 
   useEffect(() => {
@@ -27,7 +41,9 @@ export function useAssetPreview(assetId: string | null | undefined): AssetPrevie
     }
 
     const fetch = async () => {
-      const asset: StoredAssetRecord | null = await loadAsset(assetId);
+      const asset = options.loadOriginal
+        ? await loadAsset(assetId)
+        : await loadAssetPreview(assetId);
       if (!active) {
         return;
       }
@@ -37,10 +53,18 @@ export function useAssetPreview(assetId: string | null | undefined): AssetPrevie
         return;
       }
 
-      objectUrl = URL.createObjectURL(asset.blob);
+      const blob = options.loadOriginal
+        ? (asset as StoredAssetRecord).blob
+        : (asset as StoredAssetPreviewRecord).previewBlob;
+
+      if (blob) {
+        objectUrl = URL.createObjectURL(blob);
+      }
+
       setState({
-        url: objectUrl,
+        url: blob ? objectUrl : null,
         type: asset.type ?? null,
+        previewType: blob?.type ?? null,
         name: asset.name ?? null
       });
     };
@@ -53,7 +77,7 @@ export function useAssetPreview(assetId: string | null | undefined): AssetPrevie
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [assetId]);
+  }, [assetId, options.loadOriginal]);
 
   return state;
 }

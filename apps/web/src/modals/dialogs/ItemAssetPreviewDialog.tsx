@@ -43,7 +43,7 @@ export function ItemAssetPreviewDialog({
   }
 
   const { assetHash, thumbnailUrl, itemName, rarityColor, rarityLabel } = payload;
-  const preview = useAssetPreview(assetHash);
+  const preview = useAssetPreview(assetHash, { loadOriginal: true });
   const previewUrl = preview.url ?? thumbnailUrl ?? null;
   const previewType = preview.type ?? (previewUrl ? 'image/*' : null);
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));

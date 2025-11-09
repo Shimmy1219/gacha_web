@@ -50,7 +50,8 @@ function useResolvedPreview({
 
   const url = previewUrl || preview.url || fallbackUrl || null;
   const kind = resolveKind(preview.type, kindHint ?? (fallbackUrl ? 'image' : undefined));
-  const hasImage = kind === 'image' && Boolean(url);
+  const hasPreviewImage = preview.previewType?.startsWith('image/');
+  const hasImage = Boolean(url && (hasPreviewImage || kind === 'image' || Boolean(previewUrl) || Boolean(fallbackUrl)));
 
   return {
     url,
@@ -82,7 +83,7 @@ function ItemPreviewVisual({
             ? 'object-scale-down'
             : 'object-contain';
 
-  if (kind === 'image' && hasImage && url) {
+  if (hasImage && url) {
     return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
   }
 
