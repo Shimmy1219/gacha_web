@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -145,6 +145,97 @@ export function InventoryHistoryDialog({
     return entries;
   }, [gachaId, normalizedTargetUserId, pullHistoryState]);
 
+  const [shareFeedback, setShareFeedback] = useState<
+    | {
+        entryKey: string;
+        status: 'shared' | 'copied' | 'error';
+      }
+    | null
+  >(null);
+  const shareFeedbackTimeoutRef = useRef<number | null>(null);
+
+  const scheduleShareFeedbackClear = useCallback((delay: number) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (shareFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(shareFeedbackTimeoutRef.current);
+    }
+    shareFeedbackTimeoutRef.current = window.setTimeout(() => {
+      setShareFeedback(null);
+      shareFeedbackTimeoutRef.current = null;
+    }, delay);
+  }, []);
+
+  const handleShare = useCallback(async (entryKey: string, shareText: string) => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      setShareFeedback({ entryKey, status: 'error' });
+      scheduleShareFeedbackClear(4000);
+      return;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+        setShareFeedback({ entryKey, status: 'shared' });
+        scheduleShareFeedbackClear(2000);
+        return;
+      }
+    } catch (error) {
+      console.info('Web Share API での共有に失敗しました。クリップボード共有へフォールバックします。', error);
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareText);
+        setShareFeedback({ entryKey, status: 'copied' });
+        scheduleShareFeedbackClear(2000);
+        return;
+      }
+    } catch (error) {
+      console.warn('共有テキストのコピーに失敗しました', error);
+    }
+
+    setShareFeedback({ entryKey, status: 'error' });
+    scheduleShareFeedbackClear(4000);
+  }, [scheduleShareFeedbackClear]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && shareFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(shareFeedbackTimeoutRef.current);
+        shareFeedbackTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const scriptUrl = 'https://platform.twitter.com/widgets.js';
+    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptUrl}"]`);
+    if (existingScript) {
+      const twttr = (window as typeof window & {
+        twttr?: { widgets?: { load: (element?: Element) => void } };
+      }).twttr;
+      twttr?.widgets?.load();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.async = true;
+    script.charset = 'utf-8';
+    script.onload = () => {
+      const twttr = (window as typeof window & {
+        twttr?: { widgets?: { load: (element?: Element) => void } };
+      }).twttr;
+      twttr?.widgets?.load();
+    };
+    document.body.appendChild(script);
+  }, [historyEntries.length]);
+
   return (
     <>
       <ModalBody className="space-y-4">
@@ -158,7 +249,8 @@ export function InventoryHistoryDialog({
           </p>
         ) : (
           <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
-            {historyEntries.map((entry) => {
+            {historyEntries.map((entry, index) => {
+              const entryKey = entry.id ?? `${entry.executedAt ?? 'unknown'}-${index}`;
               const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
               const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
               const statusLabel = entry.status ? PULL_HISTORY_STATUS_LABELS[entry.status] : null;
@@ -212,9 +304,33 @@ export function InventoryHistoryDialog({
                   return a.itemLabel.localeCompare(b.itemLabel, 'ja');
                 });
 
+              const positiveItemLines = itemEntries
+                .filter((item) => item.count > 0)
+                .map((item) => {
+                  const rarityLabel = item.rarityLabel ?? '景品';
+                  const countLabel = `${numberFormatter.format(item.count)}個`;
+                  return `${rarityLabel}：${item.itemLabel}：${countLabel}`;
+                });
+
+              const shareLines = [
+                `ガチャ結果 ${userName} ${pullCountLabel}`,
+                ...positiveItemLines,
+                '',
+                `# ${gachaName}`
+              ];
+              const shareText = shareLines.join('\n');
+
+              const urlParams = new URLSearchParams();
+              urlParams.set('button_hashtag', '四遊楽ガチャ');
+              urlParams.set('ref_src', 'twsrc%5Etfw');
+              urlParams.set('text', shareText);
+              const tweetUrl = `https://twitter.com/intent/tweet?${urlParams.toString()}`;
+
+              const currentFeedback = shareFeedback?.entryKey === entryKey ? shareFeedback.status : null;
+
               return (
                 <article
-                  key={entry.id}
+                  key={entryKey}
                   className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast p-4"
                 >
                   <header className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
@@ -280,6 +396,33 @@ export function InventoryHistoryDialog({
                       <span>消費リソース: {currencyUsedLabel}</span>
                     </footer>
                   ) : null}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      className="btn btn-muted btn-sm"
+                      onClick={() => handleShare(entryKey, shareText)}
+                    >
+                      結果を共有
+                    </button>
+                    <a
+                      href={tweetUrl}
+                      className="twitter-hashtag-button"
+                      data-show-count="false"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Tweet #四遊楽ガチャ
+                    </a>
+                    {currentFeedback === 'shared' ? (
+                      <span className="text-[11px] text-muted-foreground">共有を開始しました</span>
+                    ) : null}
+                    {currentFeedback === 'copied' ? (
+                      <span className="text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
+                    ) : null}
+                    {currentFeedback === 'error' ? (
+                      <span className="text-[11px] text-red-500">共有に失敗しました</span>
+                    ) : null}
+                  </div>
                 </article>
               );
             })}
