@@ -490,12 +490,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return `${rarityLabel}：${item.name}：${countLabel}`;
       });
 
-    const shareLines = [
-      `ガチャ結果 ${shareUserName} ${pullCountLabel}`,
-      ...positiveItemLines,
-      '',
-      `# ${lastGachaLabel ?? '四遊楽ガチャ'}`
-    ];
+    const gachaLabel = lastGachaLabel ?? '四遊楽ガチャ';
+    const shareLines = [`【${gachaLabel}結果】`, `${shareUserName} ${pullCountLabel}`, ''];
+    if (positiveItemLines.length > 0) {
+      shareLines.push(...positiveItemLines, '');
+    }
+    shareLines.push('# 四遊楽ガチャ');
     const shareText = shareLines.join('\n');
 
     const urlParams = new URLSearchParams();
@@ -774,33 +774,33 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
                   <button
                     type="button"
-                    className="btn btn-muted btn-sm p-2"
+                    className="btn btn-muted aspect-square h-8 w-8 p-1.5"
                     onClick={handleShareResult}
                     title="結果を共有"
                     aria-label="結果を共有"
                   >
-                    <ShareIcon className="h-4 w-4" aria-hidden="true" />
+                    <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果を共有</span>
                   </button>
                   <a
                     href={shareContent.tweetUrl}
-                    className="btn btn-muted btn-sm p-2"
+                    className="btn btn-muted aspect-square h-8 w-8 p-1.5"
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Xで共有"
                     aria-label="Xで共有"
                   >
-                    <XLogoIcon className="h-4 w-4" />
+                    <XLogoIcon className="h-3.5 w-3.5" />
                     <span className="sr-only">Xで共有</span>
                   </a>
                   <button
                     type="button"
-                    className="btn btn-muted btn-sm p-2"
+                    className="btn btn-muted aspect-square h-8 w-8 p-1.5"
                     onClick={handleCopyShareResult}
                     title="結果をコピー"
                     aria-label="結果をコピー"
                   >
-                    <ClipboardIcon className="h-4 w-4" aria-hidden="true" />
+                    <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果をコピー</span>
                   </button>
                   {shareStatus === 'shared' ? (
