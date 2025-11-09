@@ -32,6 +32,7 @@ export interface PrizeSettingsDialogPayload {
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
+  thumbnailAssetId?: string | null;
   thumbnailUrl: string | null;
   imageAssetId: string | null;
   rarityColor?: string;
@@ -46,6 +47,7 @@ export interface PrizeSettingsDialogPayload {
     completeTarget: boolean;
     riagu: boolean;
     imageAssetId: string | null;
+    thumbnailAssetId: string | null;
   }) => void;
   onDelete?: (data: { itemId: string; gachaId: string }) => void;
 }
@@ -82,6 +84,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
       riagu: payload?.isRiagu ?? false,
+      thumbnailAssetId: payload?.thumbnailAssetId ?? null,
       thumbnailUrl: payload?.thumbnailUrl ?? null,
       assetId: payload?.imageAssetId ?? null
     }),
@@ -96,11 +99,16 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentAssetId, setCurrentAssetId] = useState<string | null>(initialState.assetId);
+  const [currentThumbnailAssetId, setCurrentThumbnailAssetId] = useState<string | null>(
+    initialState.thumbnailAssetId
+  );
   const [unsavedAssetId, setUnsavedAssetId] = useState<string | null>(null);
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
   const assetRequestIdRef = useRef(0);
   const unsavedAssetIdRef = useRef<string | null>(null);
-  const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null);
+  const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null, {
+    previewAssetId: payload?.thumbnailAssetId ?? null
+  });
 
   const rarityOptionMap = useMemo(() => {
     const map = new Map<string, RarityOption>();
@@ -204,6 +212,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         unsavedAssetIdRef.current = null;
       }
       setCurrentAssetId(initialState.assetId ?? null);
+      setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
       setIsProcessingAsset(false);
       return;
     }
@@ -229,11 +238,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       setUnsavedAssetId(record.id);
       unsavedAssetIdRef.current = record.id;
       setCurrentAssetId(record.id);
+      setCurrentThumbnailAssetId(record.previewId ?? null);
     } catch (error) {
       console.error('ファイルの保存に失敗しました', error);
       if (assetRequestIdRef.current === requestId) {
         setSelectedFile(null);
         setCurrentAssetId(initialState.assetId ?? null);
+        setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
         revokePreview();
       }
     } finally {
@@ -259,7 +270,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
     riaguTarget !== initialState.riagu ||
-    (currentAssetId ?? null) !== (initialState.assetId ?? null);
+    (currentAssetId ?? null) !== (initialState.assetId ?? null) ||
+    (currentThumbnailAssetId ?? null) !== (initialState.thumbnailAssetId ?? null);
 
   const rarityColor = currentRarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
@@ -285,7 +297,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       pickupTarget,
       completeTarget,
       riagu: riaguTarget,
-      imageAssetId: currentAssetId ?? null
+      imageAssetId: currentAssetId ?? null,
+      thumbnailAssetId: currentThumbnailAssetId ?? null
     });
 
     if (unsavedAssetId) {

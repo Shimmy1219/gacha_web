@@ -16,6 +16,7 @@ type ItemPreviewImageFit = 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
 
 interface ItemPreviewBaseProps {
   assetId?: string | null;
+  previewAssetId?: string | null;
   fallbackUrl?: string | null;
   previewUrl?: string | null;
   alt: string;
@@ -42,15 +43,17 @@ function resolveKind(type: string | null | undefined, hint?: ItemPreviewKind): I
 
 function useResolvedPreview({
   assetId,
+  previewAssetId,
   fallbackUrl,
   previewUrl,
   kindHint
-}: Pick<ItemPreviewBaseProps, 'assetId' | 'fallbackUrl' | 'previewUrl' | 'kindHint'>): ItemPreviewState {
-  const preview = useAssetPreview(assetId ?? null);
+}: Pick<ItemPreviewBaseProps, 'assetId' | 'previewAssetId' | 'fallbackUrl' | 'previewUrl' | 'kindHint'>): ItemPreviewState {
+  const preview = useAssetPreview(assetId ?? null, { previewAssetId: previewAssetId ?? null });
 
   const url = previewUrl || preview.url || fallbackUrl || null;
   const kind = resolveKind(preview.type, kindHint ?? (fallbackUrl ? 'image' : undefined));
-  const hasImage = kind === 'image' && Boolean(url);
+  const hasPreviewImage = preview.previewType?.startsWith('image/');
+  const hasImage = Boolean(url && (hasPreviewImage || kind === 'image' || Boolean(previewUrl) || Boolean(fallbackUrl)));
 
   return {
     url,
@@ -82,7 +85,7 @@ function ItemPreviewVisual({
             ? 'object-scale-down'
             : 'object-contain';
 
-  if (kind === 'image' && hasImage && url) {
+  if (hasImage && url) {
     return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
   }
 
@@ -115,6 +118,7 @@ export const ItemPreviewButton = forwardRef<HTMLButtonElement, ItemPreviewButton
   (
     {
       assetId = null,
+      previewAssetId = null,
       fallbackUrl = null,
       previewUrl = null,
       alt,
@@ -131,7 +135,7 @@ export const ItemPreviewButton = forwardRef<HTMLButtonElement, ItemPreviewButton
     },
     ref
   ) => {
-    const state = useResolvedPreview({ assetId, fallbackUrl, previewUrl, kindHint });
+    const state = useResolvedPreview({ assetId, previewAssetId, fallbackUrl, previewUrl, kindHint });
     const resolvedDisabled = disabled ?? !canPreview;
     const isInteractive = canPreview && !resolvedDisabled;
 
@@ -151,6 +155,7 @@ export const ItemPreviewButton = forwardRef<HTMLButtonElement, ItemPreviewButton
       >
         <ItemPreviewVisual
           assetId={assetId}
+          previewAssetId={previewAssetId}
           fallbackUrl={fallbackUrl}
           previewUrl={previewUrl}
           alt={alt}
@@ -176,6 +181,7 @@ export const ItemPreview = forwardRef<HTMLDivElement, ItemPreviewProps>(
   (
     {
       assetId = null,
+      previewAssetId = null,
       fallbackUrl = null,
       previewUrl = null,
       alt,
@@ -189,7 +195,7 @@ export const ItemPreview = forwardRef<HTMLDivElement, ItemPreviewProps>(
     },
     ref
   ) => {
-    const state = useResolvedPreview({ assetId, fallbackUrl, previewUrl, kindHint });
+    const state = useResolvedPreview({ assetId, previewAssetId, fallbackUrl, previewUrl, kindHint });
 
     return (
       <div
@@ -203,6 +209,7 @@ export const ItemPreview = forwardRef<HTMLDivElement, ItemPreviewProps>(
       >
         <ItemPreviewVisual
           assetId={assetId}
+          previewAssetId={previewAssetId}
           fallbackUrl={fallbackUrl}
           previewUrl={previewUrl}
           alt={alt}
