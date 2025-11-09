@@ -10,6 +10,71 @@ import {
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
+const ENV_BOT_ID_KEYS = ['DISCORD_BOT_USER_ID', 'DISCORD_CLIENT_ID'];
+
+function collectEnvBotIds(){
+  const ids = new Set();
+  for (const key of ENV_BOT_ID_KEYS){
+    const value = process.env[key];
+    if (typeof value === 'string'){
+      const trimmed = value.trim();
+      if (trimmed){
+        ids.add(trimmed);
+      }
+    }
+  }
+  return ids;
+}
+
+let botIdentityCache = null;
+let botIdentityCacheToken = null;
+let botIdentityPromise = null;
+
+async function resolveBotIdentity(log){
+  const envIds = collectEnvBotIds();
+  const token = typeof process.env.DISCORD_BOT_TOKEN === 'string' ? process.env.DISCORD_BOT_TOKEN.trim() : '';
+  if (!token){
+    const primaryId = envIds.values().next().value || '';
+    return { primaryId, idSet: envIds };
+  }
+
+  const finalize = (cache) => {
+    const idSet = new Set([...envIds, ...(cache?.ids ?? [])]);
+    const primaryId = cache?.primaryId || idSet.values().next().value || '';
+    return { primaryId, idSet };
+  };
+
+  if (botIdentityCache && botIdentityCacheToken === token){
+    return finalize(botIdentityCache);
+  }
+
+  if (!botIdentityPromise){
+    botIdentityPromise = (async () => {
+      try {
+        const me = await dFetch('/users/@me', { token, isBot:true });
+        const fetchedId = typeof me?.id === 'string' ? me.id.trim() : '';
+        const ids = new Set();
+        if (fetchedId){
+          ids.add(fetchedId);
+        }
+        botIdentityCacheToken = token;
+        botIdentityCache = { primaryId: fetchedId, ids };
+      } catch (error) {
+        botIdentityCacheToken = token;
+        botIdentityCache = { primaryId: '', ids: new Set() };
+        const message = error instanceof Error ? error.message : String(error);
+        log?.warn('failed to resolve bot id from token', { message });
+      } finally {
+        botIdentityPromise = null;
+      }
+      return botIdentityCache;
+    })();
+  }
+
+  const cache = await botIdentityPromise;
+  return finalize(cache);
+}
+
 function buildChannelNameFromDisplayName(displayName, memberId){
   const fallback = `gift-${memberId}`;
   if (typeof displayName !== 'string'){ return fallback; }
@@ -77,15 +142,7 @@ export default async function handler(req, res){
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
-  const botUserId = (() => {
-    if (typeof process.env.DISCORD_BOT_USER_ID === 'string' && process.env.DISCORD_BOT_USER_ID.trim()) {
-      return process.env.DISCORD_BOT_USER_ID.trim();
-    }
-    if (typeof process.env.DISCORD_CLIENT_ID === 'string' && process.env.DISCORD_CLIENT_ID.trim()) {
-      return process.env.DISCORD_CLIENT_ID.trim();
-    }
-    return '';
-  })();
+  const { primaryId: botUserId, idSet: botUserIdSet } = await resolveBotIdentity(log);
 
   const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
   const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
@@ -138,7 +195,7 @@ export default async function handler(req, res){
       if (ow.id === sess.uid || ow.id === memberId){
         return false;
       }
-      if (botUserId && ow.id === botUserId){
+      if (botUserIdSet.has(ow.id)){
         return false;
       }
       return true;
@@ -156,7 +213,7 @@ export default async function handler(req, res){
       continue;
     }
 
-    const botOverwrite = botUserId ? userOverwrites.find((ow) => ow.id === botUserId) : null;
+    const botOverwrite = userOverwrites.find((ow) => botUserIdSet.has(ow.id));
     if (botOverwrite && allowsView(botOverwrite)){
       matchWithBot = ch;
       break;
