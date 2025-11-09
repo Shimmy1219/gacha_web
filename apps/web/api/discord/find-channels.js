@@ -10,6 +10,71 @@ import {
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
+const ENV_BOT_ID_KEYS = ['DISCORD_BOT_USER_ID', 'DISCORD_CLIENT_ID'];
+
+function collectEnvBotIds(){
+  const ids = new Set();
+  for (const key of ENV_BOT_ID_KEYS){
+    const value = process.env[key];
+    if (typeof value === 'string'){
+      const trimmed = value.trim();
+      if (trimmed){
+        ids.add(trimmed);
+      }
+    }
+  }
+  return ids;
+}
+
+let botIdentityCache = null;
+let botIdentityCacheToken = null;
+let botIdentityPromise = null;
+
+async function resolveBotIdentity(log){
+  const envIds = collectEnvBotIds();
+  const token = typeof process.env.DISCORD_BOT_TOKEN === 'string' ? process.env.DISCORD_BOT_TOKEN.trim() : '';
+  if (!token){
+    const primaryId = envIds.values().next().value || '';
+    return { primaryId, idSet: envIds };
+  }
+
+  const finalize = (cache) => {
+    const idSet = new Set([...envIds, ...(cache?.ids ?? [])]);
+    const primaryId = cache?.primaryId || idSet.values().next().value || '';
+    return { primaryId, idSet };
+  };
+
+  if (botIdentityCache && botIdentityCacheToken === token){
+    return finalize(botIdentityCache);
+  }
+
+  if (!botIdentityPromise){
+    botIdentityPromise = (async () => {
+      try {
+        const me = await dFetch('/users/@me', { token, isBot:true });
+        const fetchedId = typeof me?.id === 'string' ? me.id.trim() : '';
+        const ids = new Set();
+        if (fetchedId){
+          ids.add(fetchedId);
+        }
+        botIdentityCacheToken = token;
+        botIdentityCache = { primaryId: fetchedId, ids };
+      } catch (error) {
+        botIdentityCacheToken = token;
+        botIdentityCache = { primaryId: '', ids: new Set() };
+        const message = error instanceof Error ? error.message : String(error);
+        log?.warn('failed to resolve bot id from token', { message });
+      } finally {
+        botIdentityPromise = null;
+      }
+      return botIdentityCache;
+    })();
+  }
+
+  const cache = await botIdentityPromise;
+  return finalize(cache);
+}
+
 function buildChannelNameFromDisplayName(displayName, memberId){
   const fallback = `gift-${memberId}`;
   if (typeof displayName !== 'string'){ return fallback; }
@@ -44,6 +109,8 @@ export default async function handler(req, res){
     return res.status(401).json({ ok:false, error:'not logged in' });
   }
 
+  log.debug('session resolved', { uid: sess.uid, expiresAt: sess.expires_at ?? null });
+
   const guildId = String(req.query.guild_id || '');
   const memberId = String(req.query.member_id || '');
   const memberDisplayNameParam = typeof req.query.display_name === 'string' ? req.query.display_name : '';
@@ -56,9 +123,19 @@ export default async function handler(req, res){
     return res.status(400).json({ ok:false, error:'guild_id and member_id required' });
   }
 
+  log.debug('request parameters normalized', {
+    guildId,
+    memberId,
+    memberDisplayNameParam,
+    createParam,
+    allowCreate,
+    categoryId: categoryId || null,
+  });
+
   // オーナー検証
   try {
     await assertGuildOwner(sess.access_token, guildId);
+    log.debug('guild ownership confirmed', { guildId, ownerId: sess.uid });
   } catch(e){
     log.warn('guild ownership assertion failed', { error: e instanceof Error ? e.message : String(e) });
     return res.status(403).json({ ok:false, error: e.message || 'forbidden' });
@@ -77,15 +154,12 @@ export default async function handler(req, res){
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
-  const botUserId = (() => {
-    if (typeof process.env.DISCORD_BOT_USER_ID === 'string' && process.env.DISCORD_BOT_USER_ID.trim()) {
-      return process.env.DISCORD_BOT_USER_ID.trim();
-    }
-    if (typeof process.env.DISCORD_CLIENT_ID === 'string' && process.env.DISCORD_CLIENT_ID.trim()) {
-      return process.env.DISCORD_CLIENT_ID.trim();
-    }
-    return '';
-  })();
+  const { primaryId: botUserId, idSet: botUserIdSet } = await resolveBotIdentity(log);
+  log.debug('bot identity resolved', {
+    primaryBotUserId: botUserId || null,
+    botIdCandidates: Array.from(botUserIdSet),
+    tokenProvided: Boolean(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_BOT_TOKEN.trim()),
+  });
 
   const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
   const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
@@ -110,8 +184,13 @@ export default async function handler(req, res){
   // 全チャンネル取得
   let chans;
   try {
+    log.debug('fetching guild channels', { guildId });
     chans = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true
+    });
+    log.debug('guild channels fetched', {
+      guildId,
+      totalCount: Array.isArray(chans) ? chans.length : 0,
     });
   } catch (error) {
     return respondDiscordApiError(error, 'guild-channels-list');
@@ -119,18 +198,45 @@ export default async function handler(req, res){
 
   const allChannels = Array.isArray(chans)?chans:[];
   const textChannels = allChannels.filter(c => c.type === 0);
+  log.debug('filtered text channels for evaluation', {
+    guildId,
+    textChannelCount: textChannels.length,
+  });
   let matchWithBot = null;
   let matchWithoutBot = null;
 
   for (const ch of textChannels){
     const overwrites = Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : [];
+    const evaluation = {
+      channelId: ch.id,
+      channelName: typeof ch.name === 'string' ? ch.name : null,
+      parentId: ch.parent_id || null,
+      overwriteCount: overwrites.length,
+    };
+    log.debug('channel evaluation started', {
+      ...evaluation,
+      rawOverwrites: overwrites,
+    });
     if (overwrites.length === 0){
+      log.debug('channel skipped: no permission overwrites', evaluation);
       continue;
     }
     const userOverwrites = overwrites.filter((ow) => ow.type === 1);
     const ownerOverwrite = userOverwrites.find((ow) => ow.id === sess.uid);
     const memberOverwrite = userOverwrites.find((ow) => ow.id === memberId);
+    log.debug('channel overwrite presence evaluation', {
+      channelId: ch.id,
+      hasOwnerOverwrite: Boolean(ownerOverwrite),
+      hasMemberOverwrite: Boolean(memberOverwrite),
+      ownerOverwrite,
+      memberOverwrite,
+    });
     if (!ownerOverwrite || !memberOverwrite){
+      log.debug('channel skipped: owner/member overwrite missing', {
+        channelId: ch.id,
+        hasOwnerOverwrite: Boolean(ownerOverwrite),
+        hasMemberOverwrite: Boolean(memberOverwrite),
+      });
       continue;
     }
 
@@ -138,31 +244,80 @@ export default async function handler(req, res){
       if (ow.id === sess.uid || ow.id === memberId){
         return false;
       }
-      if (botUserId && ow.id === botUserId){
+      if (botUserIdSet.has(ow.id)){
         return false;
       }
       return true;
     });
+    log.debug('channel other user overwrite evaluation', {
+      channelId: ch.id,
+      otherUserOverwriteCount: otherUsers.length,
+      otherUserOverwrites: otherUsers,
+      recognizedBotOverwriteIds: Array.from(botUserIdSet),
+    });
     if (otherUsers.length > 0){
+      log.debug('channel skipped: unexpected user overwrites present', {
+        channelId: ch.id,
+        otherUserOverwriteCount: otherUsers.length,
+      });
       continue;
     }
 
     const everyoneOverwrite = overwrites.find((ow) => ow.type === 0 && ow.id === guildId);
-    if (!everyoneOverwrite || !deniesView(everyoneOverwrite)){
+    const everyoneDeniedView = everyoneOverwrite ? deniesView(everyoneOverwrite) : false;
+    log.debug('channel everyone overwrite evaluation', {
+      channelId: ch.id,
+      hasEveryoneOverwrite: Boolean(everyoneOverwrite),
+      everyoneOverwrite,
+      everyoneDeniedView,
+    });
+    if (!everyoneOverwrite || !everyoneDeniedView){
+      log.debug('channel skipped: everyone overwrite missing or allows view', {
+        channelId: ch.id,
+        hasEveryoneOverwrite: Boolean(everyoneOverwrite),
+        everyoneDeniedView,
+      });
       continue;
     }
 
-    if (!allowsView(ownerOverwrite) || !allowsView(memberOverwrite)){
+    const ownerAllowsView = allowsView(ownerOverwrite);
+    const memberAllowsView = allowsView(memberOverwrite);
+    log.debug('channel owner/member view permission evaluation', {
+      channelId: ch.id,
+      ownerAllowsView,
+      memberAllowsView,
+    });
+    if (!ownerAllowsView || !memberAllowsView){
+      log.debug('channel skipped: owner or member lacks view permission', {
+        channelId: ch.id,
+        ownerAllowsView,
+        memberAllowsView,
+      });
       continue;
     }
 
-    const botOverwrite = botUserId ? userOverwrites.find((ow) => ow.id === botUserId) : null;
-    if (botOverwrite && allowsView(botOverwrite)){
+    const botOverwrite = userOverwrites.find((ow) => botUserIdSet.has(ow.id));
+    const botHasView = botOverwrite ? allowsView(botOverwrite) : false;
+    log.debug('channel bot overwrite evaluation', {
+      channelId: ch.id,
+      botOverwritePresent: Boolean(botOverwrite),
+      botOverwrite,
+      botHasView,
+    });
+    if (botOverwrite && botHasView){
+      log.debug('channel accepted: matches criteria with bot access', {
+        channelId: ch.id,
+      });
       matchWithBot = ch;
       break;
     }
 
     if (!matchWithoutBot){
+      log.debug('channel candidate stored: matches criteria without bot access', {
+        channelId: ch.id,
+        botOverwritePresent: Boolean(botOverwrite),
+        botHasView,
+      });
       matchWithoutBot = ch;
     }
   }
@@ -239,6 +394,13 @@ export default async function handler(req, res){
   const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId, botId: botUserId });
   let created;
   try {
+    log.debug('creating new channel', {
+      guildId,
+      memberId,
+      parentCategoryId: category.id,
+      channelNamePreview: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
+      overwritePayload: overwrites,
+    });
     created = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
       body: {
