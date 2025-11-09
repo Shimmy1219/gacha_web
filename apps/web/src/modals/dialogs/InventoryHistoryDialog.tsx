@@ -317,7 +317,7 @@ export function InventoryHistoryDialog({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="btn btn-muted aspect-square h-8 w-8 p-1.5"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
                           onClick={() => shareResult(entryKey, shareText)}
                           title="結果を共有"
                           aria-label="結果を共有"
@@ -327,7 +327,7 @@ export function InventoryHistoryDialog({
                         </button>
                         <a
                           href={tweetUrl}
-                          className="btn aspect-square h-8 w-8 border border-[#000000] bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70"
+                          className="btn aspect-square h-8 w-8 border border-[#000000] bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Xで共有"
@@ -338,7 +338,7 @@ export function InventoryHistoryDialog({
                         </a>
                         <button
                           type="button"
-                          className="btn btn-muted aspect-square h-8 w-8 p-1.5"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
                           onClick={() => copyShareText(entryKey, shareText)}
                           title="結果をコピー"
                           aria-label="結果をコピー"
