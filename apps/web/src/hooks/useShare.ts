@@ -1,4 +1,4 @@
-import { type DependencyList, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type ShareStatus = 'shared' | 'copied' | 'error';
 
@@ -9,6 +9,7 @@ export interface ShareFeedback {
 
 export interface ShareHandler {
   share: (entryKey: string, shareText: string) => Promise<void>;
+  copy: (entryKey: string, shareText: string) => Promise<void>;
   feedback: ShareFeedback | null;
 }
 
@@ -68,6 +69,31 @@ export function useShareHandler(): ShareHandler {
     [scheduleClear]
   );
 
+  const copy = useCallback(
+    async (entryKey: string, shareText: string) => {
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        setFeedback({ entryKey, status: 'error' });
+        scheduleClear(4000);
+        return;
+      }
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(shareText);
+          setFeedback({ entryKey, status: 'copied' });
+          scheduleClear(2000);
+          return;
+        }
+      } catch (error) {
+        console.warn('共有テキストのコピーに失敗しました', error);
+      }
+
+      setFeedback({ entryKey, status: 'error' });
+      scheduleClear(4000);
+    },
+    [scheduleClear]
+  );
+
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && timeoutRef.current !== null) {
@@ -77,34 +103,5 @@ export function useShareHandler(): ShareHandler {
     };
   }, []);
 
-  return { share, feedback };
-}
-
-export function useTwitterWidgetsLoader(dependencies: DependencyList): void {
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const scriptUrl = 'https://platform.twitter.com/widgets.js';
-    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptUrl}"]`);
-    if (existingScript) {
-      const twttr = (window as typeof window & {
-        twttr?: { widgets?: { load: (element?: Element) => void } };
-      }).twttr;
-      twttr?.widgets?.load();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.async = true;
-    script.charset = 'utf-8';
-    script.onload = () => {
-      const twttr = (window as typeof window & {
-        twttr?: { widgets?: { load: (element?: Element) => void } };
-      }).twttr;
-      twttr?.widgets?.load();
-    };
-    document.body.appendChild(script);
-  }, dependencies);
+  return { share, copy, feedback };
 }

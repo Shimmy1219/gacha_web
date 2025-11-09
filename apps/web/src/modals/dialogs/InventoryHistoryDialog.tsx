@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { ClipboardIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -12,7 +13,8 @@ import {
 } from '@domain/app-persistence';
 import { generateDeterministicUserId } from '@domain/idGenerators';
 import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
-import { useShareHandler, useTwitterWidgetsLoader } from '../../hooks/useShare';
+import { useShareHandler } from '../../hooks/useShare';
+import { XLogoIcon } from '../../components/icons/XLogoIcon';
 
 interface InventoryHistoryDialogPayload {
   userId: string;
@@ -146,9 +148,7 @@ export function InventoryHistoryDialog({
     return entries;
   }, [gachaId, normalizedTargetUserId, pullHistoryState]);
 
-  const { share: shareResult, feedback: shareFeedback } = useShareHandler();
-
-  useTwitterWidgetsLoader([historyEntries.length]);
+  const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
 
   return (
     <>
@@ -313,28 +313,43 @@ export function InventoryHistoryDialog({
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <button
                       type="button"
-                      className="btn btn-muted btn-sm"
+                      className="btn btn-muted btn-sm p-2"
                       onClick={() => shareResult(entryKey, shareText)}
+                      title="結果を共有"
+                      aria-label="結果を共有"
                     >
-                      結果を共有
+                      <ShareIcon className="h-4 w-4" aria-hidden="true" />
+                      <span className="sr-only">結果を共有</span>
                     </button>
                     <a
                       href={tweetUrl}
-                      className="twitter-hashtag-button"
-                      data-show-count="false"
+                      className="btn btn-muted btn-sm p-2"
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="Xで共有"
+                      aria-label="Xで共有"
                     >
-                      Tweet #四遊楽ガチャ
+                      <XLogoIcon className="h-4 w-4" />
+                      <span className="sr-only">Xで共有</span>
                     </a>
+                    <button
+                      type="button"
+                      className="btn btn-muted btn-sm p-2"
+                      onClick={() => copyShareText(entryKey, shareText)}
+                      title="結果をコピー"
+                      aria-label="結果をコピー"
+                    >
+                      <ClipboardIcon className="h-4 w-4" aria-hidden="true" />
+                      <span className="sr-only">結果をコピー</span>
+                    </button>
                     {currentFeedback === 'shared' ? (
-                      <span className="text-[11px] text-muted-foreground">共有を開始しました</span>
+                      <span className="basis-full text-[11px] text-muted-foreground">共有を開始しました</span>
                     ) : null}
                     {currentFeedback === 'copied' ? (
-                      <span className="text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
+                      <span className="basis-full text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
                     ) : null}
                     {currentFeedback === 'error' ? (
-                      <span className="text-[11px] text-red-500">共有に失敗しました</span>
+                      <span className="basis-full text-[11px] text-red-500">共有に失敗しました</span>
                     ) : null}
                   </div>
                 </article>

@@ -1,4 +1,4 @@
-import { SparklesIcon } from '@heroicons/react/24/outline';
+import { ClipboardIcon, ShareIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
@@ -6,7 +6,8 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
-import { useShareHandler, useTwitterWidgetsLoader } from '../../hooks/useShare';
+import { useShareHandler } from '../../hooks/useShare';
+import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -298,7 +299,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return sorted.slice(0, 8);
   }, [normalizedUserName, pullHistoryState, userProfilesState]);
 
-  const { share: shareResult, feedback: shareFeedback } = useShareHandler();
+  const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
 
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
@@ -514,8 +515,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     resultItems
   ]);
 
-  useTwitterWidgetsLoader([shareContent?.shareText ?? null]);
-
   const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
 
   const handleShareResult = useCallback(() => {
@@ -524,6 +523,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     void shareResult('draw-result', shareContent.shareText);
   }, [shareContent, shareResult]);
+
+  const handleCopyShareResult = useCallback(() => {
+    if (!shareContent) {
+      return;
+    }
+    void copyShareText('draw-result', shareContent.shareText);
+  }, [copyShareText, shareContent]);
 
   const handleOpenSettings = useCallback(() => {
     push(PageSettingsDialog, {
@@ -766,18 +772,37 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               </div>
               {shareContent ? (
                 <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
-                  <button type="button" className="btn btn-muted btn-sm" onClick={handleShareResult}>
-                    結果を共有
+                  <button
+                    type="button"
+                    className="btn btn-muted btn-sm p-2"
+                    onClick={handleShareResult}
+                    title="結果を共有"
+                    aria-label="結果を共有"
+                  >
+                    <ShareIcon className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">結果を共有</span>
                   </button>
                   <a
                     href={shareContent.tweetUrl}
-                    className="twitter-hashtag-button"
-                    data-show-count="false"
+                    className="btn btn-muted btn-sm p-2"
                     target="_blank"
                     rel="noopener noreferrer"
+                    title="Xで共有"
+                    aria-label="Xで共有"
                   >
-                    Tweet #四遊楽ガチャ
+                    <XLogoIcon className="h-4 w-4" />
+                    <span className="sr-only">Xで共有</span>
                   </a>
+                  <button
+                    type="button"
+                    className="btn btn-muted btn-sm p-2"
+                    onClick={handleCopyShareResult}
+                    title="結果をコピー"
+                    aria-label="結果をコピー"
+                  >
+                    <ClipboardIcon className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">結果をコピー</span>
+                  </button>
                   {shareStatus === 'shared' ? (
                     <span className="basis-full text-right text-[11px] text-muted-foreground">
                       共有を開始しました
