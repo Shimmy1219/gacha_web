@@ -1,4 +1,4 @@
-import { SparklesIcon } from '@heroicons/react/24/outline';
+import { ClipboardIcon, ShareIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
@@ -6,6 +6,8 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
+import { useShareHandler } from '../../hooks/useShare';
+import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -196,6 +198,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastPointsRemainder, setLastPointsRemainder] = useState<number | null>(null);
   const [lastExecutionWarnings, setLastExecutionWarnings] = useState<string[]>([]);
   const [lastPlan, setLastPlan] = useState<DrawPlan | null>(null);
+  const [lastTotalPulls, setLastTotalPulls] = useState<number | null>(null);
+  const [lastUserName, setLastUserName] = useState<string>('');
 
   useEffect(() => {
     if (!gachaOptions.length) {
@@ -239,6 +243,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastPointsRemainder(null);
     setLastExecutionWarnings([]);
     setLastPlan(null);
+    setLastTotalPulls(null);
+    setLastUserName('');
   }, [selectedGachaId]);
 
   const parsedPoints = useMemo(() => {
@@ -293,6 +299,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return sorted.slice(0, 8);
   }, [normalizedUserName, pullHistoryState, userProfilesState]);
 
+  const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
+
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
       return null;
@@ -317,18 +325,24 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       if (!selectedGacha) {
         setErrorMessage('ガチャの種類を選択してください。');
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
       if (!drawPlan || drawPlan.errors.length > 0) {
         setErrorMessage(drawPlan?.errors?.[0] ?? 'ポイント設定を確認してください。');
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
       if (!selectedGacha.items.length) {
         setErrorMessage('選択したガチャに登録されているアイテムがありません。');
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
@@ -342,12 +356,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       if (executionResult.errors.length > 0) {
         setErrorMessage(executionResult.errors[0]);
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
       if (!executionResult.items.length) {
         setErrorMessage('ガチャ結果を生成できませんでした。');
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
@@ -383,6 +401,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       if (!pullId) {
         setErrorMessage('ガチャ結果の保存に失敗しました。');
         setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
         return;
       }
 
@@ -394,10 +414,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastPointsRemainder(executionResult.pointsRemainder);
       setLastExecutionWarnings(executionResult.warnings);
       setLastPlan(executionResult.plan);
+      setLastTotalPulls(executionResult.totalPulls);
+      setLastUserName(normalizedUserName);
     } catch (error) {
       console.error('ガチャ実行中にエラーが発生しました', error);
       setErrorMessage('ガチャの実行中にエラーが発生しました。');
       setResultItems(null);
+      setLastTotalPulls(null);
+      setLastUserName('');
       setLastPointsSpent(null);
       setLastPointsRemainder(null);
       setLastExecutionWarnings([]);
@@ -408,6 +432,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   };
 
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
+  const integerFormatter = useMemo(() => new Intl.NumberFormat('ja-JP'), []);
   const totalCount = resultItems?.reduce((total, item) => total + item.count, 0) ?? 0;
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
@@ -440,6 +465,71 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       };
     });
   }, [drawPlan, selectedGacha]);
+
+  const shareContent = useMemo(() => {
+    if (!resultItems || resultItems.length === 0) {
+      return null;
+    }
+
+    const shareUserName = (lastUserName || normalizedUserName || '名無し').trim() || '名無し';
+    const fallbackPullCount = resultItems.reduce((total, item) => total + item.count, 0);
+    const pullCount =
+      lastTotalPulls != null
+        ? lastTotalPulls
+        : lastPlan?.totalPulls != null
+          ? lastPlan.totalPulls
+          : fallbackPullCount;
+    const pullCountValue = Math.max(0, pullCount);
+    const pullCountLabel = `${integerFormatter.format(pullCountValue)}連`;
+
+    const positiveItemLines = resultItems
+      .filter((item) => item.count > 0)
+      .map((item) => {
+        const rarityLabel = item.rarityLabel ?? '景品';
+        const countLabel = `${integerFormatter.format(item.count)}個`;
+        return `${rarityLabel}：${item.name}：${countLabel}`;
+      });
+
+    const gachaLabel = lastGachaLabel ?? '四遊楽ガチャ';
+    const shareLines = [`【${gachaLabel}結果】`, `${shareUserName} ${pullCountLabel}`, ''];
+    if (positiveItemLines.length > 0) {
+      shareLines.push(...positiveItemLines, '');
+    }
+    shareLines.push('# 四遊楽ガチャ');
+    const shareText = shareLines.join('\n');
+
+    const urlParams = new URLSearchParams();
+    urlParams.set('button_hashtag', '四遊楽ガチャ');
+    urlParams.set('ref_src', 'twsrc%5Etfw');
+    urlParams.set('text', shareText);
+    const tweetUrl = `https://twitter.com/intent/tweet?${urlParams.toString()}`;
+
+    return { shareText, tweetUrl };
+  }, [
+    integerFormatter,
+    lastGachaLabel,
+    lastPlan?.totalPulls,
+    lastTotalPulls,
+    lastUserName,
+    normalizedUserName,
+    resultItems
+  ]);
+
+  const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
+
+  const handleShareResult = useCallback(() => {
+    if (!shareContent) {
+      return;
+    }
+    void shareResult('draw-result', shareContent.shareText);
+  }, [shareContent, shareResult]);
+
+  const handleCopyShareResult = useCallback(() => {
+    if (!shareContent) {
+      return;
+    }
+    void copyShareText('draw-result', shareContent.shareText);
+  }, [copyShareText, shareContent]);
 
   const handleOpenSettings = useCallback(() => {
     push(PageSettingsDialog, {
@@ -651,33 +741,85 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 </div>
               ))}
             </div>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <div>
-                消費ポイント:
-                <span className="ml-1 font-mono text-surface-foreground">
-                  {formatNumber((lastPointsSpent ?? lastPlan?.pointsUsed) ?? 0)} pt
-                </span>
-                {lastPointsRemainder != null || lastPlan?.pointsRemainder != null ? (
-                  <span className="ml-2">
-                    残り:
-                    <span className="ml-1 font-mono text-surface-foreground">
-                      {formatNumber((lastPointsRemainder ?? lastPlan?.pointsRemainder) ?? 0)} pt
-                    </span>
-                  </span>
-                ) : null}
-              </div>
-              {lastPlan && lastPlan.completeExecutions > 0 ? (
+            <div className="flex flex-wrap items-start justify-between gap-3 text-xs text-muted-foreground">
+              <div className="space-y-1">
                 <div>
-                  抽選内訳:
+                  消費ポイント:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    コンプリート {formatNumber(lastPlan.completeExecutions)} 回
+                    {formatNumber((lastPointsSpent ?? lastPlan?.pointsUsed) ?? 0)} pt
                   </span>
+                  {lastPointsRemainder != null || lastPlan?.pointsRemainder != null ? (
+                    <span className="ml-2">
+                      残り:
+                      <span className="ml-1 font-mono text-surface-foreground">
+                        {formatNumber((lastPointsRemainder ?? lastPlan?.pointsRemainder) ?? 0)} pt
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
+                {lastPlan && lastPlan.completeExecutions > 0 ? (
+                  <div>
+                    抽選内訳:
+                    <span className="ml-1 font-mono text-surface-foreground">
+                      コンプリート {formatNumber(lastPlan.completeExecutions)} 回
+                    </span>
+                  </div>
+                ) : null}
+                <div>
+                  {executedAtLabel ? `実行日時: ${executedAtLabel}` : null}
+                  {lastPullId ? `（履歴ID: ${lastPullId}）` : null}
+                </div>
+              </div>
+              {shareContent ? (
+                <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
+                  <button
+                    type="button"
+                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
+                    onClick={handleShareResult}
+                    title="結果を共有"
+                    aria-label="結果を共有"
+                  >
+                    <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="sr-only">結果を共有</span>
+                  </button>
+                  <a
+                    href={shareContent.tweetUrl}
+                    className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Xで共有"
+                    aria-label="Xで共有"
+                  >
+                    <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                    <span className="sr-only">Xで共有</span>
+                  </a>
+                  <button
+                    type="button"
+                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
+                    onClick={handleCopyShareResult}
+                    title="結果をコピー"
+                    aria-label="結果をコピー"
+                  >
+                    <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="sr-only">結果をコピー</span>
+                  </button>
+                  {shareStatus === 'shared' ? (
+                    <span className="basis-full text-right text-[11px] text-muted-foreground">
+                      共有を開始しました
+                    </span>
+                  ) : null}
+                  {shareStatus === 'copied' ? (
+                    <span className="basis-full text-right text-[11px] text-muted-foreground">
+                      共有テキストをコピーしました
+                    </span>
+                  ) : null}
+                  {shareStatus === 'error' ? (
+                    <span className="basis-full text-right text-[11px] text-red-500">
+                      共有に失敗しました
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
-              <div>
-                {executedAtLabel ? `実行日時: ${executedAtLabel}` : null}
-                {lastPullId ? `（履歴ID: ${lastPullId}）` : null}
-              </div>
             </div>
             {lastExecutionWarnings.length ? (
               <ul className="space-y-1 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700">

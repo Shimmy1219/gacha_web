@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { ClipboardIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -12,6 +13,8 @@ import {
 } from '@domain/app-persistence';
 import { generateDeterministicUserId } from '@domain/idGenerators';
 import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
+import { useShareHandler } from '../../hooks/useShare';
+import { XLogoIcon } from '../../components/icons/XLogoIcon';
 
 interface InventoryHistoryDialogPayload {
   userId: string;
@@ -145,6 +148,8 @@ export function InventoryHistoryDialog({
     return entries;
   }, [gachaId, normalizedTargetUserId, pullHistoryState]);
 
+  const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
+
   return (
     <>
       <ModalBody className="space-y-4">
@@ -158,7 +163,8 @@ export function InventoryHistoryDialog({
           </p>
         ) : (
           <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
-            {historyEntries.map((entry) => {
+            {historyEntries.map((entry, index) => {
+              const entryKey = entry.id ?? `${entry.executedAt ?? 'unknown'}-${index}`;
               const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
               const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
               const statusLabel = entry.status ? PULL_HISTORY_STATUS_LABELS[entry.status] : null;
@@ -212,9 +218,32 @@ export function InventoryHistoryDialog({
                   return a.itemLabel.localeCompare(b.itemLabel, 'ja');
                 });
 
+              const positiveItemLines = itemEntries
+                .filter((item) => item.count > 0)
+                .map((item) => {
+                  const rarityLabel = item.rarityLabel ?? '景品';
+                  const countLabel = `${numberFormatter.format(item.count)}個`;
+                  return `${rarityLabel}：${item.itemLabel}：${countLabel}`;
+                });
+
+              const shareLines = [`【${gachaName}結果】`, `${userName} ${pullCountLabel}`, ''];
+              if (positiveItemLines.length > 0) {
+                shareLines.push(...positiveItemLines, '');
+              }
+              shareLines.push('# 四遊楽ガチャ');
+              const shareText = shareLines.join('\n');
+
+              const urlParams = new URLSearchParams();
+              urlParams.set('button_hashtag', '四遊楽ガチャ');
+              urlParams.set('ref_src', 'twsrc%5Etfw');
+              urlParams.set('text', shareText);
+              const tweetUrl = `https://twitter.com/intent/tweet?${urlParams.toString()}`;
+
+              const currentFeedback = shareFeedback?.entryKey === entryKey ? shareFeedback.status : null;
+
               return (
                 <article
-                  key={entry.id}
+                  key={entryKey}
                   className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast p-4"
                 >
                   <header className="flex flex-wrap items-start justify-between gap-2 text-xs text-muted-foreground">
@@ -275,11 +304,60 @@ export function InventoryHistoryDialog({
                   ) : (
                     <p className="text-sm text-muted-foreground">アイテムの記録がありません。</p>
                   )}
-                  {currencyUsedLabel ? (
-                    <footer className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-                      <span>消費リソース: {currencyUsedLabel}</span>
-                    </footer>
-                  ) : null}
+                  <footer className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+                    <div
+                      className={clsx(
+                        'flex w-full flex-wrap items-center gap-2',
+                        currencyUsedLabel ? 'justify-between' : 'justify-end'
+                      )}
+                    >
+                      {currencyUsedLabel ? (
+                        <span>消費リソース: {currencyUsedLabel}</span>
+                      ) : null}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
+                          onClick={() => shareResult(entryKey, shareText)}
+                          title="結果を共有"
+                          aria-label="結果を共有"
+                        >
+                          <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="sr-only">結果を共有</span>
+                        </button>
+                        <a
+                          href={tweetUrl}
+                          className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Xで共有"
+                          aria-label="Xで共有"
+                        >
+                          <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                          <span className="sr-only">Xで共有</span>
+                        </a>
+                        <button
+                          type="button"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
+                          onClick={() => copyShareText(entryKey, shareText)}
+                          title="結果をコピー"
+                          aria-label="結果をコピー"
+                        >
+                          <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="sr-only">結果をコピー</span>
+                        </button>
+                      </div>
+                    </div>
+                    {currentFeedback === 'shared' ? (
+                      <span className="text-[11px] text-muted-foreground">共有を開始しました</span>
+                    ) : null}
+                    {currentFeedback === 'copied' ? (
+                      <span className="text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
+                    ) : null}
+                    {currentFeedback === 'error' ? (
+                      <span className="text-[11px] text-red-500">共有に失敗しました</span>
+                    ) : null}
+                  </footer>
                 </article>
               );
             })}
