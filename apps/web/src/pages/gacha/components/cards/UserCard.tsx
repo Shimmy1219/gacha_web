@@ -2,12 +2,27 @@ import { Disclosure } from '@headlessui/react';
 import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
-import { useCallback, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent
+} from 'react';
 
 import type { ItemId, RarityMeta } from './ItemCard';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
-import { ConfirmDialog, InventoryHistoryDialog, useModal } from '../../../../modals';
+import {
+  ConfirmDialog,
+  InventoryHistoryDialog,
+  useModal,
+  UserDiscordProfileDialog,
+  UserHistoryDialog
+} from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
 
@@ -72,6 +87,40 @@ export function UserCard({
   discordAvatarAssetId,
   discordAvatarUrl
 }: UserCardProps): JSX.Element {
+  const { push } = useModal();
+  const {
+    userProfiles: userProfilesStore,
+    userInventories: userInventoriesStore,
+    pullHistory: pullHistoryStore
+  } = useDomainStores();
+  const [userMenuAnchor, setUserMenuAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(userName);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const nameFieldId = `user-name-${userId}`;
+
+  useEffect(() => {
+    if (!isEditingName) {
+      setNameDraft(userName);
+    }
+  }, [isEditingName, userName]);
+
+  useEffect(() => {
+    if (!isEditingName) {
+      return;
+    }
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [isEditingName]);
+
   const catalogItemsMap = catalogItemsByGacha ?? {};
   const rarityOptionsMap = rarityOptionsByGacha ?? {};
   const normalizedDiscordDisplayName = discordDisplayName?.trim() ?? '';
@@ -86,6 +135,127 @@ export function UserCard({
     const [first] = Array.from(source);
     return first ? first.toUpperCase() : '';
   }, [normalizedDiscordDisplayName, userName]);
+
+  const handleOpenUserMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setUserMenuAnchor({ x: rect.left, y: rect.bottom + 8 });
+  }, []);
+
+  const handleCloseUserMenu = useCallback(() => {
+    setUserMenuAnchor(null);
+  }, []);
+
+  const handleStartEditName = useCallback(() => {
+    setUserMenuAnchor(null);
+    setIsEditingName(true);
+    setNameDraft(userName);
+    setNameError(null);
+  }, [userName]);
+
+  const handleCancelEditName = useCallback(() => {
+    setIsEditingName(false);
+    setNameDraft(userName);
+    setNameError(null);
+  }, [userName]);
+
+  const handleNameSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = nameDraft.trim();
+      if (!trimmed) {
+        setNameError('ユーザー名を入力してください');
+        return;
+      }
+      if (trimmed === userName) {
+        setIsEditingName(false);
+        return;
+      }
+      setNameError(null);
+      userProfilesStore.renameProfile(userId, trimmed);
+      setIsEditingName(false);
+    },
+    [nameDraft, userId, userName, userProfilesStore]
+  );
+
+  const handleNameKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCancelEditName();
+      }
+    },
+    [handleCancelEditName]
+  );
+
+  const handleDiscordInfo = useCallback(() => {
+    setUserMenuAnchor(null);
+    push(UserDiscordProfileDialog, {
+      id: `user-discord-${userId}`,
+      title: 'Discord情報',
+      size: 'md',
+      payload: { userId, userName }
+    });
+  }, [push, userId, userName]);
+
+  const handleOpenUserHistory = useCallback(() => {
+    setUserMenuAnchor(null);
+    push(UserHistoryDialog, {
+      id: `user-history-${userId}`,
+      title: 'ユーザー履歴',
+      size: 'xl',
+      payload: { userId, userName }
+    });
+  }, [push, userId, userName]);
+
+  const handleDeleteUser = useCallback(() => {
+    setUserMenuAnchor(null);
+    push(ConfirmDialog, {
+      id: `delete-user-${userId}`,
+      title: 'ユーザーを削除',
+      payload: {
+        message: `ユーザー「${userName}」のプロフィール、獲得履歴、インベントリをすべて削除します。この操作は元に戻せません。よろしいですか？`,
+        confirmLabel: '削除する',
+        cancelLabel: 'キャンセル',
+        onConfirm: () => {
+          userProfilesStore.deleteProfile(userId);
+          pullHistoryStore.deletePullsForUser(userId);
+          userInventoriesStore.deleteUser(userId);
+        }
+      }
+    });
+  }, [pullHistoryStore, push, userId, userInventoriesStore, userProfilesStore, userName]);
+
+  const userMenuItems = useMemo<ContextMenuEntry[]>(
+    () => [
+      {
+        type: 'item',
+        id: 'user-edit-name',
+        label: 'ユーザー名の編集',
+        onSelect: handleStartEditName
+      },
+      {
+        type: 'item',
+        id: 'user-discord-info',
+        label: 'Discord情報',
+        onSelect: handleDiscordInfo
+      },
+      {
+        type: 'item',
+        id: 'user-history',
+        label: '履歴',
+        onSelect: handleOpenUserHistory
+      },
+      { type: 'separator', id: 'user-menu-separator' },
+      {
+        type: 'item',
+        id: 'user-delete',
+        label: '削除',
+        tone: 'danger',
+        onSelect: handleDeleteUser
+      }
+    ],
+    [handleDeleteUser, handleDiscordInfo, handleOpenUserHistory, handleStartEditName]
+  );
 
   return (
     <Disclosure defaultOpen={expandedByDefault}>
@@ -117,14 +287,56 @@ export function UserCard({
                   </div>
                 ) : null}
                 <div className="user-card__summary min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
-                    {normalizedDiscordDisplayName ? (
-                      <span className="user-card__discord-display text-xs text-muted-foreground">
-                        {normalizedDiscordDisplayName}
-                      </span>
-                    ) : null}
-                  </div>
+                  {isEditingName ? (
+                    <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
+                      <label className="sr-only" htmlFor={nameFieldId}>
+                        ユーザー名
+                      </label>
+                      <input
+                        ref={nameInputRef}
+                        id={nameFieldId}
+                        type="text"
+                        className="min-w-[10rem] flex-1 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1.5 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                        value={nameDraft}
+                        onChange={(event) => {
+                          setNameDraft(event.target.value);
+                          if (nameError) {
+                            setNameError(null);
+                          }
+                        }}
+                        onKeyDown={handleNameKeyDown}
+                        aria-invalid={nameError ? 'true' : undefined}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="submit"
+                          className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-white transition hover:bg-accent-bright focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        >
+                          保存
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-border/60 px-3 py-1 text-sm text-muted-foreground transition hover:border-border/40 hover:text-surface-foreground"
+                          onClick={handleCancelEditName}
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
+                      {normalizedDiscordDisplayName ? (
+                        <span className="user-card__discord-display text-xs text-muted-foreground">
+                          {normalizedDiscordDisplayName}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+                  {isEditingName && normalizedDiscordDisplayName ? (
+                    <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
+                  ) : null}
+                  {nameError ? <p className="text-xs text-red-500">{nameError}</p> : null}
                   {memo ? (
                     <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
                   ) : null}
@@ -143,6 +355,23 @@ export function UserCard({
                 <FolderArrowDownIcon className="h-5 w-5" />
                 保存
               </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                aria-label="ユーザーメニューを開く"
+                onClick={handleOpenUserMenu}
+              >
+                <EllipsisVerticalIcon className="h-5 w-5" />
+              </button>
+              {userMenuAnchor ? (
+                <ContextMenu
+                  anchor={userMenuAnchor}
+                  header="ユーザー操作"
+                  items={userMenuItems}
+                  onClose={handleCloseUserMenu}
+                  width={220}
+                />
+              ) : null}
             </div>
           </header>
           <div

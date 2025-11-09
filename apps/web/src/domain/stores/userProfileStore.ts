@@ -203,6 +203,47 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
     return userId;
   }
 
+  renameProfile(
+    profileId: string,
+    displayName: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const trimmedProfileId = profileId.trim();
+    const trimmedDisplayName = displayName.trim();
+
+    if (!trimmedProfileId || !trimmedDisplayName) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      const existing = base.users[trimmedProfileId];
+      if (!existing) {
+        return previous;
+      }
+
+      if (existing.displayName === trimmedDisplayName) {
+        return previous;
+      }
+
+      const now = new Date().toISOString();
+      const nextUsers = {
+        ...base.users,
+        [trimmedProfileId]: {
+          ...existing,
+          displayName: trimmedDisplayName,
+          updatedAt: now
+        }
+      } satisfies Record<string, UserProfileCardV3>;
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
   linkDiscordProfile(
     profileId: string,
     info: {
@@ -342,6 +383,94 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
         ...base.users,
         [trimmedProfileId]: nextProfile
       } satisfies Record<string, UserProfileCardV3>;
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
+  unlinkDiscordProfile(
+    profileId: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const trimmedProfileId = profileId.trim();
+    if (!trimmedProfileId) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      const existing = base.users[trimmedProfileId];
+      if (!existing) {
+        return previous;
+      }
+
+      const {
+        discordUserId: _discardUserId,
+        discordDisplayName: _discardDisplayName,
+        discordUserName: _discardUserName,
+        discordAvatarAssetId: _discardAvatarAssetId,
+        discordAvatarUrl: _discardAvatarUrl,
+        discordLinkedAt: _discardLinkedAt,
+        discordLastShareChannelId: _discardChannelId,
+        discordLastShareChannelName: _discardChannelName,
+        discordLastShareChannelParentId: _discardParentId,
+        discordLastShareUrl: _discardShareUrl,
+        discordLastShareLabel: _discardShareLabel,
+        discordLastShareTitle: _discardShareTitle,
+        discordLastShareComment: _discardShareComment,
+        discordLastShareAt: _discardShareAt,
+        ...rest
+      } = existing;
+
+      const now = new Date().toISOString();
+      const nextProfile: UserProfileCardV3 = {
+        ...rest,
+        id: existing.id,
+        displayName: existing.displayName,
+        joinedAt: existing.joinedAt,
+        updatedAt: now
+      } satisfies UserProfileCardV3;
+
+      const nextUsers = {
+        ...base.users,
+        [trimmedProfileId]: nextProfile
+      } satisfies Record<string, UserProfileCardV3>;
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
+  deleteProfile(
+    profileId: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const trimmedProfileId = profileId.trim();
+    if (!trimmedProfileId) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      if (!base.users[trimmedProfileId]) {
+        return previous;
+      }
+
+      const nextUsers = { ...base.users } as Record<string, UserProfileCardV3>;
+      delete nextUsers[trimmedProfileId];
+
+      if (Object.keys(nextUsers).length === 0) {
+        return undefined;
+      }
+
+      const now = new Date().toISOString();
 
       return {
         ...base,

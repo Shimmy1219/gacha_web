@@ -10,9 +10,12 @@ const importSettings = {
   'import/resolver': {
     node: {
       extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      moduleDirectory: ['node_modules', '../../node_modules'],
     },
     typescript: {
       project: path.resolve(__dirname, './tsconfig.json'),
+      tsconfigRootDir: __dirname,
+      alwaysTryTypes: true,
     },
   },
   'import/extensions': ['.js', '.jsx', '.ts', '.tsx'],
@@ -61,6 +64,7 @@ module.exports = [
       '@typescript-eslint/no-misused-promises': 'off',
       '@typescript-eslint/unbound-method': 'off',
       'import/order': 'off',
+      'no-undef': 'off',
     },
   },
   {
