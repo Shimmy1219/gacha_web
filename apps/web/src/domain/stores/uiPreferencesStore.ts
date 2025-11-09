@@ -14,7 +14,7 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   selectedGachaIds: '*',
   selectedRarityIds: '*',
   hideMiss: false,
-  showCounts: false,
+  showCounts: true,
   showSkipOnly: false,
   keyword: ''
 };
