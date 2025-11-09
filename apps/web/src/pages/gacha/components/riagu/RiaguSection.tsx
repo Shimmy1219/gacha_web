@@ -8,9 +8,12 @@ import { getRarityTextPresentation } from '../../../../features/rarity/utils/rar
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
+import { useModal, RiaguConfigDialog } from '../../../../modals';
 
 interface RiaguDisplayEntry {
   id: string;
+  gachaId: string;
+  itemId: string;
   itemName: string;
   typeLabel?: string;
   rarityLabel: string;
@@ -21,7 +24,7 @@ interface RiaguDisplayEntry {
   unitCost?: number;
   requiredQuantity: number;
   totalCost?: number;
-  winners: Array<{ name: string; count: number }>;
+  winners: Array<{ id: string; name: string; count: number; discordAvatarUrl: string | null }>;
 }
 
 type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
@@ -52,6 +55,7 @@ export function RiaguSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
+  const { push } = useModal();
 
   const { entriesByGacha, riaguGachaIds, totalEntryCount } = useMemo(() => {
     const grouped: RiaguEntriesByGacha = {};
@@ -84,15 +88,29 @@ export function RiaguSection(): JSX.Element {
       const requiredQuantity = reverseEntries.reduce((sum, record) => sum + Math.max(record.count ?? 0, 0), 0);
 
       const winners = reverseEntries
-        .map((record) => ({
-          name: userProfiles[record.userId]?.displayName ?? record.userId,
-          count: record.count ?? 0
-        }))
+        .map((record) => {
+          const profile = userProfiles[record.userId];
+          const displayName = profile?.displayName?.trim() || record.userId;
+          const avatarUrlRaw = profile?.discordAvatarUrl;
+          const discordAvatarUrl =
+            typeof avatarUrlRaw === 'string' && avatarUrlRaw.trim().length > 0
+              ? avatarUrlRaw.trim()
+              : null;
+
+          return {
+            id: record.userId,
+            name: displayName,
+            count: record.count ?? 0,
+            discordAvatarUrl
+          };
+        })
         .filter((winner) => winner.count > 0)
         .sort((a, b) => b.count - a.count);
 
       const entry: RiaguDisplayEntry = {
         id: card.id,
+        gachaId,
+        itemId: card.itemId,
         itemName,
         typeLabel,
         rarityLabel,
@@ -103,7 +121,10 @@ export function RiaguSection(): JSX.Element {
         unitCost: sanitizedUnitCost,
         requiredQuantity,
         totalCost: sanitizedUnitCost != null ? sanitizedUnitCost * requiredQuantity : undefined,
-        winners: winners.length > 0 ? winners : [{ name: '当選者なし', count: 0 }]
+        winners:
+          winners.length > 0
+            ? winners
+            : [{ id: 'none', name: '当選者なし', count: 0, discordAvatarUrl: null }]
       };
 
       if (!grouped[gachaId]) {
@@ -271,17 +292,46 @@ export function RiaguSection(): JSX.Element {
                               </div>
                             </dl>
                           </div>
-                          <div className="riagu-card__type chip text-xs text-muted-foreground">
-                            {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                          <div className="riagu-card__aside flex flex-col items-end gap-2">
+                            <div className="riagu-card__type chip text-xs text-muted-foreground">
+                              {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                push(RiaguConfigDialog, {
+                                  gachaId: entry.gachaId,
+                                  itemId: entry.itemId,
+                                  itemName: entry.itemName,
+                                  defaultPrice: entry.unitCost,
+                                  defaultType: entry.typeLabel
+                                })
+                              }
+                              className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                            >
+                              リアグ設定
+                            </button>
                           </div>
                         </header>
                         <div className="riagu-card__winners space-y-2">
                           {entry.winners.map((winner) => (
                             <div
-                              key={`${entry.id}-${winner.name}`}
+                              key={`${entry.id}-${winner.id}`}
                               className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-surface-foreground"
                             >
-                              <span>{winner.name}</span>
+                              <span className="riagu-card__winner-name flex items-center gap-2">
+                                {winner.discordAvatarUrl ? (
+                                  <span className="riagu-card__winner-avatar inline-flex h-6 w-6 shrink-0 overflow-hidden rounded-full bg-surface">
+                                    <img
+                                      src={winner.discordAvatarUrl}
+                                      alt=""
+                                      loading="lazy"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </span>
+                                ) : null}
+                                <span>{winner.name}</span>
+                              </span>
                               <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
                             </div>
                           ))}
