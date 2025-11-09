@@ -176,11 +176,13 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       return undefined;
     }
 
-    const userId = generateDeterministicUserId(trimmed);
-
+    let resolvedId = generateDeterministicUserId(trimmed);
     this.update((previous) => {
       const base = normalizeState(previous);
       const now = new Date().toISOString();
+      const existingByName = Object.values(base.users).find((profile) => profile.displayName === trimmed);
+      const userId = existingByName?.id ?? resolvedId;
+      resolvedId = userId;
       const existing = base.users[userId];
       const nextUsers = {
         ...base.users,
@@ -200,7 +202,7 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       } satisfies UserProfilesStateV3;
     }, options);
 
-    return userId;
+    return resolvedId;
   }
 
   renameProfile(
