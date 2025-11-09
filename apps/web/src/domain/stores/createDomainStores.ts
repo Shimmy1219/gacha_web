@@ -1,3 +1,4 @@
+import { GACHA_STORAGE_UPDATED_EVENT } from '../app-persistence';
 import type { AppPersistence, GachaLocalStorageSnapshot } from '../app-persistence';
 import { projectInventories } from '../inventoryProjection';
 import { AppStateStore } from './appStateStore';
@@ -37,13 +38,34 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
 
   const snapshot = hydrateStores(stores, () => persistence.loadSnapshot());
 
-  const initialLegacy = snapshot?.userInventories;
+  let legacyInventories = snapshot?.userInventories;
+
+  stores.userInventories.subscribe((nextState) => {
+    if (!nextState && legacyInventories) {
+      legacyInventories = undefined;
+    }
+  });
+
+  if (typeof window !== 'undefined') {
+    const refreshLegacyInventories = () => {
+      try {
+        const latestSnapshot = persistence.loadSnapshot();
+        legacyInventories = latestSnapshot.userInventories;
+      } catch (error) {
+        console.warn('Failed to refresh legacy inventories from persistence snapshot', error);
+        legacyInventories = undefined;
+      }
+    };
+
+    window.addEventListener('storage', refreshLegacyInventories);
+    window.addEventListener(GACHA_STORAGE_UPDATED_EVENT, refreshLegacyInventories);
+  }
 
   const runProjection = () => {
     const { state } = projectInventories({
       pullHistory: stores.pullHistory.getState(),
       catalogState: stores.catalog.getState(),
-      legacyInventories: initialLegacy
+      legacyInventories
     });
 
     stores.userInventories.applyProjectionResult(state);
