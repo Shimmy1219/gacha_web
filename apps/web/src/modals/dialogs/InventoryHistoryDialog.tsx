@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -12,6 +12,7 @@ import {
 } from '@domain/app-persistence';
 import { generateDeterministicUserId } from '@domain/idGenerators';
 import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
+import { useShareHandler, useTwitterWidgetsLoader } from '../../hooks/useShare';
 
 interface InventoryHistoryDialogPayload {
   userId: string;
@@ -145,96 +146,9 @@ export function InventoryHistoryDialog({
     return entries;
   }, [gachaId, normalizedTargetUserId, pullHistoryState]);
 
-  const [shareFeedback, setShareFeedback] = useState<
-    | {
-        entryKey: string;
-        status: 'shared' | 'copied' | 'error';
-      }
-    | null
-  >(null);
-  const shareFeedbackTimeoutRef = useRef<number | null>(null);
+  const { share: shareResult, feedback: shareFeedback } = useShareHandler();
 
-  const scheduleShareFeedbackClear = useCallback((delay: number) => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    if (shareFeedbackTimeoutRef.current !== null) {
-      window.clearTimeout(shareFeedbackTimeoutRef.current);
-    }
-    shareFeedbackTimeoutRef.current = window.setTimeout(() => {
-      setShareFeedback(null);
-      shareFeedbackTimeoutRef.current = null;
-    }, delay);
-  }, []);
-
-  const handleShare = useCallback(async (entryKey: string, shareText: string) => {
-    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-      setShareFeedback({ entryKey, status: 'error' });
-      scheduleShareFeedbackClear(4000);
-      return;
-    }
-
-    try {
-      if (navigator.share) {
-        await navigator.share({ text: shareText });
-        setShareFeedback({ entryKey, status: 'shared' });
-        scheduleShareFeedbackClear(2000);
-        return;
-      }
-    } catch (error) {
-      console.info('Web Share API での共有に失敗しました。クリップボード共有へフォールバックします。', error);
-    }
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareText);
-        setShareFeedback({ entryKey, status: 'copied' });
-        scheduleShareFeedbackClear(2000);
-        return;
-      }
-    } catch (error) {
-      console.warn('共有テキストのコピーに失敗しました', error);
-    }
-
-    setShareFeedback({ entryKey, status: 'error' });
-    scheduleShareFeedbackClear(4000);
-  }, [scheduleShareFeedbackClear]);
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && shareFeedbackTimeoutRef.current !== null) {
-        window.clearTimeout(shareFeedbackTimeoutRef.current);
-        shareFeedbackTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const scriptUrl = 'https://platform.twitter.com/widgets.js';
-    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptUrl}"]`);
-    if (existingScript) {
-      const twttr = (window as typeof window & {
-        twttr?: { widgets?: { load: (element?: Element) => void } };
-      }).twttr;
-      twttr?.widgets?.load();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.async = true;
-    script.charset = 'utf-8';
-    script.onload = () => {
-      const twttr = (window as typeof window & {
-        twttr?: { widgets?: { load: (element?: Element) => void } };
-      }).twttr;
-      twttr?.widgets?.load();
-    };
-    document.body.appendChild(script);
-  }, [historyEntries.length]);
+  useTwitterWidgetsLoader([historyEntries.length]);
 
   return (
     <>
@@ -400,7 +314,7 @@ export function InventoryHistoryDialog({
                     <button
                       type="button"
                       className="btn btn-muted btn-sm"
-                      onClick={() => handleShare(entryKey, shareText)}
+                      onClick={() => shareResult(entryKey, shareText)}
                     >
                       結果を共有
                     </button>
