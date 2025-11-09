@@ -304,53 +304,60 @@ export function InventoryHistoryDialog({
                   ) : (
                     <p className="text-sm text-muted-foreground">アイテムの記録がありません。</p>
                   )}
-                  {currencyUsedLabel ? (
-                    <footer className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-                      <span>消費リソース: {currencyUsedLabel}</span>
-                    </footer>
-                  ) : null}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      className="btn btn-muted aspect-square h-8 w-8 p-1.5"
-                      onClick={() => shareResult(entryKey, shareText)}
-                      title="結果を共有"
-                      aria-label="結果を共有"
+                  <footer className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+                    <div
+                      className={clsx(
+                        'flex w-full flex-wrap items-center gap-2',
+                        currencyUsedLabel ? 'justify-between' : 'justify-end'
+                      )}
                     >
-                      <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span className="sr-only">結果を共有</span>
-                    </button>
-                    <a
-                      href={tweetUrl}
-                      className="btn aspect-square h-8 w-8 border border-[#000000] bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Xで共有"
-                      aria-label="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </a>
-                    <button
-                      type="button"
-                      className="btn btn-muted aspect-square h-8 w-8 p-1.5"
-                      onClick={() => copyShareText(entryKey, shareText)}
-                      title="結果をコピー"
-                      aria-label="結果をコピー"
-                    >
-                      <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span className="sr-only">結果をコピー</span>
-                    </button>
+                      {currencyUsedLabel ? (
+                        <span>消費リソース: {currencyUsedLabel}</span>
+                      ) : null}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5"
+                          onClick={() => shareResult(entryKey, shareText)}
+                          title="結果を共有"
+                          aria-label="結果を共有"
+                        >
+                          <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="sr-only">結果を共有</span>
+                        </button>
+                        <a
+                          href={tweetUrl}
+                          className="btn aspect-square h-8 w-8 border border-[#000000] bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Xで共有"
+                          aria-label="Xで共有"
+                        >
+                          <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                          <span className="sr-only">Xで共有</span>
+                        </a>
+                        <button
+                          type="button"
+                          className="btn btn-muted aspect-square h-8 w-8 p-1.5"
+                          onClick={() => copyShareText(entryKey, shareText)}
+                          title="結果をコピー"
+                          aria-label="結果をコピー"
+                        >
+                          <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span className="sr-only">結果をコピー</span>
+                        </button>
+                      </div>
+                    </div>
                     {currentFeedback === 'shared' ? (
-                      <span className="basis-full text-[11px] text-muted-foreground">共有を開始しました</span>
+                      <span className="text-[11px] text-muted-foreground">共有を開始しました</span>
                     ) : null}
                     {currentFeedback === 'copied' ? (
-                      <span className="basis-full text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
+                      <span className="text-[11px] text-muted-foreground">共有テキストをコピーしました</span>
                     ) : null}
                     {currentFeedback === 'error' ? (
-                      <span className="basis-full text-[11px] text-red-500">共有に失敗しました</span>
+                      <span className="text-[11px] text-red-500">共有に失敗しました</span>
                     ) : null}
-                  </div>
+                  </footer>
                 </article>
               );
             })}
