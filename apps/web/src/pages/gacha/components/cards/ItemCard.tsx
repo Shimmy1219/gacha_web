@@ -138,6 +138,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           assetId={assetId}
           fallbackUrl={fallbackUrl}
           alt={model.name}
+          emptyLabel="noImage"
           aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}

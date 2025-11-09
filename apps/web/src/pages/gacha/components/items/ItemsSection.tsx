@@ -258,10 +258,7 @@ export function ItemsSection(): JSX.Element {
           rarityId: snapshot.rarityId,
           name: snapshot.name,
           imageAsset: {
-            thumbnailUrl:
-              snapshot.imageAssetId
-                ? `https://picsum.photos/seed/${encodeURIComponent(snapshot.imageAssetId)}/400/400`
-                : null,
+            thumbnailUrl: null,
             assetHash: snapshot.imageAssetId ?? null,
             hasImage: Boolean(snapshot.imageAssetId)
           },

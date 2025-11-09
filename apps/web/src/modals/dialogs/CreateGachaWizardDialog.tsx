@@ -741,7 +741,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                         assetId={item.assetId}
                         previewUrl={item.previewUrl || undefined}
                         alt={`${item.name}のプレビュー`}
-                        emptyLabel="画像なし"
+                        emptyLabel="noImage"
                         kindHint="image"
                         className="h-16 w-16 shrink-0 bg-surface-deep"
                       />
