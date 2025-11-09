@@ -251,6 +251,10 @@ export function ItemsSection(): JSX.Element {
         const riaguId = riaguIndex[snapshot.itemId];
         const riaguCard = riaguId ? riaguCards[riaguId] : undefined;
 
+        const imageAssetId = snapshot.imageAssetId ?? null;
+        const thumbnailAssetId = snapshot.thumbnailAssetId ?? null;
+        const hasImage = Boolean(thumbnailAssetId || imageAssetId);
+
         const model: ItemCardModel = {
           itemId: snapshot.itemId,
           gachaId,
@@ -259,8 +263,9 @@ export function ItemsSection(): JSX.Element {
           name: snapshot.name,
           imageAsset: {
             thumbnailUrl: null,
-            assetHash: snapshot.imageAssetId ?? null,
-            hasImage: Boolean(snapshot.imageAssetId)
+            thumbnailAssetId,
+            assetHash: imageAssetId,
+            hasImage
           },
           isRiagu: Boolean(snapshot.riagu || riaguCard),
           completeTarget: Boolean(snapshot.completeTarget),
@@ -800,6 +805,7 @@ export function ItemsSection(): JSX.Element {
             pickupTarget: false,
             completeTarget: false,
             imageAssetId: asset.id,
+            thumbnailAssetId: asset.previewId ?? null,
             riagu: false,
             updatedAt: timestamp
           } satisfies GachaCatalogItemV3;
@@ -872,6 +878,7 @@ export function ItemsSection(): JSX.Element {
           isRiagu: model.isRiagu,
           hasRiaguCard: Boolean(riaguCard),
           riaguAssignmentCount,
+          thumbnailAssetId: model.imageAsset.thumbnailAssetId,
           thumbnailUrl: model.imageAsset.thumbnailUrl,
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
@@ -887,7 +894,9 @@ export function ItemsSection(): JSX.Element {
                 pickupTarget: payload.pickupTarget,
                 completeTarget: payload.completeTarget,
                 riagu: payload.riagu,
-                imageAssetId: typeof payload.imageAssetId === 'string' ? payload.imageAssetId : null
+                imageAssetId: typeof payload.imageAssetId === 'string' ? payload.imageAssetId : null,
+                thumbnailAssetId:
+                  typeof payload.thumbnailAssetId === 'string' ? payload.thumbnailAssetId : null
               };
               catalogStore.updateItem({
                 gachaId: model.gachaId,
@@ -961,6 +970,7 @@ export function ItemsSection(): JSX.Element {
           rarityLabel: target.rarity.label,
           rarityColor: target.rarity.color,
           assetHash: payload.assetHash,
+          thumbnailAssetId: payload.thumbnailAssetId,
           thumbnailUrl: payload.thumbnailUrl
         }
       });

@@ -23,6 +23,7 @@ const INITIAL_STATE: AssetPreviewState = {
 
 export interface UseAssetPreviewOptions {
   loadOriginal?: boolean;
+  previewAssetId?: string | null;
 }
 
 export function useAssetPreview(
@@ -35,15 +36,18 @@ export function useAssetPreview(
     let active = true;
     let objectUrl: string | null = null;
 
-    if (!assetId) {
+    const resolvedAssetId = assetId ?? null;
+    const resolvedPreviewId = options.previewAssetId ?? resolvedAssetId;
+
+    if (!resolvedAssetId && !resolvedPreviewId) {
       setState(INITIAL_STATE);
       return () => {};
     }
 
     const fetch = async () => {
       const asset = options.loadOriginal
-        ? await loadAsset(assetId)
-        : await loadAssetPreview(assetId);
+        ? (resolvedAssetId ? await loadAsset(resolvedAssetId) : null)
+        : await loadAssetPreview({ assetId: resolvedAssetId, previewId: resolvedPreviewId });
       if (!active) {
         return;
       }
@@ -77,7 +81,7 @@ export function useAssetPreview(
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [assetId, options.loadOriginal]);
+  }, [assetId, options.loadOriginal, options.previewAssetId]);
 
   return state;
 }

@@ -1,9 +1,10 @@
 import { generateAssetPreview } from './thumbnailGenerator';
 
 const DB_NAME = 'gacha-asset-store';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = 'assets';
 const BLOB_STORE_NAME = 'assetBlobs';
+const PREVIEW_STORE_NAME = 'assetPreviews';
 
 interface AssetMetadataRecord {
   id: string;
@@ -12,7 +13,9 @@ interface AssetMetadataRecord {
   size: number;
   createdAt: string;
   updatedAt: string;
-  previewBlob: Blob | null;
+  previewId: string | null;
+  previewType: string | null;
+  previewSize: number | null;
 }
 
 interface AssetBlobRecord {
@@ -20,13 +23,25 @@ interface AssetBlobRecord {
   blob: Blob;
 }
 
-export interface StoredAssetRecord extends AssetMetadataRecord {
+interface AssetPreviewBlobRecord {
+  id: string;
+  assetId: string;
   blob: Blob;
+  type: string;
+  size: number;
+  updatedAt: string;
 }
 
-export interface StoredAssetMetadata extends Omit<StoredAssetRecord, 'blob'> {}
+export interface StoredAssetRecord extends AssetMetadataRecord {
+  blob: Blob;
+  previewBlob: Blob | null;
+}
 
-export interface StoredAssetPreviewRecord extends StoredAssetMetadata {}
+export interface StoredAssetMetadata extends AssetMetadataRecord {}
+
+export interface StoredAssetPreviewRecord extends AssetMetadataRecord {
+  previewBlob: Blob | null;
+}
 
 let openRequest: Promise<IDBDatabase> | null = null;
 
@@ -40,6 +55,10 @@ function generateAssetId(): string {
   }
 
   return `asset-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function generatePreviewId(assetId: string): string {
+  return `${assetId}:preview`;
 }
 
 function wrapRequest<T>(request: IDBRequest<T>, errorMessage: string): Promise<T> {
@@ -77,8 +96,9 @@ async function openDatabase(): Promise<IDBDatabase> {
         return;
       }
 
-      let metadataStore: IDBObjectStore;
+      const oldVersion = event.oldVersion ?? 0;
 
+      let metadataStore: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         metadataStore = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
         metadataStore.createIndex('by-updatedAt', 'updatedAt');
@@ -89,13 +109,25 @@ async function openDatabase(): Promise<IDBDatabase> {
         }
       }
 
+      let blobStore: IDBObjectStore;
       if (!db.objectStoreNames.contains(BLOB_STORE_NAME)) {
-        db.createObjectStore(BLOB_STORE_NAME, { keyPath: 'id' });
+        blobStore = db.createObjectStore(BLOB_STORE_NAME, { keyPath: 'id' });
+      } else {
+        blobStore = transaction.objectStore(BLOB_STORE_NAME);
       }
 
-      if ((event.oldVersion ?? 0) < 2) {
-        const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+      let previewStore: IDBObjectStore;
+      if (!db.objectStoreNames.contains(PREVIEW_STORE_NAME)) {
+        previewStore = db.createObjectStore(PREVIEW_STORE_NAME, { keyPath: 'id' });
+        previewStore.createIndex('by-assetId', 'assetId', { unique: false });
+      } else {
+        previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
+        if (!previewStore.indexNames.contains('by-assetId')) {
+          previewStore.createIndex('by-assetId', 'assetId', { unique: false });
+        }
+      }
 
+      if (oldVersion < 3) {
         const migrateRequest = metadataStore.openCursor();
 
         migrateRequest.onsuccess = () => {
@@ -104,20 +136,58 @@ async function openDatabase(): Promise<IDBDatabase> {
             return;
           }
 
-          const value = cursor.value as AssetMetadataRecord & Partial<AssetBlobRecord> & { blob?: Blob };
-          const { blob, previewBlob = null, ...rest } = value;
-          const normalizedPreview = previewBlob instanceof Blob ? previewBlob : null;
-          const metadataRecord: AssetMetadataRecord = {
-            ...rest,
-            previewBlob: normalizedPreview
-          };
+          const value = cursor.value as Record<string, unknown>;
+          const id = typeof value.id === 'string' && value.id.length > 0 ? value.id : null;
 
-          cursor.update(metadataRecord);
+          if (!id) {
+            cursor.delete();
+            cursor.continue();
+            return;
+          }
+
+          const blob = value.blob instanceof Blob ? value.blob : null;
+          const previewBlob = value.previewBlob instanceof Blob ? value.previewBlob : null;
+          const existingPreviewId = typeof value.previewId === 'string' && value.previewId.length > 0 ? value.previewId : null;
+          const fallbackPreviewType = typeof value.previewType === 'string' && value.previewType.length > 0 ? value.previewType : null;
+          const fallbackPreviewSize = typeof value.previewSize === 'number' && Number.isFinite(value.previewSize)
+            ? Number(value.previewSize)
+            : null;
+
+          const metadataRecord: AssetMetadataRecord = {
+            id,
+            name: typeof value.name === 'string' ? value.name : id,
+            type: typeof value.type === 'string' ? value.type : 'application/octet-stream',
+            size: typeof value.size === 'number' && Number.isFinite(value.size) ? Number(value.size) : 0,
+            createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString(),
+            updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : new Date().toISOString(),
+            previewId: null,
+            previewType: fallbackPreviewType,
+            previewSize: fallbackPreviewSize
+          };
 
           if (blob instanceof Blob) {
             blobStore.put({ id: metadataRecord.id, blob });
           }
 
+          if (previewBlob instanceof Blob) {
+            const assignedPreviewId = existingPreviewId ?? generatePreviewId(metadataRecord.id);
+            const previewRecord: AssetPreviewBlobRecord = {
+              id: assignedPreviewId,
+              assetId: metadataRecord.id,
+              blob: previewBlob,
+              type: previewBlob.type || fallbackPreviewType || 'application/octet-stream',
+              size: previewBlob.size ?? fallbackPreviewSize ?? 0,
+              updatedAt: metadataRecord.updatedAt
+            };
+            previewStore.put(previewRecord);
+            metadataRecord.previewId = assignedPreviewId;
+            metadataRecord.previewType = previewRecord.type;
+            metadataRecord.previewSize = previewRecord.size;
+          } else if (existingPreviewId) {
+            metadataRecord.previewId = existingPreviewId;
+          }
+
+          cursor.update(metadataRecord);
           cursor.continue();
         };
       }
@@ -202,6 +272,7 @@ export async function saveAsset(file: File): Promise<StoredAssetRecord> {
 
   const timestamp = new Date().toISOString();
   let previewBlob: Blob | null = null;
+  let previewRecord: AssetPreviewBlobRecord | null = null;
 
   try {
     previewBlob = await generateAssetPreview(file);
@@ -217,12 +288,32 @@ export async function saveAsset(file: File): Promise<StoredAssetRecord> {
     size: file.size,
     createdAt: timestamp,
     updatedAt: timestamp,
-    previewBlob
+    previewId: null,
+    previewType: null,
+    previewSize: null
   };
 
-  await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+  if (previewBlob instanceof Blob) {
+    const previewId = generatePreviewId(metadataRecord.id);
+    const previewType = previewBlob.type || 'image/webp';
+    const previewSize = Number.isFinite(previewBlob.size) ? previewBlob.size : null;
+    metadataRecord.previewId = previewId;
+    metadataRecord.previewType = previewType;
+    metadataRecord.previewSize = previewSize;
+    previewRecord = {
+      id: previewId,
+      assetId: metadataRecord.id,
+      blob: previewBlob,
+      type: previewType,
+      size: previewSize ?? previewBlob.size,
+      updatedAt: timestamp
+    } satisfies AssetPreviewBlobRecord;
+  }
+
+  await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
     const metadataStore = transaction.objectStore(STORE_NAME);
     const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+    const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
 
     await Promise.all([
       new Promise<void>((resolve, reject) => {
@@ -234,13 +325,20 @@ export async function saveAsset(file: File): Promise<StoredAssetRecord> {
         const request = blobStore.put({ id: metadataRecord.id, blob: file } satisfies AssetBlobRecord);
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error ?? new Error('Failed to store asset blob'));
-      })
+      }),
+      previewRecord
+        ? new Promise<void>((resolve, reject) => {
+            const request = previewStore.put(previewRecord);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error ?? new Error('Failed to store asset preview'));
+          })
+        : Promise.resolve()
     ]);
 
     return metadataRecord;
   });
 
-  return { ...metadataRecord, blob: file };
+  return { ...metadataRecord, blob: file, previewBlob };
 }
 
 export async function loadAsset(assetId: string): Promise<StoredAssetRecord | null> {
@@ -249,9 +347,10 @@ export async function loadAsset(assetId: string): Promise<StoredAssetRecord | nu
   }
 
   try {
-    return await runTransaction('readonly', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+    return await runTransaction('readonly', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
       const metadataStore = transaction.objectStore(STORE_NAME);
       const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+      const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
 
       const metadata = (await wrapRequest<AssetMetadataRecord | undefined>(
         metadataStore.get(assetId),
@@ -271,7 +370,36 @@ export async function loadAsset(assetId: string): Promise<StoredAssetRecord | nu
         throw new Error('Asset blob is missing');
       }
 
-      return { ...metadata, blob: blobRecord.blob } satisfies StoredAssetRecord;
+      let previewBlob: Blob | null = null;
+      let previewType = metadata.previewType ?? null;
+      let previewSize = metadata.previewSize ?? null;
+
+      if (metadata.previewId) {
+        const previewRecord = (await wrapRequest<AssetPreviewBlobRecord | undefined>(
+          previewStore.get(metadata.previewId),
+          'Failed to load asset preview'
+        )) ?? null;
+
+        if (previewRecord && previewRecord.blob instanceof Blob) {
+          previewBlob = previewRecord.blob;
+          previewType = previewRecord.type || previewBlob.type || previewType;
+          previewSize = Number.isFinite(previewRecord.size)
+            ? Number(previewRecord.size)
+            : Number.isFinite(previewBlob.size)
+              ? previewBlob.size
+              : previewSize;
+        }
+      }
+
+      const record: StoredAssetRecord = {
+        ...metadata,
+        previewType,
+        previewSize,
+        blob: blobRecord.blob,
+        previewBlob
+      };
+
+      return record;
     });
   } catch (error) {
     console.error('Failed to load asset from IndexedDB', error);
@@ -279,20 +407,84 @@ export async function loadAsset(assetId: string): Promise<StoredAssetRecord | nu
   }
 }
 
-export async function loadAssetPreview(assetId: string): Promise<StoredAssetPreviewRecord | null> {
+export interface LoadAssetPreviewParams {
+  assetId?: string | null;
+  previewId?: string | null;
+}
+
+export async function loadAssetPreview({
+  assetId,
+  previewId
+}: LoadAssetPreviewParams): Promise<StoredAssetPreviewRecord | null> {
   if (!isBrowserEnvironment()) {
     return null;
   }
 
-  try {
-    return await runTransaction('readonly', [STORE_NAME], async (transaction) => {
-      const metadataStore = transaction.objectStore(STORE_NAME);
-      const metadata = (await wrapRequest<AssetMetadataRecord | undefined>(
-        metadataStore.get(assetId),
-        'Failed to load asset preview'
-      )) ?? null;
+  const requestedAssetId = assetId ?? null;
+  const requestedPreviewId = previewId ?? requestedAssetId ?? null;
 
-      return metadata ? ({ ...metadata } satisfies StoredAssetPreviewRecord) : null;
+  if (!requestedAssetId && !requestedPreviewId) {
+    return null;
+  }
+
+  try {
+    return await runTransaction('readonly', [STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
+      const metadataStore = transaction.objectStore(STORE_NAME);
+      const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
+
+      let metadata: AssetMetadataRecord | null = null;
+      if (requestedAssetId) {
+        metadata = (await wrapRequest<AssetMetadataRecord | undefined>(
+          metadataStore.get(requestedAssetId),
+          'Failed to load asset metadata for preview'
+        )) ?? null;
+      }
+
+      let previewRecord: AssetPreviewBlobRecord | null = null;
+
+      if (requestedPreviewId) {
+        previewRecord = (await wrapRequest<AssetPreviewBlobRecord | undefined>(
+          previewStore.get(requestedPreviewId),
+          'Failed to load asset preview blob'
+        )) ?? null;
+      }
+
+      if (!metadata && previewRecord?.assetId) {
+        metadata = (await wrapRequest<AssetMetadataRecord | undefined>(
+          metadataStore.get(previewRecord.assetId),
+          'Failed to load asset metadata for preview'
+        )) ?? null;
+      }
+
+      if (!metadata) {
+        return null;
+      }
+
+      let previewBlob: Blob | null = null;
+      let previewType = metadata.previewType ?? null;
+      let previewSize = metadata.previewSize ?? null;
+      let resolvedPreviewId = metadata.previewId ?? null;
+
+      if (previewRecord && previewRecord.blob instanceof Blob) {
+        previewBlob = previewRecord.blob;
+        previewType = previewRecord.type || previewBlob.type || previewType;
+        previewSize = Number.isFinite(previewRecord.size)
+          ? Number(previewRecord.size)
+          : Number.isFinite(previewBlob.size)
+            ? previewBlob.size
+            : previewSize;
+        resolvedPreviewId = previewRecord.id;
+      }
+
+      const record: StoredAssetPreviewRecord = {
+        ...metadata,
+        previewId: resolvedPreviewId,
+        previewType,
+        previewSize,
+        previewBlob
+      };
+
+      return record;
     });
   } catch (error) {
     console.error('Failed to load asset preview from IndexedDB', error);
@@ -306,13 +498,30 @@ export async function deleteAsset(assetId: string): Promise<void> {
   }
 
   try {
-    await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+    await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
       const metadataStore = transaction.objectStore(STORE_NAME);
       const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+      const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
+
+      const metadata = (await wrapRequest<AssetMetadataRecord | undefined>(
+        metadataStore.get(assetId),
+        'Failed to resolve asset metadata before deletion'
+      )) ?? null;
+
+      const previewIds = new Set<string>();
+      if (metadata?.previewId) {
+        previewIds.add(metadata.previewId);
+      }
+      previewIds.add(generatePreviewId(assetId));
 
       await Promise.all([
         wrapRequest(metadataStore.delete(assetId), 'Failed to delete asset metadata'),
-        wrapRequest(blobStore.delete(assetId), 'Failed to delete asset blob')
+        wrapRequest(blobStore.delete(assetId), 'Failed to delete asset blob'),
+        Promise.all(
+          Array.from(previewIds).map(async (previewId) => {
+            await wrapRequest(previewStore.delete(previewId), 'Failed to delete asset preview');
+          })
+        )
       ]);
 
       return undefined;
@@ -328,13 +537,15 @@ export async function deleteAllAssets(): Promise<void> {
   }
 
   try {
-    await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+    await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
       const metadataStore = transaction.objectStore(STORE_NAME);
       const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+      const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
 
       await Promise.all([
         wrapRequest(metadataStore.clear(), 'Failed to clear asset metadata'),
-        wrapRequest(blobStore.clear(), 'Failed to clear asset blobs')
+        wrapRequest(blobStore.clear(), 'Failed to clear asset blobs'),
+        wrapRequest(previewStore.clear(), 'Failed to clear asset previews')
       ]);
 
       return undefined;
@@ -348,8 +559,13 @@ export async function deleteAllAssets(): Promise<void> {
 }
 
 export async function getAssetMetadata(assetId: string): Promise<StoredAssetMetadata | null> {
-  const record = await loadAssetPreview(assetId);
-  return record;
+  const record = await loadAssetPreview({ assetId });
+  if (!record) {
+    return null;
+  }
+
+  const { previewBlob: _previewBlob, ...metadata } = record;
+  return metadata;
 }
 
 export async function exportAllAssets(): Promise<StoredAssetRecord[]> {
@@ -358,9 +574,10 @@ export async function exportAllAssets(): Promise<StoredAssetRecord[]> {
   }
 
   try {
-    return await runTransaction('readonly', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+    return await runTransaction('readonly', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
       const metadataStore = transaction.objectStore(STORE_NAME);
       const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+      const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
 
       const metadataRecords = await wrapRequest<AssetMetadataRecord[]>(
         metadataStore.getAll(),
@@ -378,7 +595,36 @@ export async function exportAllAssets(): Promise<StoredAssetRecord[]> {
             return null;
           }
 
-          return { ...metadata, blob: blobRecord.blob } satisfies StoredAssetRecord;
+          let previewBlob: Blob | null = null;
+          let previewType = metadata.previewType ?? null;
+          let previewSize = metadata.previewSize ?? null;
+
+          if (metadata.previewId) {
+            const previewRecord = (await wrapRequest<AssetPreviewBlobRecord | undefined>(
+              previewStore.get(metadata.previewId),
+              'Failed to fetch asset preview blob'
+            )) ?? null;
+
+            if (previewRecord && previewRecord.blob instanceof Blob) {
+              previewBlob = previewRecord.blob;
+              previewType = previewRecord.type || previewBlob.type || previewType;
+              previewSize = Number.isFinite(previewRecord.size)
+                ? Number(previewRecord.size)
+                : Number.isFinite(previewBlob.size)
+                  ? previewBlob.size
+                  : previewSize;
+            }
+          }
+
+          const record: StoredAssetRecord = {
+            ...metadata,
+            previewType,
+            previewSize,
+            blob: blobRecord.blob,
+            previewBlob
+          };
+
+          return record;
         })
       );
 
@@ -395,12 +641,16 @@ export async function importAssets(records: StoredAssetRecord[]): Promise<void> 
     return;
   }
 
-  await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME], async (transaction) => {
+  await runTransaction('readwrite', [STORE_NAME, BLOB_STORE_NAME, PREVIEW_STORE_NAME], async (transaction) => {
     const metadataStore = transaction.objectStore(STORE_NAME);
     const blobStore = transaction.objectStore(BLOB_STORE_NAME);
+    const previewStore = transaction.objectStore(PREVIEW_STORE_NAME);
 
     await Promise.all(
       records.map(async (record) => {
+        const basePreviewType = record.previewType ?? (record.previewBlob instanceof Blob ? record.previewBlob.type : null);
+        const basePreviewSize = record.previewSize ?? (record.previewBlob instanceof Blob ? record.previewBlob.size : null);
+
         const metadata: AssetMetadataRecord = {
           id: record.id,
           name: record.name,
@@ -408,12 +658,38 @@ export async function importAssets(records: StoredAssetRecord[]): Promise<void> 
           size: record.size,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
-          previewBlob: record.previewBlob ?? null
+          previewId: null,
+          previewType: basePreviewType ?? null,
+          previewSize: basePreviewSize ?? null
         };
+
+        let previewRecord: AssetPreviewBlobRecord | null = null;
+
+        if (record.previewBlob instanceof Blob) {
+          const assignedPreviewId = record.previewId ?? generatePreviewId(record.id);
+          const previewType = basePreviewType ?? (record.previewBlob.type || 'image/webp');
+          const previewSize = Number.isFinite(basePreviewSize) ? Number(basePreviewSize) : record.previewBlob.size;
+          metadata.previewId = assignedPreviewId;
+          metadata.previewType = previewType;
+          metadata.previewSize = previewSize;
+          previewRecord = {
+            id: assignedPreviewId,
+            assetId: record.id,
+            blob: record.previewBlob,
+            type: previewType,
+            size: previewSize ?? record.previewBlob.size,
+            updatedAt: record.updatedAt
+          } satisfies AssetPreviewBlobRecord;
+        } else if (record.previewId) {
+          metadata.previewId = record.previewId;
+        }
 
         await Promise.all([
           wrapRequest(metadataStore.put(metadata), 'Failed to import asset metadata'),
-          wrapRequest(blobStore.put({ id: record.id, blob: record.blob } satisfies AssetBlobRecord), 'Failed to import asset blob')
+          wrapRequest(blobStore.put({ id: record.id, blob: record.blob } satisfies AssetBlobRecord), 'Failed to import asset blob'),
+          previewRecord
+            ? wrapRequest(previewStore.put(previewRecord), 'Failed to import asset preview')
+            : Promise.resolve()
         ]);
       })
     );

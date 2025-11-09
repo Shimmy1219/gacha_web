@@ -40,8 +40,10 @@ interface BackupAssetMetadata {
   createdAt: string;
   updatedAt: string;
   path: string;
+  previewId?: string | null;
   previewPath?: string | null;
   previewType?: string | null;
+  previewSize?: number | null;
   /**
    * @deprecated v1 バックアップでは previewBlob を JSON 化できず空オブジェクトになるため互換目的で残す
    */
@@ -879,9 +881,11 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
 
     let previewPath: string | null = null;
     let previewType: string | null = null;
+    let previewSize: number | null = asset.previewSize ?? null;
 
     if (asset.previewBlob instanceof Blob) {
       previewType = asset.previewBlob.type || null;
+      previewSize = Number.isFinite(asset.previewBlob.size) ? asset.previewBlob.size : previewSize;
       previewPath = `${ASSETS_DIRECTORY}/${asset.id}.preview`;
       zip.file(previewPath, asset.previewBlob, { binary: true, compression: 'STORE' });
     }
@@ -894,8 +898,10 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
       createdAt: asset.createdAt,
       updatedAt: asset.updatedAt,
       path,
+      previewId: asset.previewId ?? null,
       previewPath,
-      previewType
+      previewType,
+      previewSize
     });
   });
 
@@ -1051,6 +1057,14 @@ export async function importBackupFromFile(
       previewBlob = assetMeta.previewBlob;
     }
 
+    const resolvedPreviewType = previewType ?? (previewBlob?.type ?? null);
+    const resolvedPreviewSize =
+      typeof assetMeta.previewSize === 'number' && Number.isFinite(assetMeta.previewSize)
+        ? Number(assetMeta.previewSize)
+        : previewBlob instanceof Blob
+          ? previewBlob.size
+          : null;
+
     assetRecords.push({
       id: assetMeta.id,
       name: assetMeta.name,
@@ -1058,6 +1072,9 @@ export async function importBackupFromFile(
       size: assetMeta.size,
       createdAt: assetMeta.createdAt,
       updatedAt: assetMeta.updatedAt,
+      previewId: assetMeta.previewId ?? null,
+      previewType: resolvedPreviewType,
+      previewSize: resolvedPreviewSize,
       previewBlob,
       blob
     });

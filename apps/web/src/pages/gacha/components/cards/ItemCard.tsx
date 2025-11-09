@@ -21,6 +21,7 @@ export interface RarityMeta {
 
 export interface ItemCardImageAsset {
   thumbnailUrl: string | null;
+  thumbnailAssetId: string | null;
   assetHash: string | null;
   hasImage: boolean;
 }
@@ -46,6 +47,7 @@ export interface ItemCardPreviewPayload {
   gachaId: GachaId;
   gachaDisplayName: string;
   assetHash: string | null;
+  thumbnailAssetId: string | null;
   thumbnailUrl: string | null;
 }
 
@@ -77,8 +79,9 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const { imageAsset } = model;
   const { isMobile } = useResponsiveDashboard();
   const assetId = imageAsset?.assetHash ?? null;
+  const previewAssetId = imageAsset?.thumbnailAssetId ?? null;
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
-  const canPreviewAsset = Boolean(onPreviewAsset && (assetId || fallbackUrl));
+  const canPreviewAsset = Boolean(onPreviewAsset && (assetId || previewAssetId || fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -97,6 +100,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       gachaId: model.gachaId,
       gachaDisplayName: model.gachaDisplayName,
       assetHash: assetId,
+      thumbnailAssetId: previewAssetId,
       thumbnailUrl: fallbackUrl
     });
   };
@@ -136,6 +140,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           onClick={handlePreviewClick}
           canPreview={canPreviewAsset}
           assetId={assetId}
+          previewAssetId={previewAssetId}
           fallbackUrl={fallbackUrl}
           alt={model.name}
           emptyLabel="noImage"

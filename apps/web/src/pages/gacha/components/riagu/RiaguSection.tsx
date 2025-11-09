@@ -16,6 +16,7 @@ interface RiaguDisplayEntry {
   rarityLabel: string;
   rarityColor: string;
   assetId: string | null;
+  thumbnailAssetId: string | null;
   thumbnailUrl: string | null;
   unitCost?: number;
   requiredQuantity: number;
@@ -74,6 +75,7 @@ export function RiaguSection(): JSX.Element {
       const rarityColor = rarityEntity?.color ?? '#a855f7';
       const typeLabel = card.typeLabel ?? undefined;
       const assetId = catalogItem?.imageAssetId ?? null;
+      const thumbnailAssetId = catalogItem?.thumbnailAssetId ?? null;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const sanitizedUnitCost =
@@ -96,6 +98,7 @@ export function RiaguSection(): JSX.Element {
         rarityLabel,
         rarityColor,
         assetId,
+        thumbnailAssetId,
         thumbnailUrl: null,
         unitCost: sanitizedUnitCost,
         requiredQuantity,
@@ -227,6 +230,7 @@ export function RiaguSection(): JSX.Element {
                             <div className="riagu-card__meta-heading flex items-center gap-3">
                               <ItemPreview
                                 assetId={entry.assetId}
+                                previewAssetId={entry.thumbnailAssetId}
                                 fallbackUrl={entry.thumbnailUrl}
                                 alt={`${entry.itemName}のプレビュー`}
                                 kindHint="image"

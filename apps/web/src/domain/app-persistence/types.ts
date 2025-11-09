@@ -23,6 +23,7 @@ export interface GachaCatalogItemV3 {
   pickupTarget?: boolean;
   completeTarget?: boolean;
   imageAssetId?: string;
+  thumbnailAssetId?: string | null;
   riagu?: boolean;
   updatedAt?: string;
 }
