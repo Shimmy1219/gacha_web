@@ -173,10 +173,36 @@ export function UserCard({
         return;
       }
       setNameError(null);
-      userProfilesStore.renameProfile(userId, trimmed);
+      const renameResult = userProfilesStore.renameProfile(userId, trimmed);
+      if (!renameResult.success) {
+        if (renameResult.reason === 'duplicate-name') {
+          push(ConfirmDialog, {
+            id: `duplicate-user-name-${userId}`,
+            title: 'ユーザー名が重複しています',
+            size: 'sm',
+            payload: {
+              message: `ユーザー名「${trimmed}」は既に使用されています。別の名前を指定してください。`,
+              confirmLabel: '閉じる'
+            }
+          });
+          handleCancelEditName();
+          return;
+        }
+
+        setNameError('ユーザー名の更新に失敗しました');
+        return;
+      }
+
       setIsEditingName(false);
     },
-    [nameDraft, userId, userName, userProfilesStore]
+    [
+      handleCancelEditName,
+      nameDraft,
+      push,
+      userId,
+      userName,
+      userProfilesStore
+    ]
   );
 
   const handleNameKeyDown = useCallback(

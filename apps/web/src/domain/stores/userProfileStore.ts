@@ -160,6 +160,14 @@ function normalizeState(state: UserProfilesStateV3 | undefined): UserProfilesSta
   } satisfies UserProfilesStateV3;
 }
 
+export type RenameProfileResult =
+  | { success: true }
+  | {
+      success: false;
+      reason: 'invalid-input' | 'not-found' | 'duplicate-name';
+      conflictProfileId?: string;
+    };
+
 export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
@@ -209,22 +217,38 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
     profileId: string,
     displayName: string,
     options: UpdateOptions = { persist: 'immediate' }
-  ): void {
+  ): RenameProfileResult {
     const trimmedProfileId = profileId.trim();
     const trimmedDisplayName = displayName.trim();
 
     if (!trimmedProfileId || !trimmedDisplayName) {
-      return;
+      return { success: false, reason: 'invalid-input' };
     }
+
+    let result: RenameProfileResult = { success: false, reason: 'not-found' };
 
     this.update((previous) => {
       const base = normalizeState(previous);
       const existing = base.users[trimmedProfileId];
       if (!existing) {
+        result = { success: false, reason: 'not-found' };
         return previous;
       }
 
       if (existing.displayName === trimmedDisplayName) {
+        result = { success: true };
+        return previous;
+      }
+
+      const duplicateProfile = Object.values(base.users).find(
+        (profile) => profile.displayName === trimmedDisplayName && profile.id !== trimmedProfileId
+      );
+      if (duplicateProfile) {
+        result = {
+          success: false,
+          reason: 'duplicate-name',
+          conflictProfileId: duplicateProfile.id
+        };
         return previous;
       }
 
@@ -238,12 +262,16 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
         }
       } satisfies Record<string, UserProfileCardV3>;
 
+      result = { success: true };
+
       return {
         ...base,
         updatedAt: now,
         users: nextUsers
       } satisfies UserProfilesStateV3;
     }, options);
+
+    return result;
   }
 
   linkDiscordProfile(
