@@ -98,7 +98,9 @@ export function UserCard({
   const [nameDraft, setNameDraft] = useState(userName);
   const [nameError, setNameError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
+  const panelId = `user-card-panel-${userId}`;
 
   useEffect(() => {
     if (!isEditingName) {
@@ -262,16 +264,23 @@ export function UserCard({
       {({ open }) => (
         <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
-            <Disclosure.Button
-              type="button"
-              className="user-card__toggle flex min-w-0 flex-1 items-start gap-3 text-left transition-colors duration-200 ease-linear"
-            >
-              <ChevronRightIcon
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <Disclosure.Button
+                ref={toggleButtonRef}
+                type="button"
                 className={clsx(
-                  'user-card__chevron h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ease-linear',
-                  open && 'rotate-90 text-accent'
+                  'user-card__toggle mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                  open && 'text-accent'
                 )}
-              />
+                aria-label="ユーザー詳細の表示を切り替える"
+              >
+                <ChevronRightIcon
+                  className={clsx(
+                    'user-card__chevron h-5 w-5 transition-transform duration-300 ease-linear',
+                    open && 'rotate-90 text-accent'
+                  )}
+                />
+              </Disclosure.Button>
               <div className="flex min-w-0 flex-1 items-start gap-1">
                 {avatarSrc ? (
                   <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
@@ -324,14 +333,22 @@ export function UserCard({
                       </div>
                     </form>
                   ) : (
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <button
+                      type="button"
+                      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      aria-expanded={open}
+                      aria-controls={panelId}
+                      onClick={() => {
+                        toggleButtonRef.current?.click();
+                      }}
+                    >
                       <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
                       {normalizedDiscordDisplayName ? (
                         <span className="user-card__discord-display text-xs text-muted-foreground">
                           {normalizedDiscordDisplayName}
                         </span>
                       ) : null}
-                    </div>
+                    </button>
                   )}
                   {isEditingName && normalizedDiscordDisplayName ? (
                     <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
@@ -345,7 +362,7 @@ export function UserCard({
                   ) : null}
                 </div>
               </div>
-            </Disclosure.Button>
+            </div>
             <div className="user-card__actions flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -384,6 +401,7 @@ export function UserCard({
           >
             <Disclosure.Panel
               static
+              id={panelId}
               className={clsx(
                 'overflow-hidden transition-opacity duration-300 ease-linear',
                 'group-data-[state=open]:opacity-100',
