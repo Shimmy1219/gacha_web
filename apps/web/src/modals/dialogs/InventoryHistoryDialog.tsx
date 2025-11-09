@@ -327,7 +327,7 @@ export function InventoryHistoryDialog({
                         </button>
                         <a
                           href={tweetUrl}
-                          className="btn aspect-square h-8 w-8 border border-[#000000] bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
+                          className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Xで共有"
