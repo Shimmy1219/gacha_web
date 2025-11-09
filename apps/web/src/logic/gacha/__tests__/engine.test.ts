@@ -126,6 +126,41 @@ describe('executeGacha', () => {
     });
   });
 
+  test('frontload mode distributes remaining draws according to purchase settings', () => {
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      complete: { price: 100, mode: 'frontload' }
+    };
+
+    const rng = (() => {
+      const sequence = [0.1, 0.2, 0.3, 0.6, 0.8, 0.95];
+      let index = 0;
+      return () => {
+        const value = sequence[index % sequence.length];
+        index += 1;
+        return value;
+      };
+    })();
+
+    const result = executeGacha({ gachaId: 'sample', pool, settings, points: 100, rng });
+
+    expect(result.plan.completeExecutions).toBe(1);
+    expect(result.plan.completePulls).toBe(pool.items.length);
+    expect(result.plan.randomPulls).toBe(7);
+    expect(result.totalPulls).toBe(10);
+    expect(result.pointsSpent).toBe(100);
+    expect(result.pointsRemainder).toBe(0);
+
+    pool.items.forEach((item) => {
+      const aggregated = result.items.find((entry) => entry.itemId === item.itemId);
+      expect(aggregated).toBeDefined();
+      expect(aggregated?.count ?? 0).toBeGreaterThanOrEqual(1);
+    });
+
+    const totalCount = result.items.reduce((sum, item) => sum + item.count, 0);
+    expect(totalCount).toBe(10);
+  });
+
   test('supports legacy complate complete settings when executing gacha', () => {
     const settings = {
       complate: { price: 120, mode: 'frontload' }

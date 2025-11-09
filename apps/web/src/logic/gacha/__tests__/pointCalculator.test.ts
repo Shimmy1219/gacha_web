@@ -63,10 +63,27 @@ describe('calculateDrawPlan', () => {
     expect(plan.errors).toHaveLength(0);
     expect(plan.completeExecutions).toBe(2);
     expect(plan.completePulls).toBe(5);
-    expect(plan.randomPulls).toBe(10);
+    expect(plan.randomPulls).toBe(20);
     expect(plan.pointsUsed).toBe(250);
     expect(plan.pointsRemainder).toBe(0);
     expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
+  });
+
+  test('frontload mode converts leftover pulls when buying a single completion', () => {
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      complete: { price: 100, mode: 'frontload' }
+    };
+
+    const plan = calculateDrawPlan({ points: 100, settings, totalItemTypes: 8 });
+
+    expect(plan.errors).toHaveLength(0);
+    expect(plan.completeExecutions).toBe(1);
+    expect(plan.completePulls).toBe(8);
+    expect(plan.randomPulls).toBe(2);
+    expect(plan.totalPulls).toBe(10);
+    expect(plan.pointsUsed).toBe(100);
+    expect(plan.pointsRemainder).toBe(0);
   });
 
   test('frontload mode converts additional completions into random pulls', () => {

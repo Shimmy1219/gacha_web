@@ -32,8 +32,22 @@ function formatBackupTimestamp(date: Date): string {
   return `${year}${month}${day}${hours}${minutes}${seconds}`;
 }
 
-interface BackupAssetMetadata extends Omit<StoredAssetRecord, 'blob'> {
+interface BackupAssetMetadata {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
   path: string;
+  previewId?: string | null;
+  previewPath?: string | null;
+  previewType?: string | null;
+  previewSize?: number | null;
+  /**
+   * @deprecated v1 バックアップでは previewBlob を JSON 化できず空オブジェクトになるため互換目的で残す
+   */
+  previewBlob?: unknown;
 }
 
 interface BackupFileMetadata {
@@ -861,10 +875,34 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
     if (!asset?.id) {
       return;
     }
+
     const path = `${ASSETS_DIRECTORY}/${asset.id}`;
     zip.file(path, asset.blob, { binary: true, compression: 'STORE' });
-    const { blob: _blob, ...metadata } = asset;
-    assetMetadata.push({ ...metadata, path });
+
+    let previewPath: string | null = null;
+    let previewType: string | null = null;
+    let previewSize: number | null = asset.previewSize ?? null;
+
+    if (asset.previewBlob instanceof Blob) {
+      previewType = asset.previewBlob.type || null;
+      previewSize = Number.isFinite(asset.previewBlob.size) ? asset.previewBlob.size : previewSize;
+      previewPath = `${ASSETS_DIRECTORY}/${asset.id}.preview`;
+      zip.file(previewPath, asset.previewBlob, { binary: true, compression: 'STORE' });
+    }
+
+    assetMetadata.push({
+      id: asset.id,
+      name: asset.name,
+      type: asset.type,
+      size: asset.size,
+      createdAt: asset.createdAt,
+      updatedAt: asset.updatedAt,
+      path,
+      previewId: asset.previewId ?? null,
+      previewPath,
+      previewType,
+      previewSize
+    });
   });
 
   const metadata: BackupFileMetadata = {
@@ -991,14 +1029,55 @@ export async function importBackupFromFile(
     if (!assetMeta?.id || !assetIdsToImport.has(assetMeta.id)) {
       continue;
     }
+
     const path = assetMeta.path ?? `${ASSETS_DIRECTORY}/${assetMeta.id}`;
     const assetFile = zip.file(path);
     if (!assetFile) {
       console.warn(`バックアップ内のアセット ${assetMeta.id} が見つかりませんでした`);
       continue;
     }
+
     const blob = await assetFile.async('blob');
-    assetRecords.push({ ...assetMeta, blob });
+
+    let previewBlob: Blob | null = null;
+    const previewPath = assetMeta.previewPath ?? null;
+    const previewType = assetMeta.previewType ?? null;
+
+    if (previewPath) {
+      const previewEntry = zip.file(previewPath);
+      if (!previewEntry) {
+        console.warn(`バックアップ内のプレビュー ${previewPath} が見つかりませんでした`);
+      } else {
+        const previewBuffer = await previewEntry.async('arraybuffer');
+        const blobOptions: BlobPropertyBag = previewType ? { type: previewType } : {};
+        previewBlob = new Blob([previewBuffer], blobOptions);
+      }
+    } else if (assetMeta.previewBlob instanceof Blob) {
+      // 互換性確保: v1 バックアップで previewBlob が含まれていた場合のみ利用
+      previewBlob = assetMeta.previewBlob;
+    }
+
+    const resolvedPreviewType = previewType ?? (previewBlob?.type ?? null);
+    const resolvedPreviewSize =
+      typeof assetMeta.previewSize === 'number' && Number.isFinite(assetMeta.previewSize)
+        ? Number(assetMeta.previewSize)
+        : previewBlob instanceof Blob
+          ? previewBlob.size
+          : null;
+
+    assetRecords.push({
+      id: assetMeta.id,
+      name: assetMeta.name,
+      type: assetMeta.type,
+      size: assetMeta.size,
+      createdAt: assetMeta.createdAt,
+      updatedAt: assetMeta.updatedAt,
+      previewId: assetMeta.previewId ?? null,
+      previewType: resolvedPreviewType,
+      previewSize: resolvedPreviewSize,
+      previewBlob,
+      blob
+    });
   }
 
   await importAssets(assetRecords);

@@ -48,6 +48,7 @@ interface DraftItem {
   assetId: string;
   name: string;
   previewUrl: string;
+  thumbnailAssetId: string | null;
   isRiagu: boolean;
   isCompleteTarget: boolean;
   rarityId: string | null;
@@ -371,8 +372,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
         records.forEach((record) => {
           let previewUrl = '';
-          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-            previewUrl = URL.createObjectURL(record.blob);
+          const previewSource = record.previewBlob ?? record.blob;
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && previewSource) {
+            previewUrl = URL.createObjectURL(previewSource);
             previewUrlMapRef.current.set(record.id, previewUrl);
           }
 
@@ -380,6 +382,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             assetId: record.id,
             name: '',
             previewUrl,
+            thumbnailAssetId: record.previewId ?? null,
             isRiagu: false,
             isCompleteTarget: true,
             rarityId: defaultRarityId
@@ -594,6 +597,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           rarityId: resolvedRarityId,
           order: index,
           imageAssetId: item.assetId,
+          thumbnailAssetId: item.thumbnailAssetId ?? null,
           ...(item.isRiagu ? { riagu: true } : {}),
           ...(item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
@@ -739,9 +743,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                     <div className="flex w-full items-start gap-3 sm:w-auto">
                       <ItemPreview
                         assetId={item.assetId}
+                        previewAssetId={item.thumbnailAssetId}
                         previewUrl={item.previewUrl || undefined}
                         alt={`${item.name}のプレビュー`}
-                        emptyLabel="画像なし"
+                        emptyLabel="noImage"
                         kindHint="image"
                         className="h-16 w-16 shrink-0 bg-surface-deep"
                       />

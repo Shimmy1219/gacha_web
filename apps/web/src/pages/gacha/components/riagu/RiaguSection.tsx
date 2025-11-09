@@ -16,6 +16,7 @@ interface RiaguDisplayEntry {
   rarityLabel: string;
   rarityColor: string;
   assetId: string | null;
+  thumbnailAssetId: string | null;
   thumbnailUrl: string | null;
   unitCost?: number;
   requiredQuantity: number;
@@ -74,9 +75,7 @@ export function RiaguSection(): JSX.Element {
       const rarityColor = rarityEntity?.color ?? '#a855f7';
       const typeLabel = card.typeLabel ?? undefined;
       const assetId = catalogItem?.imageAssetId ?? null;
-      const thumbnailUrl = assetId
-        ? `https://picsum.photos/seed/${encodeURIComponent(assetId)}/400/400`
-        : null;
+      const thumbnailAssetId = catalogItem?.thumbnailAssetId ?? null;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const sanitizedUnitCost =
@@ -99,7 +98,8 @@ export function RiaguSection(): JSX.Element {
         rarityLabel,
         rarityColor,
         assetId,
-        thumbnailUrl,
+        thumbnailAssetId,
+        thumbnailUrl: null,
         unitCost: sanitizedUnitCost,
         requiredQuantity,
         totalCost: sanitizedUnitCost != null ? sanitizedUnitCost * requiredQuantity : undefined,
@@ -230,10 +230,12 @@ export function RiaguSection(): JSX.Element {
                             <div className="riagu-card__meta-heading flex items-center gap-3">
                               <ItemPreview
                                 assetId={entry.assetId}
+                                previewAssetId={entry.thumbnailAssetId}
                                 fallbackUrl={entry.thumbnailUrl}
                                 alt={`${entry.itemName}のプレビュー`}
                                 kindHint="image"
                                 className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
+                                emptyLabel="noImage"
                               />
                               <div className="riagu-card__meta-text flex-1 space-y-2">
                                 <span className={clsx('riagu-card__rarity badge', className)} style={style}>

@@ -20,6 +20,7 @@ export interface ItemAssetPreviewDialogPayload {
   rarityLabel: string;
   rarityColor: string;
   assetHash: string | null;
+  thumbnailAssetId: string | null;
   thumbnailUrl: string | null;
 }
 
@@ -42,8 +43,11 @@ export function ItemAssetPreviewDialog({
     );
   }
 
-  const { assetHash, thumbnailUrl, itemName, rarityColor, rarityLabel } = payload;
-  const preview = useAssetPreview(assetHash);
+  const { assetHash, thumbnailAssetId, thumbnailUrl, itemName, rarityColor, rarityLabel } = payload;
+  const preview = useAssetPreview(assetHash, {
+    loadOriginal: true,
+    previewAssetId: thumbnailAssetId ?? null
+  });
   const previewUrl = preview.url ?? thumbnailUrl ?? null;
   const previewType = preview.type ?? (previewUrl ? 'image/*' : null);
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
