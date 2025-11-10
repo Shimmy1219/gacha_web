@@ -12,6 +12,22 @@ import { createRequestLogger } from '../_lib/logger.js';
 
 const ENV_BOT_ID_KEYS = ['DISCORD_BOT_USER_ID', 'DISCORD_CLIENT_ID'];
 
+function normalizeOverwriteType(overwrite){
+  if (!overwrite){ return null; }
+  const { type } = overwrite;
+  if (typeof type === 'number'){
+    if (type === 1){ return 'member'; }
+    if (type === 0){ return 'role'; }
+    return null;
+  }
+  if (typeof type === 'string'){
+    const normalized = type.trim().toLowerCase();
+    if (normalized === '1' || normalized === 'member'){ return 'member'; }
+    if (normalized === '0' || normalized === 'role'){ return 'role'; }
+  }
+  return null;
+}
+
 function collectEnvBotIds(){
   const ids = new Set();
   for (const key of ENV_BOT_ID_KEYS){
@@ -221,7 +237,7 @@ export default async function handler(req, res){
       log.debug('channel skipped: no permission overwrites', evaluation);
       continue;
     }
-    const userOverwrites = overwrites.filter((ow) => ow.type === 1);
+    const userOverwrites = overwrites.filter((ow) => normalizeOverwriteType(ow) === 'member');
     const ownerOverwrite = userOverwrites.find((ow) => ow.id === sess.uid);
     const memberOverwrite = userOverwrites.find((ow) => ow.id === memberId);
     log.debug('channel overwrite presence evaluation', {
@@ -263,7 +279,7 @@ export default async function handler(req, res){
       continue;
     }
 
-    const everyoneOverwrite = overwrites.find((ow) => ow.type === 0 && ow.id === guildId);
+    const everyoneOverwrite = overwrites.find((ow) => normalizeOverwriteType(ow) === 'role' && ow.id === guildId);
     const everyoneDeniedView = everyoneOverwrite ? deniesView(everyoneOverwrite) : false;
     log.debug('channel everyone overwrite evaluation', {
       channelId: ch.id,
