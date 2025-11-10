@@ -8,22 +8,21 @@ import { useQuery } from '@tanstack/react-query';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
-  type DiscordGuildCategorySelection
+  DISCORD_MEMBER_CACHE_TTL_MS,
+  loadDiscordMemberCache,
+  normalizeDiscordGuildMembers,
+  saveDiscordMemberCache,
+  type DiscordGuildMemberSummary
+} from '../../features/discord/discordMemberCacheStorage';
+import {
+  type DiscordGuildCategorySelection,
+  updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 
-interface DiscordMemberSummary {
-  id: string;
-  username: string;
-  globalName: string | null;
-  nick: string | null;
-  avatar: string | null;
-  displayName: string;
-}
-
 interface DiscordMembersResponse {
   ok: boolean;
-  members?: DiscordMemberSummary[];
+  members?: DiscordGuildMemberSummary[];
   error?: string;
 }
 
@@ -56,7 +55,10 @@ interface DiscordMemberPickerPayload {
   onShareFailed?: (message: string) => void;
 }
 
-function getMemberAvatarUrl(member: DiscordMemberSummary): string | null {
+function getMemberAvatarUrl(member: DiscordGuildMemberSummary): string | null {
+  if (member.avatarUrl) {
+    return member.avatarUrl;
+  }
   if (!member.avatar) {
     return null;
   }
@@ -84,17 +86,53 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced;
 }
 
-function useDiscordGuildMembers(guildId: string | null | undefined, query: string) {
+function useDiscordGuildMembers(
+  discordUserId: string | null | undefined,
+  guildId: string | null | undefined,
+  query: string
+) {
   const trimmedQuery = query.trim();
+  const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
 
-  return useQuery({
-    queryKey: ['discord', 'members', guildId, trimmedQuery],
+  const initialData = useMemo(() => {
+    if (!cacheEntry) {
+      return undefined;
+    }
+
+    if (!trimmedQuery) {
+      return cacheEntry.members;
+    }
+
+    const lowered = trimmedQuery.toLowerCase();
+    return cacheEntry.members.filter((member) => {
+      const fields = [
+        member.displayName,
+        member.username,
+        member.globalName ?? '',
+        member.nick ?? ''
+      ]
+        .filter(Boolean)
+        .map((field) => field.toLowerCase());
+      return fields.some((field) => field.includes(lowered));
+    });
+  }, [cacheEntry, trimmedQuery]);
+
+  const initialDataUpdatedAt = useMemo(() => {
+    if (!cacheEntry) {
+      return undefined;
+    }
+    const timestamp = Date.parse(cacheEntry.updatedAt);
+    return Number.isNaN(timestamp) ? undefined : timestamp;
+  }, [cacheEntry]);
+
+  return useQuery<DiscordGuildMemberSummary[]>({
+    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery],
     queryFn: async () => {
-      if (!guildId) {
-        return [] as DiscordMemberSummary[];
+      if (!discordUserId || !guildId) {
+        return [];
       }
 
-      const params = new URLSearchParams({ guild_id: guildId, limit: '200' });
+      const params = new URLSearchParams({ guild_id: guildId, limit: trimmedQuery ? '200' : '1000' });
       if (trimmedQuery) {
         params.set('q', trimmedQuery);
       }
@@ -121,12 +159,25 @@ function useDiscordGuildMembers(guildId: string | null | undefined, query: strin
         throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
-      return payload.members;
+      let normalizedMembers = normalizeDiscordGuildMembers(payload.members);
+      if (!trimmedQuery) {
+        const savedEntry = saveDiscordMemberCache(discordUserId, guildId, normalizedMembers);
+        const persistedMembers = savedEntry?.members ?? normalizedMembers;
+        normalizedMembers = persistedMembers;
+        updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry?.updatedAt ?? null);
+        if (!savedEntry) {
+          console.warn('Discord member cache could not be persisted. Continuing with API response only.');
+        }
+      }
+
+      return normalizedMembers;
     },
-    enabled: Boolean(guildId),
-    staleTime: 60 * 1000,
+    enabled: Boolean(discordUserId && guildId),
+    staleTime: trimmedQuery ? 0 : DISCORD_MEMBER_CACHE_TTL_MS,
     gcTime: 5 * 60 * 1000,
-    keepPreviousData: true
+    keepPreviousData: true,
+    initialData,
+    initialDataUpdatedAt
   });
 }
 
@@ -146,7 +197,7 @@ export function DiscordMemberPickerDialog({
   );
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(guildId, debouncedQuery);
+  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery);
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
