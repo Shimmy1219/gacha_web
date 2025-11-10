@@ -310,6 +310,7 @@ export function DiscordBotInviteDialog({
               {guilds.map((guild) => {
                 const isSelected = guild.id === selectedGuildId;
                 const iconUrl = getGuildIconUrl(guild);
+                const isDisabled = !guild.botJoined;
                 return (
                   <li key={guild.id}>
                     <button
@@ -317,7 +318,7 @@ export function DiscordBotInviteDialog({
                       onClick={() => handleSelect(guild)}
                       className="flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
                       aria-pressed={isSelected}
-                      disabled={isCheckingGuild && isSelected}
+                      disabled={isDisabled || (isCheckingGuild && isSelected)}
                     >
                       <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
                         {iconUrl ? (
