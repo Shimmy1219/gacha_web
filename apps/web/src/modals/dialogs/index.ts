@@ -23,4 +23,5 @@ export * from './BackupImportConflictDialog';
 export * from './SaveTargetDialog';
 export * from './StartWizardDialog';
 export * from './UserDiscordProfileDialog';
+export * from './UserDiscordProfileLinkDialog';
 export * from './UserHistoryDialog';
