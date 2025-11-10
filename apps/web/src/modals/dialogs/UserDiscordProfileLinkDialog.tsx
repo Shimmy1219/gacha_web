@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -12,6 +13,8 @@ import {
   type DiscordMemberCacheEntry,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { saveDiscordMemberCache } from '../../features/discord/discordMemberCacheStorage';
+import { updateDiscordGuildSelectionMemberCacheTimestamp } from '../../features/discord/discordGuildSelectionStorage';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 
 interface UserDiscordProfileLinkDialogPayload {
@@ -57,7 +60,9 @@ export function UserDiscordProfileLinkDialog({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isLinking, setIsLinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -133,7 +138,7 @@ export function UserDiscordProfileLinkDialog({
         return;
       }
       setIsLinking(true);
-      setError(null);
+      setLinkError(null);
       try {
         await linkDiscordProfileToStore({
           store: userProfilesStore,
@@ -146,13 +151,54 @@ export function UserDiscordProfileLinkDialog({
         close();
       } catch (linkError) {
         console.warn('Failed to link Discord profile from member cache', linkError);
-        setError('Discord情報の連携に失敗しました。時間をおいて再度お試しください。');
+        setLinkError('Discord情報の連携に失敗しました。時間をおいて再度お試しください。');
       } finally {
         setIsLinking(false);
       }
     },
     [close, isLinking, userId, userProfilesStore]
   );
+
+  const handleRefreshMembers = useCallback(async () => {
+    if (!discordUserId || !guildId || isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    setRefreshError(null);
+
+    try {
+      const params = new URLSearchParams({ guild_id: guildId, limit: '1000' });
+      const response = await fetch(`/api/discord/members?${params.toString()}`, {
+        headers: {
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { ok: boolean; members?: DiscordGuildMemberSummary[]; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload.members)) {
+        const message = payload?.error || `Discordメンバー一覧の取得に失敗しました (${response.status})`;
+        throw new Error(message);
+      }
+
+      const savedEntry = saveDiscordMemberCache(discordUserId, guildId, payload.members);
+      if (!savedEntry) {
+        throw new Error('Failed to persist refreshed Discord member cache');
+      }
+
+      setMemberCacheEntry(savedEntry);
+      updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry.updatedAt);
+    } catch (error) {
+      console.warn('Failed to refresh Discord member cache from picker dialog', error);
+      setRefreshError('メンバー情報の更新に失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [discordUserId, guildId, isRefreshing]);
 
   return (
     <>
@@ -161,12 +207,28 @@ export function UserDiscordProfileLinkDialog({
           <p className="text-sm font-medium text-surface-foreground">{userName}</p>
           <p className="text-xs text-muted-foreground">連携するDiscordユーザーを選択してください。</p>
         </div>
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground">選択中のDiscordギルド</p>
-          <p className="text-sm text-surface-foreground">{guildName ?? '未選択'}</p>
-          {memberCacheUpdatedLabel ? (
-            <p className="text-xs text-muted-foreground">メンバーキャッシュ最終更新: {memberCacheUpdatedLabel}</p>
-          ) : null}
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground">選択中のDiscordギルド</p>
+            <p className="text-sm text-surface-foreground">{guildName ?? '未選択'}</p>
+            {memberCacheUpdatedLabel ? (
+              <p className="text-xs text-muted-foreground">メンバーキャッシュ最終更新: {memberCacheUpdatedLabel}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel-contrast px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-panel-contrast/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={() => {
+                void handleRefreshMembers();
+              }}
+              disabled={!discordUserId || !guildId || isRefreshing}
+              aria-busy={isRefreshing}
+            >
+              <ArrowPathIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+              メンバー情報の更新
+            </button>
+          </div>
         </div>
         {!discordUserId ? (
           <p className="text-xs text-red-500">Discordにログインしてからメンバー一覧を読み込んでください。</p>
@@ -234,7 +296,8 @@ export function UserDiscordProfileLinkDialog({
             </p>
           )
         ) : null}
-        {error ? <p className="text-xs text-red-500">{error}</p> : null}
+        {refreshError ? <p className="text-xs text-red-500">{refreshError}</p> : null}
+        {linkError ? <p className="text-xs text-red-500">{linkError}</p> : null}
       </ModalBody>
       <ModalFooter>
         <button type="button" className="btn btn-muted" onClick={close} disabled={isLinking}>
