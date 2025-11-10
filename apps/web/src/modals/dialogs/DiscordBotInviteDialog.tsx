@@ -49,12 +49,18 @@ export function DiscordBotInviteDialog({
   }, [userId]);
 
   useEffect(() => {
-    if (selectedGuildId && guilds.every((guild) => guild.id !== selectedGuildId)) {
-      setSelectedGuildId(null);
+    if (selectedGuildId) {
+      const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId);
+      if (!selectedGuild || !selectedGuild.botJoined) {
+        setSelectedGuildId(null);
+      }
     }
   }, [guilds, selectedGuildId]);
 
   const handleSelect = (guild: DiscordGuildSummary) => {
+    if (!guild.botJoined) {
+      return;
+    }
     setSelectedGuildId(guild.id);
   };
 
@@ -64,7 +70,7 @@ export function DiscordBotInviteDialog({
     }
 
     const guild = guilds.find((item) => item.id === selectedGuildId);
-    if (!guild) {
+    if (!guild || !guild.botJoined) {
       return;
     }
 
@@ -167,13 +173,19 @@ export function DiscordBotInviteDialog({
               {guilds.map((guild) => {
                 const isSelected = guild.id === selectedGuildId;
                 const iconUrl = getGuildIconUrl(guild);
+                const isDisabled = !guild.botJoined;
                 return (
                   <li key={guild.id}>
                     <button
                       type="button"
                       onClick={() => handleSelect(guild)}
-                      className="flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
+                      className={`relative flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${
+                        isDisabled
+                          ? 'cursor-not-allowed border-border/60 bg-surface/20 text-muted-foreground/90 opacity-60'
+                          : 'border-border/70 bg-surface/40 hover:border-accent/50 hover:bg-surface/60'
+                      }`}
                       aria-pressed={isSelected}
+                      disabled={isDisabled}
                     >
                       <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
                         {iconUrl ? (
@@ -185,6 +197,22 @@ export function DiscordBotInviteDialog({
                       <div className="flex flex-1 flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{guild.name}</span>
                         <span className="text-xs text-muted-foreground">ID: {guild.id}</span>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          <span
+                            className={
+                              guild.botJoined
+                                ? 'inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success'
+                                : 'inline-flex items-center rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger'
+                            }
+                          >
+                            {guild.botJoined ? 'Bot参加済み' : 'Bot未参加'}
+                          </span>
+                          {guild.permissions ? (
+                            <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              権限: {guild.permissions}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       {isSelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />
