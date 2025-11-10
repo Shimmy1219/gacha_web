@@ -20,6 +20,25 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 
+export interface DiscordMemberShareResult {
+  memberId: string;
+  memberName: string;
+  memberDisplayName: string;
+  memberUsername?: string;
+  memberGlobalName?: string | null;
+  memberAvatarHash?: string | null;
+  memberAvatarUrl?: string | null;
+  channelId: string;
+  channelName?: string | null;
+  channelParentId?: string | null;
+  created: boolean;
+  shareUrl: string;
+  shareLabel?: string | null;
+  shareTitle: string;
+  shareComment?: string | null;
+  sharedAt: string;
+}
+
 interface DiscordMembersResponse {
   ok: boolean;
   members?: DiscordGuildMemberSummary[];
@@ -34,24 +53,7 @@ interface DiscordMemberPickerPayload {
   shareLabel?: string;
   shareTitle?: string;
   receiverName?: string;
-  onShared?: (result: {
-    memberId: string;
-    memberName: string;
-    memberDisplayName: string;
-    memberUsername?: string;
-    memberGlobalName?: string | null;
-    memberAvatarHash?: string | null;
-    memberAvatarUrl?: string | null;
-    channelId: string;
-    channelName?: string | null;
-    channelParentId?: string | null;
-    created: boolean;
-    shareUrl: string;
-    shareLabel?: string | null;
-    shareTitle: string;
-    shareComment?: string | null;
-    sharedAt: string;
-  }) => void;
+  onShared?: (result: DiscordMemberShareResult) => void;
   onShareFailed?: (message: string) => void;
 }
 

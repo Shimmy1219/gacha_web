@@ -10,20 +10,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
-import { saveAsset } from '@domain/assets/assetStorage';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
-import {
-  DiscordGuildSelectionMissingError,
-  requireDiscordGuildSelection
-} from '../../features/discord/discordGuildSelectionStorage';
+import { DiscordGuildSelectionMissingError } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
+import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
+import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -102,116 +99,33 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     return userId;
   }, [snapshot.userProfiles?.users, userId, userName]);
 
-  const linkDiscordProfileToStore = useCallback(
-    async (params: {
+  const linkDiscordProfile = useCallback(
+    (params: {
       discordUserId: string;
-      discordDisplayName?: string;
-      discordUserName?: string;
+      discordDisplayName?: string | null;
+      discordUserName?: string | null;
       avatarUrl?: string | null;
       share?: {
-        channelId: string;
+        channelId?: string;
         channelName?: string | null;
         channelParentId?: string | null;
-        shareUrl: string;
+        shareUrl?: string;
         shareLabel?: string | null;
         shareTitle?: string | null;
         shareComment?: string | null;
         sharedAt?: string;
       };
-    }) => {
-      if (!userProfilesStore || !userId) {
-        return;
-      }
-
-      const trimmedDiscordId = params.discordUserId?.trim();
-      if (!trimmedDiscordId) {
-        return;
-      }
-
-      const profilesState = userProfilesStore.getState();
-      const existingProfile = profilesState?.users?.[userId];
-
-      const normalizeAvatarUrl = (
-        value: string | null | undefined
-      ): string | null | undefined => {
-        if (value === undefined) {
-          return undefined;
-        }
-        if (value === null) {
-          return null;
-        }
-        const trimmed = value.trim();
-        return trimmed ? trimmed : null;
-      };
-
-      const normalizedAvatarUrl = normalizeAvatarUrl(params.avatarUrl);
-      let avatarAssetId: string | null | undefined = undefined;
-
-      if (normalizedAvatarUrl === null) {
-        avatarAssetId = null;
-      } else if (typeof normalizedAvatarUrl === 'string') {
-        const existingAvatarUrl = existingProfile?.discordAvatarUrl ?? null;
-        if (normalizedAvatarUrl !== existingAvatarUrl) {
-          if (
-            typeof window !== 'undefined' &&
-            typeof fetch === 'function' &&
-            typeof File !== 'undefined'
-          ) {
-            try {
-              const response = await fetch(normalizedAvatarUrl, { credentials: 'omit' });
-              if (response.ok) {
-                const blob = await response.blob();
-                const mimeType = blob.type || 'image/png';
-                let extension = 'png';
-                if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
-                  extension = 'jpg';
-                } else if (mimeType.includes('gif')) {
-                  extension = 'gif';
-                } else if (mimeType.includes('webp')) {
-                  extension = 'webp';
-                }
-                const fileName = `discord-avatar-${trimmedDiscordId}.${extension}`;
-                const file = new File([blob], fileName, { type: mimeType });
-                const record = await saveAsset(file);
-                avatarAssetId = record.id;
-              } else {
-                console.warn('Discordアバターの取得に失敗しました', {
-                  status: response.status
-                });
-                avatarAssetId = null;
-              }
-            } catch (error) {
-              console.warn('Discordアバターの保存に失敗しました', error);
-              avatarAssetId = null;
-            }
-          } else {
-            avatarAssetId = null;
-          }
-        } else {
-          avatarAssetId = existingProfile?.discordAvatarAssetId ?? undefined;
-        }
-      } else {
-        avatarAssetId = existingProfile?.discordAvatarAssetId ?? undefined;
-      }
-
-      try {
-        userProfilesStore.linkDiscordProfile(
-          userId,
-          {
-            discordUserId: trimmedDiscordId,
-            discordDisplayName: params.discordDisplayName ?? receiverDisplayName,
-            discordUserName: params.discordUserName,
-            discordAvatarAssetId: avatarAssetId,
-            discordAvatarUrl: normalizedAvatarUrl,
-            share: params.share
-          },
-          { persist: 'immediate' }
-        );
-      } catch (error) {
-        console.error('Discordプロフィール情報の保存に失敗しました', error);
-      }
-    },
-    [userProfilesStore, userId, receiverDisplayName]
+    }) =>
+      linkDiscordProfileToStore({
+        store: userProfilesStore,
+        profileId: userId,
+        discordUserId: params.discordUserId,
+        discordDisplayName: params.discordDisplayName ?? receiverDisplayName,
+        discordUserName: params.discordUserName,
+        avatarUrl: params.avatarUrl,
+        share: params.share
+      }),
+    [receiverDisplayName, userId, userProfilesStore]
   );
 
   const storedUpload: SaveOptionsUploadResult | null = useMemo(() => {
@@ -569,71 +483,65 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
 
     try {
-      const selection = requireDiscordGuildSelection(discordUserId);
-      push(DiscordMemberPickerDialog, {
-        title: 'Discord共有先の選択',
-        size: 'lg',
-        payload: {
-          guildId: selection.guildId,
-          discordUserId,
-          initialCategory: selection.privateChannelCategory ?? null,
-          shareUrl: uploadData.url,
-          shareLabel: uploadData.label,
-          receiverName: receiverDisplayName,
-          onShared: ({
-            memberId: sharedMemberId,
-            memberName,
-            memberDisplayName,
-            memberUsername,
-            memberAvatarHash,
-            memberAvatarUrl,
-            channelId,
-            channelName,
-            channelParentId,
-            shareUrl: sharedUrl,
-            shareLabel,
-            shareTitle,
-            shareComment,
-            sharedAt
-          }) => {
-            setErrorBanner(null);
-            const resolvedAvatarUrl = sharedMemberId && memberAvatarHash
-              ? `https://cdn.discordapp.com/avatars/${sharedMemberId}/${memberAvatarHash}.png?size=256`
-              : memberAvatarUrl ?? null;
-            const rawShareUrl = sharedUrl || uploadData?.url || '';
-            const resolvedShareUrl = rawShareUrl.trim();
-            const resolvedShareLabelRaw =
-              shareLabel ?? uploadData?.label ?? (sharedUrl && sharedUrl !== rawShareUrl ? sharedUrl : null);
-            const resolvedShareLabel =
-              typeof resolvedShareLabelRaw === 'string' ? resolvedShareLabelRaw.trim() : resolvedShareLabelRaw;
-            const shareInfo = resolvedShareUrl
-              ? {
-                  channelId,
-                  channelName: channelName ?? null,
-                  channelParentId: channelParentId ?? null,
-                  shareUrl: resolvedShareUrl,
-                  shareLabel: resolvedShareLabel ? resolvedShareLabel : null,
-                  shareTitle: shareTitle ?? null,
-                  shareComment: shareComment ?? null,
-                  sharedAt: sharedAt ?? new Date().toISOString()
-                }
-              : undefined;
+      openDiscordShareDialog({
+        push,
+        discordUserId,
+        shareUrl: uploadData.url,
+        shareLabel: uploadData.label,
+        receiverName: receiverDisplayName,
+        onShared: ({
+          memberId: sharedMemberId,
+          memberName,
+          memberDisplayName,
+          memberUsername,
+          memberAvatarHash,
+          memberAvatarUrl,
+          channelId,
+          channelName,
+          channelParentId,
+          shareUrl: sharedUrl,
+          shareLabel,
+          shareTitle,
+          shareComment,
+          sharedAt
+        }) => {
+          setErrorBanner(null);
+          const resolvedAvatarUrl = sharedMemberId && memberAvatarHash
+            ? `https://cdn.discordapp.com/avatars/${sharedMemberId}/${memberAvatarHash}.png?size=256`
+            : memberAvatarUrl ?? null;
+          const rawShareUrl = sharedUrl || uploadData?.url || '';
+          const resolvedShareUrl = rawShareUrl.trim();
+          const resolvedShareLabelRaw =
+            shareLabel ?? uploadData?.label ?? (sharedUrl && sharedUrl !== rawShareUrl ? sharedUrl : null);
+          const resolvedShareLabel =
+            typeof resolvedShareLabelRaw === 'string' ? resolvedShareLabelRaw.trim() : resolvedShareLabelRaw;
+          const shareInfo = resolvedShareUrl
+            ? {
+                channelId,
+                channelName: channelName ?? null,
+                channelParentId: channelParentId ?? null,
+                shareUrl: resolvedShareUrl,
+                shareLabel: resolvedShareLabel ? resolvedShareLabel : null,
+                shareTitle: shareTitle ?? null,
+                shareComment: shareComment ?? null,
+                sharedAt: sharedAt ?? new Date().toISOString()
+              }
+            : undefined;
 
-            void linkDiscordProfileToStore({
-              discordUserId: sharedMemberId,
-              discordDisplayName: memberDisplayName ?? memberName,
-              discordUserName: memberUsername,
-              avatarUrl: resolvedAvatarUrl,
-              share: shareInfo
-            });
-            setUploadNotice({
-              id: Date.now(),
-              message: `${memberName}さんにDiscordで共有しました`
-            });
-          },
-          onShareFailed: (message) => {
-            setErrorBanner(message);
-          }
+          void linkDiscordProfile({
+            discordUserId: sharedMemberId,
+            discordDisplayName: memberDisplayName ?? memberName,
+            discordUserName: memberUsername,
+            avatarUrl: resolvedAvatarUrl,
+            share: shareInfo
+          });
+          setUploadNotice({
+            id: Date.now(),
+            message: `${memberName}さんにDiscordで共有しました`
+          });
+        },
+        onShareFailed: (message) => {
+          setErrorBanner(message);
         }
       });
     } catch (error) {

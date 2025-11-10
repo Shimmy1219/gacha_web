@@ -1,8 +1,23 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import { clsx } from 'clsx';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import {
+  loadDiscordGuildSelection,
+  updateDiscordGuildSelectionMemberCacheTimestamp,
+  type DiscordGuildSelection
+} from '../../features/discord/discordGuildSelectionStorage';
+import {
+  loadDiscordMemberCache,
+  normalizeDiscordGuildMembers,
+  saveDiscordMemberCache,
+  type DiscordGuildMemberSummary,
+  type DiscordMemberCacheEntry
+} from '../../features/discord/discordMemberCacheStorage';
 
 interface UserDiscordProfileDialogPayload {
   userId: string;
@@ -28,6 +43,15 @@ export function UserDiscordProfileDialog({
   const { userProfiles: userProfilesStore } = useDomainStores();
   const userProfilesState = useStoreValue(userProfilesStore);
   const profile = userProfilesState?.users?.[userId];
+  const { data: discordSession } = useDiscordSession();
+  const discordUserIdFromSession = discordSession?.user?.id ?? null;
+
+  const [guildSelection, setGuildSelection] = useState<DiscordGuildSelection | null>(null);
+  const guildId = guildSelection?.guildId ?? null;
+  const guildName = guildSelection?.guildName ?? null;
+
+  const [memberCacheEntry, setMemberCacheEntry] = useState<DiscordMemberCacheEntry | null>(null);
+  const members = memberCacheEntry?.members ?? [];
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -38,26 +62,34 @@ export function UserDiscordProfileDialog({
     []
   );
 
-  const [discordUserId, setDiscordUserId] = useState(profile?.discordUserId ?? '');
-  const [discordDisplayName, setDiscordDisplayName] = useState(profile?.discordDisplayName ?? '');
-  const [discordUserName, setDiscordUserName] = useState(profile?.discordUserName ?? '');
-  const [discordAvatarAssetId, setDiscordAvatarAssetId] = useState(profile?.discordAvatarAssetId ?? '');
-  const [discordAvatarUrl, setDiscordAvatarUrl] = useState(profile?.discordAvatarUrl ?? '');
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(profile?.discordUserId ?? null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [cacheMessage, setCacheMessage] = useState<string | null>(null);
+  const [cacheError, setCacheError] = useState<string | null>(null);
+  const [isRefreshingCache, setIsRefreshingCache] = useState(false);
 
   useEffect(() => {
-    setDiscordUserId(profile?.discordUserId ?? '');
-    setDiscordDisplayName(profile?.discordDisplayName ?? '');
-    setDiscordUserName(profile?.discordUserName ?? '');
-    setDiscordAvatarAssetId(profile?.discordAvatarAssetId ?? '');
-    setDiscordAvatarUrl(profile?.discordAvatarUrl ?? '');
-  }, [
-    profile?.discordAvatarAssetId,
-    profile?.discordAvatarUrl,
-    profile?.discordDisplayName,
-    profile?.discordUserId,
-    profile?.discordUserName
-  ]);
+    if (!discordUserIdFromSession) {
+      setGuildSelection(null);
+      return;
+    }
+    const selection = loadDiscordGuildSelection(discordUserIdFromSession);
+    setGuildSelection(selection);
+  }, [discordUserIdFromSession]);
+
+  useEffect(() => {
+    if (!discordUserIdFromSession || !guildId) {
+      setMemberCacheEntry(null);
+      return;
+    }
+    const entry = loadDiscordMemberCache(discordUserIdFromSession, guildId);
+    setMemberCacheEntry(entry);
+  }, [discordUserIdFromSession, guildId]);
+
+  useEffect(() => {
+    setSelectedMemberId(profile?.discordUserId ?? null);
+  }, [profile?.discordUserId]);
 
   const linkedAtLabel = useMemo(
     () => formatDateLabel(dateTimeFormatter, profile?.discordLinkedAt),
@@ -115,26 +147,79 @@ export function UserDiscordProfileDialog({
 
   const fieldId = (name: string) => `user-discord-${userId}-${name}`;
 
+  const sortedMembers = useMemo(() => {
+    if (members.length === 0) {
+      return [] as DiscordGuildMemberSummary[];
+    }
+    return [...members].sort((a, b) => {
+      const nameA = a.displayName.toLowerCase();
+      const nameB = b.displayName.toLowerCase();
+      if (nameA < nameB) {
+        return -1;
+      }
+      if (nameA > nameB) {
+        return 1;
+      }
+      return a.id.localeCompare(b.id);
+    });
+  }, [members]);
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredMembers = useMemo(() => {
+    if (!normalizedSearch) {
+      return sortedMembers;
+    }
+
+    return sortedMembers.filter((member) => {
+      const fields = [
+        member.displayName,
+        member.username,
+        member.globalName ?? '',
+        member.nick ?? ''
+      ]
+        .filter(Boolean)
+        .map((field) => field.toLowerCase());
+      return fields.some((field) => field.includes(normalizedSearch));
+    });
+  }, [normalizedSearch, sortedMembers]);
+
+  const selectedMember = useMemo(
+    () => (selectedMemberId ? members.find((member) => member.id === selectedMemberId) ?? null : null),
+    [members, selectedMemberId]
+  );
+
+  const memberCacheUpdatedLabel = useMemo(
+    () => formatDateLabel(dateTimeFormatter, memberCacheEntry?.updatedAt),
+    [dateTimeFormatter, memberCacheEntry?.updatedAt]
+  );
+
+  const handleSelectMember = useCallback((memberId: string) => {
+    setSelectedMemberId(memberId);
+    setError(null);
+  }, []);
+
+  const refreshGuildSelection = useCallback(() => {
+    if (!discordUserIdFromSession) {
+      return;
+    }
+    const selection = loadDiscordGuildSelection(discordUserIdFromSession);
+    setGuildSelection(selection);
+  }, [discordUserIdFromSession]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    const trimmedId = discordUserId.trim();
-    if (!trimmedId) {
-      setError('DiscordユーザーIDを入力してください');
+    if (!selectedMember) {
+      setError('Discordメンバーを選択してください');
       return;
     }
 
-    const displayNameValue = discordDisplayName.trim();
-    const userNameValue = discordUserName.trim();
-    const avatarAssetIdValue = discordAvatarAssetId.trim();
-    const avatarUrlValue = discordAvatarUrl.trim();
-
     userProfilesStore.linkDiscordProfile(userId, {
-      discordUserId: trimmedId,
-      discordDisplayName: displayNameValue || null,
-      discordUserName: userNameValue || null,
-      discordAvatarAssetId: avatarAssetIdValue ? avatarAssetIdValue : null,
-      discordAvatarUrl: avatarUrlValue ? avatarUrlValue : null
+      discordUserId: selectedMember.id,
+      discordDisplayName: selectedMember.displayName || null,
+      discordUserName: selectedMember.username || selectedMember.globalName || null,
+      discordAvatarAssetId: null,
+      discordAvatarUrl: selectedMember.avatarUrl ?? null
     });
     close();
   };
@@ -146,6 +231,96 @@ export function UserDiscordProfileDialog({
 
   const canUnlink = Boolean(profile?.discordUserId);
 
+  const handleRefreshMemberCache = useCallback(async () => {
+    if (!discordUserIdFromSession) {
+      setCacheError('Discordにログインしてからメンバーキャッシュを更新してください。');
+      return;
+    }
+    if (!guildId) {
+      setCacheError('Discordギルドが選択されていません。');
+      return;
+    }
+
+    setCacheError(null);
+    setCacheMessage(null);
+    setIsRefreshingCache(true);
+
+    try {
+      const params = new URLSearchParams({ guild_id: guildId, limit: '1000' });
+      const response = await fetch(`/api/discord/members?${params.toString()}`, {
+        headers: {
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        members?: DiscordGuildMemberSummary[];
+        error?: string;
+      } | null;
+
+      if (!response.ok || !payload) {
+        const message = payload?.error?.trim();
+        throw new Error(message && message.length > 0 ? message : `HTTP ${response.status}`);
+      }
+
+      if (!payload.ok || !Array.isArray(payload.members)) {
+        throw new Error(payload.error || 'Discordメンバー一覧の取得に失敗しました');
+      }
+
+      const normalizedMembers = normalizeDiscordGuildMembers(payload.members);
+      if (normalizedMembers.length === 0) {
+        throw new Error('利用可能なメンバーが見つかりませんでした');
+      }
+
+      const savedEntry = saveDiscordMemberCache(discordUserIdFromSession, guildId, normalizedMembers);
+      if (savedEntry) {
+        setMemberCacheEntry(savedEntry);
+        updateDiscordGuildSelectionMemberCacheTimestamp(
+          discordUserIdFromSession,
+          guildId,
+          savedEntry.updatedAt
+        );
+        refreshGuildSelection();
+        setCacheMessage('メンバーキャッシュを更新しました。');
+      } else {
+        setMemberCacheEntry({
+          guildId,
+          members: normalizedMembers,
+          updatedAt: new Date().toISOString()
+        });
+        setCacheMessage('メンバー一覧を更新しました (キャッシュの保存に失敗した可能性があります)。');
+      }
+    } catch (refreshError) {
+      const message =
+        refreshError instanceof Error
+          ? refreshError.message
+          : 'メンバーキャッシュの更新に失敗しました';
+      setCacheError(`メンバーキャッシュの更新に失敗しました: ${message}`);
+    } finally {
+      setIsRefreshingCache(false);
+    }
+  }, [discordUserIdFromSession, guildId, refreshGuildSelection]);
+
+  const missingSelectedMember = Boolean(selectedMemberId && !selectedMember && members.length > 0);
+
+  const memberDetails = useMemo(() => {
+    if (!selectedMember) {
+      return null;
+    }
+    const detailParts = [
+      selectedMember.username ? `@${selectedMember.username}` : null,
+      selectedMember.globalName ?? null,
+      selectedMember.nick ? `(${selectedMember.nick})` : null
+    ].filter(Boolean);
+    return {
+      id: selectedMember.id,
+      displayName: selectedMember.displayName,
+      details: detailParts.join(' / ') || null
+    };
+  }, [selectedMember]);
+
   return (
     <>
       <ModalBody className="space-y-5">
@@ -154,73 +329,106 @@ export function UserDiscordProfileDialog({
           <p className="text-xs text-muted-foreground">Discord情報を編集または連携解除します。</p>
         </div>
         <form id="discord-profile-form" className="space-y-4" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('id')}>
-              DiscordユーザーID
-            </label>
-            <input
-              id={fieldId('id')}
-              type="text"
-              className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              value={discordUserId}
-              onChange={(event) => {
-                setDiscordUserId(event.target.value);
-                if (error) {
-                  setError(null);
-                }
-              }}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('display-name')}>
-              表示名 (任意)
-            </label>
-            <input
-              id={fieldId('display-name')}
-              type="text"
-              className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              value={discordDisplayName}
-              onChange={(event) => setDiscordDisplayName(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('username')}>
-              ユーザー名 (任意)
-            </label>
-            <input
-              id={fieldId('username')}
-              type="text"
-              className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              value={discordUserName}
-              onChange={(event) => setDiscordUserName(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('avatar-asset')}>
-              アバターアセットID (任意)
-            </label>
-            <input
-              id={fieldId('avatar-asset')}
-              type="text"
-              className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              value={discordAvatarAssetId}
-              onChange={(event) => setDiscordAvatarAssetId(event.target.value)}
-              placeholder="画像アセットID"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('avatar-url')}>
-              アバターURL (任意)
-            </label>
-            <input
-              id={fieldId('avatar-url')}
-              type="url"
-              className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-              value={discordAvatarUrl}
-              onChange={(event) => setDiscordAvatarUrl(event.target.value)}
-              placeholder="https://..."
-            />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground">選択中のDiscordギルド</p>
+                <p className="text-sm text-surface-foreground">{guildName ?? '未選択'}</p>
+                {memberCacheUpdatedLabel ? (
+                  <p className="text-xs text-muted-foreground">メンバーキャッシュ最終更新: {memberCacheUpdatedLabel}</p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="btn btn-muted inline-flex items-center gap-1"
+                onClick={handleRefreshMemberCache}
+                disabled={isRefreshingCache || !discordUserIdFromSession || !guildId}
+              >
+                <ArrowPathIcon
+                  className={clsx('h-4 w-4', isRefreshingCache && 'animate-spin')}
+                  aria-hidden="true"
+                />
+                <span>メンバーキャッシュを更新</span>
+              </button>
+            </div>
+            {!discordUserIdFromSession ? (
+              <p className="text-xs text-red-500">
+                Discordにログインすると所属ギルドのメンバー一覧を利用できます。
+              </p>
+            ) : null}
+            {discordUserIdFromSession && !guildId ? (
+              <p className="text-xs text-red-500">Discordギルドが選択されていません。Discord設定からギルドを選択してください。</p>
+            ) : null}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-muted-foreground" htmlFor={fieldId('search')}>
+                メンバーを検索
+              </label>
+              <input
+                id={fieldId('search')}
+                type="text"
+                className="w-full rounded-lg border border-border/60 bg-panel-contrast px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="表示名やユーザー名で検索"
+                disabled={members.length === 0}
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground">メンバー一覧</p>
+              <div className="max-h-64 space-y-2 overflow-y-auto rounded-xl border border-border/60 bg-panel-contrast p-2">
+                {filteredMembers.length > 0 ? (
+                  filteredMembers.map((member) => {
+                    const detailParts = [
+                      member.username ? `@${member.username}` : null,
+                      member.globalName ?? null,
+                      member.nick ? `(${member.nick})` : null
+                    ].filter(Boolean);
+                    return (
+                      <button
+                        key={member.id}
+                        type="button"
+                        className={clsx(
+                          'w-full rounded-lg border px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                          selectedMemberId === member.id
+                            ? 'border-accent bg-accent/10 text-surface-foreground'
+                            : 'border-border/60 bg-panel-contrast text-surface-foreground hover:border-border/40 hover:bg-panel-contrast/80'
+                        )}
+                        onClick={() => handleSelectMember(member.id)}
+                      >
+                        <p className="text-sm font-semibold">{member.displayName}</p>
+                        {detailParts.length > 0 ? (
+                          <p className="text-xs text-muted-foreground">{detailParts.join(' / ')}</p>
+                        ) : null}
+                        <p className="text-xs text-muted-foreground/80">ID: {member.id}</p>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {guildId
+                      ? 'メンバーキャッシュが見つかりません。更新ボタンを押して最新のメンバー一覧を取得してください。'
+                      : 'メンバー一覧を取得するにはDiscordにログインし、ギルドを選択してください。'}
+                  </p>
+                )}
+              </div>
+            </div>
+            {cacheMessage ? <p className="text-xs text-accent">{cacheMessage}</p> : null}
+            {cacheError ? <p className="text-xs text-red-500">{cacheError}</p> : null}
+            {missingSelectedMember ? (
+              <p className="text-xs text-red-500">
+                選択中のDiscordユーザーは現在のメンバーキャッシュに存在しません。キャッシュを更新するか、別のメンバーを選択してください。
+              </p>
+            ) : null}
+            {memberDetails ? (
+              <div className="space-y-1 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2">
+                <p className="text-xs font-semibold text-muted-foreground">選択中のメンバー</p>
+                <p className="text-sm text-surface-foreground">{memberDetails.displayName}</p>
+                {memberDetails.details ? (
+                  <p className="text-xs text-muted-foreground">{memberDetails.details}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground/80">ID: {memberDetails.id}</p>
+              </div>
+            ) : null}
           </div>
           {error ? <p className="text-xs text-red-500">{error}</p> : null}
         </form>
@@ -256,7 +464,12 @@ export function UserDiscordProfileDialog({
           <button type="button" className="btn btn-muted" onClick={close}>
             キャンセル
           </button>
-          <button type="submit" form="discord-profile-form" className="btn btn-primary">
+          <button
+            type="submit"
+            form="discord-profile-form"
+            className="btn btn-primary"
+            disabled={!selectedMember}
+          >
             保存
           </button>
         </div>

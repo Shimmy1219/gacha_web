@@ -1,13 +1,19 @@
-import { ClipboardIcon, ShareIcon, SparklesIcon } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ClipboardIcon, PaperAirplaneIcon, ShareIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
-import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
+import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
+import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
+import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
+import { DiscordGuildSelectionMissingError } from '../../features/discord/discordGuildSelectionStorage';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -200,6 +206,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastPlan, setLastPlan] = useState<DrawPlan | null>(null);
   const [lastTotalPulls, setLastTotalPulls] = useState<number | null>(null);
   const [lastUserName, setLastUserName] = useState<string>('');
+  const [lastUserId, setLastUserId] = useState<string | null>(null);
+  const [isDiscordDelivering, setIsDiscordDelivering] = useState(false);
+  const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
+  const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!gachaOptions.length) {
@@ -245,6 +256,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastPlan(null);
     setLastTotalPulls(null);
     setLastUserName('');
+    setLastUserId(null);
+    setDiscordDeliveryError(null);
+    setDiscordDeliveryNotice(null);
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+      noticeTimerRef.current = null;
+    }
   }, [selectedGachaId]);
 
   const parsedPoints = useMemo(() => {
@@ -300,6 +318,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   }, [normalizedUserName, pullHistoryState, userProfilesState]);
 
   const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
+  const { uploadZip } = useBlobUpload();
+  const { data: discordSession } = useDiscordSession();
+  const persistence = useAppPersistence();
 
   const drawPlan = useMemo(() => {
     if (!selectedGacha) {
@@ -321,6 +342,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     try {
       setErrorMessage(null);
       setLastPullId(null);
+      setDiscordDeliveryError(null);
+      setDiscordDeliveryNotice(null);
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+      setLastUserId(null);
 
       if (!selectedGacha) {
         setErrorMessage('ガチャの種類を選択してください。');
@@ -416,6 +444,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastPlan(executionResult.plan);
       setLastTotalPulls(executionResult.totalPulls);
       setLastUserName(normalizedUserName);
+      setLastUserId(userId ?? null);
     } catch (error) {
       console.error('ガチャ実行中にエラーが発生しました', error);
       setErrorMessage('ガチャの実行中にエラーが発生しました。');
@@ -426,6 +455,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastPointsRemainder(null);
       setLastExecutionWarnings([]);
       setLastPlan(null);
+      setLastUserId(null);
     } finally {
       setIsExecuting(false);
     }
@@ -516,6 +546,41 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   ]);
 
   const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
+  const isDiscordLoggedIn = discordSession?.loggedIn === true;
+  const staffDiscordId = discordSession?.user?.id ?? null;
+  const staffDiscordName = discordSession?.user?.name ?? null;
+  const lastUserProfile = lastUserId ? userProfilesState?.users?.[lastUserId] : undefined;
+  const canDeliverToDiscord = Boolean(
+    resultItems &&
+      lastPullId &&
+      lastUserId &&
+      lastUserProfile?.discordUserId &&
+      isDiscordLoggedIn &&
+      staffDiscordId
+  );
+  const discordDeliveryButtonDisabled = isDiscordDelivering || !canDeliverToDiscord;
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!discordDeliveryNotice) {
+      return;
+    }
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current);
+    }
+    noticeTimerRef.current = window.setTimeout(() => {
+      setDiscordDeliveryNotice(null);
+      noticeTimerRef.current = null;
+    }, 4000);
+  }, [discordDeliveryNotice]);
 
   const handleShareResult = useCallback(() => {
     if (!shareContent) {
@@ -523,6 +588,168 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     void shareResult('draw-result', shareContent.shareText);
   }, [shareContent, shareResult]);
+
+  const handleDeliverToDiscord = useCallback(async () => {
+    if (!resultItems || resultItems.length === 0) {
+      setDiscordDeliveryError('共有できるガチャ結果がありません。');
+      return;
+    }
+    if (!lastPullId) {
+      setDiscordDeliveryError('共有する履歴が見つかりませんでした。');
+      return;
+    }
+    if (!lastUserId) {
+      setDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
+      return;
+    }
+    if (!isDiscordLoggedIn) {
+      setDiscordDeliveryError('Discordにログインしてから共有してください。');
+      return;
+    }
+    if (!staffDiscordId) {
+      setDiscordDeliveryError('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      return;
+    }
+
+    const profile = lastUserProfile;
+    if (!profile?.discordUserId) {
+      setDiscordDeliveryError('このユーザーにはDiscord連携情報がありません。プロフィールを確認してください。');
+      return;
+    }
+
+    setIsDiscordDelivering(true);
+    setDiscordDeliveryError(null);
+
+    try {
+      const snapshot = persistence.loadSnapshot();
+
+      const profileDisplayName = profile.displayName?.trim();
+      const receiverDisplayName =
+        profileDisplayName && profileDisplayName.length > 0
+          ? profileDisplayName
+          : (lastUserName && lastUserName.trim().length > 0
+              ? lastUserName.trim()
+              : normalizedUserName && normalizedUserName.length > 0
+                ? normalizedUserName
+                : profile.id || lastUserId);
+
+      const selection = { mode: 'history', pullIds: [lastPullId] } as const;
+
+      const zip = await buildUserZipFromSelection({
+        snapshot,
+        selection,
+        userId: lastUserId,
+        userName: receiverDisplayName
+      });
+
+      const uploadResponse = await uploadZip({
+        file: zip.blob,
+        fileName: zip.fileName,
+        userId: lastUserId,
+        receiverName: receiverDisplayName,
+        ownerDiscordId: staffDiscordId,
+        ownerDiscordName: staffDiscordName ?? undefined
+      });
+
+      if (!uploadResponse?.shareUrl) {
+        throw new Error('Discord共有に必要なURLを取得できませんでした。');
+      }
+
+      if (zip.pullIds.length > 0) {
+        pullHistory.markPullStatus(zip.pullIds, 'uploaded');
+      }
+
+      openDiscordShareDialog({
+        push,
+        discordUserId: staffDiscordId,
+        shareUrl: uploadResponse.shareUrl,
+        shareLabel: uploadResponse.shareUrl,
+        receiverName: receiverDisplayName,
+        onShared: ({
+          memberId: sharedMemberId,
+          memberName,
+          memberDisplayName,
+          memberUsername,
+          memberAvatarHash,
+          memberAvatarUrl,
+          channelId,
+          channelName,
+          channelParentId,
+          shareUrl: sharedUrl,
+          shareLabel,
+          shareTitle,
+          shareComment,
+          sharedAt
+        }) => {
+          setDiscordDeliveryError(null);
+          setDiscordDeliveryNotice(`${memberName}さんに景品を送信しました`);
+          const resolvedAvatarUrl = sharedMemberId && memberAvatarHash
+            ? `https://cdn.discordapp.com/avatars/${sharedMemberId}/${memberAvatarHash}.png?size=256`
+            : memberAvatarUrl ?? null;
+          const rawShareUrl = sharedUrl || uploadResponse.shareUrl || '';
+          const resolvedShareUrl = rawShareUrl.trim();
+          const resolvedShareLabelRaw =
+            shareLabel ?? (uploadResponse.shareUrl && uploadResponse.shareUrl !== rawShareUrl ? uploadResponse.shareUrl : null);
+          const resolvedShareLabel =
+            typeof resolvedShareLabelRaw === 'string' ? resolvedShareLabelRaw.trim() : resolvedShareLabelRaw;
+          const shareInfo = resolvedShareUrl
+            ? {
+                channelId,
+                channelName: channelName ?? null,
+                channelParentId: channelParentId ?? null,
+                shareUrl: resolvedShareUrl,
+                shareLabel: resolvedShareLabel ? resolvedShareLabel : null,
+                shareTitle: shareTitle ?? null,
+                shareComment: shareComment ?? null,
+                sharedAt: sharedAt ?? new Date().toISOString()
+              }
+            : undefined;
+
+          void linkDiscordProfileToStore({
+            store: userProfiles,
+            profileId: lastUserId,
+            discordUserId: sharedMemberId,
+            discordDisplayName: memberDisplayName ?? memberName,
+            discordUserName: memberUsername,
+            avatarUrl: resolvedAvatarUrl,
+            share: shareInfo
+          });
+        },
+        onShareFailed: (message) => {
+          setDiscordDeliveryError(message);
+        }
+      });
+    } catch (error) {
+      const message =
+        error instanceof DiscordGuildSelectionMissingError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      const displayMessage =
+        error instanceof DiscordGuildSelectionMissingError
+          ? message
+          : `Discord共有の準備に失敗しました: ${message}`;
+      setDiscordDeliveryError(displayMessage);
+    } finally {
+      setIsDiscordDelivering(false);
+    }
+  }, [
+    resultItems,
+    lastPullId,
+    lastUserId,
+    isDiscordLoggedIn,
+    staffDiscordId,
+    lastUserProfile,
+    persistence,
+    lastUserName,
+    normalizedUserName,
+    uploadZip,
+    staffDiscordName,
+    pullHistory,
+    push,
+    userProfiles
+  ]);
 
   const handleCopyShareResult = useCallback(() => {
     if (!shareContent) {
@@ -772,6 +999,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               </div>
               {shareContent ? (
                 <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
+                  {lastUserProfile?.discordUserId ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs"
+                      onClick={handleDeliverToDiscord}
+                      disabled={discordDeliveryButtonDisabled}
+                    >
+                      <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      Discordに即送信
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
@@ -816,6 +1054,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   {shareStatus === 'error' ? (
                     <span className="basis-full text-right text-[11px] text-red-500">
                       共有に失敗しました
+                    </span>
+                  ) : null}
+                  {discordDeliveryNotice ? (
+                    <span className="basis-full text-right text-[11px] text-emerald-600">
+                      {discordDeliveryNotice}
+                    </span>
+                  ) : null}
+                  {discordDeliveryError ? (
+                    <span className="basis-full text-right text-[11px] text-red-500">
+                      {discordDeliveryError}
                     </span>
                   ) : null}
                 </div>
