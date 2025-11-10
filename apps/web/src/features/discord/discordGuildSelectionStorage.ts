@@ -1,3 +1,8 @@
+import {
+  clearDiscordMemberCache,
+  loadDiscordMemberCache
+} from './discordMemberCacheStorage';
+
 export interface DiscordGuildCategorySelection {
   id: string;
   name: string;
@@ -10,6 +15,7 @@ export interface DiscordGuildSelection {
   guildIcon?: string | null;
   selectedAt: string;
   privateChannelCategory?: DiscordGuildCategorySelection | null;
+  memberCacheUpdatedAt?: string | null;
 }
 
 const STORAGE_PREFIX = 'discord.guildSelection';
@@ -48,6 +54,12 @@ export function loadDiscordGuildSelection(
     ) {
       parsed.privateChannelCategory = null;
     }
+    if (
+      parsed.memberCacheUpdatedAt !== undefined &&
+      typeof parsed.memberCacheUpdatedAt !== 'string'
+    ) {
+      parsed.memberCacheUpdatedAt = null;
+    }
     return parsed;
   } catch (error) {
     console.warn('Failed to parse Discord guild selection from localStorage', error);
@@ -63,11 +75,54 @@ export function saveDiscordGuildSelection(
     return;
   }
 
+  const previousSelection = loadDiscordGuildSelection(discordUserId);
+  if (previousSelection?.guildId && previousSelection.guildId !== selection.guildId) {
+    clearDiscordMemberCache(discordUserId, previousSelection.guildId);
+  }
+
+  const cacheEntry =
+    selection.memberCacheUpdatedAt !== undefined
+      ? null
+      : loadDiscordMemberCache(discordUserId, selection.guildId);
+
+  const normalizedSelection: DiscordGuildSelection = {
+    ...selection,
+    memberCacheUpdatedAt:
+      selection.memberCacheUpdatedAt !== undefined
+        ? selection.memberCacheUpdatedAt
+        : cacheEntry?.updatedAt ?? null
+  };
+
   try {
-    window.localStorage.setItem(getStorageKey(discordUserId), JSON.stringify(selection));
+    window.localStorage.setItem(getStorageKey(discordUserId), JSON.stringify(normalizedSelection));
   } catch (error) {
     console.error('Failed to persist Discord guild selection to localStorage', error);
   }
+}
+
+export function updateDiscordGuildSelectionMemberCacheTimestamp(
+  discordUserId: string | undefined | null,
+  guildId: string | undefined | null,
+  updatedAt: string | null | undefined
+): void {
+  if (!discordUserId || !guildId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return;
+  }
+
+  const currentSelection = loadDiscordGuildSelection(discordUserId);
+  if (!currentSelection || currentSelection.guildId !== guildId) {
+    return;
+  }
+
+  const normalizedUpdatedAt = updatedAt ?? null;
+  if (currentSelection.memberCacheUpdatedAt === normalizedUpdatedAt) {
+    return;
+  }
+
+  saveDiscordGuildSelection(discordUserId, {
+    ...currentSelection,
+    memberCacheUpdatedAt: normalizedUpdatedAt
+  });
 }
 
 export function getStoredDiscordGuildId(discordUserId: string | undefined | null): string | null {

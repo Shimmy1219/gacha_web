@@ -12,6 +12,10 @@ import {
   saveDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import {
+  saveDiscordMemberCache,
+  type DiscordGuildMemberSummary
+} from '../../features/discord/discordMemberCacheStorage';
 
 interface DiscordBotInviteDialogPayload {
   userId: string;
@@ -22,6 +26,12 @@ interface DiscordBotInviteDialogPayload {
 
 const DEFAULT_INVITE_URL =
   'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
+
+interface DiscordMembersResponse {
+  ok: boolean;
+  members?: DiscordGuildMemberSummary[];
+  error?: string;
+}
 
 function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
   if (!guild.icon) {
@@ -38,6 +48,7 @@ export function DiscordBotInviteDialog({
   const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const guilds = useMemo(() => data ?? [], [data]);
 
@@ -64,7 +75,7 @@ export function DiscordBotInviteDialog({
     setSelectedGuildId(guild.id);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!userId || !selectedGuildId) {
       return;
     }
@@ -74,22 +85,60 @@ export function DiscordBotInviteDialog({
       return;
     }
 
-    const storedSelection = loadDiscordGuildSelection(userId);
-    const preservedCategory =
-      storedSelection && storedSelection.guildId === guild.id
-        ? storedSelection.privateChannelCategory ?? null
-        : null;
+    setIsSaving(true);
 
-    const selection: DiscordGuildSelection = {
-      guildId: guild.id,
-      guildName: guild.name,
-      guildIcon: guild.icon,
-      selectedAt: new Date().toISOString(),
-      privateChannelCategory: preservedCategory
-    };
-    saveDiscordGuildSelection(userId, selection);
-    payload?.onGuildSelected?.(selection);
-    close();
+    try {
+      const storedSelection = loadDiscordGuildSelection(userId);
+      const preservedCategory =
+        storedSelection && storedSelection.guildId === guild.id
+          ? storedSelection.privateChannelCategory ?? null
+          : null;
+      let memberCacheUpdatedAt: string | null | undefined =
+        storedSelection && storedSelection.guildId === guild.id
+          ? storedSelection.memberCacheUpdatedAt ?? null
+          : null;
+
+      try {
+        const params = new URLSearchParams({ guild_id: guild.id, limit: '1000' });
+        const response = await fetch(`/api/discord/members?${params.toString()}`, {
+          headers: {
+            Accept: 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        const payload = (await response.json().catch(() => null)) as DiscordMembersResponse | null;
+
+        if (response.ok && payload?.ok && Array.isArray(payload.members)) {
+          const savedEntry = saveDiscordMemberCache(userId, guild.id, payload.members);
+          if (savedEntry) {
+            memberCacheUpdatedAt = savedEntry.updatedAt;
+          } else {
+            console.warn('Discord member cache could not be persisted after guild selection.');
+          }
+        } else {
+          const message = payload?.error || `Discordメンバー一覧の取得に失敗しました (${response.status})`;
+          console.warn('Failed to refresh Discord member cache after guild selection:', message);
+        }
+      } catch (error) {
+        console.warn('Unexpected error while refreshing Discord member cache after guild selection', error);
+      }
+
+      const selection: DiscordGuildSelection = {
+        guildId: guild.id,
+        guildName: guild.name,
+        guildIcon: guild.icon,
+        selectedAt: new Date().toISOString(),
+        privateChannelCategory: preservedCategory,
+        memberCacheUpdatedAt
+      };
+
+      saveDiscordGuildSelection(userId, selection);
+      payload?.onGuildSelected?.(selection);
+      close();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -235,8 +284,15 @@ export function DiscordBotInviteDialog({
         <button
           type="button"
           className="btn btn-primary"
-          onClick={handleSubmit}
-          disabled={!selectedGuildId || !guilds.some((guild) => guild.id === selectedGuildId)}
+          onClick={() => {
+            void handleSubmit();
+          }}
+          disabled={
+            isSaving ||
+            !selectedGuildId ||
+            !guilds.some((guild) => guild.id === selectedGuildId && guild.botJoined)
+          }
+          aria-busy={isSaving}
         >
           このギルドを保存
         </button>
