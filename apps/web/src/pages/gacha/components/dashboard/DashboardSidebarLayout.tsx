@@ -64,7 +64,7 @@ export function DashboardSidebarLayout({
         ) : (
           <div
             className={clsx(
-              'dashboard-sidebar-layout__section-grid grid h-full w-full gap-4',
+              'dashboard-sidebar-layout__section-grid grid h-full w-full gap-4 [&_.section-container]:border-none [&_.section-container]:p-0',
               selectedSections.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1'
             )}
           >
