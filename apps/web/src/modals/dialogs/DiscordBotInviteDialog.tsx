@@ -12,6 +12,7 @@ import {
   loadDiscordGuildSelection,
   saveDiscordGuildSelection,
   describeDiscordGuildCapabilityIssue,
+  isDiscordGuildCapabilityCheckFresh,
   type DiscordGuildCapabilityCheckResult,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
@@ -44,6 +45,9 @@ export function DiscordBotInviteDialog({
   const [isCheckingGuild, setIsCheckingGuild] = useState(false);
   const [checkResult, setCheckResult] = useState<DiscordGuildCapabilityCheckResult | null>(null);
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [storedSelection, setStoredSelection] = useState<DiscordGuildSelection | null>(() =>
+    loadDiscordGuildSelection(userId)
+  );
 
   const guilds = useMemo(() => data ?? [], [data]);
 
@@ -52,6 +56,7 @@ export function DiscordBotInviteDialog({
     if (stored?.guildId) {
       setSelectedGuildId(stored.guildId);
     }
+    setStoredSelection(stored);
   }, [userId]);
 
   useEffect(() => {
@@ -61,14 +66,25 @@ export function DiscordBotInviteDialog({
   }, [guilds, selectedGuildId]);
 
   useEffect(() => {
-    setCheckResult(null);
+    if (!selectedGuildId) {
+      setCheckResult(null);
+      setCheckError(null);
+      return;
+    }
+
+    const stored = storedSelection && storedSelection.guildId === selectedGuildId ? storedSelection : null;
+    if (stored?.capabilityCheck) {
+      setCheckResult(stored.capabilityCheck);
+    } else {
+      setCheckResult(null);
+    }
     setCheckError(null);
-  }, [selectedGuildId]);
+  }, [selectedGuildId, storedSelection]);
 
   const handleSelect = (guild: DiscordGuildSummary) => {
     setSelectedGuildId(guild.id);
-    setCheckResult(null);
     setCheckError(null);
+    setStoredSelection(loadDiscordGuildSelection(userId));
   };
 
   const runGuildCapabilityCheck = async (
@@ -128,11 +144,58 @@ export function DiscordBotInviteDialog({
       return;
     }
 
-    const storedSelection = loadDiscordGuildSelection(userId);
+    const latestStoredSelection = loadDiscordGuildSelection(userId);
     const preservedCategory =
+      latestStoredSelection && latestStoredSelection.guildId === guild.id
+        ? latestStoredSelection.privateChannelCategory ?? null
+        : storedSelection && storedSelection.guildId === guild.id
+          ? storedSelection.privateChannelCategory ?? null
+          : null;
+
+    const targetCategoryId = preservedCategory?.id ?? null;
+
+    const candidateChecks = [
+      checkResult && checkResult.guildId === guild.id ? checkResult : null,
+      latestStoredSelection && latestStoredSelection.guildId === guild.id
+        ? latestStoredSelection.capabilityCheck ?? null
+        : null,
       storedSelection && storedSelection.guildId === guild.id
-        ? storedSelection.privateChannelCategory ?? null
-        : null;
+        ? storedSelection.capabilityCheck ?? null
+        : null
+    ].filter((item): item is DiscordGuildCapabilityCheckResult => Boolean(item));
+
+    const reusableCheck =
+      candidateChecks.find((candidate) => {
+        if ((candidate.categoryId ?? null) !== targetCategoryId) {
+          return false;
+        }
+        if (
+          !candidate.canFetchCategories ||
+          !candidate.canEnsurePrivateChannel ||
+          !candidate.canSendMessage
+        ) {
+          return false;
+        }
+        return isDiscordGuildCapabilityCheckFresh(candidate);
+      }) ?? null;
+
+    if (reusableCheck) {
+      const selection: DiscordGuildSelection = {
+        guildId: guild.id,
+        guildName: guild.name,
+        guildIcon: guild.icon,
+        selectedAt: new Date().toISOString(),
+        privateChannelCategory: preservedCategory,
+        capabilityCheck: reusableCheck
+      };
+      saveDiscordGuildSelection(userId, selection);
+      setStoredSelection(selection);
+      setCheckResult(reusableCheck);
+      setCheckError(null);
+      payload?.onGuildSelected?.(selection);
+      close();
+      return;
+    }
 
     setIsCheckingGuild(true);
     setCheckResult(null);

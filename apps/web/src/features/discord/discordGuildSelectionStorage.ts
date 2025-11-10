@@ -29,6 +29,8 @@ export interface DiscordGuildCapabilityCheckResult {
   messages: DiscordGuildCapabilityCheckMessages;
 }
 
+export const DISCORD_GUILD_CAPABILITY_CHECK_TTL_MS = 5 * 60 * 1000;
+
 const STORAGE_PREFIX = 'discord.guildSelection';
 
 function getStorageKey(discordUserId: string): string {
@@ -234,6 +236,27 @@ export function describeDiscordGuildCapabilityIssue(
   }
 
   return issues.join('\n');
+}
+
+export function isDiscordGuildCapabilityCheckFresh(
+  check: DiscordGuildCapabilityCheckResult | null | undefined,
+  ttlMs = DISCORD_GUILD_CAPABILITY_CHECK_TTL_MS,
+  now = Date.now()
+): check is DiscordGuildCapabilityCheckResult {
+  if (!check) {
+    return false;
+  }
+
+  const checkedAtTime = Date.parse(check.checkedAt);
+  if (Number.isNaN(checkedAtTime)) {
+    return false;
+  }
+
+  if (ttlMs <= 0) {
+    return true;
+  }
+
+  return now - checkedAtTime <= ttlMs;
 }
 
 export function clearAllDiscordGuildSelections(): void {
