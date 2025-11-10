@@ -36,17 +36,27 @@ export function formatItemRateWithPrecision(rate?: number, fractionDigits?: numb
     return '';
   }
 
-  const percentValue = rate * 100;
-  if (!Number.isFinite(percentValue)) {
-    return '';
-  }
-
+  const formatted = formatRarityRate(rate);
   const digits = clampFractionDigits(fractionDigits);
-  if (digits == null) {
-    return formatRarityRate(rate);
+
+  if (digits == null || !formatted) {
+    return formatted;
   }
 
-  return percentValue.toFixed(digits);
+  const dotIndex = formatted.indexOf('.');
+  if (dotIndex === -1) {
+    if (digits <= 0) {
+      return formatted;
+    }
+    return `${formatted}.${'0'.repeat(digits)}`;
+  }
+
+  const currentDigits = formatted.length - dotIndex - 1;
+  if (currentDigits >= digits) {
+    return formatted;
+  }
+
+  return `${formatted}${'0'.repeat(digits - currentDigits)}`;
 }
 
 export function inferRarityFractionDigits(
