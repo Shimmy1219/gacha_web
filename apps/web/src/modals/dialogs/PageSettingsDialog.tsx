@@ -26,6 +26,7 @@ import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarSt
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import type { CompleteDrawMode } from '../../logic/gacha/types';
+import type { DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -33,7 +34,7 @@ interface MenuItem {
   description: string;
 }
 
-type SettingsMenuKey = 'gacha' | 'site-theme' | 'misc';
+type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'misc';
 
 const MENU_ITEMS: MenuItem[] = [
   {
@@ -45,6 +46,11 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'site-theme',
     label: 'サイトカラー',
     description: '背景とアクセントカラーのテーマを切り替えます。'
+  },
+  {
+    id: 'layout',
+    label: 'レイアウト',
+    description: 'ページ全体のレイアウトや表示方法を切り替えます。'
   },
   {
     id: 'misc',
@@ -63,6 +69,23 @@ const COMPLETE_MODE_OPTIONS: Array<{ value: CompleteDrawMode; label: string; des
     value: 'frontload',
     label: '初回のみ全種→残りは通常抽選',
     description: '最初のコンプ分は全アイテムを配布し、以降は通常抽選になります。'
+  }
+];
+
+const DASHBOARD_DESKTOP_LAYOUT_OPTIONS: Array<{
+  value: DashboardDesktopLayout;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'grid',
+    label: 'カードグリッド',
+    description: '各セクションを複数列で同時に表示します。従来のデスクトップ表示です。'
+  },
+  {
+    value: 'sidebar',
+    label: 'サイドタブ',
+    description: '左側のタブでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
   }
 ];
 
@@ -139,8 +162,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     userInventories: userInventoriesStore,
     userProfiles: userProfilesStore
   } = useDomainStores();
+  const [desktopLayout, setDesktopLayout] = useState<DashboardDesktopLayout>(() =>
+    uiPreferencesStore.getDashboardDesktopLayout()
+  );
   const appState = useStoreValue(appStateStore);
   const ptSettingsState = useStoreValue(ptControlsStore);
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -197,6 +224,14 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       );
     },
     [ptControlsStore, ptSettingsState]
+  );
+
+  const handleDesktopLayoutChange = useCallback(
+    (layout: DashboardDesktopLayout) => {
+      setDesktopLayout(layout);
+      uiPreferencesStore.setDashboardDesktopLayout(layout);
+    },
+    [uiPreferencesStore]
   );
 
   const handleDeleteAllData = useCallback(async () => {
@@ -340,6 +375,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       ) ?? null,
     [normalizedAccent]
   );
+  const desktopLayoutOptions = useMemo(() => DASHBOARD_DESKTOP_LAYOUT_OPTIONS, []);
 
   useEffect(() => {
     if (!selectedPalette) {
@@ -350,6 +386,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       setCustomAccentColor(selectedPalette[accentScheme]);
     }
   }, [accentScheme, normalizedAccent, selectedPalette, setCustomAccentColor]);
+
+  useEffect(() => {
+    setDesktopLayout(uiPreferencesStore.getDashboardDesktopLayout());
+  }, [uiPreferencesState, uiPreferencesStore]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
@@ -682,6 +722,60 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   まだガチャが登録されていません。ガチャ管理ページから新しいガチャを作成すると、ここに表示されます。
                 </p>
               )}
+            </div>
+          </div>
+        );
+      case 'layout':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-semibold text-surface-foreground">レイアウト</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                デスクトップ時の表示方式を切り替えて、画面サイズに合わせた操作性を選択できます。
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
+                </p>
+              </div>
+              <RadioGroup value={desktopLayout} onChange={handleDesktopLayoutChange} className="space-y-2">
+                {desktopLayoutOptions.map((option) => (
+                  <RadioGroup.Option
+                    key={option.value}
+                    value={option.value}
+                    className={({ checked, active }) =>
+                      clsx(
+                        'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 transition',
+                        checked
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
+                        active && !checked ? 'ring-2 ring-accent/40' : undefined
+                      )
+                    }
+                  >
+                    {({ checked }) => (
+                      <div className="flex w-full flex-col gap-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
+                            {option.label}
+                          </RadioGroup.Label>
+                          {checked ? (
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                              適用中
+                            </span>
+                          ) : null}
+                        </div>
+                        <RadioGroup.Description className="text-xs leading-relaxed text-muted-foreground">
+                          {option.description}
+                        </RadioGroup.Description>
+                      </div>
+                    )}
+                  </RadioGroup.Option>
+                ))}
+              </RadioGroup>
             </div>
           </div>
         );

@@ -1,6 +1,12 @@
-import type { Dispatch, PointerEvent as ReactPointerEvent, ReactNode, SetStateAction } from 'react';
+import type {
+  Dispatch,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  SetStateAction
+} from 'react';
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -12,11 +18,14 @@ import { clsx } from 'clsx';
 
 import { DashboardDesktopGrid } from './DashboardDesktopGrid';
 import { DashboardMobileTabs } from './DashboardMobileTabs';
+import { DashboardSidebarLayout } from './DashboardSidebarLayout';
 import { useResponsiveDashboard } from './useResponsiveDashboard';
 import {
   loadStoredDashboardControlsPosition,
   saveDashboardControlsPosition
 } from './dashboardControlsPositionStorage';
+import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
 
 export interface DashboardSectionConfig {
   id: string;
@@ -35,6 +44,7 @@ interface DashboardContextValue {
   isMobile: boolean;
   activeView: string;
   setActiveView: Dispatch<SetStateAction<string>>;
+  activeSidebarViews: readonly string[];
 }
 
 const DashboardContext = createContext<DashboardContextValue | undefined>(undefined);
@@ -42,6 +52,40 @@ const DashboardContext = createContext<DashboardContextValue | undefined>(undefi
 const DEFAULT_CONTROLS_PADDING = 16;
 
 type ControlsPosition = { top: number; left: number };
+
+function deriveSidebarViews(
+  previous: readonly string[],
+  sections: DashboardSectionConfig[]
+): string[] {
+  const availableIds = sections.map((section) => section.id);
+
+  if (availableIds.length === 0) {
+    return [];
+  }
+
+  const filtered = previous.filter((viewId) => availableIds.includes(viewId)).slice(0, 2);
+
+  if (filtered.length === 0) {
+    return availableIds.slice(0, Math.min(2, availableIds.length));
+  }
+
+  if (filtered.length === 1 && availableIds.length > 1) {
+    const fallback = availableIds.find((id) => id !== filtered[0]);
+    if (fallback) {
+      return [filtered[0], fallback];
+    }
+  }
+
+  return filtered;
+}
+
+function shallowEqualArrays(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((value, index) => value === b[index]);
+}
 
 function clampControlsPosition(
   position: ControlsPosition,
@@ -67,7 +111,14 @@ export function useDashboardShell(): DashboardContextValue {
 
 export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
+  const { uiPreferences: uiPreferencesStore } = useDomainStores();
+  useStoreValue(uiPreferencesStore);
+  const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
+  const isSidebarLayout = !isMobile && desktopLayout === 'sidebar';
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
+  const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
+    deriveSidebarViews([], sections)
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const [controlsPosition, setControlsPosition] = useState<ControlsPosition | null>(null);
@@ -81,6 +132,22 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
       setActiveView(sections[0].id);
     }
   }, [sections, activeView]);
+
+  useEffect(() => {
+    setActiveSidebarViews((previous) => {
+      const next = deriveSidebarViews(previous, sections);
+      if (shallowEqualArrays(previous, next)) {
+        return previous;
+      }
+      return next;
+    });
+  }, [sections]);
+
+  useEffect(() => {
+    if (activeSidebarViews.length > 0 && activeSidebarViews[0] !== activeView) {
+      setActiveView(activeSidebarViews[0]);
+    }
+  }, [activeSidebarViews, activeView]);
 
   useLayoutEffect(() => {
     if (!controlsSlot) {
@@ -222,9 +289,39 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
     window.addEventListener('pointercancel', finishDragging);
   };
 
+  const handleToggleSidebarView = useCallback(
+    (viewId: string) => {
+      setActiveSidebarViews((previous) => {
+        const availableIds = sections.map((section) => section.id);
+
+        if (!availableIds.includes(viewId)) {
+          return previous;
+        }
+
+        const isSelected = previous.includes(viewId);
+
+        if (isSelected) {
+          const next = previous.filter((id) => id !== viewId);
+          if (next.length === 0) {
+            const fallback = availableIds.find((id) => id !== viewId);
+            return fallback ? [fallback] : [viewId];
+          }
+          return next;
+        }
+
+        if (previous.length >= 2) {
+          return [...previous.slice(1), viewId];
+        }
+
+        return [...previous, viewId];
+      });
+    },
+    [sections]
+  );
+
   const value = useMemo(
-    () => ({ isMobile, activeView, setActiveView }),
-    [isMobile, activeView]
+    () => ({ isMobile, activeView, setActiveView, activeSidebarViews }),
+    [isMobile, activeView, activeSidebarViews]
   );
 
   return (
@@ -252,9 +349,21 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </aside>
         ) : null}
 
-        <div className="dashboard-shell__desktop hidden lg:block">
-          <DashboardDesktopGrid sections={sections} />
-        </div>
+        {!isMobile && isSidebarLayout ? (
+          <div className="dashboard-shell__desktop-sidebar hidden lg:block">
+            <DashboardSidebarLayout
+              sections={sections}
+              selectedViewIds={activeSidebarViews}
+              onToggleView={handleToggleSidebarView}
+            />
+          </div>
+        ) : null}
+
+        {!isMobile && !isSidebarLayout ? (
+          <div className="dashboard-shell__desktop hidden lg:block">
+            <DashboardDesktopGrid sections={sections} />
+          </div>
+        ) : null}
 
         <div className="dashboard-shell__mobile lg:hidden">
           {sections.map((section) => (

@@ -28,6 +28,11 @@ const CUSTOM_BASE_TONE_SET = new Set<string>(CUSTOM_BASE_TONE_VALUES);
 export const DEFAULT_CUSTOM_BASE_TONE: CustomBaseTone = 'dark';
 const LEGACY_TWILIGHT_ACCENT = '#8b5cf6';
 
+export const DASHBOARD_DESKTOP_LAYOUT_VALUES = ['grid', 'sidebar'] as const;
+export type DashboardDesktopLayout = (typeof DASHBOARD_DESKTOP_LAYOUT_VALUES)[number];
+const DASHBOARD_DESKTOP_LAYOUT_SET = new Set<string>(DASHBOARD_DESKTOP_LAYOUT_VALUES);
+export const DEFAULT_DASHBOARD_DESKTOP_LAYOUT: DashboardDesktopLayout = 'grid';
+
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export type SiteTheme = (typeof SITE_THEME_VALUES)[number];
@@ -111,6 +116,16 @@ function normalizeCustomBaseTone(value: unknown): CustomBaseTone | null {
   return null;
 }
 
+function normalizeDashboardDesktopLayout(value: unknown): DashboardDesktopLayout | null {
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase();
+    if (DASHBOARD_DESKTOP_LAYOUT_SET.has(lower)) {
+      return lower as DashboardDesktopLayout;
+    }
+  }
+  return null;
+}
+
 function normalizeSiteTheme(value: unknown): SiteTheme | null {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
@@ -173,6 +188,19 @@ function readCustomBaseToneFromState(state: UiPreferencesStateV3 | undefined): C
     return null;
   }
   return normalizeCustomBaseTone(appearance.customBaseTone);
+}
+
+function readDashboardDesktopLayoutFromState(
+  state: UiPreferencesStateV3 | undefined
+): DashboardDesktopLayout | null {
+  if (!state) {
+    return null;
+  }
+  const dashboard = state.dashboard;
+  if (!isRecord(dashboard)) {
+    return null;
+  }
+  return normalizeDashboardDesktopLayout(dashboard.desktop);
 }
 
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
@@ -394,6 +422,39 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           appearance: {
             ...previousAppearance,
             customBaseTone: tone
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getDashboardDesktopLayout(): DashboardDesktopLayout {
+    return readDashboardDesktopLayoutFromState(this.state) ?? DEFAULT_DASHBOARD_DESKTOP_LAYOUT;
+  }
+
+  setDashboardDesktopLayout(
+    layout: DashboardDesktopLayout,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readDashboardDesktopLayoutFromState(previous) ?? DEFAULT_DASHBOARD_DESKTOP_LAYOUT;
+        if (current === layout) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousDashboard = base.dashboard && isRecord(base.dashboard) ? base.dashboard : {};
+
+        return {
+          ...base,
+          dashboard: {
+            ...previousDashboard,
+            desktop: layout
           }
         };
       },

@@ -998,7 +998,6 @@ export function ItemsSection(): JSX.Element {
               フィルタ
             </button>
           }
-          footer="ガチャタブ切替とItemCatalogToolbarの操作が追加される予定です。画像設定はAssetStoreと連携します。"
           contentClassName="items-section__content"
           forceMobile={forceMobileSection}
         >

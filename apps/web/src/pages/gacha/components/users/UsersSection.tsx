@@ -113,7 +113,6 @@ export function UsersSection(): JSX.Element {
           フィルタ
         </button>
       }
-      footer="ユーザーカードの折りたたみ・フィルタ同期はUserPanelFilterと同一のフックを利用します。"
     >
       <div
         className={clsx(

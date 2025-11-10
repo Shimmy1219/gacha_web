@@ -208,7 +208,6 @@ export function RiaguSection(): JSX.Element {
       id="riagu"
       title="リアグ設定"
       description="リアルグッズの在庫と当選者を同期します。"
-      footer="RiaguStoreのマーク/解除とAppStateStore.saveDebounced()を連携予定です。"
       contentClassName="riagu-section__content"
     >
       <GachaTabs

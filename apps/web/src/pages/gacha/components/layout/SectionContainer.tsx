@@ -10,7 +10,6 @@ interface SectionContainerProps {
   accentLabel?: string;
   actions?: ReactNode;
   filterButton?: ReactNode;
-  footer?: ReactNode;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -24,7 +23,6 @@ export function SectionContainer({
   accentLabel,
   actions,
   filterButton,
-  footer,
   children,
   className,
   contentClassName,
@@ -125,9 +123,6 @@ export function SectionContainer({
             {children}
           </div>
         </div>
-        {footer ? (
-          <footer className="section-container__footer border-t border-white/5 pt-4 text-xs text-muted-foreground">{footer}</footer>
-        ) : null}
       </div>
     </section>
   );
