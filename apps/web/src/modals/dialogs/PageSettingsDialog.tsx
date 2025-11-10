@@ -34,7 +34,7 @@ interface MenuItem {
   description: string;
 }
 
-type SettingsMenuKey = 'gacha' | 'site-theme' | 'misc';
+type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'misc';
 
 const MENU_ITEMS: MenuItem[] = [
   {
@@ -46,6 +46,11 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'site-theme',
     label: 'サイトカラー',
     description: '背景とアクセントカラーのテーマを切り替えます。'
+  },
+  {
+    id: 'layout',
+    label: 'レイアウト',
+    description: 'ページ全体のレイアウトや表示方法を切り替えます。'
   },
   {
     id: 'misc',
@@ -536,49 +541,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 並べ替えや表示ルールを変更すると、ガチャ管理ページに即時反映されます。
               </p>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
-                </p>
-              </div>
-              <RadioGroup value={desktopLayout} onChange={handleDesktopLayoutChange} className="space-y-2">
-                {desktopLayoutOptions.map((option) => (
-                  <RadioGroup.Option
-                    key={option.value}
-                    value={option.value}
-                    className={({ checked, active }) =>
-                      clsx(
-                        'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 transition',
-                        checked
-                          ? 'border-accent bg-accent/10'
-                          : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
-                        active && !checked ? 'ring-2 ring-accent/40' : undefined
-                      )
-                    }
-                  >
-                    {({ checked }) => (
-                      <div className="flex w-full flex-col gap-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
-                            {option.label}
-                          </RadioGroup.Label>
-                          {checked ? (
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                              適用中
-                            </span>
-                          ) : null}
-                        </div>
-                        <RadioGroup.Description className="text-xs leading-relaxed text-muted-foreground">
-                          {option.description}
-                        </RadioGroup.Description>
-                      </div>
-                    )}
-                  </RadioGroup.Option>
-                ))}
-              </RadioGroup>
-            </div>
             <div className="space-y-3">
               <SwitchField
                 label="アーカイブ済みのガチャをリストに表示"
@@ -760,6 +722,60 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   まだガチャが登録されていません。ガチャ管理ページから新しいガチャを作成すると、ここに表示されます。
                 </p>
               )}
+            </div>
+          </div>
+        );
+      case 'layout':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-base font-semibold text-surface-foreground">レイアウト</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                デスクトップ時の表示方式を切り替えて、画面サイズに合わせた操作性を選択できます。
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
+                </p>
+              </div>
+              <RadioGroup value={desktopLayout} onChange={handleDesktopLayoutChange} className="space-y-2">
+                {desktopLayoutOptions.map((option) => (
+                  <RadioGroup.Option
+                    key={option.value}
+                    value={option.value}
+                    className={({ checked, active }) =>
+                      clsx(
+                        'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 transition',
+                        checked
+                          ? 'border-accent bg-accent/10'
+                          : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
+                        active && !checked ? 'ring-2 ring-accent/40' : undefined
+                      )
+                    }
+                  >
+                    {({ checked }) => (
+                      <div className="flex w-full flex-col gap-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
+                            {option.label}
+                          </RadioGroup.Label>
+                          {checked ? (
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                              適用中
+                            </span>
+                          ) : null}
+                        </div>
+                        <RadioGroup.Description className="text-xs leading-relaxed text-muted-foreground">
+                          {option.description}
+                        </RadioGroup.Description>
+                      </div>
+                    )}
+                  </RadioGroup.Option>
+                ))}
+              </RadioGroup>
             </div>
           </div>
         );
