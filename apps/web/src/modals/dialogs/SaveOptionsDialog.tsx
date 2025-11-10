@@ -19,6 +19,9 @@ import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
   DiscordGuildSelectionMissingError,
+  describeDiscordGuildCapabilityIssue,
+  isDiscordGuildSelectionCapabilityValid,
+  loadDiscordGuildSelection,
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -569,6 +572,25 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
 
     try {
+      const currentSelection = loadDiscordGuildSelection(discordUserId);
+      if (!currentSelection) {
+        setErrorBanner(
+          'Discordギルドの選択情報が見つかりません。Discord設定からギルドを保存してから再度お試しください。'
+        );
+        setIsDiscordSharing(false);
+        return;
+      }
+
+      if (!isDiscordGuildSelectionCapabilityValid(currentSelection)) {
+        const issue = describeDiscordGuildCapabilityIssue(currentSelection);
+        setErrorBanner(
+          issue ??
+            'Discord Botの権限チェックが最新ではありません。Discord設定からギルドの権限を再確認してください。'
+        );
+        setIsDiscordSharing(false);
+        return;
+      }
+
       const selection = requireDiscordGuildSelection(discordUserId);
       push(DiscordMemberPickerDialog, {
         title: 'Discord共有先の選択',

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowPathIcon,
   ArrowTopRightOnSquareIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -10,6 +11,8 @@ import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/
 import {
   loadDiscordGuildSelection,
   saveDiscordGuildSelection,
+  describeDiscordGuildCapabilityIssue,
+  type DiscordGuildCapabilityCheckResult,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 
@@ -38,6 +41,9 @@ export function DiscordBotInviteDialog({
   const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
+  const [isCheckingGuild, setIsCheckingGuild] = useState(false);
+  const [checkResult, setCheckResult] = useState<DiscordGuildCapabilityCheckResult | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   const guilds = useMemo(() => data ?? [], [data]);
 
@@ -54,11 +60,65 @@ export function DiscordBotInviteDialog({
     }
   }, [guilds, selectedGuildId]);
 
+  useEffect(() => {
+    setCheckResult(null);
+    setCheckError(null);
+  }, [selectedGuildId]);
+
   const handleSelect = (guild: DiscordGuildSummary) => {
     setSelectedGuildId(guild.id);
+    setCheckResult(null);
+    setCheckError(null);
   };
 
-  const handleSubmit = () => {
+  const runGuildCapabilityCheck = async (
+    guildId: string,
+    categoryId: string | null
+  ): Promise<DiscordGuildCapabilityCheckResult> => {
+    const response = await fetch('/api/discord/guild-check', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ guild_id: guildId, category_id: categoryId ?? undefined })
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | (Partial<DiscordGuildCapabilityCheckResult> & {
+          ok?: boolean;
+          messages?: Partial<DiscordGuildCapabilityCheckResult['messages']>;
+        } & { categories?: { id: string; name: string; position: number }[] })
+      | { ok?: false; error?: string }
+      | null;
+
+    if (!response.ok || !payload || payload.ok === false) {
+      const message = payload && 'error' in payload && payload.error ? payload.error : null;
+      throw new Error(message || `Discordギルドの権限チェックに失敗しました (${response.status})`);
+    }
+
+    const messages = {
+      fetchCategories: payload.messages?.fetchCategories ?? null,
+      ensurePrivateChannel: payload.messages?.ensurePrivateChannel ?? null,
+      sendMessage: payload.messages?.sendMessage ?? null
+    };
+
+    return {
+      checkedAt: typeof payload.checkedAt === 'string' ? payload.checkedAt : new Date().toISOString(),
+      guildId: typeof payload.guildId === 'string' ? payload.guildId : guildId,
+      categoryId:
+        typeof payload.categoryId === 'string'
+          ? payload.categoryId
+          : categoryId ?? null,
+      canFetchCategories: Boolean(payload.canFetchCategories),
+      canEnsurePrivateChannel: Boolean(payload.canEnsurePrivateChannel),
+      canSendMessage: Boolean(payload.canSendMessage),
+      messages
+    };
+  };
+
+  const handleSubmit = async () => {
     if (!userId || !selectedGuildId) {
       return;
     }
@@ -74,17 +134,100 @@ export function DiscordBotInviteDialog({
         ? storedSelection.privateChannelCategory ?? null
         : null;
 
-    const selection: DiscordGuildSelection = {
-      guildId: guild.id,
-      guildName: guild.name,
-      guildIcon: guild.icon,
-      selectedAt: new Date().toISOString(),
-      privateChannelCategory: preservedCategory
-    };
-    saveDiscordGuildSelection(userId, selection);
-    payload?.onGuildSelected?.(selection);
-    close();
+    setIsCheckingGuild(true);
+    setCheckResult(null);
+    setCheckError(null);
+
+    try {
+      const capabilityCheck = await runGuildCapabilityCheck(
+        guild.id,
+        preservedCategory?.id ?? null
+      );
+      setCheckResult(capabilityCheck);
+
+      if (
+        !capabilityCheck.canFetchCategories ||
+        !capabilityCheck.canEnsurePrivateChannel ||
+        !capabilityCheck.canSendMessage
+      ) {
+        const issueMessage = describeDiscordGuildCapabilityIssue({
+          guildId: guild.id,
+          guildName: guild.name,
+          guildIcon: guild.icon,
+          selectedAt: new Date().toISOString(),
+          privateChannelCategory: preservedCategory,
+          capabilityCheck
+        });
+        setCheckError(
+          issueMessage ??
+            'Discord Botの権限確認で問題が見つかりました。Botの招待状況と権限を確認してください。'
+        );
+        return;
+      }
+
+      const selection: DiscordGuildSelection = {
+        guildId: guild.id,
+        guildName: guild.name,
+        guildIcon: guild.icon,
+        selectedAt: new Date().toISOString(),
+        privateChannelCategory: preservedCategory,
+        capabilityCheck
+      };
+      saveDiscordGuildSelection(userId, selection);
+      payload?.onGuildSelected?.(selection);
+      close();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Discordギルドの権限チェックに失敗しました。';
+      setCheckError(message);
+    } finally {
+      setIsCheckingGuild(false);
+    }
   };
+
+  const capabilityStatuses = useMemo(() => {
+    if (!checkResult) {
+      return [] as {
+        key: string;
+        label: string;
+        ok: boolean;
+        message: string | null;
+      }[];
+    }
+    return [
+      {
+        key: 'fetch',
+        label: 'カテゴリ一覧の取得',
+        ok: checkResult.canFetchCategories,
+        message: checkResult.messages.fetchCategories
+      },
+      {
+        key: 'channel',
+        label: 'お渡しチャンネルの作成権限',
+        ok: checkResult.canEnsurePrivateChannel,
+        message: checkResult.messages.ensurePrivateChannel
+      },
+      {
+        key: 'send',
+        label: 'メッセージ送信権限',
+        ok: checkResult.canSendMessage,
+        message: checkResult.messages.sendMessage
+      }
+    ];
+  }, [checkResult]);
+
+  const checkedAtDisplay = useMemo(() => {
+    if (!checkResult?.checkedAt) {
+      return null;
+    }
+    try {
+      return new Date(checkResult.checkedAt).toLocaleString();
+    } catch {
+      return checkResult.checkedAt;
+    }
+  }, [checkResult]);
 
   return (
     <>
@@ -174,6 +317,7 @@ export function DiscordBotInviteDialog({
                       onClick={() => handleSelect(guild)}
                       className="flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
                       aria-pressed={isSelected}
+                      disabled={isCheckingGuild && isSelected}
                     >
                       <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface">
                         {iconUrl ? (
@@ -197,6 +341,59 @@ export function DiscordBotInviteDialog({
               })}
             </ul>
           ) : null}
+
+          {checkError ? (
+            <div className="space-y-2 rounded-2xl border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger">
+              <div className="flex items-start gap-2">
+                <XCircleIcon className="mt-0.5 h-5 w-5" aria-hidden="true" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-danger">Discord Botの権限チェックに失敗しました</p>
+                  <p className="text-xs text-danger/90 whitespace-pre-line">{checkError}</p>
+                </div>
+              </div>
+              <div className="text-xs text-danger/80">
+                Botを再招待する場合は{' '}
+                <a
+                  href={inviteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-semibold underline"
+                >
+                  招待リンクを開く
+                  <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                {' '}か、Discord上で権限を付与した後に再度チェックを実行してください。
+              </div>
+            </div>
+          ) : null}
+
+          {checkResult ? (
+            <section className="space-y-3 rounded-2xl border border-border/70 bg-surface/30 p-4 text-sm">
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <h3 className="text-sm font-semibold text-surface-foreground">Bot権限チェックの結果</h3>
+                {checkedAtDisplay ? (
+                  <span className="text-xs text-muted-foreground">確認日時: {checkedAtDisplay}</span>
+                ) : null}
+              </div>
+              <ul className="space-y-2">
+                {capabilityStatuses.map((status) => (
+                  <li key={status.key} className="flex items-start gap-3">
+                    {status.ok ? (
+                      <CheckCircleIcon className="mt-0.5 h-5 w-5 text-emerald-500" aria-hidden="true" />
+                    ) : (
+                      <XCircleIcon className="mt-0.5 h-5 w-5 text-rose-400" aria-hidden="true" />
+                    )}
+                    <div className="space-y-1">
+                      <p className="font-medium text-surface-foreground">{status.label}</p>
+                      {status.message ? (
+                        <p className="text-xs text-muted-foreground whitespace-pre-line">{status.message}</p>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </section>
       </ModalBody>
 
@@ -208,9 +405,13 @@ export function DiscordBotInviteDialog({
           type="button"
           className="btn btn-primary"
           onClick={handleSubmit}
-          disabled={!selectedGuildId || !guilds.some((guild) => guild.id === selectedGuildId)}
+          disabled={
+            !selectedGuildId ||
+            !guilds.some((guild) => guild.id === selectedGuildId) ||
+            isCheckingGuild
+          }
         >
-          このギルドを保存
+          {isCheckingGuild ? '権限を確認中…' : 'このギルドを保存'}
         </button>
       </ModalFooter>
     </>

@@ -6,108 +6,13 @@ import {
   assertGuildOwner,
   build1to1Overwrites,
   isDiscordUnknownGuildError,
-  PERM
+  PERM,
+  resolveBotIdentity,
+  normalizeOverwriteType,
+  hasPermissionBit,
+  buildChannelNameFromDisplayName
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
-
-const ENV_BOT_ID_KEYS = ['DISCORD_BOT_USER_ID', 'DISCORD_CLIENT_ID'];
-
-function normalizeOverwriteType(overwrite){
-  if (!overwrite){ return null; }
-  const { type } = overwrite;
-  if (typeof type === 'number'){
-    if (type === 1){ return 'member'; }
-    if (type === 0){ return 'role'; }
-    return null;
-  }
-  if (typeof type === 'string'){
-    const normalized = type.trim().toLowerCase();
-    if (normalized === '1' || normalized === 'member'){ return 'member'; }
-    if (normalized === '0' || normalized === 'role'){ return 'role'; }
-  }
-  return null;
-}
-
-function collectEnvBotIds(){
-  const ids = new Set();
-  for (const key of ENV_BOT_ID_KEYS){
-    const value = process.env[key];
-    if (typeof value === 'string'){
-      const trimmed = value.trim();
-      if (trimmed){
-        ids.add(trimmed);
-      }
-    }
-  }
-  return ids;
-}
-
-let botIdentityCache = null;
-let botIdentityCacheToken = null;
-let botIdentityPromise = null;
-
-async function resolveBotIdentity(log){
-  const envIds = collectEnvBotIds();
-  const token = typeof process.env.DISCORD_BOT_TOKEN === 'string' ? process.env.DISCORD_BOT_TOKEN.trim() : '';
-  if (!token){
-    const primaryId = envIds.values().next().value || '';
-    return { primaryId, idSet: envIds };
-  }
-
-  const finalize = (cache) => {
-    const idSet = new Set([...envIds, ...(cache?.ids ?? [])]);
-    const primaryId = cache?.primaryId || idSet.values().next().value || '';
-    return { primaryId, idSet };
-  };
-
-  if (botIdentityCache && botIdentityCacheToken === token){
-    return finalize(botIdentityCache);
-  }
-
-  if (!botIdentityPromise){
-    botIdentityPromise = (async () => {
-      try {
-        const me = await dFetch('/users/@me', { token, isBot:true });
-        const fetchedId = typeof me?.id === 'string' ? me.id.trim() : '';
-        const ids = new Set();
-        if (fetchedId){
-          ids.add(fetchedId);
-        }
-        botIdentityCacheToken = token;
-        botIdentityCache = { primaryId: fetchedId, ids };
-      } catch (error) {
-        botIdentityCacheToken = token;
-        botIdentityCache = { primaryId: '', ids: new Set() };
-        const message = error instanceof Error ? error.message : String(error);
-        log?.warn('failed to resolve bot id from token', { message });
-      } finally {
-        botIdentityPromise = null;
-      }
-      return botIdentityCache;
-    })();
-  }
-
-  const cache = await botIdentityPromise;
-  return finalize(cache);
-}
-
-function buildChannelNameFromDisplayName(displayName, memberId){
-  const fallback = `gift-${memberId}`;
-  if (typeof displayName !== 'string'){ return fallback; }
-  const trimmed = displayName.trim();
-  if (!trimmed){ return fallback; }
-
-  const normalized = trimmed.normalize('NFKC').toLowerCase();
-  const whitespaceCollapsed = normalized.replace(/\s+/gu, '-');
-  const sanitized = whitespaceCollapsed
-    .replace(/[^-\p{Letter}\p{Number}_]+/gu, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/^_+|_+$/g, '');
-
-  const candidate = sanitized || fallback;
-  return candidate.length > 90 ? candidate.slice(0, 90) : candidate;
-}
 
 export default async function handler(req, res){
   const log = createRequestLogger('api/discord/find-channels', req);
@@ -180,22 +85,8 @@ export default async function handler(req, res){
   const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
   const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
 
-  const toBigInt = (value) => {
-    if (typeof value === 'string' && value){
-      try {
-        return BigInt(value);
-      } catch {
-        return 0n;
-      }
-    }
-    if (typeof value === 'number'){
-      return BigInt(value);
-    }
-    return 0n;
-  };
-
-  const allowsView = (overwrite) => (toBigInt(overwrite?.allow) & viewChannelBit) === viewChannelBit;
-  const deniesView = (overwrite) => (toBigInt(overwrite?.deny) & viewChannelBit) === viewChannelBit;
+  const allowsView = (overwrite) => hasPermissionBit(overwrite, viewChannelBit, 'allow');
+  const deniesView = (overwrite) => hasPermissionBit(overwrite, viewChannelBit, 'deny');
 
   // 全チャンネル取得
   let chans;

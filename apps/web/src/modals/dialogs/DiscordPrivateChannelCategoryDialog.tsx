@@ -168,9 +168,14 @@ export function DiscordPrivateChannelCategoryDialog({
         name: category.name,
         selectedAt: new Date().toISOString()
       };
+      const capabilityCheck =
+        selection.capabilityCheck && selection.capabilityCheck.categoryId === category.id
+          ? selection.capabilityCheck
+          : null;
       saveDiscordGuildSelection(discordUserId, {
         ...selection,
-        privateChannelCategory: categorySelection
+        privateChannelCategory: categorySelection,
+        capabilityCheck
       });
       payload?.onCategorySelected?.(categorySelection);
       close();
