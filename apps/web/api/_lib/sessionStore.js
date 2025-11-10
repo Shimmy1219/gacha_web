@@ -1,12 +1,32 @@
 // /api/_lib/sessionStore.js
 // 長期ログインセッション (sid) を Upstash に保存
-import crypto from 'crypto';
 import { kv } from './kv.js';
 
 const SESSION_TTL_SEC = 60 * 60 * 24 * 30; // 30日
 
 export function newSid() {
-  return crypto.randomBytes(24).toString('base64url');
+  const cryptoApi = globalThis?.crypto;
+  if (!cryptoApi || typeof cryptoApi.getRandomValues !== 'function') {
+    throw new Error('crypto.getRandomValues is not available in this environment');
+  }
+
+  const bytes = new Uint8Array(24);
+  cryptoApi.getRandomValues(bytes);
+
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64url');
+  }
+
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+
+  if (typeof btoa === 'function') {
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/u, '');
+  }
+
+  throw new Error('Base64 encoding is not supported in this environment');
 }
 
 export async function saveSession(sid, payload) {

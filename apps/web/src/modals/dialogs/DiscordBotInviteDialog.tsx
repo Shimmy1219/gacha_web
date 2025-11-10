@@ -185,6 +185,22 @@ export function DiscordBotInviteDialog({
                       <div className="flex flex-1 flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{guild.name}</span>
                         <span className="text-xs text-muted-foreground">ID: {guild.id}</span>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          <span
+                            className={
+                              guild.botJoined
+                                ? 'inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success'
+                                : 'inline-flex items-center rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger'
+                            }
+                          >
+                            {guild.botJoined ? 'Bot参加済み' : 'Bot未参加'}
+                          </span>
+                          {guild.permissions ? (
+                            <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              権限: {guild.permissions}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       {isSelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />

@@ -4,6 +4,11 @@ export interface DiscordGuildSummary {
   id: string;
   name: string;
   icon?: string | null;
+  owner: boolean;
+  permissions: string | null;
+  permissionsNew: string | null;
+  features: string[];
+  botJoined: boolean;
 }
 
 interface DiscordGuildsResponse {
@@ -28,7 +33,7 @@ async function fetchDiscordGuilds(): Promise<DiscordGuildSummary[]> {
     throw new Error('Invalid CSRF payload received');
   }
 
-  const response = await fetch('/api/discord/guilds', {
+  const response = await fetch('/api/discord/bot-guilds', {
     method: 'GET',
     credentials: 'include',
     headers: {
@@ -52,7 +57,7 @@ async function fetchDiscordGuilds(): Promise<DiscordGuildSummary[]> {
 
 export function useDiscordOwnedGuilds(userId?: string | null) {
   return useQuery<DiscordGuildSummary[]>({
-    queryKey: ['discord', 'guilds', userId ?? 'anonymous'],
+    queryKey: ['discord', 'bot-guilds', userId ?? 'anonymous'],
     queryFn: fetchDiscordGuilds,
     enabled: Boolean(userId),
     staleTime: 60_000,
