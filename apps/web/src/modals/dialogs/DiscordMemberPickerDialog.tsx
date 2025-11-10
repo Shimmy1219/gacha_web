@@ -10,6 +10,7 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
   DISCORD_MEMBER_CACHE_TTL_MS,
   loadDiscordMemberCache,
+  normalizeDiscordGuildMembers,
   saveDiscordMemberCache,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
@@ -55,6 +56,9 @@ interface DiscordMemberPickerPayload {
 }
 
 function getMemberAvatarUrl(member: DiscordGuildMemberSummary): string | null {
+  if (member.avatarUrl) {
+    return member.avatarUrl;
+  }
   if (!member.avatar) {
     return null;
   }
@@ -155,15 +159,18 @@ function useDiscordGuildMembers(
         throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
+      let normalizedMembers = normalizeDiscordGuildMembers(payload.members);
       if (!trimmedQuery) {
-        const savedEntry = saveDiscordMemberCache(discordUserId, guildId, payload.members);
+        const savedEntry = saveDiscordMemberCache(discordUserId, guildId, normalizedMembers);
+        const persistedMembers = savedEntry?.members ?? normalizedMembers;
+        normalizedMembers = persistedMembers;
         updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry?.updatedAt ?? null);
         if (!savedEntry) {
           console.warn('Discord member cache could not be persisted. Continuing with API response only.');
         }
       }
 
-      return payload.members;
+      return normalizedMembers;
     },
     enabled: Boolean(discordUserId && guildId),
     staleTime: trimmedQuery ? 0 : DISCORD_MEMBER_CACHE_TTL_MS,
