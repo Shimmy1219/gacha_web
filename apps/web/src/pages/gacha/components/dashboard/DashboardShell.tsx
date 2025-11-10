@@ -12,11 +12,14 @@ import { clsx } from 'clsx';
 
 import { DashboardDesktopGrid } from './DashboardDesktopGrid';
 import { DashboardMobileTabs } from './DashboardMobileTabs';
+import { DashboardSidebarLayout } from './DashboardSidebarLayout';
 import { useResponsiveDashboard } from './useResponsiveDashboard';
 import {
   loadStoredDashboardControlsPosition,
   saveDashboardControlsPosition
 } from './dashboardControlsPositionStorage';
+import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
 
 export interface DashboardSectionConfig {
   id: string;
@@ -67,6 +70,10 @@ export function useDashboardShell(): DashboardContextValue {
 
 export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
+  const { uiPreferences: uiPreferencesStore } = useDomainStores();
+  useStoreValue(uiPreferencesStore);
+  const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
+  const isSidebarLayout = !isMobile && desktopLayout === 'sidebar';
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -252,9 +259,21 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </aside>
         ) : null}
 
-        <div className="dashboard-shell__desktop hidden lg:block">
-          <DashboardDesktopGrid sections={sections} />
-        </div>
+        {!isMobile && isSidebarLayout ? (
+          <div className="dashboard-shell__desktop-sidebar hidden lg:block">
+            <DashboardSidebarLayout
+              sections={sections}
+              activeView={activeView}
+              onSelectView={setActiveView}
+            />
+          </div>
+        ) : null}
+
+        {!isMobile && !isSidebarLayout ? (
+          <div className="dashboard-shell__desktop hidden lg:block">
+            <DashboardDesktopGrid sections={sections} />
+          </div>
+        ) : null}
 
         <div className="dashboard-shell__mobile lg:hidden">
           {sections.map((section) => (
