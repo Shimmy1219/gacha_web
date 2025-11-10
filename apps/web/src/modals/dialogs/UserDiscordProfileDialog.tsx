@@ -154,8 +154,12 @@ export function UserDiscordProfileDialog({
               </div>
             </div>
             <div>
-              <button type="button" className="btn btn-muted" onClick={handleOpenLinkDialog}>
-                Discord情報を追加
+              <button
+                type="button"
+                className="btn btn-muted border-red-500/50 text-red-500 hover:border-red-500 hover:text-red-600"
+                onClick={handleUnlink}
+              >
+                連携を解除
               </button>
             </div>
             {linkedAtLabel ? (
@@ -186,25 +190,10 @@ export function UserDiscordProfileDialog({
           </div>
         )}
       </ModalBody>
-      <ModalFooter className={hasLinkedDiscord ? 'justify-between' : 'justify-end'}>
-        {hasLinkedDiscord ? (
-          <>
-            <button
-              type="button"
-              className="btn btn-muted border-red-500/50 text-red-500 hover:border-red-500 hover:text-red-600"
-              onClick={handleUnlink}
-            >
-              連携を解除
-            </button>
-            <button type="button" className="btn btn-muted" onClick={close}>
-              閉じる
-            </button>
-          </>
-        ) : (
-          <button type="button" className="btn btn-muted" onClick={close}>
-            閉じる
-          </button>
-        )}
+      <ModalFooter className="justify-end">
+        <button type="button" className="btn btn-muted" onClick={close}>
+          閉じる
+        </button>
       </ModalFooter>
     </>
   );
