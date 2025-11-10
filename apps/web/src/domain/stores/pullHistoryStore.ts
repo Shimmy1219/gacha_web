@@ -451,6 +451,69 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     }, options);
   }
 
+  deletePullsForUser(userId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    const normalizedUserId = normalizeUserIdValue(userId);
+    if (!normalizedUserId) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      let removed = false;
+      const nextPulls: Record<string, PullHistoryEntryV1 | undefined> = {};
+      const nextOrder: string[] = [];
+      const seen = new Set<string>();
+
+      base.order.forEach((entryId) => {
+        const entry = base.pulls[entryId];
+        if (!entry) {
+          removed = true;
+          return;
+        }
+        if (normalizeUserIdValue(entry.userId) === normalizedUserId) {
+          removed = true;
+          return;
+        }
+        nextPulls[entryId] = entry;
+        nextOrder.push(entryId);
+        seen.add(entryId);
+      });
+
+      Object.entries(base.pulls).forEach(([entryId, entry]) => {
+        if (seen.has(entryId)) {
+          return;
+        }
+        if (!entry) {
+          removed = true;
+          return;
+        }
+        if (normalizeUserIdValue(entry.userId) === normalizedUserId) {
+          removed = true;
+          return;
+        }
+        nextPulls[entryId] = entry;
+        nextOrder.push(entryId);
+      });
+
+      if (!removed) {
+        return previous;
+      }
+
+      if (nextOrder.length === 0) {
+        return undefined;
+      }
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: nextOrder,
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+  }
+
   recordManualInventoryChange(
     params: RecordManualInventoryChangeParams,
     options: UpdateOptions = { persist: 'immediate' }

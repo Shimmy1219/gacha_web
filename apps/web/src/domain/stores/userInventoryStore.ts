@@ -82,6 +82,78 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     );
   }
 
+  deleteUser(userId: string, options: UpdateOptions = { persist: 'immediate' }): void {
+    const trimmedUserId = userId.trim();
+    if (!trimmedUserId) {
+      return;
+    }
+
+    this.update(
+      (previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const hasInventories = Object.prototype.hasOwnProperty.call(
+          previous.inventories ?? {},
+          trimmedUserId
+        );
+
+        let changed = false;
+        const nextInventories: UserInventoriesStateV3['inventories'] = {};
+
+        Object.entries(previous.inventories ?? {}).forEach(([existingUserId, snapshots]) => {
+          if (existingUserId === trimmedUserId) {
+            changed = true;
+            return;
+          }
+          if (snapshots) {
+            nextInventories[existingUserId] = snapshots;
+          }
+        });
+
+        const nextByItemId: UserInventoriesStateV3['byItemId'] = {};
+        Object.entries(previous.byItemId ?? {}).forEach(([itemId, entries]) => {
+          if (!entries) {
+            return;
+          }
+
+          const filtered = entries.filter((entry) => entry?.userId !== trimmedUserId);
+          if (filtered.length === 0) {
+            if (entries.length > 0) {
+              changed = true;
+            }
+            return;
+          }
+
+          if (filtered.length !== entries.length) {
+            changed = true;
+          }
+
+          nextByItemId[itemId] = filtered;
+        });
+
+        if (!changed && !hasInventories) {
+          return previous;
+        }
+
+        if (Object.keys(nextInventories).length === 0 && Object.keys(nextByItemId).length === 0) {
+          return undefined;
+        }
+
+        const timestamp = new Date().toISOString();
+
+        return {
+          version: typeof previous.version === 'number' ? previous.version : 3,
+          updatedAt: timestamp,
+          inventories: nextInventories,
+          byItemId: nextByItemId
+        } satisfies UserInventoriesStateV3;
+      },
+      options
+    );
+  }
+
   applyProjectionResult(
     state: UserInventoriesStateV3 | undefined,
     options: UpdateOptions = {}

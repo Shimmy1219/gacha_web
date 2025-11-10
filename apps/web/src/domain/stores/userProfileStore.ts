@@ -160,6 +160,14 @@ function normalizeState(state: UserProfilesStateV3 | undefined): UserProfilesSta
   } satisfies UserProfilesStateV3;
 }
 
+export type RenameProfileResult =
+  | { success: true }
+  | {
+      success: false;
+      reason: 'invalid-input' | 'not-found' | 'duplicate-name';
+      conflictProfileId?: string;
+    };
+
 export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
@@ -176,11 +184,13 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       return undefined;
     }
 
-    const userId = generateDeterministicUserId(trimmed);
-
+    let resolvedId = generateDeterministicUserId(trimmed);
     this.update((previous) => {
       const base = normalizeState(previous);
       const now = new Date().toISOString();
+      const existingByName = Object.values(base.users).find((profile) => profile.displayName === trimmed);
+      const userId = existingByName?.id ?? resolvedId;
+      resolvedId = userId;
       const existing = base.users[userId];
       const nextUsers = {
         ...base.users,
@@ -200,7 +210,68 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       } satisfies UserProfilesStateV3;
     }, options);
 
-    return userId;
+    return resolvedId;
+  }
+
+  renameProfile(
+    profileId: string,
+    displayName: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): RenameProfileResult {
+    const trimmedProfileId = profileId.trim();
+    const trimmedDisplayName = displayName.trim();
+
+    if (!trimmedProfileId || !trimmedDisplayName) {
+      return { success: false, reason: 'invalid-input' };
+    }
+
+    let result: RenameProfileResult = { success: false, reason: 'not-found' };
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      const existing = base.users[trimmedProfileId];
+      if (!existing) {
+        result = { success: false, reason: 'not-found' };
+        return previous;
+      }
+
+      if (existing.displayName === trimmedDisplayName) {
+        result = { success: true };
+        return previous;
+      }
+
+      const duplicateProfile = Object.values(base.users).find(
+        (profile) => profile.displayName === trimmedDisplayName && profile.id !== trimmedProfileId
+      );
+      if (duplicateProfile) {
+        result = {
+          success: false,
+          reason: 'duplicate-name',
+          conflictProfileId: duplicateProfile.id
+        };
+        return previous;
+      }
+
+      const now = new Date().toISOString();
+      const nextUsers = {
+        ...base.users,
+        [trimmedProfileId]: {
+          ...existing,
+          displayName: trimmedDisplayName,
+          updatedAt: now
+        }
+      } satisfies Record<string, UserProfileCardV3>;
+
+      result = { success: true };
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+
+    return result;
   }
 
   linkDiscordProfile(
@@ -342,6 +413,94 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
         ...base.users,
         [trimmedProfileId]: nextProfile
       } satisfies Record<string, UserProfileCardV3>;
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
+  unlinkDiscordProfile(
+    profileId: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const trimmedProfileId = profileId.trim();
+    if (!trimmedProfileId) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      const existing = base.users[trimmedProfileId];
+      if (!existing) {
+        return previous;
+      }
+
+      const {
+        discordUserId: _discardUserId,
+        discordDisplayName: _discardDisplayName,
+        discordUserName: _discardUserName,
+        discordAvatarAssetId: _discardAvatarAssetId,
+        discordAvatarUrl: _discardAvatarUrl,
+        discordLinkedAt: _discardLinkedAt,
+        discordLastShareChannelId: _discardChannelId,
+        discordLastShareChannelName: _discardChannelName,
+        discordLastShareChannelParentId: _discardParentId,
+        discordLastShareUrl: _discardShareUrl,
+        discordLastShareLabel: _discardShareLabel,
+        discordLastShareTitle: _discardShareTitle,
+        discordLastShareComment: _discardShareComment,
+        discordLastShareAt: _discardShareAt,
+        ...rest
+      } = existing;
+
+      const now = new Date().toISOString();
+      const nextProfile: UserProfileCardV3 = {
+        ...rest,
+        id: existing.id,
+        displayName: existing.displayName,
+        joinedAt: existing.joinedAt,
+        updatedAt: now
+      } satisfies UserProfileCardV3;
+
+      const nextUsers = {
+        ...base.users,
+        [trimmedProfileId]: nextProfile
+      } satisfies Record<string, UserProfileCardV3>;
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
+  deleteProfile(
+    profileId: string,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const trimmedProfileId = profileId.trim();
+    if (!trimmedProfileId) {
+      return;
+    }
+
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      if (!base.users[trimmedProfileId]) {
+        return previous;
+      }
+
+      const nextUsers = { ...base.users } as Record<string, UserProfileCardV3>;
+      delete nextUsers[trimmedProfileId];
+
+      if (Object.keys(nextUsers).length === 0) {
+        return undefined;
+      }
+
+      const now = new Date().toISOString();
 
       return {
         ...base,
