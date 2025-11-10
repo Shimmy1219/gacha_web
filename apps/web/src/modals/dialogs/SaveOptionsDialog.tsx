@@ -12,11 +12,15 @@ import { createPortal } from 'react-dom';
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
+import { useStoreValue } from '@domain/stores';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
-import { DiscordGuildSelectionMissingError } from '../../features/discord/discordGuildSelectionStorage';
+import {
+  DiscordGuildSelectionMissingError,
+  requireDiscordGuildSelection
+} from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
@@ -81,6 +85,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
   const { userProfiles: userProfilesStore } = useDomainStores();
+  const userProfilesState = useStoreValue(userProfilesStore);
   const { pullHistory: pullHistoryStore } = useDomainStores();
   const { data: discordSession } = useDiscordSession();
   const discordUserId = discordSession?.user?.id;
@@ -478,6 +483,206 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
     if (!uploadData?.url) {
       setErrorBanner('Discord共有に必要なURLを取得できませんでした。再度お試しください。');
+      setIsDiscordSharing(false);
+      return;
+    }
+
+    const pickProfile = () => {
+      const latestStoreProfile = userProfilesState?.users?.[userId];
+      if (latestStoreProfile) {
+        return latestStoreProfile;
+      }
+      const snapshotProfile = snapshot.userProfiles?.users?.[userId];
+      if (snapshotProfile) {
+        return snapshotProfile;
+      }
+      const persistedSnapshot = persistence.loadSnapshot();
+      return persistedSnapshot.userProfiles?.users?.[userId];
+    };
+
+    const profile = pickProfile();
+
+    const trimOrNull = (value: string | null | undefined): string | null => {
+      if (typeof value !== 'string') {
+        return null;
+      }
+      const trimmed = value.trim();
+      return trimmed ? trimmed : null;
+    };
+
+    const sharedMemberId = trimOrNull(profile?.discordUserId);
+
+    if (sharedMemberId) {
+      try {
+        const guildSelection = requireDiscordGuildSelection(discordUserId);
+
+        const pickDisplayName = (
+          ...candidates: Array<string | null | undefined>
+        ): string => {
+          for (const candidate of candidates) {
+            if (typeof candidate === 'string') {
+              const trimmed = candidate.trim();
+              if (trimmed) {
+                return trimmed;
+              }
+            }
+          }
+          return sharedMemberId;
+        };
+
+        const memberDisplayName = pickDisplayName(
+          profile?.discordDisplayName,
+          receiverDisplayName,
+          profile?.displayName,
+          profile?.discordUserName,
+          profile?.id
+        );
+
+        let channelId = trimOrNull(profile?.discordLastShareChannelId);
+        const storedChannelName = profile?.discordLastShareChannelName;
+        let channelName =
+          storedChannelName === null ? null : trimOrNull(storedChannelName ?? undefined);
+        const storedParentId = profile?.discordLastShareChannelParentId;
+        let channelParentId =
+          storedParentId === null ? null : trimOrNull(storedParentId ?? undefined);
+
+        const shareUrl = uploadData.url;
+        const shareLabelCandidate = uploadData.label ?? shareUrl;
+        const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
+        const shareComment =
+          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+
+        if (!channelId) {
+          const preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+          if (!preferredCategory) {
+            throw new Error(
+              'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。'
+            );
+          }
+
+          const params = new URLSearchParams({
+            guild_id: guildSelection.guildId,
+            member_id: sharedMemberId,
+            category_id: preferredCategory
+          });
+          const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json'
+            },
+            credentials: 'include'
+          });
+
+          const findPayload = (await findResponse.json().catch(() => null)) as {
+            ok: boolean;
+            channel_id?: string | null;
+            channel_name?: string | null;
+            parent_id?: string | null;
+            created?: boolean;
+            error?: string;
+          } | null;
+
+          if (!findResponse.ok || !findPayload) {
+            const message =
+              findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+            throw new Error(message);
+          }
+
+          if (!findPayload.ok) {
+            throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
+          }
+
+          channelId = trimOrNull(findPayload.channel_id);
+          channelName =
+            findPayload.channel_name === null
+              ? null
+              : trimOrNull(findPayload.channel_name ?? undefined);
+          channelParentId =
+            findPayload.parent_id === null
+              ? null
+              : trimOrNull(findPayload.parent_id ?? undefined);
+        }
+
+        if (!channelId) {
+          throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
+        }
+
+        const payload: Record<string, unknown> = {
+          channel_id: channelId,
+          share_url: shareUrl,
+          title: shareTitle,
+          mode: 'bot'
+        };
+        if (shareComment) {
+          payload.comment = shareComment;
+        }
+
+        const sendResponse = await fetch('/api/discord/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+
+        const sendPayload = (await sendResponse
+          .json()
+          .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
+          ok?: boolean;
+          error?: string;
+        };
+
+        if (!sendResponse.ok || !sendPayload.ok) {
+          throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
+        }
+
+        const sharedAt = new Date().toISOString();
+        const rawShareUrl = shareUrl || '';
+        const resolvedShareUrl = rawShareUrl.trim();
+        const resolvedShareLabel =
+          typeof shareLabelCandidate === 'string' ? shareLabelCandidate.trim() : null;
+
+        const shareInfo = resolvedShareUrl
+          ? {
+              channelId,
+              channelName: channelName ?? null,
+              channelParentId: channelParentId ?? null,
+              shareUrl: resolvedShareUrl,
+              shareLabel: resolvedShareLabel ? resolvedShareLabel : null,
+              shareTitle,
+              shareComment: shareComment ?? null,
+              sharedAt
+            }
+          : undefined;
+
+        void linkDiscordProfile({
+          discordUserId: sharedMemberId,
+          discordDisplayName: memberDisplayName,
+          discordUserName: profile?.discordUserName,
+          avatarUrl: profile?.discordAvatarUrl ?? undefined,
+          share: shareInfo
+        });
+
+        setErrorBanner(null);
+        setUploadNotice({
+          id: Date.now(),
+          message: `${memberDisplayName}さんにDiscordで共有しました`
+        });
+      } catch (error) {
+        const message =
+          error instanceof DiscordGuildSelectionMissingError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : String(error);
+        const displayMessage =
+          error instanceof DiscordGuildSelectionMissingError
+            ? message
+            : `Discord共有の送信に失敗しました: ${message}`;
+        setErrorBanner(displayMessage);
+      }
       setIsDiscordSharing(false);
       return;
     }
