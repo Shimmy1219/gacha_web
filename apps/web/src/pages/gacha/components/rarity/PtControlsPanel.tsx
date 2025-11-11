@@ -503,7 +503,7 @@ export function PtControlsPanel({
         {bundles.map((bundle, index) => (
           <div
             key={bundle.id}
-            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/50 bg-panel-contrast px-3 py-2 shadow-inner"
+            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
           >
             <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
               <InlineNumberField
@@ -564,9 +564,9 @@ export function PtControlsPanel({
         {guarantees.map((guarantee, index) => (
           <div
             key={guarantee.id}
-            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 rounded-xl border border-border/50 bg-panel-contrast px-3 py-2 shadow-inner"
+            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
           >
-            <div className="pt-controls-panel__guarantee-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <div className="pt-controls-panel__guarantee-fields flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
               <InlineNumberField
                 value={guarantee.minPulls}
                 onChange={(value) =>
