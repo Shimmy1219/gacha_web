@@ -144,10 +144,14 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
   }, [sections]);
 
   useEffect(() => {
+    if (!isSidebarLayout) {
+      return;
+    }
+
     if (activeSidebarViews.length > 0 && activeSidebarViews[0] !== activeView) {
       setActiveView(activeSidebarViews[0]);
     }
-  }, [activeSidebarViews, activeView]);
+  }, [isSidebarLayout, activeSidebarViews, activeView]);
 
   useLayoutEffect(() => {
     if (!controlsSlot) {
