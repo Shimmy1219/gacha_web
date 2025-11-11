@@ -4,7 +4,10 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
-import { UserDiscordProfileLinkDialog } from './UserDiscordProfileLinkDialog';
+import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import { loadDiscordGuildSelection } from '../../features/discord/discordGuildSelectionStorage';
+import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 
 interface UserDiscordProfileDialogPayload {
   userId: string;
@@ -31,6 +34,8 @@ export function UserDiscordProfileDialog({
   const { userProfiles: userProfilesStore } = useDomainStores();
   const userProfilesState = useStoreValue(userProfilesStore);
   const profile = userProfilesState?.users?.[userId];
+  const { data: discordSession } = useDiscordSession();
+  const discordUserId = discordSession?.user?.id ?? null;
 
   const dateTimeFormatter = useMemo(
     () =>
@@ -110,12 +115,43 @@ export function UserDiscordProfileDialog({
   }, [normalizedDiscordDisplayName, profile?.discordUserName, profile?.discordUserId, userName]);
 
   const handleOpenLinkDialog = useCallback(() => {
-    push(UserDiscordProfileLinkDialog, {
+    if (!userProfilesStore) {
+      return;
+    }
+
+    const selection = discordUserId ? loadDiscordGuildSelection(discordUserId) : null;
+
+    push(DiscordMemberPickerDialog, {
       title: 'Discord情報を追加',
-      size: 'md',
-      payload: { userId, userName }
+      size: 'lg',
+      payload: {
+        mode: 'link',
+        guildId: selection?.guildId ?? '',
+        discordUserId: discordUserId ?? '',
+        submitLabel: '追加',
+        refreshLabel: 'メンバー情報の更新',
+        onMemberPicked: async (member) => {
+          const normalizedDisplayName =
+            (member.displayName && member.displayName.trim().length > 0 ? member.displayName : undefined) ??
+            member.globalName ??
+            member.username ??
+            member.id;
+
+          await linkDiscordProfileToStore({
+            store: userProfilesStore,
+            profileId: userId,
+            discordUserId: member.id,
+            discordDisplayName: normalizedDisplayName,
+            discordUserName: member.username || member.globalName || null,
+            avatarUrl: member.avatarUrl ?? null
+          });
+        },
+        onMemberPickFailed: (message) => {
+          console.warn('Failed to link Discord profile from member picker dialog', message);
+        }
+      }
     });
-  }, [push, userId, userName]);
+  }, [discordUserId, push, userId, userProfilesStore]);
 
   const handleUnlink = useCallback(() => {
     userProfilesStore.unlinkDiscordProfile(userId);
