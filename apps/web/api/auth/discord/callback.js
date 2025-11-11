@@ -185,32 +185,32 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
     const redirectTarget = '/';
-    const redirectScript = `
-      (function () {
-        var target = ${JSON.stringify(redirectTarget)};
-        var navigate = function () {
-          try {
-            window.location.replace(target);
-          } catch (error) {
-            window.location.href = target;
-          }
-        };
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-          navigate();
-        } else {
-          document.addEventListener('DOMContentLoaded', navigate, { once: true });
-        }
-        window.setTimeout(function () {
-          try {
-            window.location.href = target;
-          } catch (error) {
-            // no-op
-          }
-        }, 4000);
-      })();
-    `;
 
     if (loginContext === 'browser') {
+      const redirectScript = `
+        (function () {
+          var target = ${JSON.stringify(redirectTarget)};
+          var navigate = function () {
+            try {
+              window.location.replace(target);
+            } catch (error) {
+              window.location.href = target;
+            }
+          };
+          if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            navigate();
+          } else {
+            document.addEventListener('DOMContentLoaded', navigate, { once: true });
+          }
+          window.setTimeout(function () {
+            try {
+              window.location.href = target;
+            } catch (error) {
+              // no-op
+            }
+          }, 4000);
+        })();
+      `;
       const html = `<!DOCTYPE html>
 <html lang="ja">
   <head>
@@ -255,7 +255,6 @@ export default async function handler(req, res) {
       <p>${guidanceMessage}</p>
       <p><a href="${redirectTarget}">トップページに移動する</a></p>
     </main>
-    <script>${redirectScript}</script>
     <noscript>
       <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
     </noscript>
