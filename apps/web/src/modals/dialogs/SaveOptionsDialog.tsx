@@ -436,11 +436,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   };
 
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
-  const discordActionLabel = !isDiscordLoggedIn
-    ? 'ログインが必要'
-    : isDiscordSharing
-      ? '共有準備中…'
-      : 'Discordに共有';
+  const discordHelperText = isDiscordLoggedIn ? 'Discordに共有' : 'ログインが必要';
 
   const handleShareToDiscord = async () => {
     setErrorBanner(null);
@@ -791,30 +787,34 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
         <div className="grid gap-4 lg:grid-cols-3">
           <SaveOptionCard
-            title="自分で保存して共有"
+            title="デバイスに保存"
+            busyTitle="生成中…"
             description="端末にZIPを保存し、後からお好みのサービスにアップロードして共有します。"
-            actionLabel={isProcessing ? '生成中…' : 'デバイスに保存'}
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
             onClick={handleSaveToDevice}
             disabled={isUploading}
             isBusy={isProcessing}
+            helperText="デバイスに保存"
           />
           <SaveOptionCard
-            title="shimmy3.comへアップロード"
+            title="zipファイルをアップロード"
+            busyTitle="アップロード中…"
             description="ZIPをshimmy3.comにアップロードし、受け取り用の共有リンクを発行します。"
-            actionLabel={isUploading ? 'アップロード中…' : 'ZIPをアップロード'}
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
             onClick={handleUploadToShimmy}
             disabled={isProcessing}
             isBusy={isUploading}
+            helperText="zipファイルをアップロード"
           />
           <SaveOptionCard
             title="Discordで共有"
             description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
-            actionLabel={discordActionLabel}
             disabled={isProcessing || isUploading || isDiscordSharing}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={handleShareToDiscord}
+            isBusy={isDiscordSharing}
+            busyTitle="共有準備中…"
+            helperText={isDiscordSharing ? undefined : discordHelperText}
           />
         </div>
 
@@ -883,44 +883,52 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 interface SaveOptionCardProps {
   title: string;
   description: string;
-  actionLabel: string;
   icon: JSX.Element;
   onClick: () => void;
   disabled?: boolean;
   isBusy?: boolean;
+  busyTitle?: string;
+  helperText?: string;
 }
 
 function SaveOptionCard({
   title,
   description,
-  actionLabel,
   icon,
   onClick,
   disabled,
-  isBusy = false
+  isBusy = false,
+  busyTitle,
+  helperText
 }: SaveOptionCardProps): JSX.Element {
   const isDisabled = Boolean(disabled) || isBusy;
+  const displayTitle = isBusy && busyTitle ? busyTitle : title;
+  const displayHelperText = isBusy ? undefined : helperText;
+  const displayIcon = isBusy ? <ArrowPathIcon className="h-6 w-6 animate-spin" /> : icon;
   return (
-    <div className="save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5">
-      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
-        {icon}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isDisabled}
+      aria-busy={isBusy}
+      className={
+        `save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
+          isDisabled
+            ? 'cursor-not-allowed opacity-60'
+            : 'hover:border-accent hover:bg-accent/10'
+        }`
+      }
+    >
+      <div className="flex items-center gap-3">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
+          {displayIcon}
+        </div>
+        <h3 className="text-base font-semibold text-surface-foreground">{displayTitle}</h3>
       </div>
-      <div className="space-y-2">
-        <h3 className="text-base font-semibold text-surface-foreground">{title}</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
-      </div>
-      <button
-        type="button"
-        className="btn btn-primary mt-auto"
-        onClick={onClick}
-        disabled={isDisabled}
-        aria-busy={isBusy}
-      >
-        <span className="flex items-center justify-center gap-2">
-          {isBusy ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
-          <span>{actionLabel}</span>
-        </span>
-      </button>
-    </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+      {displayHelperText ? (
+        <div className="mt-auto text-sm font-medium text-accent">{displayHelperText}</div>
+      ) : null}
+    </button>
   );
 }
