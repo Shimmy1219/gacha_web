@@ -1,4 +1,10 @@
-import { ClipboardIcon, PaperAirplaneIcon, ShareIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowPathIcon,
+  ClipboardIcon,
+  PaperAirplaneIcon,
+  ShareIcon,
+  SparklesIcon
+} from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
@@ -1117,12 +1123,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   {lastUserProfile?.discordUserId ? (
                     <button
                       type="button"
-                      className="btn btn-primary flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs"
+                      className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
                       onClick={handleDeliverToDiscord}
                       disabled={discordDeliveryButtonDisabled}
                     >
-                      <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                      Discordに即送信
+                      {isDiscordDelivering ? (
+                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      お渡し部屋に景品を送信
                     </button>
                   ) : null}
                   <button
