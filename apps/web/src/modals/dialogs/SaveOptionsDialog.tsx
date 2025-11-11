@@ -901,26 +901,30 @@ function SaveOptionCard({
 }: SaveOptionCardProps): JSX.Element {
   const isDisabled = Boolean(disabled) || isBusy;
   return (
-    <div className="save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5">
-      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
-        {icon}
-      </div>
-      <div className="space-y-2">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isDisabled}
+      aria-busy={isBusy}
+      className={
+        `save-options__card flex h-full flex-col gap-4 rounded-2xl border border-border/70 bg-surface/30 p-5 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-transparent ${
+          isDisabled
+            ? 'cursor-not-allowed opacity-60'
+            : 'hover:border-accent hover:bg-accent/10'
+        }`
+      }
+    >
+      <div className="flex items-center gap-3">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
+          {icon}
+        </div>
         <h3 className="text-base font-semibold text-surface-foreground">{title}</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
       </div>
-      <button
-        type="button"
-        className="btn btn-primary mt-auto"
-        onClick={onClick}
-        disabled={isDisabled}
-        aria-busy={isBusy}
-      >
-        <span className="flex items-center justify-center gap-2">
-          {isBusy ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
-          <span>{actionLabel}</span>
-        </span>
-      </button>
-    </div>
+      <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+      <div className="mt-auto flex items-center gap-2 text-sm font-medium text-accent">
+        {isBusy ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : null}
+        <span>{actionLabel}</span>
+      </div>
+    </button>
   );
 }
