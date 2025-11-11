@@ -40,6 +40,59 @@ export interface DiscordMemberGiftChannelInfo {
   botHasView: boolean | null;
 }
 
+function cloneWithGiftChannelMetadata(
+  member: DiscordGuildMemberSummary,
+  source: DiscordGuildMemberSummary
+): DiscordGuildMemberSummary {
+  const next: DiscordGuildMemberSummary = { ...member };
+
+  if (hasOwnProperty(source, 'giftChannelId')) {
+    next.giftChannelId = source.giftChannelId ?? null;
+  } else {
+    delete next.giftChannelId;
+  }
+
+  if (hasOwnProperty(source, 'giftChannelName')) {
+    next.giftChannelName = source.giftChannelName ?? null;
+  } else {
+    delete next.giftChannelName;
+  }
+
+  if (hasOwnProperty(source, 'giftChannelParentId')) {
+    next.giftChannelParentId = source.giftChannelParentId ?? null;
+  } else {
+    delete next.giftChannelParentId;
+  }
+
+  if (hasOwnProperty(source, 'giftChannelBotHasView')) {
+    next.giftChannelBotHasView = source.giftChannelBotHasView ?? null;
+  } else {
+    delete next.giftChannelBotHasView;
+  }
+
+  return next;
+}
+
+export function applyGiftChannelMetadataFromCache(
+  members: DiscordGuildMemberSummary[],
+  cachedMembers: DiscordGuildMemberSummary[] | undefined | null
+): DiscordGuildMemberSummary[] {
+  if (!Array.isArray(members) || members.length === 0) {
+    return members;
+  }
+
+  if (!Array.isArray(cachedMembers) || cachedMembers.length === 0) {
+    return members;
+  }
+
+  const cacheMap = new Map(cachedMembers.map((entry) => [entry.id, entry]));
+
+  return members.map((member) => {
+    const cached = cacheMap.get(member.id);
+    return cached ? cloneWithGiftChannelMetadata(member, cached) : member;
+  });
+}
+
 function buildMemberAvatarUrl(memberId: string, avatar: string | null): string | null {
   if (!avatar) {
     return null;

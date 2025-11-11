@@ -137,13 +137,22 @@ export function UserDiscordProfileDialog({
             member.username ??
             member.id;
 
+          const shareInfo = member.giftChannelId
+            ? {
+                channelId: member.giftChannelId,
+                channelName: member.giftChannelName ?? null,
+                channelParentId: member.giftChannelParentId ?? null
+              }
+            : undefined;
+
           await linkDiscordProfileToStore({
             store: userProfilesStore,
             profileId: userId,
             discordUserId: member.id,
             discordDisplayName: normalizedDisplayName,
             discordUserName: member.username || member.globalName || null,
-            avatarUrl: member.avatarUrl ?? null
+            avatarUrl: member.avatarUrl ?? null,
+            share: shareInfo
           });
         },
         onMemberPickFailed: (message) => {

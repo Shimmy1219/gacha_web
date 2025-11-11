@@ -14,6 +14,8 @@ import {
   normalizeDiscordMemberGiftChannels,
   saveDiscordMemberCache,
   mergeDiscordMemberGiftChannels,
+  applyGiftChannelMetadataFromCache,
+  type DiscordMemberCacheEntry,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
 import {
@@ -187,6 +189,7 @@ function useDiscordGuildMembers(
       }
 
       let normalizedMembers = normalizeDiscordGuildMembers(payload.members);
+      let channelCacheEntry: DiscordMemberCacheEntry | null = null;
       if (!trimmedQuery) {
         const savedEntry = saveDiscordMemberCache(discordUserId, guildId, normalizedMembers);
         const persistedMembers = savedEntry?.members ?? normalizedMembers;
@@ -195,34 +198,52 @@ function useDiscordGuildMembers(
         if (!savedEntry) {
           console.warn('Discord member cache could not be persisted. Continuing with API response only.');
         }
+      }
 
-        if (guildId) {
-          try {
-            const channelParams = new URLSearchParams({ guild_id: guildId });
-            const giftResponse = await fetch(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
-              headers: {
-                Accept: 'application/json'
-              },
-              credentials: 'include'
-            });
-
-            const giftPayload = (await giftResponse.json().catch(() => null)) as DiscordGiftChannelsResponse | null;
-
-            if (!giftResponse.ok || !giftPayload?.ok) {
-              const message = giftPayload?.error?.trim();
-              if (message) {
-                console.warn(`Failed to update Discord gift channel cache: ${message}`);
-              } else {
-                console.warn(`Failed to update Discord gift channel cache (${giftResponse.status})`);
-              }
-            } else {
-              const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
-              mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+      if (guildId && normalizedMembers.length > 0) {
+        try {
+          const channelParams = new URLSearchParams({ guild_id: guildId });
+          if (trimmedQuery) {
+            const memberIds = normalizedMembers.map((member) => member.id).filter(Boolean);
+            if (memberIds.length > 0) {
+              channelParams.set('member_ids', memberIds.join(','));
             }
-          } catch (error) {
-            console.warn('Failed to update Discord gift channel cache', error);
           }
+
+          const giftResponse = await fetch(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
+            headers: {
+              Accept: 'application/json'
+            },
+            credentials: 'include'
+          });
+
+          const giftPayload = (await giftResponse.json().catch(() => null)) as DiscordGiftChannelsResponse | null;
+
+          if (!giftResponse.ok || !giftPayload?.ok) {
+            const message = giftPayload?.error?.trim();
+            if (message) {
+              console.warn(`Failed to update Discord gift channel cache: ${message}`);
+            } else {
+              console.warn(`Failed to update Discord gift channel cache (${giftResponse.status})`);
+            }
+          } else if (discordUserId) {
+            const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
+            const mergedEntry = mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+            if (mergedEntry) {
+              channelCacheEntry = mergedEntry;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to update Discord gift channel cache', error);
         }
+      }
+
+      if (!channelCacheEntry && discordUserId && guildId) {
+        channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
+      }
+
+      if (channelCacheEntry) {
+        normalizedMembers = applyGiftChannelMetadataFromCache(normalizedMembers, channelCacheEntry.members);
       }
 
       return normalizedMembers;
@@ -641,6 +662,24 @@ export function DiscordMemberPickerDialog({
                   member.username && member.username.trim().length > 0
                     ? member.username
                     : member.id;
+                const giftChannelName = member.giftChannelName?.trim();
+                const hasGiftChannel = Boolean(member.giftChannelId);
+                const resolvedChannelName =
+                  giftChannelName && giftChannelName.length > 0
+                    ? `#${giftChannelName}`
+                    : member.giftChannelId ?? '';
+                const giftLabel = hasGiftChannel
+                  ? `お渡しチャンネル: ${resolvedChannelName}`
+                  : 'お渡しチャンネル未作成';
+                const giftBadgeClass = hasGiftChannel
+                  ? 'inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success'
+                  : 'inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground';
+                const categoryLabel =
+                  hasGiftChannel && member.giftChannelParentId
+                    ? `カテゴリID: ${member.giftChannelParentId}`
+                    : null;
+                const botWarningLabel =
+                  hasGiftChannel && member.giftChannelBotHasView === false ? 'Bot閲覧不可' : null;
                 return (
                   <li key={member.id}>
                     <button
@@ -665,6 +704,19 @@ export function DiscordMemberPickerDialog({
                           {fallbackLabel}
                           {member.nick ? ` ／ サーバーニックネーム: ${member.nick}` : ''}
                         </span>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className={giftBadgeClass}>{giftLabel}</span>
+                          {categoryLabel ? (
+                            <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              {categoryLabel}
+                            </span>
+                          ) : null}
+                          {botWarningLabel ? (
+                            <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning-foreground">
+                              {botWarningLabel}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       {isSelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />
