@@ -144,10 +144,14 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
   }, [sections]);
 
   useEffect(() => {
+    if (!isSidebarLayout) {
+      return;
+    }
+
     if (activeSidebarViews.length > 0 && activeSidebarViews[0] !== activeView) {
       setActiveView(activeSidebarViews[0]);
     }
-  }, [activeSidebarViews, activeView]);
+  }, [isSidebarLayout, activeSidebarViews, activeView]);
 
   useLayoutEffect(() => {
     if (!controlsSlot) {
@@ -365,17 +369,19 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </div>
         ) : null}
 
-        <div className="dashboard-shell__mobile lg:hidden">
-          {sections.map((section) => (
-            <div
-              key={section.id}
-              data-view={section.id}
-              className={clsx('dashboard-shell__mobile-section', activeView !== section.id && 'hidden')}
-            >
-              {section.node}
-            </div>
-          ))}
-        </div>
+        {isMobile ? (
+          <div className="dashboard-shell__mobile lg:hidden">
+            {sections.map((section) => (
+              <div
+                key={section.id}
+                data-view={section.id}
+                className={clsx('dashboard-shell__mobile-section', activeView !== section.id && 'hidden')}
+              >
+                {section.node}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} />
       </div>

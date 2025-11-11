@@ -3,7 +3,13 @@ import { useEffect, useState } from 'react';
 const QUERY = '(max-width: 900px), (hover: none) and (pointer: coarse)';
 
 export function useResponsiveDashboard(): { isMobile: boolean } {
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+
+    return window.matchMedia(QUERY).matches;
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
