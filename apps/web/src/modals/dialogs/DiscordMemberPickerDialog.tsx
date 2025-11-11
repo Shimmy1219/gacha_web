@@ -11,7 +11,9 @@ import {
   DISCORD_MEMBER_CACHE_TTL_MS,
   loadDiscordMemberCache,
   normalizeDiscordGuildMembers,
+  normalizeDiscordMemberGiftChannels,
   saveDiscordMemberCache,
+  mergeDiscordMemberGiftChannels,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
 import {
@@ -42,6 +44,12 @@ export interface DiscordMemberShareResult {
 interface DiscordMembersResponse {
   ok: boolean;
   members?: DiscordGuildMemberSummary[];
+  error?: string;
+}
+
+interface DiscordGiftChannelsResponse {
+  ok: boolean;
+  channels?: unknown;
   error?: string;
 }
 
@@ -186,6 +194,34 @@ function useDiscordGuildMembers(
         updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry?.updatedAt ?? null);
         if (!savedEntry) {
           console.warn('Discord member cache could not be persisted. Continuing with API response only.');
+        }
+
+        if (guildId) {
+          try {
+            const channelParams = new URLSearchParams({ guild_id: guildId });
+            const giftResponse = await fetch(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
+              headers: {
+                Accept: 'application/json'
+              },
+              credentials: 'include'
+            });
+
+            const giftPayload = (await giftResponse.json().catch(() => null)) as DiscordGiftChannelsResponse | null;
+
+            if (!giftResponse.ok || !giftPayload?.ok) {
+              const message = giftPayload?.error?.trim();
+              if (message) {
+                console.warn(`Failed to update Discord gift channel cache: ${message}`);
+              } else {
+                console.warn(`Failed to update Discord gift channel cache (${giftResponse.status})`);
+              }
+            } else {
+              const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
+              mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+            }
+          } catch (error) {
+            console.warn('Failed to update Discord gift channel cache', error);
+          }
         }
       }
 
