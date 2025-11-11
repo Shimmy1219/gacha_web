@@ -1,5 +1,6 @@
 import { calculateDrawPlan } from './pointCalculator';
 import type {
+  DrawPlan,
   ExecuteGachaArgs,
   ExecuteGachaDrawInstance,
   ExecuteGachaResult,
@@ -58,71 +59,13 @@ function pickRandomItem(
   return data.items[data.items.length - 1];
 }
 
-function ensureGuarantees(
-  draws: ExecuteGachaDrawInstance[],
-  pool: GachaPoolDefinition,
-  guarantees: NormalizedGuaranteeSetting[],
-  rng: () => number
-): string[] {
-  const warnings: string[] = [];
-
-  if (!guarantees.length || !draws.length) {
-    return warnings;
-  }
-
-  guarantees.forEach((guarantee) => {
-    const group = pool.rarityGroups.get(guarantee.rarityId);
-    if (!group || !group.items.length) {
-      warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`);
-      return;
-    }
-
-    let interval = guarantee.threshold;
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    interval = Math.floor(interval);
-
-    let start = 0;
-    while (start < draws.length) {
-      if (start + interval > draws.length) {
-        break;
-      }
-
-      const end = start + interval;
-      const slice = draws.slice(start, end);
-      const hasHit = slice.some((entry) => entry.rarityId === guarantee.rarityId);
-
-      if (!hasHit) {
-        const chosen = group.items[Math.floor(Math.max(0, Math.min(0.9999999999, rng())) * group.items.length)];
-        const targetIndex = end - 1;
-        draws[targetIndex] = {
-          itemId: chosen.itemId,
-          rarityId: chosen.rarityId,
-          wasGuaranteed: true
-        };
-      }
-
-      start = end;
-      let nextInterval = guarantee.pityStep ?? guarantee.threshold;
-      if (!Number.isFinite(nextInterval) || nextInterval <= 0) {
-        nextInterval = guarantee.threshold;
-      }
-      interval = Math.floor(nextInterval);
-    }
-  });
-
-  return warnings;
-}
-
 function performRandomDraws(
   pool: GachaPoolDefinition,
   count: number,
-  guarantees: NormalizedGuaranteeSetting[],
   rng: () => number
-): { draws: ExecuteGachaDrawInstance[]; warnings: string[] } {
+): ExecuteGachaDrawInstance[] {
   if (count <= 0) {
-    return { draws: [], warnings: [] };
+    return [];
   }
 
   const weights = buildWeights(pool);
@@ -136,8 +79,77 @@ function performRandomDraws(
     draws.push({ itemId: item.itemId, rarityId: item.rarityId, wasGuaranteed: false });
   }
 
-  const warnings = ensureGuarantees(draws, pool, guarantees, rng);
-  return { draws, warnings };
+  return draws;
+}
+
+function buildGuaranteedDraws(
+  plan: DrawPlan,
+  pool: GachaPoolDefinition,
+  guarantees: NormalizedGuaranteeSetting[],
+  itemMap: Map<string, GachaItemDefinition>,
+  rng: () => number
+): { draws: ExecuteGachaDrawInstance[]; warnings: string[]; remainingRandomPulls: number } {
+  if (!guarantees.length || plan.totalPulls <= 0) {
+    return { draws: [], warnings: [], remainingRandomPulls: plan.randomPulls };
+  }
+
+  let remainingRandomPulls = Math.max(0, plan.randomPulls);
+  const draws: ExecuteGachaDrawInstance[] = [];
+  const warnings: string[] = [];
+
+  guarantees.forEach((guarantee) => {
+    if (plan.totalPulls < guarantee.threshold || remainingRandomPulls <= 0) {
+      return;
+    }
+
+    const group = pool.rarityGroups.get(guarantee.rarityId);
+    if (!group || group.items.length === 0) {
+      warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`);
+      return;
+    }
+
+    const allocation = Math.min(Math.max(0, Math.floor(guarantee.quantity)), remainingRandomPulls);
+    if (allocation <= 0) {
+      return;
+    }
+
+    if (allocation < guarantee.quantity) {
+      warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な抽選回数が不足しています。`);
+    }
+
+    const selectRandomFromGroup = (): GachaItemDefinition => {
+      const roll = Math.max(0, Math.min(0.9999999999, rng()));
+      const index = Math.min(group.items.length - 1, Math.floor(roll * group.items.length));
+      return group.items[index];
+    };
+
+    for (let index = 0; index < allocation; index += 1) {
+      let selected: GachaItemDefinition | undefined;
+
+      if (guarantee.targetType === 'item' && guarantee.itemId) {
+        const candidate = itemMap.get(guarantee.itemId);
+        if (!candidate) {
+          warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムが見つかりません。`);
+        } else if (candidate.rarityId !== guarantee.rarityId) {
+          warnings.push(
+            `保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは指定したレアリティと一致しません。`
+          );
+        } else {
+          selected = candidate;
+        }
+      }
+
+      if (!selected) {
+        selected = selectRandomFromGroup();
+      }
+
+      draws.push({ itemId: selected.itemId, rarityId: selected.rarityId, wasGuaranteed: true });
+    }
+
+    remainingRandomPulls -= allocation;
+  });
+
+  return { draws, warnings, remainingRandomPulls };
 }
 
 export function executeGacha({
@@ -183,14 +195,21 @@ export function executeGacha({
     }
   }
 
-  if (plan.randomPulls > 0) {
-    const { draws: randomDraws, warnings: guaranteeWarnings } = performRandomDraws(
-      pool,
-      plan.randomPulls,
-      plan.normalizedSettings.guarantees,
-      rng
-    );
+  const {
+    draws: guaranteeDraws,
+    warnings: guaranteeWarnings,
+    remainingRandomPulls
+  } = buildGuaranteedDraws(plan, pool, plan.normalizedSettings.guarantees, itemMap, rng);
+
+  if (guaranteeDraws.length > 0) {
+    draws.push(...guaranteeDraws);
+  }
+  if (guaranteeWarnings.length > 0) {
     warnings.push(...guaranteeWarnings);
+  }
+
+  if (remainingRandomPulls > 0) {
+    const randomDraws = performRandomDraws(pool, remainingRandomPulls, rng);
     draws.push(...randomDraws);
   }
 

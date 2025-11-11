@@ -127,6 +127,51 @@ export function RaritySection(): JSX.Element {
     [sortedRarityRows]
   );
 
+  const guaranteeItemOptions = useMemo(() => {
+    if (!catalogState || !activeGachaId) {
+      return new Map<string, { value: string; label: string }[]>();
+    }
+
+    const snapshot = catalogState.byGacha?.[activeGachaId];
+    if (!snapshot) {
+      return new Map<string, { value: string; label: string }[]>();
+    }
+
+    const orderIndex = new Map<string, number>();
+    (snapshot.order ?? []).forEach((itemId, index) => {
+      orderIndex.set(itemId, index);
+    });
+
+    const map = new Map<string, { value: string; label: string }[]>();
+
+    Object.values(snapshot.items ?? {}).forEach((item) => {
+      if (!item) {
+        return;
+      }
+      const rarityId = item.rarityId?.trim();
+      if (!rarityId) {
+        return;
+      }
+      const entryLabel = item.name?.trim() || item.itemId;
+      const list = map.get(rarityId) ?? [];
+      list.push({ value: item.itemId, label: entryLabel });
+      map.set(rarityId, list);
+    });
+
+    map.forEach((list) => {
+      list.sort((a, b) => {
+        const orderA = orderIndex.get(a.value) ?? Number.POSITIVE_INFINITY;
+        const orderB = orderIndex.get(b.value) ?? Number.POSITIVE_INFINITY;
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        return a.label.localeCompare(b.label, 'ja');
+      });
+    });
+
+    return map;
+  }, [activeGachaId, catalogState]);
+
   const ptSettings = activeGachaId ? ptSettingsState?.byGachaId?.[activeGachaId] : undefined;
 
   const handlePtSettingsChange = useCallback(
@@ -295,6 +340,7 @@ export function RaritySection(): JSX.Element {
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
+            itemOptionsByRarity={guaranteeItemOptions}
             onSettingsChange={handlePtSettingsChange}
           />
 

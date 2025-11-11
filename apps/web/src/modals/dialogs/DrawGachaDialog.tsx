@@ -453,10 +453,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return drawPlan.normalizedSettings.guarantees.map((guarantee) => {
       const rarity = selectedGacha.pool.rarityGroups.get(guarantee.rarityId);
       const label = rarity?.label ?? guarantee.rarityId;
-      const description = guarantee.pityStep && guarantee.pityStep !== guarantee.threshold
-        ? `${label}: ${guarantee.threshold}連目で保証、以後${guarantee.pityStep}連ごとに保証`
-        : `${label}: ${guarantee.threshold}連ごとに保証`;
-      const applies = drawPlan.randomPulls >= guarantee.threshold;
+      let targetLabel = 'レアリティ内からランダムに';
+      if (guarantee.targetType === 'item' && guarantee.itemId) {
+        const item = selectedGacha.pool.items.find((entry) => entry.itemId === guarantee.itemId);
+        if (item) {
+          targetLabel = `${item.name}を`;
+        } else {
+          targetLabel = '指定アイテムを';
+        }
+      }
+      const description = `${label}: ${guarantee.threshold}連以上で${targetLabel}${guarantee.quantity}個保証`;
+      const applies = drawPlan.totalPulls >= guarantee.threshold;
       return {
         rarityId: guarantee.rarityId,
         threshold: guarantee.threshold,

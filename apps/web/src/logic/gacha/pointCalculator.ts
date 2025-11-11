@@ -21,6 +21,14 @@ function toPositiveNumber(value: unknown): number | null {
   return parsed;
 }
 
+function toPositiveInteger(value: unknown): number | null {
+  const positive = toPositiveNumber(value);
+  if (positive == null) {
+    return null;
+  }
+  return Math.floor(positive);
+}
+
 export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizePtSettingResult {
   const normalized: NormalizedPtSetting = {
     bundles: [],
@@ -87,17 +95,40 @@ export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizeP
   if (Array.isArray(setting.guarantees)) {
     setting.guarantees.forEach((guarantee) => {
       const rarityId = typeof guarantee?.rarityId === 'string' ? guarantee.rarityId.trim() : '';
-      const threshold = toPositiveNumber(guarantee?.threshold);
-      if (!rarityId || !threshold) {
+      const threshold = toPositiveInteger(guarantee?.threshold);
+      if (!rarityId || threshold == null) {
         warnings.push(`保証設定「${guarantee?.id ?? 'unknown'}」が不完全のため、除外しました。`);
         return;
       }
-      const pityStepValue = toPositiveNumber(guarantee?.pityStep);
+
+      const hasQuantityField = guarantee?.quantity != null;
+      const quantityValue = toPositiveInteger(guarantee?.quantity);
+      const quantity = quantityValue ?? 1;
+      if (hasQuantityField && quantityValue == null) {
+        warnings.push(`保証設定「${guarantee?.id ?? 'unknown'}」の個数が無効なため、1個として扱います。`);
+      }
+
+      const rawTargetType = guarantee?.target?.type;
+      const targetType = rawTargetType === 'item' ? 'item' : 'rarity';
+      const itemId =
+        targetType === 'item' && typeof guarantee?.target?.itemId === 'string'
+          ? guarantee.target.itemId.trim()
+          : undefined;
+
+      if (targetType === 'item' && (!itemId || itemId.length === 0)) {
+        warnings.push(
+          `保証設定「${guarantee?.id ?? 'unknown'}」の対象アイテムが未指定のため、除外しました。`
+        );
+        return;
+      }
+
       normalized.guarantees.push({
         id: guarantee.id,
         rarityId,
-        threshold: Math.floor(threshold),
-        pityStep: pityStepValue ? Math.floor(pityStepValue) : undefined
+        threshold,
+        quantity,
+        targetType,
+        ...(itemId ? { itemId } : {})
       });
     });
   }

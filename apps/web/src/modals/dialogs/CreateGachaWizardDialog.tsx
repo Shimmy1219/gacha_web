@@ -132,6 +132,21 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     [sortedRarities]
   );
 
+  const guaranteeItemOptions = useMemo(() => {
+    const map = new Map<string, { value: string; label: string }[]>();
+    items.forEach((item, index) => {
+      const rarityId = item.rarityId ?? '';
+      if (!rarityId) {
+        return;
+      }
+      const list = map.get(rarityId) ?? [];
+      const label = item.name || `景品${index + 1}`;
+      list.push({ value: item.assetId, label });
+      map.set(rarityId, list);
+    });
+    return map;
+  }, [items]);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
   const previewUrlMapRef = useRef<Map<string, string>>(new Map());
@@ -586,6 +601,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       }
 
       const riaguCardInputs: Array<{ itemId: string }> = [];
+      const assetToItemId = new Map<string, string>();
 
       items.forEach((item, index) => {
         const resolvedRarityId = item.rarityId && availableRarityIds.has(item.rarityId) ? item.rarityId : fallbackRarityId;
@@ -602,6 +618,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           ...(item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
         } satisfies GachaCatalogItemV3;
+
+        assetToItemId.set(item.assetId, itemId);
 
         if (item.isRiagu) {
           riaguCardInputs.push({ itemId });
@@ -625,7 +643,34 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         riaguStore.upsertCard({ itemId, gachaId }, { persist: 'immediate' });
       });
 
-      ptControlsStore.setGachaSettings(gachaId, ptSettings, { persist: 'immediate' });
+      const resolvedPtSettings = ptSettings
+        ? {
+            ...ptSettings,
+            guarantees: ptSettings.guarantees
+              ? ptSettings.guarantees.map((guarantee) => {
+                  if (guarantee.target?.type !== 'item') {
+                    return {
+                      ...guarantee,
+                      target: { ...guarantee.target }
+                    };
+                  }
+                  const mapped = assetToItemId.get(guarantee.target.itemId);
+                  if (!mapped) {
+                    return {
+                      ...guarantee,
+                      target: { ...guarantee.target }
+                    };
+                  }
+                  return {
+                    ...guarantee,
+                    target: { type: 'item', itemId: mapped }
+                  };
+                })
+              : undefined
+          }
+        : undefined;
+
+      ptControlsStore.setGachaSettings(gachaId, resolvedPtSettings, { persist: 'immediate' });
 
       committedRef.current = true;
       createdAssetIdsRef.current.clear();
@@ -850,7 +895,12 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
         </p>
         <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
-          <PtControlsPanel settings={ptSettings} rarityOptions={rarityOptions} onSettingsChange={setPtSettings} />
+          <PtControlsPanel
+            settings={ptSettings}
+            rarityOptions={rarityOptions}
+            itemOptionsByRarity={guaranteeItemOptions}
+            onSettingsChange={setPtSettings}
+          />
         </div>
       </div>
     );

@@ -46,11 +46,15 @@ export interface NormalizedBundleSetting {
   efficiency: number;
 }
 
+export type GuaranteeTargetType = 'rarity' | 'item';
+
 export interface NormalizedGuaranteeSetting {
   id: string;
   rarityId: string;
   threshold: number;
-  pityStep?: number;
+  quantity: number;
+  targetType: GuaranteeTargetType;
+  itemId?: string;
 }
 
 export interface NormalizedPtSetting {

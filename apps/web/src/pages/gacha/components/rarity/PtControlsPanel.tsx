@@ -13,10 +13,15 @@ interface PtBundleRowState {
   pulls: string;
 }
 
+type GuaranteeTargetType = 'rarity' | 'item';
+
 interface PtGuaranteeRowState {
   id: string;
   minPulls: string;
-  minRarity: string;
+  rarityId: string;
+  targetType: GuaranteeTargetType;
+  itemId: string;
+  quantity: string;
 }
 
 function areBundleRowsEqual(a: PtBundleRowState[], b: PtBundleRowState[]): boolean {
@@ -40,7 +45,15 @@ function areGuaranteeRowsEqual(a: PtGuaranteeRowState[], b: PtGuaranteeRowState[
   for (let index = 0; index < a.length; index += 1) {
     const left = a[index];
     const right = b[index];
-    if (!right || left.id !== right.id || left.minPulls !== right.minPulls || left.minRarity !== right.minRarity) {
+    if (
+      !right ||
+      left.id !== right.id ||
+      left.minPulls !== right.minPulls ||
+      left.rarityId !== right.rarityId ||
+      left.targetType !== right.targetType ||
+      left.itemId !== right.itemId ||
+      left.quantity !== right.quantity
+    ) {
       return false;
     }
   }
@@ -60,9 +73,17 @@ interface RarityOption {
   color?: string | null;
 }
 
+interface GuaranteeItemOption {
+  value: string;
+  label: string;
+}
+
+type GuaranteeItemOptionsByRarity = Map<string, GuaranteeItemOption[]>;
+
 interface PtControlsPanelProps {
   settings?: PtSettingV3;
   rarityOptions: RarityOption[];
+  itemOptionsByRarity?: GuaranteeItemOptionsByRarity;
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
@@ -80,7 +101,10 @@ function createGuaranteeRow(seed?: string, overrides?: Partial<PtGuaranteeRowSta
   return {
     id,
     minPulls: overrides?.minPulls ?? '',
-    minRarity: overrides?.minRarity ?? ''
+    rarityId: overrides?.rarityId ?? '',
+    targetType: overrides?.targetType ?? 'rarity',
+    itemId: overrides?.itemId ?? '',
+    quantity: overrides?.quantity ?? '1'
   };
 }
 
@@ -307,23 +331,23 @@ function buildSettingsFromSnapshot(
     next.bundles = bundles;
   }
 
-  const previousGuarantees = previous?.guarantees ?? [];
   const guarantees = snapshot.guarantees
     .map((guarantee): PtGuaranteeV3 | null => {
       const threshold = parsePositiveInteger(guarantee.minPulls);
-      const rarityId = guarantee.minRarity.trim();
+      const rarityId = guarantee.rarityId.trim();
       if (!rarityId || threshold == null) {
         return null;
       }
-      const previousEntry = previousGuarantees.find((entry) => entry.id === guarantee.id);
+      const quantity = parsePositiveInteger(guarantee.quantity) ?? 1;
+      const targetType: GuaranteeTargetType = guarantee.targetType === 'item' ? 'item' : 'rarity';
+      const itemId = guarantee.itemId.trim();
       const base: PtGuaranteeV3 = {
         id: guarantee.id,
         rarityId,
-        threshold
+        threshold,
+        quantity,
+        target: targetType === 'item' ? { type: 'item', itemId } : { type: 'rarity' }
       };
-      if (previousEntry?.pityStep != null) {
-        base.pityStep = previousEntry.pityStep;
-      }
       return base;
     })
     .filter((guarantee): guarantee is PtGuaranteeV3 => guarantee !== null);
@@ -339,11 +363,21 @@ function buildSettingsFromSnapshot(
   return next;
 }
 
-export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: PtControlsPanelProps): JSX.Element {
+export function PtControlsPanel({
+  settings,
+  rarityOptions,
+  itemOptionsByRarity,
+  onSettingsChange
+}: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
   const [complete, setComplete] = useState('');
   const [bundles, setBundles] = useState<PtBundleRowState[]>([]);
   const [guarantees, setGuarantees] = useState<PtGuaranteeRowState[]>([]);
+
+  const itemOptionsMap = useMemo(
+    () => itemOptionsByRarity ?? new Map<string, GuaranteeItemOption[]>(),
+    [itemOptionsByRarity]
+  );
 
   const initialComparableSettings = cloneSettingWithoutUpdatedAt(settings);
   const lastEmittedRef = useRef<string>(
@@ -371,12 +405,20 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
     setBundles((previous) => (areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles));
 
     const nextGuarantees = settings?.guarantees
-      ? settings.guarantees.map((guarantee) =>
-          createGuaranteeRow(guarantee.id, {
+      ? settings.guarantees.map((guarantee) => {
+          const targetType: GuaranteeTargetType = guarantee.target?.type === 'item' ? 'item' : 'rarity';
+          const itemId =
+            targetType === 'item' && typeof guarantee.target?.itemId === 'string'
+              ? guarantee.target.itemId
+              : '';
+          return createGuaranteeRow(guarantee.id, {
             minPulls: String(guarantee.threshold),
-            minRarity: guarantee.rarityId
-          })
-        )
+            rarityId: guarantee.rarityId,
+            targetType,
+            itemId,
+            quantity: String(guarantee.quantity ?? 1)
+          });
+        })
       : [];
     setGuarantees((previous) =>
       areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
@@ -538,19 +580,81 @@ export function PtControlsPanel({ settings, rarityOptions, onSettingsChange }: P
                 min={1}
                 className="w-[8ch]"
               />
-              <span className="text-xs leading-none text-muted-foreground">連で</span>
+              <span className="text-xs leading-none text-muted-foreground">連以上で</span>
               <InlineSelectField
-                value={guarantee.minRarity || (rarityOptions[0]?.value ?? '')}
+                value={guarantee.rarityId || (rarityOptions[0]?.value ?? '')}
                 onChange={(value) =>
                   setGuarantees((prev) => {
                     const next = [...prev];
-                    next[index] = { ...next[index], minRarity: value };
+                    const available = itemOptionsMap.get(value) ?? [];
+                    const currentItemId = next[index].itemId;
+                    const shouldResetItem =
+                      next[index].targetType === 'item' &&
+                      (currentItemId === '' || !available.some((option) => option.value === currentItemId));
+                    next[index] = {
+                      ...next[index],
+                      rarityId: value,
+                      itemId: shouldResetItem ? '' : currentItemId
+                    };
                     return next;
                   })
                 }
                 options={rarityOptions}
               />
-              <span className="text-xs leading-none text-muted-foreground">確定</span>
+              <span className="text-xs leading-none text-muted-foreground">の中から</span>
+              <SingleSelectDropdown<GuaranteeTargetType>
+                value={guarantee.targetType}
+                options={[
+                  { value: 'rarity', label: 'レアリティ内でランダム' },
+                  { value: 'item', label: '特定アイテム' }
+                ]}
+                onChange={(value) =>
+                  setGuarantees((prev) => {
+                    const next = [...prev];
+                    next[index] = {
+                      ...next[index],
+                      targetType: value,
+                      itemId: value === 'item' ? next[index].itemId : ''
+                    };
+                    return next;
+                  })
+                }
+                fallbackToFirstOption={false}
+              />
+              {guarantee.targetType === 'item' ? (
+                <SingleSelectDropdown
+                  value={guarantee.itemId || undefined}
+                  options={(itemOptionsMap.get(guarantee.rarityId) ?? []).map((option) => ({
+                    value: option.value,
+                    label: option.label
+                  }))}
+                  placeholder="アイテムを選択"
+                  fallbackToFirstOption={false}
+                  disabled={(itemOptionsMap.get(guarantee.rarityId) ?? []).length === 0}
+                  onChange={(value) =>
+                    setGuarantees((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], itemId: value };
+                      return next;
+                    })
+                  }
+                />
+              ) : null}
+              <span className="text-xs leading-none text-muted-foreground">を</span>
+              <InlineNumberField
+                value={guarantee.quantity}
+                onChange={(value) =>
+                  setGuarantees((prev) => {
+                    const next = [...prev];
+                    next[index] = { ...next[index], quantity: value };
+                    return next;
+                  })
+                }
+                placeholder="1"
+                min={1}
+                className="w-[6ch]"
+              />
+              <span className="text-xs leading-none text-muted-foreground">個確定</span>
             </div>
             <RemoveButton
               onClick={() =>

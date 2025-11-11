@@ -65,13 +65,21 @@ describe('executeGacha', () => {
     ])
   };
 
-  test('enforces guarantees and aggregates results', () => {
+  test('applies pre-draw guarantees and aggregates results', () => {
     const settings: PtSettingV3 = {
       perPull: { price: 10, pulls: 1 },
-      guarantees: [{ id: 'g1', rarityId: 'rare', threshold: 2 }]
+      guarantees: [
+        {
+          id: 'g1',
+          rarityId: 'rare',
+          threshold: 2,
+          quantity: 1,
+          target: { type: 'rarity' }
+        }
+      ]
     };
 
-    const rolls = [0.1, 0.2, 0.95];
+    const rolls = [0.3, 0.1, 0.6];
     const rng = () => {
       const next = rolls.shift();
       return next ?? 0.5;
@@ -86,13 +94,73 @@ describe('executeGacha', () => {
     });
 
     expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
     expect(result.pointsSpent).toBe(30);
     expect(result.totalPulls).toBe(3);
     expect(result.plan.randomPulls).toBe(3);
 
     const rareItem = result.items.find((item) => item.itemId === 'rare-1');
-    expect(rareItem?.count).toBe(2);
+    expect(rareItem?.count).toBe(1);
     expect(rareItem?.guaranteedCount).toBe(1);
+
+    const commonItemCounts = result.items
+      .filter((item) => item.rarityId === 'common')
+      .map((item) => item.count)
+      .sort();
+    expect(commonItemCounts).toEqual([1, 1]);
+  });
+
+  test('guarantees specific items when available', () => {
+    const rareTwo: GachaItemDefinition = {
+      itemId: 'rare-2',
+      name: 'Rare Two',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0,
+      itemRateDisplay: '0%'
+    };
+
+    const poolWithTwoRares: GachaPoolDefinition = {
+      ...pool,
+      items: [...pool.items, rareTwo],
+      rarityGroups: new Map([
+        ...pool.rarityGroups.entries(),
+        [
+          'rare',
+          {
+            rarityId: 'rare',
+            label: 'Rare',
+            color: '#ffaa00',
+            emitRate: 0.2,
+            itemCount: 2,
+            items: [rare, rareTwo]
+          }
+        ]
+      ])
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-item',
+          rarityId: 'rare',
+          threshold: 1,
+          quantity: 2,
+          target: { type: 'item', itemId: 'rare-2' }
+        }
+      ]
+    };
+
+    const result = executeGacha({ gachaId: 'sample', pool: poolWithTwoRares, settings, points: 20 });
+
+    const targeted = result.items.find((item) => item.itemId === 'rare-2');
+    expect(targeted?.count).toBe(2);
+    expect(targeted?.guaranteedCount).toBe(2);
+    expect(result.totalPulls).toBe(2);
+    expect(result.plan.randomPulls).toBe(2);
   });
 
   test('frontload mode guarantees only the first completion', () => {
