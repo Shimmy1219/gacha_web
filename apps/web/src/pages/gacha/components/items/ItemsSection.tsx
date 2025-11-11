@@ -226,9 +226,12 @@ export function ItemsSection(): JSX.Element {
         const rarityGroup = pool.rarityGroups.get(snapshot.rarityId);
 
         const emitRate = poolItem?.rarityEmitRate ?? rarityEntity?.emitRate;
-        const computedItemRate = poolItem?.itemRate ?? (rarityGroup?.emitRate && rarityGroup.itemCount
-          ? rarityGroup.emitRate / rarityGroup.itemCount
-          : undefined);
+        const baseWeight = poolItem?.drawWeight ?? (snapshot.pickupTarget ? 2 : 1);
+        const computedItemRate =
+          poolItem?.itemRate ??
+          (rarityGroup?.emitRate && rarityGroup?.totalWeight
+            ? (rarityGroup.emitRate * baseWeight) / rarityGroup.totalWeight
+            : undefined);
         const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
         const baseDisplay = poolItem?.itemRateDisplay
           ? poolItem.itemRateDisplay.replace(/%$/, '')

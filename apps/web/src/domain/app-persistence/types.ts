@@ -130,11 +130,25 @@ export interface PtBundleV3 {
   pulls: number;
 }
 
+export type PtGuaranteeTargetType = 'rarity' | 'item';
+
+export interface PtGuaranteeTargetRarityV3 {
+  type: 'rarity';
+}
+
+export interface PtGuaranteeTargetItemV3 {
+  type: 'item';
+  itemId: string;
+}
+
+export type PtGuaranteeTargetV3 = PtGuaranteeTargetRarityV3 | PtGuaranteeTargetItemV3;
+
 export interface PtGuaranteeV3 {
   id: string;
   rarityId: string;
   threshold: number;
-  pityStep?: number;
+  quantity: number;
+  target: PtGuaranteeTargetV3;
 }
 
 export interface PtSettingV3 {

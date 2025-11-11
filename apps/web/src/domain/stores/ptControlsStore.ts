@@ -53,6 +53,19 @@ function areBundlesEqual(a: PtBundleV3[] | undefined, b: PtBundleV3[] | undefine
   return true;
 }
 
+function areGuaranteeTargetsEqual(
+  a: PtGuaranteeV3['target'],
+  b: PtGuaranteeV3['target']
+): boolean {
+  if (a.type !== b.type) {
+    return false;
+  }
+  if (a.type === 'item' && b.type === 'item') {
+    return a.itemId === b.itemId;
+  }
+  return true;
+}
+
 function areGuaranteesEqual(a: PtGuaranteeV3[] | undefined, b: PtGuaranteeV3[] | undefined): boolean {
   if (!a && !b) {
     return true;
@@ -70,7 +83,8 @@ function areGuaranteesEqual(a: PtGuaranteeV3[] | undefined, b: PtGuaranteeV3[] |
       aEntry.id !== bEntry.id ||
       aEntry.rarityId !== bEntry.rarityId ||
       aEntry.threshold !== bEntry.threshold ||
-      aEntry.pityStep !== bEntry.pityStep
+      aEntry.quantity !== bEntry.quantity ||
+      !areGuaranteeTargetsEqual(aEntry.target, bEntry.target)
     ) {
       return false;
     }
@@ -98,7 +112,14 @@ function cloneSettingWithoutUpdatedAt(setting: PtSettingV3): PtSettingV3 {
     ...(setting.perPull ? { perPull: { ...setting.perPull } } : {}),
     ...(setting.complete ? { complete: { ...setting.complete } } : {}),
     ...(setting.bundles ? { bundles: setting.bundles.map((bundle) => ({ ...bundle })) } : {}),
-    ...(setting.guarantees ? { guarantees: setting.guarantees.map((guarantee) => ({ ...guarantee })) } : {})
+    ...(setting.guarantees
+      ? {
+          guarantees: setting.guarantees.map((guarantee) => ({
+            ...guarantee,
+            target: { ...guarantee.target }
+          }))
+        }
+      : {})
   };
 }
 
@@ -195,19 +216,39 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
   }
 
   private sanitizeSetting(setting: LegacyPtSetting): PtSettingV3 {
-    const legacyComplete = setting.complate;
-    if (!legacyComplete || typeof legacyComplete !== 'object') {
-      return setting;
-    }
+    const upgradedGuarantees = Array.isArray(setting.guarantees)
+      ? setting.guarantees.map((guarantee) => {
+          const quantity =
+            typeof guarantee.quantity === 'number' && Number.isFinite(guarantee.quantity) && guarantee.quantity > 0
+              ? guarantee.quantity
+              : 1;
+          const target =
+            guarantee.target && guarantee.target.type === 'item' && typeof guarantee.target.itemId === 'string'
+              ? { type: 'item', itemId: guarantee.target.itemId }
+              : { type: 'rarity' as const };
+          return {
+            ...guarantee,
+            quantity,
+            target
+          };
+        })
+      : undefined;
 
-    const mergedComplete = setting.complete
-      ? { ...legacyComplete, ...setting.complete }
-      : { ...legacyComplete };
-
-    const next: PtSettingV3 = {
+    const base: PtSettingV3 = {
       ...setting,
-      complete: mergedComplete
+      ...(upgradedGuarantees ? { guarantees: upgradedGuarantees } : {})
     };
+
+    const legacyComplete = setting.complate;
+    let next: PtSettingV3 = base;
+
+    if (legacyComplete && typeof legacyComplete === 'object') {
+      const mergedComplete = base.complete ? { ...legacyComplete, ...base.complete } : { ...legacyComplete };
+      next = {
+        ...base,
+        complete: mergedComplete
+      };
+    }
 
     delete (next as LegacyPtSetting).complate;
     return next;

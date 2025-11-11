@@ -36,17 +36,27 @@ export function formatItemRateWithPrecision(rate?: number, fractionDigits?: numb
     return '';
   }
 
-  const percentValue = rate * 100;
-  if (!Number.isFinite(percentValue)) {
-    return '';
-  }
-
+  const formatted = formatRarityRate(rate);
   const digits = clampFractionDigits(fractionDigits);
-  if (digits == null) {
-    return formatRarityRate(rate);
+
+  if (digits == null || !formatted || formatted.endsWith('...')) {
+    return formatted;
   }
 
-  return percentValue.toFixed(digits);
+  const dotIndex = formatted.indexOf('.');
+  if (dotIndex === -1) {
+    if (digits <= 0) {
+      return formatted;
+    }
+    return `${formatted}.${'0'.repeat(digits)}`;
+  }
+
+  const currentDigits = formatted.length - dotIndex - 1;
+  if (currentDigits >= digits) {
+    return formatted;
+  }
+
+  return `${formatted}${'0'.repeat(digits - currentDigits)}`;
 }
 
 export function inferRarityFractionDigits(
@@ -61,8 +71,9 @@ export function inferRarityFractionDigits(
       return;
     }
 
-    const dotIndex = formatted.indexOf('.');
-    const digits = dotIndex === -1 ? 0 : formatted.length - dotIndex - 1;
+    const sanitized = formatted.endsWith('...') ? formatted.slice(0, -3) : formatted;
+    const dotIndex = sanitized.indexOf('.');
+    const digits = dotIndex === -1 ? 0 : sanitized.length - dotIndex - 1;
     result.set(rarityId, digits);
   });
 
@@ -88,15 +99,21 @@ export function buildGachaPools({
       return;
     }
 
-    const rarityCounts = new Map<string, number>();
+    const rarityStats = new Map<string, { itemCount: number; totalWeight: number }>();
 
     catalog.order.forEach((itemId) => {
       const snapshot = catalog.items?.[itemId];
       if (!snapshot) {
         return;
       }
-      const previous = rarityCounts.get(snapshot.rarityId) ?? 0;
-      rarityCounts.set(snapshot.rarityId, previous + 1);
+      const weight = snapshot.pickupTarget ? 2 : 1;
+      const existing = rarityStats.get(snapshot.rarityId);
+      if (existing) {
+        existing.itemCount += 1;
+        existing.totalWeight += weight;
+      } else {
+        rarityStats.set(snapshot.rarityId, { itemCount: 1, totalWeight: weight });
+      }
     });
 
     const rarityGroups = new Map<string, GachaRarityGroup>();
@@ -110,8 +127,10 @@ export function buildGachaPools({
 
       const rarityEntity = rarityEntities[snapshot.rarityId];
       const rarityEmitRate = typeof rarityEntity?.emitRate === 'number' ? rarityEntity.emitRate : undefined;
-      const rarityCount = rarityCounts.get(snapshot.rarityId) ?? 0;
-      const itemRate = rarityEmitRate && rarityCount > 0 ? rarityEmitRate / rarityCount : undefined;
+      const stats = rarityStats.get(snapshot.rarityId);
+      const totalWeight = stats?.totalWeight ?? 0;
+      const itemWeight = snapshot.pickupTarget ? 2 : 1;
+      const itemRate = rarityEmitRate && totalWeight > 0 ? (rarityEmitRate * itemWeight) / totalWeight : undefined;
       const ratePrecision = rarityFractionDigits?.get(snapshot.rarityId);
       const formattedRate = formatItemRateWithPrecision(itemRate, ratePrecision);
 
@@ -123,7 +142,9 @@ export function buildGachaPools({
         rarityColor: rarityEntity?.color ?? undefined,
         rarityEmitRate,
         itemRate,
-        itemRateDisplay: formattedRate ? `${formattedRate}%` : ''
+        itemRateDisplay: formattedRate ? `${formattedRate}%` : '',
+        pickupTarget: Boolean(snapshot.pickupTarget),
+        drawWeight: itemWeight
       };
 
       items.push(item);
@@ -133,6 +154,7 @@ export function buildGachaPools({
       if (group) {
         group.items.push(item);
         group.itemCount += 1;
+        group.totalWeight += itemWeight;
       } else {
         rarityGroups.set(snapshot.rarityId, {
           rarityId: snapshot.rarityId,
@@ -140,6 +162,7 @@ export function buildGachaPools({
           color: item.rarityColor,
           emitRate: rarityEmitRate,
           itemCount: 1,
+          totalWeight: itemWeight,
           items: [item]
         });
       }

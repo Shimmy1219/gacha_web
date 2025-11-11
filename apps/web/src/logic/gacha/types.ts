@@ -9,6 +9,8 @@ export interface GachaItemDefinition {
   rarityEmitRate?: number;
   itemRate?: number;
   itemRateDisplay?: string;
+  pickupTarget: boolean;
+  drawWeight: number;
 }
 
 export interface GachaRarityGroup {
@@ -17,6 +19,7 @@ export interface GachaRarityGroup {
   color?: string;
   emitRate?: number;
   itemCount: number;
+  totalWeight: number;
   items: GachaItemDefinition[];
 }
 
@@ -46,11 +49,15 @@ export interface NormalizedBundleSetting {
   efficiency: number;
 }
 
+export type GuaranteeTargetType = 'rarity' | 'item';
+
 export interface NormalizedGuaranteeSetting {
   id: string;
   rarityId: string;
   threshold: number;
-  pityStep?: number;
+  quantity: number;
+  targetType: GuaranteeTargetType;
+  itemId?: string;
 }
 
 export interface NormalizedPtSetting {

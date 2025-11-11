@@ -125,11 +125,41 @@ describe('calculateDrawPlan', () => {
   test('emits warnings when guarantees are incomplete', () => {
     const settings: PtSettingV3 = {
       perPull: { price: 10, pulls: 1 },
-      guarantees: [{ id: 'g1', rarityId: 'rare', threshold: 0 }]
+      guarantees: [
+        { id: 'g1', rarityId: 'rare', threshold: 0, quantity: 1, target: { type: 'rarity' } }
+      ]
     };
 
     const plan = calculateDrawPlan({ points: 10, settings, totalItemTypes: 2 });
 
     expect(plan.warnings.some((warning) => warning.includes('保証設定'))).toBe(true);
+  });
+
+  test('normalizes guarantee quantity and target type', () => {
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-normalized',
+          rarityId: 'rare',
+          threshold: 5,
+          quantity: 2,
+          target: { type: 'item', itemId: 'rare-1' }
+        }
+      ]
+    };
+
+    const plan = calculateDrawPlan({ points: 100, settings, totalItemTypes: 3 });
+
+    expect(plan.normalizedSettings.guarantees).toEqual([
+      {
+        id: 'g-normalized',
+        rarityId: 'rare',
+        threshold: 5,
+        quantity: 2,
+        targetType: 'item',
+        itemId: 'rare-1'
+      }
+    ]);
   });
 });
