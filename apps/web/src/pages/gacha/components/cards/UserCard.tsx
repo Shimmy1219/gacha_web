@@ -1,5 +1,5 @@
 import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import {
@@ -98,7 +98,7 @@ export function UserCard({
   const [nameDraft, setNameDraft] = useState(userName);
   const [nameError, setNameError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const toggleButtonRef = useRef<HTMLElement | null>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
   const panelId = `user-card-panel-${userId}`;
@@ -349,26 +349,18 @@ export function UserCard({
           onClick={handleCardClick}
           onKeyDown={handleCardKeyDown}
         >
-          <Disclosure.Button ref={toggleButtonRef} as="span" className="sr-only" aria-hidden="true">
+          <Disclosure.Button
+            ref={toggleButtonRef}
+            as="button"
+            type="button"
+            tabIndex={-1}
+            className="sr-only"
+            aria-hidden="true"
+          >
             ユーザー詳細の表示を切り替える
           </Disclosure.Button>
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <div
-                className={clsx(
-                  'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear',
-                  open && 'text-accent'
-                )}
-                aria-hidden="true"
-              >
-                <ChevronRightIcon
-                  className={clsx(
-                    'user-card__chevron h-5 w-5 transition-transform duration-300 ease-linear',
-                    open && 'rotate-90 text-accent'
-                  )}
-                />
-              </div>
-              <div className="flex min-w-0 flex-1 items-start gap-1">
+            <div className="flex min-w-0 flex-1 items-start gap-1">
                 {avatarSrc ? (
                   <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
                     <img
