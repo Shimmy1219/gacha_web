@@ -98,7 +98,8 @@ export function UserCard({
   const [nameDraft, setNameDraft] = useState(userName);
   const [nameError, setNameError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const toggleButtonRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
   const panelId = `user-card-panel-${userId}`;
 
@@ -253,6 +254,56 @@ export function UserCard({
     });
   }, [pullHistoryStore, push, userId, userInventoriesStore, userProfilesStore, userName]);
 
+  const triggerCardToggle = useCallback(() => {
+    toggleButtonRef.current?.click();
+  }, []);
+
+  const handleCardClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      if (panelRef.current?.contains(target)) {
+        return;
+      }
+
+      if (
+        target.closest(
+          'button, a, input, textarea, select, label, [role="button"], [role="menuitem"], [role="option"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [contenteditable="true"], [data-user-card-ignore-toggle="true"]'
+        )
+      ) {
+        return;
+      }
+
+      triggerCardToggle();
+    },
+    [triggerCardToggle]
+  );
+
+  const handleCardKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.currentTarget !== event.target) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        triggerCardToggle();
+      }
+    },
+    [triggerCardToggle]
+  );
+
   const userMenuItems = useMemo<ContextMenuEntry[]>(
     () => [
       {
@@ -288,17 +339,27 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={expandedByDefault}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+        <article
+          className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          data-state={open ? 'open' : 'closed'}
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={handleCardClick}
+          onKeyDown={handleCardKeyDown}
+        >
+          <Disclosure.Button ref={toggleButtonRef} as="span" className="sr-only" aria-hidden="true">
+            ユーザー詳細の表示を切り替える
+          </Disclosure.Button>
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
             <div className="flex min-w-0 flex-1 items-start gap-3">
-              <Disclosure.Button
-                ref={toggleButtonRef}
-                type="button"
+              <div
                 className={clsx(
-                  'user-card__toggle mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                  'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear',
                   open && 'text-accent'
                 )}
-                aria-label="ユーザー詳細の表示を切り替える"
+                aria-hidden="true"
               >
                 <ChevronRightIcon
                   className={clsx(
@@ -306,7 +367,7 @@ export function UserCard({
                     open && 'rotate-90 text-accent'
                   )}
                 />
-              </Disclosure.Button>
+              </div>
               <div className="flex min-w-0 flex-1 items-start gap-1">
                 {avatarSrc ? (
                   <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
@@ -359,22 +420,14 @@ export function UserCard({
                       </div>
                     </form>
                   ) : (
-                    <button
-                      type="button"
-                      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-expanded={open}
-                      aria-controls={panelId}
-                      onClick={() => {
-                        toggleButtonRef.current?.click();
-                      }}
-                    >
+                    <div className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left">
                       <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
                       {normalizedDiscordDisplayName ? (
                         <span className="user-card__discord-display text-xs text-muted-foreground">
                           {normalizedDiscordDisplayName}
                         </span>
                       ) : null}
-                    </button>
+                    </div>
                   )}
                   {isEditingName && normalizedDiscordDisplayName ? (
                     <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
@@ -393,6 +446,7 @@ export function UserCard({
               <button
                 type="button"
                 className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
+                data-user-card-ignore-toggle="true"
                 onClick={() => onExport?.(userId)}
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
@@ -402,6 +456,7 @@ export function UserCard({
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 aria-label="ユーザーメニューを開く"
+                data-user-card-ignore-toggle="true"
                 onClick={handleOpenUserMenu}
               >
                 <EllipsisVerticalIcon className="h-5 w-5" />
@@ -428,6 +483,7 @@ export function UserCard({
             <Disclosure.Panel
               static
               id={panelId}
+              ref={panelRef}
               className={clsx(
                 'overflow-hidden transition-opacity duration-300 ease-linear',
                 'group-data-[state=open]:opacity-100',
