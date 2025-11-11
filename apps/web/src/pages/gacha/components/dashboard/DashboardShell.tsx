@@ -332,7 +332,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
     <DashboardContext.Provider value={value}>
       <div
         ref={containerRef}
-        className="dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-16"
+        className="dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-0"
       >
         {controlsSlot ? (
           <aside
