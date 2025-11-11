@@ -9,6 +9,8 @@ export interface GachaItemDefinition {
   rarityEmitRate?: number;
   itemRate?: number;
   itemRateDisplay?: string;
+  pickupTarget: boolean;
+  drawWeight: number;
 }
 
 export interface GachaRarityGroup {
@@ -17,6 +19,7 @@ export interface GachaRarityGroup {
   color?: string;
   emitRate?: number;
   itemCount: number;
+  totalWeight: number;
   items: GachaItemDefinition[];
 }
 

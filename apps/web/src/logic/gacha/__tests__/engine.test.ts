@@ -13,7 +13,9 @@ describe('executeGacha', () => {
     rarityColor: '#cccccc',
     rarityEmitRate: 0.8,
     itemRate: 0.4,
-    itemRateDisplay: '40%'
+    itemRateDisplay: '40%',
+    pickupTarget: false,
+    drawWeight: 1
   };
   const common2: GachaItemDefinition = {
     itemId: 'common-2',
@@ -23,7 +25,9 @@ describe('executeGacha', () => {
     rarityColor: '#cccccc',
     rarityEmitRate: 0.8,
     itemRate: 0.4,
-    itemRateDisplay: '40%'
+    itemRateDisplay: '40%',
+    pickupTarget: false,
+    drawWeight: 1
   };
   const rare: GachaItemDefinition = {
     itemId: 'rare-1',
@@ -33,7 +37,9 @@ describe('executeGacha', () => {
     rarityColor: '#ffaa00',
     rarityEmitRate: 0.2,
     itemRate: 0.2,
-    itemRateDisplay: '20%'
+    itemRateDisplay: '20%',
+    pickupTarget: false,
+    drawWeight: 1
   };
 
   const pool: GachaPoolDefinition = {
@@ -48,6 +54,7 @@ describe('executeGacha', () => {
           color: '#cccccc',
           emitRate: 0.8,
           itemCount: 2,
+          totalWeight: 2,
           items: [common1, common2]
         }
       ],
@@ -59,6 +66,7 @@ describe('executeGacha', () => {
           color: '#ffaa00',
           emitRate: 0.2,
           itemCount: 1,
+          totalWeight: 1,
           items: [rare]
         }
       ]
@@ -119,7 +127,9 @@ describe('executeGacha', () => {
       rarityColor: '#ffaa00',
       rarityEmitRate: 0.2,
       itemRate: 0,
-      itemRateDisplay: '0%'
+      itemRateDisplay: '0%',
+      pickupTarget: false,
+      drawWeight: 1
     };
 
     const poolWithTwoRares: GachaPoolDefinition = {
@@ -135,6 +145,7 @@ describe('executeGacha', () => {
             color: '#ffaa00',
             emitRate: 0.2,
             itemCount: 2,
+            totalWeight: 2,
             items: [rare, rareTwo]
           }
         ]

@@ -13,15 +13,18 @@ function buildTestStates({
   itemCount,
   rarityId = 'rarity-1',
   gachaId = 'gacha-1',
-  label = 'UR'
+  label = 'UR',
+  pickupTargets = []
 }: {
   emitRate: number;
   itemCount: number;
   rarityId?: string;
   gachaId?: string;
   label?: string;
+  pickupTargets?: string[];
 }) {
   const itemIds = Array.from({ length: itemCount }, (_, index) => `item-${index + 1}`);
+  const pickupSet = new Set(pickupTargets);
 
   const catalogState = {
     version: 3,
@@ -30,7 +33,7 @@ function buildTestStates({
       [gachaId]: {
         order: itemIds,
         items: Object.fromEntries(
-          itemIds.map((itemId) => [itemId, { itemId, name: itemId, rarityId }])
+          itemIds.map((itemId) => [itemId, { itemId, name: itemId, rarityId, pickupTarget: pickupSet.has(itemId) }])
         )
       }
     }
@@ -202,5 +205,31 @@ describe('buildGachaPools item rate distribution', () => {
       expect(item.itemRate).toBeCloseTo(expectedRate, 12);
       expect(item.itemRateDisplay).toBe('5.7103846154%');
     });
+  });
+
+  it('allocates additional weight to pickup items within the same rarity', () => {
+    const { gachaId, catalogState, rarityState, rarityFractionDigits } = buildTestStates({
+      emitRate: 0.15,
+      itemCount: 3,
+      label: 'R',
+      pickupTargets: ['item-2']
+    });
+
+    const { poolsByGachaId } = buildGachaPools({
+      catalogState,
+      rarityState,
+      rarityFractionDigits
+    });
+
+    const pool = poolsByGachaId.get(gachaId);
+    expect(pool?.items).toHaveLength(3);
+
+    expect(pool?.items[0].itemRate).toBeCloseTo(0.0375, 12);
+    expect(pool?.items[1].itemRate).toBeCloseTo(0.075, 12);
+    expect(pool?.items[2].itemRate).toBeCloseTo(0.0375, 12);
+
+    expect(pool?.items[0].itemRateDisplay).toBe('3.75%');
+    expect(pool?.items[1].itemRateDisplay).toBe('7.5%');
+    expect(pool?.items[2].itemRateDisplay).toBe('3.75%');
   });
 });

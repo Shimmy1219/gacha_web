@@ -17,14 +17,19 @@ function buildItemMap(pool: GachaPoolDefinition): Map<string, GachaItemDefinitio
   return map;
 }
 
-function buildWeights(pool: GachaPoolDefinition): { items: GachaItemDefinition[]; weights: number[]; total: number } {
-  const items = pool.items;
+function buildWeightedDistribution(
+  items: GachaItemDefinition[]
+): { items: GachaItemDefinition[]; weights: number[]; total: number } {
   const weights = items.map((item) => {
     if (item.itemRate != null && Number.isFinite(item.itemRate) && item.itemRate > 0) {
       return item.itemRate;
     }
+    if (item.drawWeight != null && Number.isFinite(item.drawWeight) && item.drawWeight > 0) {
+      return item.drawWeight;
+    }
     return 0;
   });
+
   let total = weights.reduce((sum, weight) => sum + weight, 0);
 
   if (total <= 0) {
@@ -36,6 +41,10 @@ function buildWeights(pool: GachaPoolDefinition): { items: GachaItemDefinition[]
   }
 
   return { items, weights, total };
+}
+
+function buildWeights(pool: GachaPoolDefinition): { items: GachaItemDefinition[]; weights: number[]; total: number } {
+  return buildWeightedDistribution(pool.items);
 }
 
 function pickRandomItem(
@@ -118,9 +127,8 @@ function buildGuaranteedDraws(
     }
 
     const selectRandomFromGroup = (): GachaItemDefinition => {
-      const roll = Math.max(0, Math.min(0.9999999999, rng()));
-      const index = Math.min(group.items.length - 1, Math.floor(roll * group.items.length));
-      return group.items[index];
+      const distribution = buildWeightedDistribution(group.items);
+      return pickRandomItem(distribution, rng) ?? group.items[group.items.length - 1];
     };
 
     for (let index = 0; index < allocation; index += 1) {
