@@ -339,8 +339,10 @@ function buildSettingsFromSnapshot(
         return null;
       }
       const quantity = parsePositiveInteger(guarantee.quantity) ?? 1;
-      const targetType: GuaranteeTargetType = guarantee.targetType === 'item' ? 'item' : 'rarity';
-      const itemId = guarantee.itemId.trim();
+      const trimmedItemId = guarantee.itemId.trim();
+      const targetType: GuaranteeTargetType =
+        guarantee.targetType === 'item' && trimmedItemId !== '' ? 'item' : 'rarity';
+      const itemId = targetType === 'item' ? trimmedItemId : '';
       const base: PtGuaranteeV3 = {
         id: guarantee.id,
         rarityId,
@@ -406,11 +408,14 @@ export function PtControlsPanel({
 
     const nextGuarantees = settings?.guarantees
       ? settings.guarantees.map((guarantee) => {
-          const targetType: GuaranteeTargetType = guarantee.target?.type === 'item' ? 'item' : 'rarity';
-          const itemId =
-            targetType === 'item' && typeof guarantee.target?.itemId === 'string'
+          const rawItemId =
+            guarantee.target?.type === 'item' && typeof guarantee.target?.itemId === 'string'
               ? guarantee.target.itemId
               : '';
+          const normalizedItemId = rawItemId.trim();
+          const targetType: GuaranteeTargetType =
+            guarantee.target?.type === 'item' && normalizedItemId !== '' ? 'item' : 'rarity';
+          const itemId = targetType === 'item' ? normalizedItemId : '';
           return createGuaranteeRow(guarantee.id, {
             minPulls: String(guarantee.threshold),
             rarityId: guarantee.rarityId,
@@ -594,6 +599,7 @@ export function PtControlsPanel({
                     next[index] = {
                       ...next[index],
                       rarityId: value,
+                      targetType: shouldResetItem ? 'rarity' : next[index].targetType,
                       itemId: shouldResetItem ? '' : currentItemId
                     };
                     return next;
@@ -602,44 +608,34 @@ export function PtControlsPanel({
                 options={rarityOptions}
               />
               <span className="text-xs leading-none text-muted-foreground">の中から</span>
-              <SingleSelectDropdown<GuaranteeTargetType>
-                value={guarantee.targetType}
+              <SingleSelectDropdown<string>
+                value={
+                  guarantee.targetType === 'item' && guarantee.itemId
+                    ? `item:${guarantee.itemId}`
+                    : 'rarity'
+                }
                 options={[
-                  { value: 'rarity', label: 'レアリティ内でランダム' },
-                  { value: 'item', label: '特定アイテム' }
+                  { value: 'rarity', label: 'ランダム' },
+                  ...(itemOptionsMap.get(guarantee.rarityId) ?? []).map((option) => ({
+                    value: `item:${option.value}`,
+                    label: option.label
+                  }))
                 ]}
                 onChange={(value) =>
                   setGuarantees((prev) => {
                     const next = [...prev];
+                    const isItem = value.startsWith('item:');
+                    const itemId = isItem ? value.slice(5) : '';
                     next[index] = {
                       ...next[index],
-                      targetType: value,
-                      itemId: value === 'item' ? next[index].itemId : ''
+                      targetType: isItem ? 'item' : 'rarity',
+                      itemId
                     };
                     return next;
                   })
                 }
                 fallbackToFirstOption={false}
               />
-              {guarantee.targetType === 'item' ? (
-                <SingleSelectDropdown
-                  value={guarantee.itemId || undefined}
-                  options={(itemOptionsMap.get(guarantee.rarityId) ?? []).map((option) => ({
-                    value: option.value,
-                    label: option.label
-                  }))}
-                  placeholder="アイテムを選択"
-                  fallbackToFirstOption={false}
-                  disabled={(itemOptionsMap.get(guarantee.rarityId) ?? []).length === 0}
-                  onChange={(value) =>
-                    setGuarantees((prev) => {
-                      const next = [...prev];
-                      next[index] = { ...next[index], itemId: value };
-                      return next;
-                    })
-                  }
-                />
-              ) : null}
               <span className="text-xs leading-none text-muted-foreground">を</span>
               <InlineNumberField
                 value={guarantee.quantity}
