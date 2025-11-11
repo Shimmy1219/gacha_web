@@ -20,40 +20,59 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 
+export interface DiscordMemberShareResult {
+  memberId: string;
+  memberName: string;
+  memberDisplayName: string;
+  memberUsername?: string;
+  memberGlobalName?: string | null;
+  memberAvatarHash?: string | null;
+  memberAvatarUrl?: string | null;
+  channelId: string;
+  channelName?: string | null;
+  channelParentId?: string | null;
+  created: boolean;
+  shareUrl: string;
+  shareLabel?: string | null;
+  shareTitle: string;
+  shareComment?: string | null;
+  sharedAt: string;
+}
+
 interface DiscordMembersResponse {
   ok: boolean;
   members?: DiscordGuildMemberSummary[];
   error?: string;
 }
 
-interface DiscordMemberPickerPayload {
+type DiscordMemberPickerMode = 'share' | 'link';
+
+interface DiscordMemberPickerBasePayload {
+  mode?: DiscordMemberPickerMode;
   guildId: string;
   discordUserId: string;
   initialCategory?: DiscordGuildCategorySelection | null;
+}
+
+interface DiscordMemberPickerSharePayload extends DiscordMemberPickerBasePayload {
+  mode?: 'share';
   shareUrl: string;
   shareLabel?: string;
   shareTitle?: string;
   receiverName?: string;
-  onShared?: (result: {
-    memberId: string;
-    memberName: string;
-    memberDisplayName: string;
-    memberUsername?: string;
-    memberGlobalName?: string | null;
-    memberAvatarHash?: string | null;
-    memberAvatarUrl?: string | null;
-    channelId: string;
-    channelName?: string | null;
-    channelParentId?: string | null;
-    created: boolean;
-    shareUrl: string;
-    shareLabel?: string | null;
-    shareTitle: string;
-    shareComment?: string | null;
-    sharedAt: string;
-  }) => void;
+  onShared?: (result: DiscordMemberShareResult) => void;
   onShareFailed?: (message: string) => void;
 }
+
+interface DiscordMemberPickerLinkPayload extends DiscordMemberPickerBasePayload {
+  mode: 'link';
+  submitLabel?: string;
+  refreshLabel?: string;
+  onMemberPicked?: (member: DiscordGuildMemberSummary) => void | Promise<void>;
+  onMemberPickFailed?: (message: string) => void;
+}
+
+type DiscordMemberPickerPayload = DiscordMemberPickerSharePayload | DiscordMemberPickerLinkPayload;
 
 function getMemberAvatarUrl(member: DiscordGuildMemberSummary): string | null {
   if (member.avatarUrl) {
@@ -186,6 +205,11 @@ export function DiscordMemberPickerDialog({
   close,
   push
 }: ModalComponentProps<DiscordMemberPickerPayload>): JSX.Element {
+  const mode: DiscordMemberPickerMode = payload?.mode === 'link' ? 'link' : 'share';
+  const isLinkMode = mode === 'link';
+  const sharePayload = !isLinkMode ? (payload as DiscordMemberPickerSharePayload | undefined) : undefined;
+  const linkPayload = isLinkMode ? (payload as DiscordMemberPickerLinkPayload | undefined) : undefined;
+
   const guildId = payload?.guildId ?? null;
   const discordUserId = payload?.discordUserId ?? '';
   const [searchInput, setSearchInput] = useState('');
@@ -193,7 +217,7 @@ export function DiscordMemberPickerDialog({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<DiscordGuildCategorySelection | null>(
-    payload?.initialCategory ?? null
+    !isLinkMode ? payload?.initialCategory ?? null : null
   );
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
@@ -231,13 +255,20 @@ export function DiscordMemberPickerDialog({
   };
 
   useEffect(() => {
-    if (!payload?.initialCategory) {
+    if (isLinkMode) {
+      setSelectedCategory(null);
       return;
     }
-    setSelectedCategory(payload.initialCategory);
-  }, [payload?.initialCategory?.id]);
+    if (!sharePayload?.initialCategory) {
+      return;
+    }
+    setSelectedCategory(sharePayload.initialCategory);
+  }, [isLinkMode, sharePayload?.initialCategory?.id]);
 
   const openCategoryDialog = () => {
+    if (isLinkMode) {
+      return;
+    }
     if (!guildId || !discordUserId) {
       setSubmitError('Discordギルドまたはアカウント情報を取得できませんでした。');
       return;
@@ -258,16 +289,16 @@ export function DiscordMemberPickerDialog({
   };
 
   const performShare = async (category: DiscordGuildCategorySelection) => {
-    if (!payload?.shareUrl) {
+    if (!sharePayload?.shareUrl) {
       const message = '共有URLが見つかりませんでした。ZIPをアップロードしてから再度お試しください。';
       setSubmitError(message);
-      payload?.onShareFailed?.(message);
+      sharePayload?.onShareFailed?.(message);
       return;
     }
     if (!guildId) {
       const message = 'Discordギルド情報を取得できませんでした。';
       setSubmitError(message);
-      payload?.onShareFailed?.(message);
+      sharePayload?.onShareFailed?.(message);
       return;
     }
     if (!selectedMemberId) {
@@ -325,10 +356,10 @@ export function DiscordMemberPickerDialog({
       }
 
       const title =
-        payload.shareTitle ?? `${payload.receiverName ?? '景品'}のお渡しリンクです`;
+        sharePayload?.shareTitle ?? `${sharePayload?.receiverName ?? '景品'}のお渡しリンクです`;
       const comment =
-        payload.shareLabel && payload.shareLabel !== payload.shareUrl
-          ? payload.shareLabel
+        sharePayload?.shareLabel && sharePayload.shareLabel !== sharePayload.shareUrl
+          ? sharePayload.shareLabel
           : undefined;
 
       const sendResponse = await fetch('/api/discord/send', {
@@ -340,7 +371,7 @@ export function DiscordMemberPickerDialog({
         credentials: 'include',
         body: JSON.stringify({
           channel_id: channelId,
-          share_url: payload.shareUrl,
+          share_url: sharePayload.shareUrl,
           title,
           comment,
           mode: 'bot'
@@ -365,7 +396,7 @@ export function DiscordMemberPickerDialog({
 
       const sharedAt = new Date().toISOString();
 
-      payload?.onShared?.({
+      sharePayload?.onShared?.({
         memberId: selectedMemberId,
         memberName,
         memberDisplayName,
@@ -377,8 +408,8 @@ export function DiscordMemberPickerDialog({
         channelName: findPayload.channel_name ?? null,
         channelParentId: findPayload.parent_id ?? null,
         created: Boolean(findPayload.created),
-        shareUrl: payload.shareUrl,
-        shareLabel: payload.shareLabel ?? null,
+        shareUrl: sharePayload.shareUrl,
+        shareLabel: sharePayload?.shareLabel ?? null,
         shareTitle: title,
         shareComment: comment ?? null,
         sharedAt
@@ -391,7 +422,48 @@ export function DiscordMemberPickerDialog({
           : 'Discord共有処理に失敗しました';
       const displayMessage = `Discord共有処理に失敗しました: ${message}`;
       setSubmitError(displayMessage);
-      payload?.onShareFailed?.(displayMessage);
+      sharePayload?.onShareFailed?.(displayMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const performLink = async () => {
+    if (!linkPayload?.onMemberPicked) {
+      const message = 'Discord情報の連携処理が設定されていません。';
+      setSubmitError(message);
+      linkPayload?.onMemberPickFailed?.(message);
+      return;
+    }
+    if (!selectedMemberId) {
+      setSubmitError('連携するメンバーを選択してください。');
+      return;
+    }
+
+    const selectedMember = members.find((member) => member.id === selectedMemberId);
+    if (!selectedMember) {
+      const message = '選択したメンバーの情報を取得できませんでした。再度選択してください。';
+      setSubmitError(message);
+      linkPayload.onMemberPickFailed?.(message);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await linkPayload.onMemberPicked(selectedMember);
+      close();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Discord情報の連携に失敗しました。';
+      const displayMessage = message.includes('Discord情報')
+        ? message
+        : `Discord情報の連携に失敗しました: ${message}`;
+      setSubmitError(displayMessage);
+      linkPayload.onMemberPickFailed?.(displayMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -399,7 +471,11 @@ export function DiscordMemberPickerDialog({
 
   const handleSubmit = async () => {
     if (!selectedMemberId) {
-      setSubmitError('共有先のメンバーを選択してください。');
+      setSubmitError(isLinkMode ? '連携するメンバーを選択してください。' : '共有先のメンバーを選択してください。');
+      return;
+    }
+    if (isLinkMode) {
+      await performLink();
       return;
     }
     if (!selectedCategory?.id) {
@@ -409,28 +485,48 @@ export function DiscordMemberPickerDialog({
     await performShare(selectedCategory);
   };
 
+  const refreshLabel = linkPayload?.refreshLabel ?? '再取得';
+  const submitLabel = linkPayload?.submitLabel ?? 'Discordに共有';
+
   return (
     <>
       <ModalBody className="space-y-6">
         <section className="rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
-          <p>
-            Discordギルドのメンバーから共有先を選択し、お渡し用のテキストチャンネルへ共有リンクを送信します。
-          </p>
-          <p className="mt-2">
-            選択したメンバーとの1:1お渡しチャンネルが見つからない場合は、保存済みのカテゴリ配下に自動で作成します。カテゴリは事前に設定しておく必要があります。
-          </p>
-          {selectedCategory ? (
-            <p className="mt-2 text-xs text-surface-foreground">
-              現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
-            </p>
+          {isLinkMode ? (
+            <>
+              <p>Discordギルドのメンバーから連携するユーザーを選択し、ユーザープロフィールに保存します。</p>
+              <p className="mt-2">
+                選択したメンバーの表示名・ユーザー名・アイコンが、このユーザーのプロフィールに反映されます。
+              </p>
+            </>
           ) : (
-            <p className="mt-2 text-xs text-danger">
-              お渡しカテゴリが未設定です。「Discordに共有」を押すとカテゴリ選択モーダルが表示されます。
-            </p>
+            <>
+              <p>
+                Discordギルドのメンバーから共有先を選択し、お渡し用のテキストチャンネルへ共有リンクを送信します。
+              </p>
+              <p className="mt-2">
+                選択したメンバーとの1:1お渡しチャンネルが見つからない場合は、保存済みのカテゴリ配下に自動で作成します。カテゴリは事前に設定しておく必要があります。
+              </p>
+              {selectedCategory ? (
+                <p className="mt-2 text-xs text-surface-foreground">
+                  現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-danger">
+                  お渡しカテゴリが未設定です。「Discordに共有」を押すとカテゴリ選択モーダルが表示されます。
+                </p>
+              )}
+            </>
           )}
         </section>
 
         <section className="space-y-4">
+          {isLinkMode && !discordUserId ? (
+            <p className="text-xs text-danger">Discordにログインしてからメンバー一覧を読み込んでください。</p>
+          ) : null}
+          {isLinkMode && discordUserId && !guildId ? (
+            <p className="text-xs text-danger">Discord設定からギルドを選択するとメンバー一覧を利用できます。</p>
+          ) : null}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h3 className="text-sm font-semibold text-surface-foreground">
               ギルドメンバー一覧
@@ -451,8 +547,8 @@ export function DiscordMemberPickerDialog({
                 disabled={membersQuery.isFetching}
                 aria-busy={membersQuery.isFetching}
               >
-                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                再取得
+                <ArrowPathIcon className={`h-4 w-4 ${membersQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {refreshLabel}
               </button>
             </div>
           </div>
@@ -569,7 +665,7 @@ export function DiscordMemberPickerDialog({
         >
           <span className="flex items-center gap-2">
             {isSubmitting ? <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            <span>Discordに共有</span>
+            <span>{submitLabel}</span>
           </span>
         </button>
       </ModalFooter>
