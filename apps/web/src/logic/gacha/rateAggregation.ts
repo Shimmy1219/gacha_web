@@ -39,7 +39,7 @@ export function formatItemRateWithPrecision(rate?: number, fractionDigits?: numb
   const formatted = formatRarityRate(rate);
   const digits = clampFractionDigits(fractionDigits);
 
-  if (digits == null || !formatted) {
+  if (digits == null || !formatted || formatted.endsWith('...')) {
     return formatted;
   }
 
@@ -71,8 +71,9 @@ export function inferRarityFractionDigits(
       return;
     }
 
-    const dotIndex = formatted.indexOf('.');
-    const digits = dotIndex === -1 ? 0 : formatted.length - dotIndex - 1;
+    const sanitized = formatted.endsWith('...') ? formatted.slice(0, -3) : formatted;
+    const dotIndex = sanitized.indexOf('.');
+    const digits = dotIndex === -1 ? 0 : sanitized.length - dotIndex - 1;
     result.set(rarityId, digits);
   });
 

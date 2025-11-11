@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  MAX_PERCENT_FRACTION_DIGITS,
   MAX_RATE_FRACTION_DIGITS,
   formatRarityRate,
   parseRarityRateInput
@@ -63,6 +64,55 @@ export interface UseRarityTableControllerResult {
   emitRateInputs: Record<string, EmitRateInputStateEntry>;
   handleEmitRateInputChange: (rarityId: string, value: string) => void;
   handleEmitRateInputCommit: (rarityId: string) => void;
+}
+
+function sanitizeEmitRateInput(value: string): string {
+  const trimmed = value.replace(/,/g, '');
+  if (trimmed === '') {
+    return '';
+  }
+
+  const exponentIndex = trimmed.toLowerCase().indexOf('e');
+  const withoutExponent = exponentIndex === -1 ? trimmed : trimmed.slice(0, exponentIndex);
+
+  const normalized = withoutExponent.startsWith('+') ? withoutExponent.slice(1) : withoutExponent;
+
+  const sign = normalized.startsWith('-') ? '-' : '';
+  let unsigned = sign ? normalized.slice(1) : normalized;
+
+  if (unsigned.startsWith('.')) {
+    unsigned = `0${unsigned}`;
+  }
+
+  const dotIndex = unsigned.indexOf('.');
+  let integerPart = dotIndex === -1 ? unsigned : unsigned.slice(0, dotIndex);
+  let fractionalPart = dotIndex === -1 ? '' : unsigned.slice(dotIndex + 1);
+
+  if (fractionalPart.length > MAX_PERCENT_FRACTION_DIGITS) {
+    fractionalPart = fractionalPart.slice(0, MAX_PERCENT_FRACTION_DIGITS);
+  }
+
+  if (integerPart === '') {
+    integerPart = '0';
+  }
+
+  let recomposed = `${integerPart}`;
+  if (dotIndex !== -1) {
+    recomposed += `.${fractionalPart}`;
+  }
+
+  const signed = `${sign}${recomposed}`;
+  const numeric = Number(signed);
+  if (Number.isFinite(numeric)) {
+    if (numeric > 100) {
+      return '100';
+    }
+    if (numeric < 0) {
+      return '0';
+    }
+  }
+
+  return signed;
 }
 
 export function useRarityTableController<Row extends RarityRateRow>(
@@ -159,16 +209,18 @@ export function useRarityTableController<Row extends RarityRateRow>(
     (rarityId: string, value: string) => {
       const previousRow = rows.find((row) => row.id === rarityId);
       const fallbackRate = previousRow?.emitRate;
+      const sanitizedValue = sanitizeEmitRateInput(value);
+
       setEmitRateInputs((previousInputs) => {
         const prevEntry = previousInputs[rarityId];
         const nextSyncedRate = prevEntry?.lastSyncedRate ?? fallbackRate;
-        if (prevEntry?.value === value && prevEntry?.lastSyncedRate === nextSyncedRate) {
+        if (prevEntry?.value === sanitizedValue && prevEntry?.lastSyncedRate === nextSyncedRate) {
           return previousInputs;
         }
         return {
           ...previousInputs,
           [rarityId]: {
-            value,
+            value: sanitizedValue,
             lastSyncedRate: nextSyncedRate
           }
         };
@@ -185,7 +237,7 @@ export function useRarityTableController<Row extends RarityRateRow>(
 
       if (trimmed !== '') {
         const fractionDigits = countFractionDigits(trimmed);
-        if (fractionDigits != null && fractionDigits > MAX_RATE_FRACTION_DIGITS) {
+        if (fractionDigits != null && fractionDigits > MAX_PERCENT_FRACTION_DIGITS) {
           revertEmitRateInput(rarityId);
           onPrecisionExceeded?.({ rarityId, fractionDigits, input: trimmed });
           return;

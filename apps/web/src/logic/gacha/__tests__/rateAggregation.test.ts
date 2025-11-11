@@ -137,7 +137,7 @@ describe('buildGachaPools item rate distribution', () => {
     expect(pool?.items).toHaveLength(3);
     pool?.items.forEach((item) => {
       expect(item.itemRate).toBeCloseTo(0.0000333333333333, 15);
-      expect(item.itemRateDisplay).toBe('0.003333333333%');
+      expect(item.itemRateDisplay).toBe('0.0033...%');
     });
   });
 
@@ -200,7 +200,7 @@ describe('buildGachaPools item rate distribution', () => {
     const expectedRate = 0.74235 / 13;
     pool?.items.forEach((item) => {
       expect(item.itemRate).toBeCloseTo(expectedRate, 12);
-      expect(item.itemRateDisplay).toBe('5.710384615384%');
+      expect(item.itemRateDisplay).toBe('5.7103846154%');
     });
   });
 });

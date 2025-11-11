@@ -1,7 +1,7 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { MAX_RATE_FRACTION_DIGITS } from '../../features/rarity/utils/rarityRate';
+import { MAX_PERCENT_FRACTION_DIGITS } from '../../features/rarity/utils/rarityRate';
 
 export interface RarityRateErrorDialogPayload {
   reason?: 'total-exceeds-limit' | 'precision-exceeded';
@@ -16,7 +16,7 @@ export function RarityRateErrorDialog({
   const reason = payload?.reason ?? 'total-exceeds-limit';
   const message =
     reason === 'precision-exceeded'
-      ? `小数点以下の桁数が多すぎます（最大${MAX_RATE_FRACTION_DIGITS}桁まで入力できます）。`
+      ? `小数点以下の桁数が多すぎます（最大${MAX_PERCENT_FRACTION_DIGITS}桁まで入力できます）。`
       : '排出率の合計が100%を超えています。';
   const guidance =
     reason === 'precision-exceeded'
