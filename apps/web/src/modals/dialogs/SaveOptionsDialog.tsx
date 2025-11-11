@@ -791,7 +791,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
         <div className="grid gap-4 lg:grid-cols-3">
           <SaveOptionCard
-            title="自分で保存して共有"
+            title="デバイスに保存"
             description="端末にZIPを保存し、後からお好みのサービスにアップロードして共有します。"
             actionLabel={isProcessing ? '生成中…' : 'デバイスに保存'}
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
@@ -800,7 +800,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             isBusy={isProcessing}
           />
           <SaveOptionCard
-            title="shimmy3.comへアップロード"
+            title="zipファイルをアップロード"
             description="ZIPをshimmy3.comにアップロードし、受け取り用の共有リンクを発行します。"
             actionLabel={isUploading ? 'アップロード中…' : 'ZIPをアップロード'}
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
