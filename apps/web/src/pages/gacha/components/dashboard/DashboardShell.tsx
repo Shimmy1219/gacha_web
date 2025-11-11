@@ -365,17 +365,19 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </div>
         ) : null}
 
-        <div className="dashboard-shell__mobile lg:hidden">
-          {sections.map((section) => (
-            <div
-              key={section.id}
-              data-view={section.id}
-              className={clsx('dashboard-shell__mobile-section', activeView !== section.id && 'hidden')}
-            >
-              {section.node}
-            </div>
-          ))}
-        </div>
+        {isMobile ? (
+          <div className="dashboard-shell__mobile lg:hidden">
+            {sections.map((section) => (
+              <div
+                key={section.id}
+                data-view={section.id}
+                className={clsx('dashboard-shell__mobile-section', activeView !== section.id && 'hidden')}
+              >
+                {section.node}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} />
       </div>
