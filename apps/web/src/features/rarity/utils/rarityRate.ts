@@ -16,18 +16,26 @@ export function formatRarityRate(rate?: number): string {
     return '0';
   }
 
-  let formatted = percent.toFixed(MAX_RATE_FRACTION_DIGITS);
+  const sign = percent < 0 ? '-' : '';
+  const absPercent = Math.abs(percent);
+  const factor = 10 ** MAX_RATE_FRACTION_DIGITS;
+  const factorBigInt = BigInt(10) ** BigInt(MAX_RATE_FRACTION_DIGITS);
+  const scaled = Math.floor(absPercent * factor + Number.EPSILON);
+  const scaledBigInt = BigInt(scaled);
+  const integerPartBigInt = scaledBigInt / factorBigInt;
+  const fractionalPartBigInt = scaledBigInt % factorBigInt;
+  const integerPart = integerPartBigInt.toString();
 
-  if (formatted.includes('.')) {
-    while (formatted.endsWith('0')) {
-      formatted = formatted.slice(0, -1);
-    }
-
-    if (formatted.endsWith('.')) {
-      formatted = formatted.slice(0, -1);
-    }
+  if (fractionalPartBigInt === 0n) {
+    return integerPart === '0' ? '0' : `${sign}${integerPart}`;
   }
 
+  let fractionalPart = fractionalPartBigInt.toString().padStart(MAX_RATE_FRACTION_DIGITS, '0');
+  while (fractionalPart.endsWith('0')) {
+    fractionalPart = fractionalPart.slice(0, -1);
+  }
+
+  const formatted = `${sign}${integerPart}.${fractionalPart}`;
   if (formatted === '-0') {
     return '0';
   }
