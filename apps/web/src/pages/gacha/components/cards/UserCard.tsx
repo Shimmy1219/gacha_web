@@ -433,7 +433,6 @@ export function UserCard({
                   ) : null}
                 </div>
               </div>
-            </div>
             <div className="user-card__actions flex shrink-0 items-center gap-2">
               <button
                 type="button"
