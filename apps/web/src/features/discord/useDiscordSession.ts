@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -136,6 +136,28 @@ export function useDiscordSession(): UseDiscordSessionResult {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false
   });
+  const { refetch: refetchQuery } = query;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      logDiscordAuthEvent('アプリが前面に復帰したためDiscordセッション情報の再取得を開始します');
+      void refetchQuery();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refetchQuery]);
 
   const login = useCallback(async () => {
     const baseLoginUrl = '/api/auth/discord/start';
@@ -236,9 +258,9 @@ export function useDiscordSession(): UseDiscordSessionResult {
   }, [queryClient]);
 
   const refetch = useCallback(async () => {
-    const result = await query.refetch();
+    const result = await refetchQuery();
     return result.data;
-  }, [query]);
+  }, [refetchQuery]);
 
   return {
     data: query.data,
