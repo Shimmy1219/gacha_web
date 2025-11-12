@@ -9,87 +9,10 @@ import {
   PERM
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
-
-const ENV_BOT_ID_KEYS = ['DISCORD_BOT_USER_ID', 'DISCORD_CLIENT_ID'];
-
-function normalizeOverwriteType(overwrite){
-  if (!overwrite){ return null; }
-  const { type } = overwrite;
-  if (typeof type === 'number'){
-    if (type === 1){ return 'member'; }
-    if (type === 0){ return 'role'; }
-    return null;
-  }
-  if (typeof type === 'string'){
-    const normalized = type.trim().toLowerCase();
-    if (normalized === '1' || normalized === 'member'){ return 'member'; }
-    if (normalized === '0' || normalized === 'role'){ return 'role'; }
-  }
-  return null;
-}
-
-function collectEnvBotIds(){
-  const ids = new Set();
-  for (const key of ENV_BOT_ID_KEYS){
-    const value = process.env[key];
-    if (typeof value === 'string'){
-      const trimmed = value.trim();
-      if (trimmed){
-        ids.add(trimmed);
-      }
-    }
-  }
-  return ids;
-}
-
-let botIdentityCache = null;
-let botIdentityCacheToken = null;
-let botIdentityPromise = null;
-
-async function resolveBotIdentity(log){
-  const envIds = collectEnvBotIds();
-  const token = typeof process.env.DISCORD_BOT_TOKEN === 'string' ? process.env.DISCORD_BOT_TOKEN.trim() : '';
-  if (!token){
-    const primaryId = envIds.values().next().value || '';
-    return { primaryId, idSet: envIds };
-  }
-
-  const finalize = (cache) => {
-    const idSet = new Set([...envIds, ...(cache?.ids ?? [])]);
-    const primaryId = cache?.primaryId || idSet.values().next().value || '';
-    return { primaryId, idSet };
-  };
-
-  if (botIdentityCache && botIdentityCacheToken === token){
-    return finalize(botIdentityCache);
-  }
-
-  if (!botIdentityPromise){
-    botIdentityPromise = (async () => {
-      try {
-        const me = await dFetch('/users/@me', { token, isBot:true });
-        const fetchedId = typeof me?.id === 'string' ? me.id.trim() : '';
-        const ids = new Set();
-        if (fetchedId){
-          ids.add(fetchedId);
-        }
-        botIdentityCacheToken = token;
-        botIdentityCache = { primaryId: fetchedId, ids };
-      } catch (error) {
-        botIdentityCacheToken = token;
-        botIdentityCache = { primaryId: '', ids: new Set() };
-        const message = error instanceof Error ? error.message : String(error);
-        log?.warn('failed to resolve bot id from token', { message });
-      } finally {
-        botIdentityPromise = null;
-      }
-      return botIdentityCache;
-    })();
-  }
-
-  const cache = await botIdentityPromise;
-  return finalize(cache);
-}
+import {
+  extractGiftChannelCandidates,
+  resolveBotIdentity,
+} from './_lib/giftChannelUtils.js';
 
 function buildChannelNameFromDisplayName(displayName, memberId){
   const fallback = `gift-${memberId}`;
@@ -177,25 +100,7 @@ export default async function handler(req, res){
     tokenProvided: Boolean(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_BOT_TOKEN.trim()),
   });
 
-  const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
   const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
-
-  const toBigInt = (value) => {
-    if (typeof value === 'string' && value){
-      try {
-        return BigInt(value);
-      } catch {
-        return 0n;
-      }
-    }
-    if (typeof value === 'number'){
-      return BigInt(value);
-    }
-    return 0n;
-  };
-
-  const allowsView = (overwrite) => (toBigInt(overwrite?.allow) & viewChannelBit) === viewChannelBit;
-  const deniesView = (overwrite) => (toBigInt(overwrite?.deny) & viewChannelBit) === viewChannelBit;
 
   // 全チャンネル取得
   let chans;
@@ -218,144 +123,41 @@ export default async function handler(req, res){
     guildId,
     textChannelCount: textChannels.length,
   });
-  let matchWithBot = null;
-  let matchWithoutBot = null;
+  const candidates = extractGiftChannelCandidates({
+    channels: textChannels,
+    ownerId: sess.uid,
+    guildId,
+    botUserIdSet,
+  });
 
-  for (const ch of textChannels){
-    const overwrites = Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : [];
-    const evaluation = {
-      channelId: ch.id,
-      channelName: typeof ch.name === 'string' ? ch.name : null,
-      parentId: ch.parent_id || null,
-      overwriteCount: overwrites.length,
-    };
-    log.debug('channel evaluation started', {
-      ...evaluation,
-      rawOverwrites: overwrites,
-    });
-    if (overwrites.length === 0){
-      log.debug('channel skipped: no permission overwrites', evaluation);
-      continue;
-    }
-    const userOverwrites = overwrites.filter((ow) => normalizeOverwriteType(ow) === 'member');
-    const ownerOverwrite = userOverwrites.find((ow) => ow.id === sess.uid);
-    const memberOverwrite = userOverwrites.find((ow) => ow.id === memberId);
-    log.debug('channel overwrite presence evaluation', {
-      channelId: ch.id,
-      hasOwnerOverwrite: Boolean(ownerOverwrite),
-      hasMemberOverwrite: Boolean(memberOverwrite),
-      ownerOverwrite,
-      memberOverwrite,
-    });
-    if (!ownerOverwrite || !memberOverwrite){
-      log.debug('channel skipped: owner/member overwrite missing', {
-        channelId: ch.id,
-        hasOwnerOverwrite: Boolean(ownerOverwrite),
-        hasMemberOverwrite: Boolean(memberOverwrite),
-      });
-      continue;
-    }
+  log.debug('gift channel candidates evaluated', {
+    guildId,
+    totalTextChannels: textChannels.length,
+    candidateCount: candidates.length,
+  });
 
-    const otherUsers = userOverwrites.filter((ow) => {
-      if (ow.id === sess.uid || ow.id === memberId){
-        return false;
-      }
-      if (botUserIdSet.has(ow.id)){
-        return false;
-      }
-      return true;
-    });
-    log.debug('channel other user overwrite evaluation', {
-      channelId: ch.id,
-      otherUserOverwriteCount: otherUsers.length,
-      otherUserOverwrites: otherUsers,
-      recognizedBotOverwriteIds: Array.from(botUserIdSet),
-    });
-    if (otherUsers.length > 0){
-      log.debug('channel skipped: unexpected user overwrites present', {
-        channelId: ch.id,
-        otherUserOverwriteCount: otherUsers.length,
-      });
-      continue;
-    }
-
-    const everyoneOverwrite = overwrites.find((ow) => normalizeOverwriteType(ow) === 'role' && ow.id === guildId);
-    const everyoneDeniedView = everyoneOverwrite ? deniesView(everyoneOverwrite) : false;
-    log.debug('channel everyone overwrite evaluation', {
-      channelId: ch.id,
-      hasEveryoneOverwrite: Boolean(everyoneOverwrite),
-      everyoneOverwrite,
-      everyoneDeniedView,
-    });
-    if (!everyoneOverwrite || !everyoneDeniedView){
-      log.debug('channel skipped: everyone overwrite missing or allows view', {
-        channelId: ch.id,
-        hasEveryoneOverwrite: Boolean(everyoneOverwrite),
-        everyoneDeniedView,
-      });
-      continue;
-    }
-
-    const ownerAllowsView = allowsView(ownerOverwrite);
-    const memberAllowsView = allowsView(memberOverwrite);
-    log.debug('channel owner/member view permission evaluation', {
-      channelId: ch.id,
-      ownerAllowsView,
-      memberAllowsView,
-    });
-    if (!ownerAllowsView || !memberAllowsView){
-      log.debug('channel skipped: owner or member lacks view permission', {
-        channelId: ch.id,
-        ownerAllowsView,
-        memberAllowsView,
-      });
-      continue;
-    }
-
-    const botOverwrite = userOverwrites.find((ow) => botUserIdSet.has(ow.id));
-    const botHasView = botOverwrite ? allowsView(botOverwrite) : false;
-    log.debug('channel bot overwrite evaluation', {
-      channelId: ch.id,
-      botOverwritePresent: Boolean(botOverwrite),
-      botOverwrite,
-      botHasView,
-    });
-    if (botOverwrite && botHasView){
-      log.debug('channel accepted: matches criteria with bot access', {
-        channelId: ch.id,
-      });
-      matchWithBot = ch;
-      break;
-    }
-
-    if (!matchWithoutBot){
-      log.debug('channel candidate stored: matches criteria without bot access', {
-        channelId: ch.id,
-        botOverwritePresent: Boolean(botOverwrite),
-        botHasView,
-      });
-      matchWithoutBot = ch;
-    }
-  }
+  const matchesForMember = candidates.filter((candidate) => candidate.memberId === memberId);
+  const matchWithBot = matchesForMember.find((candidate) => candidate.botHasView);
+  const matchWithoutBot = matchesForMember.find((candidate) => !candidate.botHasView);
 
   if (matchWithBot){
     log.info('existing channel found with bot access', {
-      channelId: matchWithBot.id,
-      parentId: matchWithBot.parent_id || null,
+      channelId: matchWithBot.channelId,
+      parentId: matchWithBot.parentId,
     });
     return res.json({
       ok:true,
-      channel_id: matchWithBot.id,
-      channel_name: typeof matchWithBot.name === 'string' ? matchWithBot.name : null,
+      channel_id: matchWithBot.channelId,
+      channel_name: matchWithBot.channelName ?? null,
       created:false,
-      parent_id: matchWithBot.parent_id || null
+      parent_id: matchWithBot.parentId
     });
   }
 
   if (matchWithoutBot){
     if (!botUserId){
       log.error('bot user id missing, cannot grant access to existing channel', {
-        channelId: matchWithoutBot.id,
+        channelId: matchWithoutBot.channelId,
       });
       return res.status(500).json({
         ok:false,
@@ -363,7 +165,7 @@ export default async function handler(req, res){
       });
     }
     try {
-      await dFetch(`/channels/${matchWithoutBot.id}/permissions/${botUserId}`, {
+      await dFetch(`/channels/${matchWithoutBot.channelId}/permissions/${botUserId}`, {
         token: process.env.DISCORD_BOT_TOKEN,
         isBot:true,
         method:'PUT',
@@ -374,8 +176,8 @@ export default async function handler(req, res){
         }
       });
       log.info('granted bot permission on existing channel', {
-        channelId: matchWithoutBot.id,
-        parentId: matchWithoutBot.parent_id || null
+        channelId: matchWithoutBot.channelId,
+        parentId: matchWithoutBot.parentId
       });
     } catch (error) {
       return respondDiscordApiError(error, 'guild-channel-grant-bot');
@@ -383,10 +185,10 @@ export default async function handler(req, res){
 
     return res.json({
       ok:true,
-      channel_id: matchWithoutBot.id,
-      channel_name: typeof matchWithoutBot.name === 'string' ? matchWithoutBot.name : null,
+      channel_id: matchWithoutBot.channelId,
+      channel_name: matchWithoutBot.channelName ?? null,
       created:false,
-      parent_id: matchWithoutBot.parent_id || null
+      parent_id: matchWithoutBot.parentId
     });
   }
 
