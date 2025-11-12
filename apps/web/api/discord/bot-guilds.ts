@@ -218,7 +218,8 @@ export default async function handler(request: Request): Promise<Response> {
     return jsonResponse(502, { ok: false, error: 'failed to fetch discord guilds' });
   }
 
-  const botToken = typeof process.env.DISCORD_BOT_TOKEN === 'string' ? process.env.DISCORD_BOT_TOKEN.trim() : '';
+  const botTokenSource = globalThis.process?.env?.DISCORD_BOT_TOKEN;
+  const botToken = typeof botTokenSource === 'string' ? botTokenSource.trim() : '';
   const botResult = await fetchBotGuilds(botToken || null, log);
 
   const guilds = ownedGuilds.map((guild) => ({
