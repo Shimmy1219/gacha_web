@@ -55,7 +55,7 @@ export const ModalPanel = forwardRef<
       ref={ref}
       className={clsx(
         'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur md:max-h-none md:overflow-hidden',
-        'max-h-[calc(100vh-2rem)]',
+        'max-h-[calc(100vh-4rem)]',
         SIZE_CLASS_MAP[size],
         paddingClassName,
         className
