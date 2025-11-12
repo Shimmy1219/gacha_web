@@ -1,5 +1,6 @@
 // /api/_lib/discordAuthStore.js
 // Discord OAuth state を Upstash Redis (kv) に保存・取得・削除するヘルパー
+import crypto from 'crypto';
 import { kv } from './kv.js';
 
 const DISCORD_AUTH_TTL_SEC = 60 * 10; // 10 minutes
@@ -37,6 +38,10 @@ function normalizePwaSessionRecord(raw) {
   if (!sid) {
     return null;
   }
+  const claimTokenDigest =
+    typeof raw.claimTokenDigest === 'string' && raw.claimTokenDigest.length > 0
+      ? raw.claimTokenDigest
+      : undefined;
   return {
     sid,
     userId: typeof raw.userId === 'string' ? raw.userId : undefined,
@@ -46,7 +51,15 @@ function normalizePwaSessionRecord(raw) {
       raw.metadata && typeof raw.metadata === 'object'
         ? raw.metadata
         : undefined,
+    claimTokenDigest,
   };
+}
+
+export function digestDiscordPwaClaimToken(token) {
+  if (typeof token !== 'string' || token.length === 0) {
+    return null;
+  }
+  return crypto.createHash('sha256').update(token).digest('base64');
 }
 
 export async function saveDiscordAuthState(state, payload) {
@@ -126,6 +139,10 @@ export async function saveDiscordPwaSession(state, payload) {
         ? payload.metadata
         : undefined,
   };
+
+  if (typeof payload.claimTokenDigest === 'string' && payload.claimTokenDigest.length > 0) {
+    record.claimTokenDigest = payload.claimTokenDigest;
+  }
 
   await kv.set(getPwaSessionKey(state), record, { ex: DISCORD_PWA_SESSION_TTL_SEC });
   return record;

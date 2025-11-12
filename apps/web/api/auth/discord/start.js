@@ -33,6 +33,16 @@ export default async function handler(req, res) {
   const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
 
+  if (normalizedContext === 'pwa') {
+    const claimToken = crypto.randomBytes(32).toString('base64url');
+    const claimTokenPreview = `${claimToken.slice(0, 4)}...`;
+    setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
+    log.info('issued discord pwa claim token', { claimTokenPreview });
+  } else {
+    // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
+    setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
+  }
+
   await saveDiscordAuthState(state, {
     verifier,
     loginContext: normalizedContext,

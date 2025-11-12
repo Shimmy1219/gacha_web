@@ -312,6 +312,12 @@ export function useDiscordSession(): UseDiscordSessionResult {
             status: response.status,
             body: errorText,
           });
+          if ([401, 403, 404, 409, 410].includes(response.status)) {
+            console.info('Discord PWA pending state will be cleared after unrecoverable response', {
+              statePreview,
+            });
+            clearPendingPwaState();
+          }
           return;
         }
 
@@ -329,6 +335,10 @@ export function useDiscordSession(): UseDiscordSessionResult {
             statePreview,
             payload,
           });
+          console.info('Discord PWA pending state will be cleared because response payload is invalid', {
+            statePreview,
+          });
+          clearPendingPwaState();
           return;
         }
 
