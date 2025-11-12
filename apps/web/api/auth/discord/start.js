@@ -5,6 +5,13 @@ import { setCookie } from '../../_lib/cookies.js';
 import { saveDiscordAuthState } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
+function createStatePreview(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return value.length > 8 ? `${value.slice(0, 4)}...` : value;
+}
+
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/start', req);
   log.info('Discordログイン開始リクエストを受信しました');
@@ -16,6 +23,7 @@ export default async function handler(req, res) {
   }
 
   const state = crypto.randomBytes(16).toString('base64url');
+  const statePreview = createStatePreview(state);
   const verifier = crypto.randomBytes(32).toString('base64url');
   const challenge = crypto
     .createHash('sha256')
