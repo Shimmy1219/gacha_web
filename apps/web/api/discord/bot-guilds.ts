@@ -1,3 +1,5 @@
+/// <reference path="../types/internal.d.ts" />
+
 import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
