@@ -2,7 +2,10 @@
 // PKCE + state を発行して Discord 認可画面へ 302
 import crypto from 'crypto';
 import { setCookie } from '../../_lib/cookies.js';
-import { saveDiscordAuthState } from '../../_lib/discordAuthStore.js';
+import {
+  saveDiscordAuthState,
+  digestDiscordPwaClaimToken,
+} from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
@@ -33,10 +36,12 @@ export default async function handler(req, res) {
   const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
 
+  let claimTokenDigest;
   if (normalizedContext === 'pwa') {
     const claimToken = crypto.randomBytes(32).toString('base64url');
     const claimTokenPreview = `${claimToken.slice(0, 4)}...`;
     setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
+    claimTokenDigest = digestDiscordPwaClaimToken(claimToken);
     log.info('issued discord pwa claim token', { claimTokenPreview });
   } else {
     // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
@@ -46,6 +51,7 @@ export default async function handler(req, res) {
   await saveDiscordAuthState(state, {
     verifier,
     loginContext: normalizedContext,
+    claimTokenDigest,
   });
 
   const params = new URLSearchParams({

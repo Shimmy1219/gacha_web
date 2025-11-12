@@ -48,6 +48,7 @@ export default async function handler(req, res) {
   let verifierToUse = typeof cookieVerifier === 'string' ? cookieVerifier : null;
   let shouldCleanupState = Boolean(stateParam);
   let stateRecordConsumed = false;
+  let storedState = null;
 
   try {
     if (!codeParam || !stateParam) {
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
       });
-      const storedState = await consumeDiscordAuthState(stateParam);
+      storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
         log.warn('state record missing in kv store', {
           hasStoredState: Boolean(storedState),
@@ -88,9 +89,9 @@ export default async function handler(req, res) {
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
       });
-    } else if (!loginContext) {
-      const storedState = await getDiscordAuthState(stateParam);
-      if (storedState?.loginContext) {
+    } else {
+      storedState = await getDiscordAuthState(stateParam);
+      if (!loginContext && storedState?.loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext) || loginContext;
       }
     }
@@ -176,7 +177,13 @@ export default async function handler(req, res) {
     log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
 
     if (loginContext === 'pwa') {
-      const claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
+      let claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
+      if (!claimTokenDigest && storedState?.claimTokenDigest) {
+        claimTokenDigest = storedState.claimTokenDigest;
+        log.info('using stored claim token digest for pwa session bridge', {
+          statePreview,
+        });
+      }
       if (!claimTokenDigest) {
         log.warn('pwa claim token missing or invalid, skipping bridge record persistence', {
           statePreview,
