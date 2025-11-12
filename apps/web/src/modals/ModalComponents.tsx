@@ -28,6 +28,33 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
+function useMediaQuery(query: string): boolean | undefined {
+  const [matches, setMatches] = useState<boolean | undefined>(undefined);
+
+  useIsomorphicLayoutEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+    const updateMatchState = (event?: MediaQueryListEvent) => {
+      setMatches(event?.matches ?? mediaQuery.matches);
+    };
+
+    updateMatchState();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', updateMatchState);
+      return () => mediaQuery.removeEventListener('change', updateMatchState);
+    }
+
+    mediaQuery.addListener(updateMatchState);
+    return () => mediaQuery.removeListener(updateMatchState);
+  }, [query]);
+
+  return matches;
+}
+
 function useModalViewportMaxHeight(offsetRem = 4): number | undefined {
   const [maxHeight, setMaxHeight] = useState<number>();
 
@@ -101,14 +128,19 @@ export const ModalPanel = forwardRef<
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
   const viewportMaxHeight = useModalViewportMaxHeight();
+  const isBelowMdViewport = useMediaQuery('(max-width: 767px)');
 
   const mergedStyle = useMemo(() => {
-    if (style?.maxHeight != null || viewportMaxHeight === undefined) {
+    if (
+      style?.maxHeight != null ||
+      viewportMaxHeight === undefined ||
+      isBelowMdViewport === false
+    ) {
       return style;
     }
 
     return { ...style, maxHeight: viewportMaxHeight };
-  }, [style, viewportMaxHeight]);
+  }, [style, viewportMaxHeight, isBelowMdViewport]);
 
   return (
     <DialogPanel
