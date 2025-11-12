@@ -5,6 +5,8 @@ import {
   consumeDiscordAuthState,
   deleteDiscordAuthState,
   getDiscordAuthState,
+  saveDiscordPwaSession,
+  digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
@@ -28,6 +30,10 @@ export default async function handler(req, res) {
   const { code, state, error } = req.query || {};
   const codeParam = Array.isArray(code) ? code[0] : code;
   const stateParam = Array.isArray(state) ? state[0] : state;
+  const statePreview =
+    typeof stateParam === 'string' && stateParam.length > 8
+      ? `${stateParam.slice(0, 4)}...`
+      : stateParam;
   if (error) {
     log.warn('oauth error reported', { error });
     return res.status(400).send(`OAuth error: ${error}`);
@@ -36,6 +42,7 @@ export default async function handler(req, res) {
   const expectedState = cookies['d_state'];
   const cookieVerifier = cookies['d_verifier'];
   const loginContextCookie = cookies['d_login_context'];
+  const pwaClaimTokenCookie = cookies['d_pwa_bridge'];
 
   let loginContext = normalizeLoginContext(loginContextCookie);
   let verifierToUse = typeof cookieVerifier === 'string' ? cookieVerifier : null;
@@ -76,10 +83,6 @@ export default async function handler(req, res) {
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
       }
-      const statePreview =
-        typeof stateParam === 'string' && stateParam.length > 8
-          ? `${stateParam.slice(0, 4)}...`
-          : stateParam;
       log.info('state restored from kv store', {
         statePreview,
         hasLoginContext: Boolean(loginContext),
@@ -171,6 +174,37 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
     log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
+
+    if (loginContext === 'pwa') {
+      const claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
+      if (!claimTokenDigest) {
+        log.warn('pwa claim token missing or invalid, skipping bridge record persistence', {
+          statePreview,
+        });
+      } else {
+        try {
+          await saveDiscordPwaSession(stateParam, {
+            sid,
+            userId: me.id,
+            loginContext,
+            issuedAt: now,
+            metadata: {
+              stateRestoredFromKv: stateRecordConsumed,
+            },
+            claimTokenDigest,
+          });
+          log.info('stored pwa session bridge record', {
+            statePreview,
+            sessionIdPreview,
+          });
+        } catch (error) {
+          log.error('failed to store discord pwa session bridge record', {
+            statePreview,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
 
     // 後続リクエストで誤検知しないようにクッキーを破棄
     setCookie(res, 'd_state', '', { maxAge: 0 });
