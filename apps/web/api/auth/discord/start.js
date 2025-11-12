@@ -7,11 +7,11 @@ import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/start', req);
-  log.info('request received');
+  log.info('Discordログイン開始リクエストを受信しました');
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    log.warn('method not allowed', { method: req.method });
+    log.warn('許可されていないHTTPメソッドです', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
@@ -33,8 +33,19 @@ export default async function handler(req, res) {
   const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
 
+  const statePreview = state.length > 8 ? `${state.slice(0, 4)}...` : state;
+  log.info('PKCE情報を生成しクッキーへ保存しました', {
+    statePreview,
+    loginContext: normalizedContext,
+  });
+
   await saveDiscordAuthState(state, {
     verifier,
+    loginContext: normalizedContext,
+  });
+
+  log.info('Upstash KV に認証状態を保存しました', {
+    statePreview,
     loginContext: normalizedContext,
   });
 
@@ -49,8 +60,8 @@ export default async function handler(req, res) {
     prompt: 'consent', // 再承認を促したい時は維持、不要なら削除可
   });
 
-  log.info('issuing discord authorize redirect', {
-    statePreview: `${state.slice(0, 4)}...`,
+  log.info('Discord認可URLを生成しました', {
+    statePreview,
     hasVerifier: Boolean(verifier),
   });
 
@@ -71,7 +82,9 @@ export default async function handler(req, res) {
       .some((value) => value === 'application/json' || value.endsWith('+json'));
 
   if (acceptsJson) {
-    log.info('returning authorize urls as json response');
+    log.info('Discord認可URLをJSONレスポンスとして返却します', {
+      loginContext: normalizedContext,
+    });
     return res.status(200).json({
       ok: true,
       authorizeUrl: webAuthorizeUrl,
@@ -80,6 +93,9 @@ export default async function handler(req, res) {
   }
 
   res.writeHead(302, { Location: webAuthorizeUrl });
-  log.info('redirect response sent', { location: webAuthorizeUrl });
+  log.info('Discord認可画面へリダイレクトレスポンスを送信しました', {
+    location: webAuthorizeUrl,
+    loginContext: normalizedContext,
+  });
   return res.end();
 }

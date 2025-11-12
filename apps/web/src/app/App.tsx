@@ -28,6 +28,7 @@ import {
   type LivePasteCatalogIssue
 } from '../logic/livePaste';
 import { AppRoutes } from './routes/AppRoutes';
+import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
 
 function formatCatalogIssueMessage(issue?: LivePasteCatalogIssue): string | undefined {
   if (!issue) {
@@ -432,5 +433,10 @@ export function App(): JSX.Element {
     onOpenPageSettings: handleOpenPageSettings
   };
 
-  return <AppRoutes gachaLayoutProps={gachaLayoutProps} />;
+  return (
+    <>
+      <AppRoutes gachaLayoutProps={gachaLayoutProps} />
+      <DiscordAuthDebugOverlay />
+    </>
+  );
 }

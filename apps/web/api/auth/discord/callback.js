@@ -17,19 +17,28 @@ function normalizeLoginContext(value) {
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/callback', req);
-  log.info('request received', { hasCode: Boolean(req.query?.code), hasState: Boolean(req.query?.state) });
+  log.info('Discordログインコールバックを受信しました', {
+    hasCode: Boolean(req.query?.code),
+    hasState: Boolean(req.query?.state),
+  });
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    log.warn('method not allowed', { method: req.method });
+    log.warn('許可されていないHTTPメソッドです', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
   const { code, state, error } = req.query || {};
   const codeParam = Array.isArray(code) ? code[0] : code;
   const stateParam = Array.isArray(state) ? state[0] : state;
+  const statePreview =
+    typeof stateParam === 'string'
+      ? stateParam.length > 8
+        ? `${stateParam.slice(0, 4)}...`
+        : stateParam
+      : null;
   if (error) {
-    log.warn('oauth error reported', { error });
+    log.warn('Discordからエラーが返却されました', { error });
     return res.status(400).send(`OAuth error: ${error}`);
   }
   const cookies = getCookies(req);
@@ -44,11 +53,12 @@ export default async function handler(req, res) {
 
   try {
     if (!codeParam || !stateParam) {
-      log.warn('state or verifier mismatch', {
+      log.warn('state または verifier の検証に失敗しました', {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       return res.status(400).send('Invalid state or verifier');
     }
@@ -58,16 +68,18 @@ export default async function handler(req, res) {
     const cookieValid = cookieStateMatches && cookieHasVerifier;
 
     if (!cookieValid) {
-      log.warn('state or verifier mismatch', {
+      log.warn('state または verifier の検証に失敗しました', {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       const storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
-        log.warn('state record missing in kv store', {
+        log.warn('KV に保存された認証状態が見つかりませんでした', {
           hasStoredState: Boolean(storedState),
+          statePreview,
         });
         return res.status(400).send('Invalid state or verifier');
       }
@@ -76,12 +88,10 @@ export default async function handler(req, res) {
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
       }
-      const statePreview =
-        typeof stateParam === 'string' && stateParam.length > 8
-          ? `${stateParam.slice(0, 4)}...`
-          : stateParam;
-      log.info('state restored from kv store', {
-        statePreview,
+      const restoredStatePreview =
+        statePreview ?? (typeof stateParam === 'string' ? stateParam : null);
+      log.info('KV から認証状態を復元しました', {
+        statePreview: restoredStatePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
       });
@@ -93,8 +103,9 @@ export default async function handler(req, res) {
     }
 
     if (!verifierToUse) {
-      log.warn('verifier missing after validation', {
+      log.warn('検証後に有効な verifier が見つかりませんでした', {
         hasCookieVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       return res.status(400).send('Invalid state or verifier');
     }
@@ -102,6 +113,11 @@ export default async function handler(req, res) {
     if (!loginContext) {
       loginContext = 'browser';
     }
+
+    log.info('Discordへアクセストークン交換リクエストを送信します', {
+      loginContext,
+      statePreview,
+    });
 
     // トークン交換
     const body = new URLSearchParams({
@@ -121,11 +137,26 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const t = await tokenRes.text();
-      log.error('token exchange failed', { status: tokenRes.status, body: t });
+      log.error('Discordへのトークン交換リクエストが失敗しました', {
+        status: tokenRes.status,
+        body: t,
+        statePreview,
+      });
       return res.status(401).send(`Token exchange failed: ${t}`);
     }
 
     const token = await tokenRes.json();
+
+    log.info('Discordからアクセストークンレスポンスを受信しました', {
+      scope: token.scope,
+      expiresIn: token.expires_in,
+      statePreview,
+    });
+
+    log.info('Discordへユーザープロフィール取得リクエストを送信します', {
+      loginContext,
+      statePreview,
+    });
 
     // プロフィール
     const meRes = await fetch('https://discord.com/api/users/@me', {
@@ -133,10 +164,21 @@ export default async function handler(req, res) {
     });
     if (!meRes.ok) {
       const t = await meRes.text();
-      log.error('fetch /users/@me failed', { status: meRes.status, body: t });
+      log.error('Discordからユーザープロフィールの取得に失敗しました', {
+        status: meRes.status,
+        body: t,
+        statePreview,
+      });
       return res.status(401).send(`Fetch /users/@me failed: ${t}`);
     }
     const me = await meRes.json();
+
+    log.info('Discordからユーザープロフィールを取得しました', {
+      userId: me.id,
+      username: me.username,
+      loginContext,
+      statePreview,
+    });
 
     const now = Date.now();
     const payload = {
@@ -170,7 +212,11 @@ export default async function handler(req, res) {
     // UX: ルートへ返す（必要なら /?loggedin=1 など）
     res.setHeader('Cache-Control', 'no-store');
     const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
-    log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
+    log.info('ログインセッションを発行しSIDクッキーを設定しました', {
+      userId: me.id,
+      sessionIdPreview,
+      loginContext,
+    });
 
     // 後続リクエストで誤検知しないようにクッキーを破棄
     setCookie(res, 'd_state', '', { maxAge: 0 });
@@ -178,39 +224,39 @@ export default async function handler(req, res) {
     setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
     if (acceptsJson) {
-      log.info('returning login completion payload as json response', { loginContext });
+      log.info('ログイン完了情報をJSONレスポンスとして返却します', { loginContext });
       return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
     }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
     const redirectTarget = '/';
-    const redirectScript = `
-      (function () {
-        var target = ${JSON.stringify(redirectTarget)};
-        var navigate = function () {
-          try {
-            window.location.replace(target);
-          } catch (error) {
-            window.location.href = target;
-          }
-        };
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-          navigate();
-        } else {
-          document.addEventListener('DOMContentLoaded', navigate, { once: true });
-        }
-        window.setTimeout(function () {
-          try {
-            window.location.href = target;
-          } catch (error) {
-            // no-op
-          }
-        }, 4000);
-      })();
-    `;
 
     if (loginContext === 'browser') {
+      const redirectScript = `
+        (function () {
+          var target = ${JSON.stringify(redirectTarget)};
+          var navigate = function () {
+            try {
+              window.location.replace(target);
+            } catch (error) {
+              window.location.href = target;
+            }
+          };
+          if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            navigate();
+          } else {
+            document.addEventListener('DOMContentLoaded', navigate, { once: true });
+          }
+          window.setTimeout(function () {
+            try {
+              window.location.href = target;
+            } catch (error) {
+              // no-op
+            }
+          }, 4000);
+        })();
+      `;
       const html = `<!DOCTYPE html>
 <html lang="ja">
   <head>
@@ -225,6 +271,8 @@ export default async function handler(req, res) {
     </noscript>
   </body>
 </html>`;
+
+      log.info('ブラウザ向けのリダイレクトHTMLを返却しました', { loginContext });
 
       return res.status(200).send(html);
     }
@@ -255,12 +303,13 @@ export default async function handler(req, res) {
       <p>${guidanceMessage}</p>
       <p><a href="${redirectTarget}">トップページに移動する</a></p>
     </main>
-    <script>${redirectScript}</script>
     <noscript>
       <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
     </noscript>
   </body>
 </html>`;
+
+    log.info('PWA向けの案内HTMLを返却しました', { loginContext });
 
     return res.status(200).send(html);
   } finally {
@@ -271,7 +320,7 @@ export default async function handler(req, res) {
       try {
         await deleteDiscordAuthState(stateParam);
       } catch (error) {
-        log.error('failed to delete discord auth state from kv', {
+        log.error('Discord認証状態の削除に失敗しました', {
           error: error instanceof Error ? error.message : String(error),
         });
       }
