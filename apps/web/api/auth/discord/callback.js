@@ -67,6 +67,7 @@ export default async function handler(req, res) {
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       return res.status(400).send('Invalid state or verifier');
     }
@@ -81,11 +82,13 @@ export default async function handler(req, res) {
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
         log.warn('kvに該当するDiscord認証stateが存在しません', {
           hasStoredState: Boolean(storedState),
+          statePreview,
         });
         return res.status(400).send('Invalid state or verifier');
       }
@@ -94,8 +97,10 @@ export default async function handler(req, res) {
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
       }
-      log.info('kvからDiscord認証stateを復元しました', {
-        statePreview,
+      const restoredStatePreview =
+        statePreview ?? (typeof stateParam === 'string' ? stateParam : null);
+      log.info('KV から認証状態を復元しました', {
+        statePreview: restoredStatePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
       });
@@ -114,8 +119,9 @@ export default async function handler(req, res) {
     }
 
     if (!verifierToUse) {
-      log.warn('検証後にverifierが見つかりませんでした', {
+      log.warn('検証後に有効な verifier が見つかりませんでした', {
         hasCookieVerifier: Boolean(cookieVerifier),
+        statePreview,
       });
       return res.status(400).send('Invalid state or verifier');
     }
@@ -123,6 +129,11 @@ export default async function handler(req, res) {
     if (!loginContext) {
       loginContext = 'browser';
     }
+
+    log.info('Discordへアクセストークン交換リクエストを送信します', {
+      loginContext,
+      statePreview,
+    });
 
     // トークン交換
     const body = new URLSearchParams({
@@ -146,7 +157,11 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const t = await tokenRes.text();
-      log.error('Discordアクセストークン交換に失敗しました', { status: tokenRes.status, body: t, statePreview });
+      log.error('Discordへのトークン交換リクエストが失敗しました', {
+        status: tokenRes.status,
+        body: t,
+        statePreview,
+      });
       return res.status(401).send(`Token exchange failed: ${t}`);
     }
 
@@ -155,6 +170,17 @@ export default async function handler(req, res) {
       statePreview,
       scope: token.scope,
       expiresIn: token.expires_in,
+    });
+
+    log.info('Discordからアクセストークンレスポンスを受信しました', {
+      scope: token.scope,
+      expiresIn: token.expires_in,
+      statePreview,
+    });
+
+    log.info('Discordへユーザープロフィール取得リクエストを送信します', {
+      loginContext,
+      statePreview,
     });
 
     // プロフィール
@@ -167,7 +193,7 @@ export default async function handler(req, res) {
     });
     if (!meRes.ok) {
       const t = await meRes.text();
-      log.error('Discordユーザープロフィール取得に失敗しました', {
+      log.error('Discordからユーザープロフィールの取得に失敗しました', {
         status: meRes.status,
         body: t,
         statePreview,
@@ -176,6 +202,13 @@ export default async function handler(req, res) {
     }
     const me = await meRes.json();
     log.info('Discordからユーザープロフィールを受領しました', {
+      userId: me.id,
+      username: me.username,
+      loginContext,
+      statePreview,
+    });
+
+    log.info('Discordからユーザープロフィールを取得しました', {
       userId: me.id,
       username: me.username,
       loginContext,

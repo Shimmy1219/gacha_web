@@ -8,6 +8,13 @@ import {
 } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
+function createStatePreview(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  return value.length > 8 ? `${value.slice(0, 4)}...` : value;
+}
+
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/start', req);
   log.info('Discordログインstartを受け取りました', {
@@ -21,6 +28,7 @@ export default async function handler(req, res) {
   }
 
   const state = crypto.randomBytes(16).toString('base64url');
+  const statePreview = createStatePreview(state);
   const verifier = crypto.randomBytes(32).toString('base64url');
   const challenge = crypto
     .createHash('sha256')
@@ -54,6 +62,16 @@ export default async function handler(req, res) {
     setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
   }
 
+  if (normalizedContext === 'pwa') {
+    const claimToken = crypto.randomBytes(32).toString('base64url');
+    const claimTokenPreview = `${claimToken.slice(0, 4)}...`;
+    setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
+    log.info('issued discord pwa claim token', { claimTokenPreview });
+  } else {
+    // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
+    setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
+  }
+
   await saveDiscordAuthState(state, {
     verifier,
     loginContext: normalizedContext,
@@ -62,6 +80,11 @@ export default async function handler(req, res) {
   log.info('kvにDiscord認証stateレコードを保存しました', {
     statePreview: `${state.slice(0, 4)}...`,
     hasClaimTokenDigest: Boolean(claimTokenDigest),
+    loginContext: normalizedContext,
+  });
+
+  log.info('Upstash KV に認証状態を保存しました', {
+    statePreview,
     loginContext: normalizedContext,
   });
 
