@@ -71,11 +71,14 @@ export default async function handler(req, res) {
       .some((value) => value === 'application/json' || value.endsWith('+json'));
 
   if (acceptsJson) {
-    log.info('returning authorize urls as json response');
+    log.info('returning authorize urls as json response', {
+      statePreview: `${state.slice(0, 4)}...`,
+    });
     return res.status(200).json({
       ok: true,
       authorizeUrl: webAuthorizeUrl,
       appAuthorizeUrl,
+      state,
     });
   }
 
