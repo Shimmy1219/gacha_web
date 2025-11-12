@@ -10,11 +10,13 @@ import { createRequestLogger } from '../../_lib/logger.js';
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/start', req);
-  log.info('request received');
+  log.info('Discordログインstartを受け取りました', {
+    query: req.query,
+  });
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    log.warn('method not allowed', { method: req.method });
+    log.warn('許可されていないHTTPメソッドです', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
@@ -33,8 +35,12 @@ export default async function handler(req, res) {
   setCookie(res, 'd_verifier', verifier, { maxAge: 600 });
 
   const contextParam = Array.isArray(req.query.context) ? req.query.context[0] : req.query.context;
-  const normalizedContext = typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
+  const normalizedContext =
+    typeof contextParam === 'string' && contextParam.toLowerCase() === 'pwa' ? 'pwa' : 'browser';
   setCookie(res, 'd_login_context', normalizedContext, { maxAge: 600 });
+  log.info('ログインコンテキストを判定しました', {
+    normalizedContext,
+  });
 
   let claimTokenDigest;
   if (normalizedContext === 'pwa') {
@@ -42,7 +48,7 @@ export default async function handler(req, res) {
     const claimTokenPreview = `${claimToken.slice(0, 4)}...`;
     setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
     claimTokenDigest = digestDiscordPwaClaimToken(claimToken);
-    log.info('issued discord pwa claim token', { claimTokenPreview });
+    log.info('PWAブリッジ用クレームトークンを発行しました', { claimTokenPreview });
   } else {
     // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
     setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
@@ -52,6 +58,11 @@ export default async function handler(req, res) {
     verifier,
     loginContext: normalizedContext,
     claimTokenDigest,
+  });
+  log.info('kvにDiscord認証stateレコードを保存しました', {
+    statePreview: `${state.slice(0, 4)}...`,
+    hasClaimTokenDigest: Boolean(claimTokenDigest),
+    loginContext: normalizedContext,
   });
 
   const params = new URLSearchParams({
@@ -65,9 +76,10 @@ export default async function handler(req, res) {
     prompt: 'consent', // 再承認を促したい時は維持、不要なら削除可
   });
 
-  log.info('issuing discord authorize redirect', {
+  log.info('DiscordへリダイレクトするURLを組み立てました', {
     statePreview: `${state.slice(0, 4)}...`,
     hasVerifier: Boolean(verifier),
+    loginContext: normalizedContext,
   });
 
   const authorizeQuery = params.toString();
@@ -87,8 +99,9 @@ export default async function handler(req, res) {
       .some((value) => value === 'application/json' || value.endsWith('+json'));
 
   if (acceptsJson) {
-    log.info('returning authorize urls as json response', {
+    log.info('クライアントにDiscord認証URL(JSON)を返却しました', {
       statePreview: `${state.slice(0, 4)}...`,
+      loginContext: normalizedContext,
     });
     return res.status(200).json({
       ok: true,
@@ -99,6 +112,9 @@ export default async function handler(req, res) {
   }
 
   res.writeHead(302, { Location: webAuthorizeUrl });
-  log.info('redirect response sent', { location: webAuthorizeUrl });
+  log.info('クライアントをDiscord認証画面へリダイレクトしました', {
+    location: webAuthorizeUrl,
+    loginContext: normalizedContext,
+  });
   return res.end();
 }

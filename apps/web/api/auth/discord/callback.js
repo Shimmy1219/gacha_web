@@ -19,11 +19,15 @@ function normalizeLoginContext(value) {
 
 export default async function handler(req, res) {
   const log = createRequestLogger('api/auth/discord/callback', req);
-  log.info('request received', { hasCode: Boolean(req.query?.code), hasState: Boolean(req.query?.state) });
+  log.info('Discordログインcallbackを受信しました', {
+    hasCode: Boolean(req.query?.code),
+    hasState: Boolean(req.query?.state),
+    url: req.url,
+  });
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
-    log.warn('method not allowed', { method: req.method });
+    log.warn('許可されていないHTTPメソッドです', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
@@ -35,7 +39,7 @@ export default async function handler(req, res) {
       ? `${stateParam.slice(0, 4)}...`
       : stateParam;
   if (error) {
-    log.warn('oauth error reported', { error });
+    log.warn('DiscordからOAuthエラーが報告されました', { error });
     return res.status(400).send(`OAuth error: ${error}`);
   }
   const cookies = getCookies(req);
@@ -43,6 +47,12 @@ export default async function handler(req, res) {
   const cookieVerifier = cookies['d_verifier'];
   const loginContextCookie = cookies['d_login_context'];
   const pwaClaimTokenCookie = cookies['d_pwa_bridge'];
+  log.info('受信したクッキー情報を確認しました', {
+    hasExpectedState: Boolean(expectedState),
+    hasVerifier: Boolean(cookieVerifier),
+    loginContextCookie,
+    hasPwaClaimTokenCookie: Boolean(pwaClaimTokenCookie),
+  });
 
   let loginContext = normalizeLoginContext(loginContextCookie);
   let verifierToUse = typeof cookieVerifier === 'string' ? cookieVerifier : null;
@@ -52,7 +62,7 @@ export default async function handler(req, res) {
 
   try {
     if (!codeParam || !stateParam) {
-      log.warn('state or verifier mismatch', {
+      log.warn('state または verifier が不足しています', {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
@@ -66,7 +76,7 @@ export default async function handler(req, res) {
     const cookieValid = cookieStateMatches && cookieHasVerifier;
 
     if (!cookieValid) {
-      log.warn('state or verifier mismatch', {
+      log.warn('state または verifier の検証に失敗したためKVを参照します', {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
@@ -74,7 +84,7 @@ export default async function handler(req, res) {
       });
       storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
-        log.warn('state record missing in kv store', {
+        log.warn('kvに該当するDiscord認証stateが存在しません', {
           hasStoredState: Boolean(storedState),
         });
         return res.status(400).send('Invalid state or verifier');
@@ -84,20 +94,27 @@ export default async function handler(req, res) {
       if (!loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext);
       }
-      log.info('state restored from kv store', {
+      log.info('kvからDiscord認証stateを復元しました', {
         statePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
       });
     } else {
       storedState = await getDiscordAuthState(stateParam);
+      if (storedState) {
+        log.info('kvからDiscord認証stateを参照しました', {
+          statePreview,
+          hasLoginContext: Boolean(storedState.loginContext),
+          hasClaimTokenDigest: Boolean(storedState.claimTokenDigest),
+        });
+      }
       if (!loginContext && storedState?.loginContext) {
         loginContext = normalizeLoginContext(storedState.loginContext) || loginContext;
       }
     }
 
     if (!verifierToUse) {
-      log.warn('verifier missing after validation', {
+      log.warn('検証後にverifierが見つかりませんでした', {
         hasCookieVerifier: Boolean(cookieVerifier),
       });
       return res.status(400).send('Invalid state or verifier');
@@ -117,6 +134,10 @@ export default async function handler(req, res) {
       code_verifier: verifierToUse,
     });
 
+    log.info('Discordにアクセストークン交換リクエストを送信します', {
+      statePreview,
+      loginContext,
+    });
     const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -125,22 +146,41 @@ export default async function handler(req, res) {
 
     if (!tokenRes.ok) {
       const t = await tokenRes.text();
-      log.error('token exchange failed', { status: tokenRes.status, body: t });
+      log.error('Discordアクセストークン交換に失敗しました', { status: tokenRes.status, body: t, statePreview });
       return res.status(401).send(`Token exchange failed: ${t}`);
     }
 
     const token = await tokenRes.json();
+    log.info('Discordからアクセストークンレスポンスを受領しました', {
+      statePreview,
+      scope: token.scope,
+      expiresIn: token.expires_in,
+    });
 
     // プロフィール
+    log.info('Discordにユーザープロフィール取得リクエストを送信します', {
+      statePreview,
+      loginContext,
+    });
     const meRes = await fetch('https://discord.com/api/users/@me', {
       headers: { Authorization: `Bearer ${token.access_token}` },
     });
     if (!meRes.ok) {
       const t = await meRes.text();
-      log.error('fetch /users/@me failed', { status: meRes.status, body: t });
+      log.error('Discordユーザープロフィール取得に失敗しました', {
+        status: meRes.status,
+        body: t,
+        statePreview,
+      });
       return res.status(401).send(`Fetch /users/@me failed: ${t}`);
     }
     const me = await meRes.json();
+    log.info('Discordからユーザープロフィールを受領しました', {
+      userId: me.id,
+      username: me.username,
+      loginContext,
+      statePreview,
+    });
 
     const now = Date.now();
     const payload = {
@@ -174,18 +214,22 @@ export default async function handler(req, res) {
     // UX: ルートへ返す（必要なら /?loggedin=1 など）
     res.setHeader('Cache-Control', 'no-store');
     const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
-    log.info('login session issued', { userId: me.id, sessionIdPreview, loginContext });
+    log.info('ログインセッションを発行しSIDクッキーを設定しました', {
+      userId: me.id,
+      sessionIdPreview,
+      loginContext,
+    });
 
     if (loginContext === 'pwa') {
       let claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
       if (!claimTokenDigest && storedState?.claimTokenDigest) {
         claimTokenDigest = storedState.claimTokenDigest;
-        log.info('using stored claim token digest for pwa session bridge', {
+        log.info('kvに保存されたクレームトークンダイジェストを利用します', {
           statePreview,
         });
       }
       if (!claimTokenDigest) {
-        log.warn('pwa claim token missing or invalid, skipping bridge record persistence', {
+        log.warn('PWAクレームトークンを検証できなかったためブリッジ保存をスキップします', {
           statePreview,
         });
       } else {
@@ -200,12 +244,12 @@ export default async function handler(req, res) {
             },
             claimTokenDigest,
           });
-          log.info('stored pwa session bridge record', {
+          log.info('kvにPWAセッションブリッジレコードを保存しました', {
             statePreview,
             sessionIdPreview,
           });
         } catch (error) {
-          log.error('failed to store discord pwa session bridge record', {
+          log.error('kvへのPWAセッションブリッジ保存に失敗しました', {
             statePreview,
             error: error instanceof Error ? error.message : String(error),
           });
@@ -219,7 +263,7 @@ export default async function handler(req, res) {
     setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
     if (acceptsJson) {
-      log.info('returning login completion payload as json response', { loginContext });
+      log.info('クライアントにログイン完了(JSON)を返却しました', { loginContext });
       return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
     }
 
@@ -267,6 +311,9 @@ export default async function handler(req, res) {
   </body>
 </html>`;
 
+      log.info('クライアントにブラウザ向けリダイレクトHTMLを返却しました', {
+        redirectTarget,
+      });
       return res.status(200).send(html);
     }
 
@@ -302,6 +349,9 @@ export default async function handler(req, res) {
   </body>
 </html>`;
 
+    log.info('クライアントにPWA向け案内HTMLを返却しました', {
+      redirectTarget,
+    });
     return res.status(200).send(html);
   } finally {
     if (stateRecordConsumed) {
@@ -311,7 +361,7 @@ export default async function handler(req, res) {
       try {
         await deleteDiscordAuthState(stateParam);
       } catch (error) {
-        log.error('failed to delete discord auth state from kv', {
+        log.error('kvからDiscord認証stateの削除に失敗しました', {
           error: error instanceof Error ? error.message : String(error),
         });
       }
