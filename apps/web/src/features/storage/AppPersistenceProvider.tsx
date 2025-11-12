@@ -1,4 +1,11 @@
-import { createContext, useContext, useState, type Context, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type Context,
+  type PropsWithChildren
+} from 'react';
 
 import { AppPersistence } from '@domain/app-persistence';
 import {
@@ -27,6 +34,12 @@ export function AppPersistenceProvider({ children }: PropsWithChildren): JSX.Ele
     const stores = createDomainStores(persistence);
     return { persistence, stores };
   });
+
+  useEffect(() => {
+    return () => {
+      value.stores.dispose();
+    };
+  }, [value]);
 
   return <AppPersistenceContext.Provider value={value}>{children}</AppPersistenceContext.Provider>;
 }

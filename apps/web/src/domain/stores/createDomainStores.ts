@@ -21,9 +21,14 @@ export interface DomainStores {
   ptControls: PtControlsStore;
   uiPreferences: UiPreferencesStore;
   pullHistory: PullHistoryStore;
+  dispose(): void;
 }
 
 export function createDomainStores(persistence: AppPersistence): DomainStores {
+  const cleanupTasks: Array<() => void> = [];
+  let disposed = false;
+  let legacyInventories: GachaLocalStorageSnapshot['userInventories'] | undefined;
+
   const stores: DomainStores = {
     appState: new AppStateStore(persistence),
     catalog: new CatalogStore(persistence),
@@ -33,18 +38,36 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     riagu: new RiaguStore(persistence),
     ptControls: new PtControlsStore(persistence),
     uiPreferences: new UiPreferencesStore(persistence),
-    pullHistory: new PullHistoryStore(persistence)
+    pullHistory: new PullHistoryStore(persistence),
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+
+      while (cleanupTasks.length > 0) {
+        const cleanup = cleanupTasks.pop();
+        try {
+          cleanup?.();
+        } catch (error) {
+          console.warn('Failed to dispose domain store resource', error);
+        }
+      }
+
+      legacyInventories = undefined;
+    }
   };
 
   const snapshot = hydrateStores(stores, () => persistence.loadSnapshot());
 
-  let legacyInventories = snapshot?.userInventories;
+  legacyInventories = snapshot?.userInventories;
 
-  stores.userInventories.subscribe((nextState) => {
+  const unsubscribeUserInventories = stores.userInventories.subscribe((nextState) => {
     if (!nextState && legacyInventories) {
       legacyInventories = undefined;
     }
   });
+  cleanupTasks.push(unsubscribeUserInventories);
 
   if (typeof window !== 'undefined') {
     const refreshLegacyInventories = () => {
@@ -59,6 +82,10 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
 
     window.addEventListener('storage', refreshLegacyInventories);
     window.addEventListener(GACHA_STORAGE_UPDATED_EVENT, refreshLegacyInventories);
+    cleanupTasks.push(() => {
+      window.removeEventListener('storage', refreshLegacyInventories);
+      window.removeEventListener(GACHA_STORAGE_UPDATED_EVENT, refreshLegacyInventories);
+    });
   }
 
   const runProjection = () => {
@@ -75,22 +102,24 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
   runProjection();
 
   let skipInitialPullHistory = true;
-  stores.pullHistory.subscribe(() => {
+  const unsubscribePullHistory = stores.pullHistory.subscribe(() => {
     if (skipInitialPullHistory) {
       skipInitialPullHistory = false;
       return;
     }
     runProjection();
   });
+  cleanupTasks.push(unsubscribePullHistory);
 
   let skipInitialCatalog = true;
-  stores.catalog.subscribe(() => {
+  const unsubscribeCatalog = stores.catalog.subscribe(() => {
     if (skipInitialCatalog) {
       skipInitialCatalog = false;
       return;
     }
     runProjection();
   });
+  cleanupTasks.push(unsubscribeCatalog);
 
   return stores;
 }
