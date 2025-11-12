@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface DiscordUserProfile {
@@ -86,6 +86,45 @@ function resolveLoginContext(): 'browser' | 'pwa' {
   return mediaStandalone || isIosStandalone ? 'pwa' : 'browser';
 }
 
+const DISCORD_LOGIN_PENDING_FLAG = 'discord-login-pending';
+
+function markDiscordLoginPending(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage?.setItem(DISCORD_LOGIN_PENDING_FLAG, '1');
+  } catch (error) {
+    console.warn('Discordログイン状態の保存に失敗しました', error);
+  }
+}
+
+function clearDiscordLoginPending(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage?.removeItem(DISCORD_LOGIN_PENDING_FLAG);
+  } catch (error) {
+    console.warn('Discordログイン状態の破棄に失敗しました', error);
+  }
+}
+
+function isDiscordLoginPending(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return window.sessionStorage?.getItem(DISCORD_LOGIN_PENDING_FLAG) === '1';
+  } catch (error) {
+    console.warn('Discordログイン状態の取得に失敗しました', error);
+    return false;
+  }
+}
+
 async function fetchSession(): Promise<DiscordSessionData> {
   const response = await fetch('/api/discord/me?soft=1', {
     headers: {
@@ -142,6 +181,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
 
       if (appAuthorizeUrl && isProbablyMobileDevice()) {
         try {
+          markDiscordLoginPending();
           openDiscordAppWithFallback(appAuthorizeUrl, authorizeUrl);
           return;
         } catch (deeplinkError) {
@@ -149,15 +189,18 @@ export function useDiscordSession(): UseDiscordSessionResult {
         }
       }
 
+      markDiscordLoginPending();
       window.location.assign(authorizeUrl);
     } catch (assignError) {
       console.error('Discordログインのディープリンク開始に失敗しました。Webリダイレクトにフォールバックします', assignError);
 
       try {
+        markDiscordLoginPending();
         window.location.assign(loginUrl);
         return;
       } catch (fallbackError) {
         console.error('Discordログインのフォールバックリダイレクトにも失敗しました', fallbackError);
+        clearDiscordLoginPending();
         throw fallbackError instanceof Error ? fallbackError : new Error('Failed to initiate Discord login redirect');
       }
     }
@@ -166,6 +209,36 @@ export function useDiscordSession(): UseDiscordSessionResult {
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+  }, [queryClient]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isDiscordLoginPending()) {
+        clearDiscordLoginPending();
+        queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+      }
+    };
+
+    const handleWindowFocus = () => {
+      if (isDiscordLoginPending()) {
+        clearDiscordLoginPending();
+        queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+      }
+    };
+
+    handleVisibilityChange();
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [queryClient]);
 
   const refetch = useCallback(async () => {
