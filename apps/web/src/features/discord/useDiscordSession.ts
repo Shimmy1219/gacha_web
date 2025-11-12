@@ -88,41 +88,15 @@ function resolveLoginContext(): 'browser' | 'pwa' {
 
 const DISCORD_LOGIN_PENDING_FLAG = 'discord-login-pending';
 
-function setStorageFlag(storage: Storage | undefined | null, value: '0' | '1'): void {
-  if (!storage) {
-    return;
-  }
-
-  if (value === '0') {
-    storage.removeItem(DISCORD_LOGIN_PENDING_FLAG);
-  } else {
-    storage.setItem(DISCORD_LOGIN_PENDING_FLAG, value);
-  }
-}
-
-function readStorageFlag(storage: Storage | undefined | null): boolean {
-  if (!storage) {
-    return false;
-  }
-
-  return storage.getItem(DISCORD_LOGIN_PENDING_FLAG) === '1';
-}
-
 function markDiscordLoginPending(): void {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    setStorageFlag(window.sessionStorage, '1');
+    window.sessionStorage?.setItem(DISCORD_LOGIN_PENDING_FLAG, '1');
   } catch (error) {
-    console.warn('Discordログイン状態の保存(sessionStorage)に失敗しました', error);
-  }
-
-  try {
-    setStorageFlag(window.localStorage, '1');
-  } catch (error) {
-    console.warn('Discordログイン状態の保存(localStorage)に失敗しました', error);
+    console.warn('Discordログイン状態の保存に失敗しました', error);
   }
 }
 
@@ -132,15 +106,9 @@ function clearDiscordLoginPending(): void {
   }
 
   try {
-    setStorageFlag(window.sessionStorage, '0');
+    window.sessionStorage?.removeItem(DISCORD_LOGIN_PENDING_FLAG);
   } catch (error) {
-    console.warn('Discordログイン状態の破棄(sessionStorage)に失敗しました', error);
-  }
-
-  try {
-    setStorageFlag(window.localStorage, '0');
-  } catch (error) {
-    console.warn('Discordログイン状態の破棄(localStorage)に失敗しました', error);
+    console.warn('Discordログイン状態の破棄に失敗しました', error);
   }
 }
 
@@ -150,22 +118,11 @@ function isDiscordLoginPending(): boolean {
   }
 
   try {
-    if (readStorageFlag(window.sessionStorage)) {
-      return true;
-    }
+    return window.sessionStorage?.getItem(DISCORD_LOGIN_PENDING_FLAG) === '1';
   } catch (error) {
-    console.warn('Discordログイン状態の取得(sessionStorage)に失敗しました', error);
+    console.warn('Discordログイン状態の取得に失敗しました', error);
+    return false;
   }
-
-  try {
-    if (readStorageFlag(window.localStorage)) {
-      return true;
-    }
-  } catch (error) {
-    console.warn('Discordログイン状態の取得(localStorage)に失敗しました', error);
-  }
-
-  return false;
 }
 
 async function fetchSession(): Promise<DiscordSessionData> {
@@ -259,46 +216,27 @@ export function useDiscordSession(): UseDiscordSessionResult {
       return;
     }
 
-    const refetchSessionIfPending = () => {
-      if (!isDiscordLoginPending()) {
-        return;
-      }
-
-      clearDiscordLoginPending();
-      queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
-    };
-
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refetchSessionIfPending();
+      if (document.visibilityState === 'visible' && isDiscordLoginPending()) {
+        clearDiscordLoginPending();
+        queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
       }
     };
 
     const handleWindowFocus = () => {
-      refetchSessionIfPending();
-    };
-
-    const handlePageShow = () => {
-      refetchSessionIfPending();
-    };
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === DISCORD_LOGIN_PENDING_FLAG && event.newValue === '1') {
-        refetchSessionIfPending();
+      if (isDiscordLoginPending()) {
+        clearDiscordLoginPending();
+        queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
       }
     };
 
-    refetchSessionIfPending();
+    handleVisibilityChange();
 
     window.addEventListener('focus', handleWindowFocus);
-    window.addEventListener('pageshow', handlePageShow);
-    window.addEventListener('storage', handleStorage);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('focus', handleWindowFocus);
-      window.removeEventListener('pageshow', handlePageShow);
-      window.removeEventListener('storage', handleStorage);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [queryClient]);
