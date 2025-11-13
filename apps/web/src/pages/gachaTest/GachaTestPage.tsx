@@ -108,6 +108,9 @@ interface SimulationRarityResult {
   observedRate: number;
   observedRateDisplay: string;
   count: number;
+  runSuccessCount: number;
+  acquisitionRate: number;
+  acquisitionRateDisplay: string;
 }
 
 interface SimulationResult {
@@ -234,6 +237,7 @@ function simulateGacha({
   });
 
   const rarityMap = new Map<string, SimulationRarityResult>();
+  const rarityRunSuccessCounts = new Map<string, number>();
   gacha.pool.rarityGroups.forEach((group) => {
     rarityMap.set(group.rarityId, {
       rarityId: group.rarityId,
@@ -241,8 +245,13 @@ function simulateGacha({
       color: group.color,
       configuredRate: group.emitRate,
       observedRate: 0,
-      observedRateDisplay: '0%'
+      observedRateDisplay: '0%',
+      count: 0,
+      runSuccessCount: 0,
+      acquisitionRate: 0,
+      acquisitionRateDisplay: '0%'
     });
+    rarityRunSuccessCounts.set(group.rarityId, 0);
   });
 
   let totalPointsSpent = 0;
@@ -267,6 +276,7 @@ function simulateGacha({
     totalPulls += result.totalPulls;
 
     const successfulItems = new Set<string>();
+    const successfulRarities = new Set<string>();
     result.items.forEach((item) => {
       const entry = itemMap.get(item.itemId);
       if (!entry) {
@@ -276,12 +286,18 @@ function simulateGacha({
       entry.guaranteedCount += item.guaranteedCount;
       if (item.count > 0) {
         successfulItems.add(item.itemId);
+        successfulRarities.add(entry.rarityId);
       }
     });
 
     successfulItems.forEach((itemId) => {
       const previous = itemRunSuccessCounts.get(itemId) ?? 0;
       itemRunSuccessCounts.set(itemId, previous + 1);
+    });
+
+    successfulRarities.forEach((rarityId) => {
+      const previous = rarityRunSuccessCounts.get(rarityId) ?? 0;
+      rarityRunSuccessCounts.set(rarityId, previous + 1);
     });
   }
 
@@ -318,6 +334,11 @@ function simulateGacha({
     rarity.count = totalForRarity;
     rarity.observedRate = rate;
     rarity.observedRateDisplay = formatObservedRate(rate, rarityDigits, rarity.rarityId);
+    const runSuccessCount = rarityRunSuccessCounts.get(rarity.rarityId) ?? 0;
+    const acquisitionRate = normalizedRuns > 0 ? runSuccessCount / normalizedRuns : 0;
+    rarity.runSuccessCount = runSuccessCount;
+    rarity.acquisitionRate = acquisitionRate;
+    rarity.acquisitionRateDisplay = formatObservedRate(acquisitionRate, rarityDigits, rarity.rarityId);
   });
 
   const rarities = Array.from(rarityMap.values()).sort((a, b) => b.count - a.count);
@@ -486,23 +507,23 @@ function GachaTestSection({
               <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">合計試行回数</p>
                 <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalRuns.toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">1回あたりの想定連数</p>
+                <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.desiredPulls.toLocaleString()}連</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  実際の排出数: {result.plan.totalPulls.toLocaleString()}連 / 消費ポイント {result.planPoints.toLocaleString()}pt
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">総ガチャ回数</p>
+                <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPulls.toLocaleString()}連</p>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">総消費ポイント</p>
+                <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPointsSpent.toLocaleString()}pt</p>
+              </div>
             </div>
-            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">1回あたりの想定連数</p>
-              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.desiredPulls.toLocaleString()}連</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                実際の排出数: {result.plan.totalPulls.toLocaleString()}連 / 消費ポイント {result.planPoints.toLocaleString()}pt
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">総ガチャ回数</p>
-              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPulls.toLocaleString()}連</p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">総消費ポイント</p>
-              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPointsSpent.toLocaleString()}pt</p>
-            </div>
-          </div>
 
           {result.warnings.length > 0 ? (
             <div className="rounded border border-yellow-500/60 bg-yellow-500/10 p-4 text-sm text-yellow-100">
@@ -547,6 +568,14 @@ function GachaTestSection({
                           : '―'}
                       </td>
                       <td className="px-4 py-2 text-right text-sm text-surface-foreground">{rarity.observedRateDisplay}</td>
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground">
+                        <div className="flex flex-col items-end">
+                          <span>{rarity.acquisitionRateDisplay}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {rarity.runSuccessCount.toLocaleString()} / {result.totalRuns.toLocaleString()}試行
+                          </span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
