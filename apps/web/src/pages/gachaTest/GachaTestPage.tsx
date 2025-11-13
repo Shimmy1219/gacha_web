@@ -377,16 +377,16 @@ function GachaTestSection({
   }, [gacha, ptSetting, pullsPerRun, runCount, rarityDigits]);
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg shadow-black/20">
+    <section className="rounded-2xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-slate-300">
+          <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             指定した回数でガチャをシミュレーションし、実際の排出率を確認できます。
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <label className="flex flex-col text-sm text-slate-200">
+          <label className="flex flex-col text-sm text-muted-foreground">
             1回あたりのガチャ回数
             <input
               type="number"
@@ -397,10 +397,10 @@ function GachaTestSection({
                 const next = Number(event.target.value);
                 setPullsPerRun(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
               }}
-              className="mt-1 w-32 rounded border border-slate-700 bg-slate-800 px-3 py-2 text-right text-base text-white focus:border-slate-500 focus:outline-none"
+              className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
             />
           </label>
-          <label className="flex flex-col text-sm text-slate-200">
+          <label className="flex flex-col text-sm text-muted-foreground">
             試行回数
             <input
               type="number"
@@ -411,14 +411,14 @@ function GachaTestSection({
                 const next = Number(event.target.value);
                 setRunCount(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
               }}
-              className="mt-1 w-32 rounded border border-slate-700 bg-slate-800 px-3 py-2 text-right text-base text-white focus:border-slate-500 focus:outline-none"
+              className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
             />
           </label>
           <button
             type="button"
             onClick={handleSimulate}
             disabled={isRunning || !gacha}
-            className="self-end rounded bg-indigo-500 px-6 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-600"
+            className="self-end rounded bg-accent px-6 py-2 text-sm font-semibold text-accent-foreground shadow-md transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
           >
             {isRunning ? '計算中...' : 'シミュレーション実行'}
           </button>
@@ -426,7 +426,7 @@ function GachaTestSection({
       </div>
 
       {error ? (
-        <div className="mt-4 rounded border border-red-500/60 bg-red-500/10 p-4 text-sm text-red-200">
+        <div className="mt-4 rounded border border-red-500/50 bg-red-500/10 p-4 text-sm text-red-200">
           <p className="font-semibold">{error}</p>
           {warnings.length > 0 ? (
             <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -441,24 +441,24 @@ function GachaTestSection({
       {result ? (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded border border-slate-800 bg-slate-900/80 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">合計試行回数</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{result.totalRuns.toLocaleString()}</p>
+            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">合計試行回数</p>
+              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalRuns.toLocaleString()}</p>
             </div>
-            <div className="rounded border border-slate-800 bg-slate-900/80 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">1回あたりの想定連数</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{result.desiredPulls.toLocaleString()}連</p>
-              <p className="mt-1 text-xs text-slate-400">
+            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">1回あたりの想定連数</p>
+              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.desiredPulls.toLocaleString()}連</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 実際の排出数: {result.plan.totalPulls.toLocaleString()}連 / 消費ポイント {result.planPoints.toLocaleString()}pt
               </p>
             </div>
-            <div className="rounded border border-slate-800 bg-slate-900/80 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">総ガチャ回数</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{result.totalPulls.toLocaleString()}連</p>
+            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">総ガチャ回数</p>
+              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPulls.toLocaleString()}連</p>
             </div>
-            <div className="rounded border border-slate-800 bg-slate-900/80 p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-400">総消費ポイント</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{result.totalPointsSpent.toLocaleString()}pt</p>
+            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">総消費ポイント</p>
+              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalPointsSpent.toLocaleString()}pt</p>
             </div>
           </div>
 
@@ -474,21 +474,21 @@ function GachaTestSection({
           ) : null}
 
           <div>
-            <h3 className="text-lg font-semibold text-white">レアリティ別集計</h3>
+            <h3 className="text-lg font-semibold text-surface-foreground">レアリティ別集計</h3>
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-800">
-                <thead className="bg-slate-900/80">
+              <table className="min-w-full divide-y divide-border/60">
+                <thead className="bg-panel-muted/70">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">レアリティ</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">排出数</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">想定排出率</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">実測排出率</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">レアリティ</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">排出数</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">想定排出率</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">実測排出率</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-border/60">
                   {result.rarities.map((rarity) => (
                     <tr key={rarity.rarityId}>
-                      <td className="px-4 py-2 text-sm text-white">
+                      <td className="px-4 py-2 text-sm text-surface-foreground">
                         <span className="inline-flex items-center gap-2">
                           <span
                             className="inline-block h-3 w-3 rounded-full"
@@ -497,13 +497,13 @@ function GachaTestSection({
                           {rarity.label}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-sm text-slate-100">{rarity.count.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-sm text-slate-100">
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground/90">{rarity.count.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-sm text-muted-foreground">
                         {rarity.configuredRate != null
                           ? `${formatItemRateWithPrecision(rarity.configuredRate, rarityDigits.get(rarity.rarityId))}%`
                           : '―'}
                       </td>
-                      <td className="px-4 py-2 text-right text-sm text-white">{rarity.observedRateDisplay}</td>
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground">{rarity.observedRateDisplay}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -512,33 +512,33 @@ function GachaTestSection({
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold text-white">アイテム別排出率</h3>
+            <h3 className="text-lg font-semibold text-surface-foreground">アイテム別排出率</h3>
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-800">
-                <thead className="bg-slate-900/80">
+              <table className="min-w-full divide-y divide-border/60">
+                <thead className="bg-panel-muted/70">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">アイテム</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">レアリティ</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">排出数</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">保証</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">想定排出率</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400">実測排出率</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">アイテム</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">レアリティ</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">排出数</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">保証</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">想定排出率</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">実測排出率</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-border/60">
                   {result.items.map((item) => (
                     <tr key={item.itemId}>
-                      <td className="px-4 py-2 text-sm text-white">
+                      <td className="px-4 py-2 text-sm text-surface-foreground">
                         <div className="flex flex-col">
                           <span>{item.name}</span>
                           {item.pickupTarget ? (
-                            <span className="mt-1 inline-flex w-fit items-center rounded bg-amber-500/20 px-2 py-0.5 text-xs font-semibold text-amber-200">
+                            <span className="mt-1 inline-flex w-fit items-center rounded border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-amber-200">
                               ピックアップ
                             </span>
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-sm text-slate-100">
+                      <td className="px-4 py-2 text-sm text-muted-foreground">
                         <span className="inline-flex items-center gap-2">
                           <span
                             className="inline-block h-3 w-3 rounded-full"
@@ -547,15 +547,15 @@ function GachaTestSection({
                           {item.rarityLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-sm text-slate-100">{item.count.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-sm text-slate-100">{item.guaranteedCount.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-right text-sm text-slate-100">
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground/90">{item.count.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground/90">{item.guaranteedCount.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right text-sm text-muted-foreground">
                         {item.configuredRateDisplay ??
                           (item.configuredRate != null
                             ? `${formatItemRateWithPrecision(item.configuredRate, rarityDigits.get(item.rarityId))}%`
                             : '―')}
                       </td>
-                      <td className="px-4 py-2 text-right text-sm text-white">{item.observedRateDisplay}</td>
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground">{item.observedRateDisplay}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -591,10 +591,10 @@ export function GachaTestPage(): JSX.Element {
   );
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8">
-      <header className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg shadow-black/20">
-        <h1 className="text-2xl font-bold text-white">ガチャテスト</h1>
-        <p className="mt-2 text-sm text-slate-300">
+    <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 text-surface-foreground">
+      <header className="rounded-2xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
+        <h1 className="text-2xl font-bold text-surface-foreground">ガチャテスト</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           現在登録されているガチャ設定を使って大量抽選のシミュレーションを行い、排出率のバランスを確認できます。
         </p>
         <div className="mt-4 max-w-md">
@@ -622,7 +622,7 @@ export function GachaTestPage(): JSX.Element {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-center text-sm text-slate-300">
+        <div className="rounded-2xl border border-border/60 bg-panel/85 p-6 text-center text-sm text-muted-foreground">
           ガチャを選択するとシミュレーション設定が表示されます。
         </div>
       )}
