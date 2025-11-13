@@ -114,7 +114,7 @@ export function SectionContainer({
           <div
             ref={contentRef}
             className={clsx(
-              'section-container__content min-h-0 space-y-4 px-4',
+              'section-container__content min-h-0 space-y-4',
               isMobileLayout ? 'h-auto overflow-visible' : 'section-scroll h-full',
               !isMobileLayout && !hasScrollbar && 'section-scroll--no-scrollbar',
               contentClassName

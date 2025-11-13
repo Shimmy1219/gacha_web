@@ -113,6 +113,7 @@ export function UsersSection(): JSX.Element {
           フィルタ
         </button>
       }
+      contentClassName="users-section__content px-4"
     >
       <div
         className={clsx(
