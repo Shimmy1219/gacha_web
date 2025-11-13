@@ -15,17 +15,17 @@ interface DashboardDesktopGridProps {
   sections: DashboardSectionConfig[];
 }
 
-type Breakpoint = 'base' | 'lg' | 'xl' | '2xl';
+export type Breakpoint = 'base' | 'lg' | 'xl' | '2xl';
 
-interface ColumnConfig {
+export interface ColumnConfig {
   minWidths: number[]; // rem values
   weights: number[];
 }
 
-const COLUMN_CONFIGS: Record<Exclude<Breakpoint, 'base'>, ColumnConfig> = {
+export const COLUMN_CONFIGS: Record<Exclude<Breakpoint, 'base'>, ColumnConfig> = {
   lg: {
-    minWidths: [24, 24],
-    weights: [1, 1]
+    minWidths: [26, 34, 26],
+    weights: [1, 1.2, 1]
   },
   xl: {
     minWidths: [24, 32, 30, 24],
@@ -45,17 +45,24 @@ interface DragState {
   minWidths: number[];
 }
 
-function getBreakpoint(width: number): Breakpoint {
+export function getBreakpoint(width: number): Breakpoint {
   if (width >= 1536) {
     return '2xl';
   }
-  if (width >= 1280) {
+  if (width >= 1100) {
     return 'xl';
   }
-  if (width >= 1024) {
+  if (width >= 900) {
     return 'lg';
   }
   return 'base';
+}
+
+export function getColumnConfig(breakpoint: Breakpoint): ColumnConfig | null {
+  if (breakpoint === 'base') {
+    return null;
+  }
+  return COLUMN_CONFIGS[breakpoint];
 }
 
 export function distributeWidths(minWidths: number[], weights: number[], available: number): number[] {
@@ -154,7 +161,6 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
   const containerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const [rootFontSize, setRootFontSize] = useState(16);
-  const [breakpoint, setBreakpoint] = useState<Breakpoint>('base');
   const [containerMetrics, setContainerMetrics] = useState<{ width: number; gap: number }>({
     width: 0,
     gap: 16
@@ -171,20 +177,10 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     }
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const handleResize = () => {
-      setBreakpoint(getBreakpoint(window.innerWidth));
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+  const breakpoint = useMemo(
+    () => getBreakpoint(containerMetrics.width),
+    [containerMetrics.width]
+  );
 
   useLayoutEffect(() => {
     if (typeof ResizeObserver === 'undefined') {
@@ -211,12 +207,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     };
   }, []);
 
-  const activeConfig = useMemo(() => {
-    if (breakpoint === 'base') {
-      return null;
-    }
-    return COLUMN_CONFIGS[breakpoint as Exclude<Breakpoint, 'base'>];
-  }, [breakpoint]);
+  const activeConfig = useMemo(() => getColumnConfig(breakpoint), [breakpoint]);
 
   const minWidthsPx = useMemo(() => {
     if (!activeConfig) {
