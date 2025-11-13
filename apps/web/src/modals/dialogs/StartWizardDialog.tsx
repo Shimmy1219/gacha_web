@@ -1,5 +1,5 @@
-import { InformationCircleIcon } from '@heroicons/react/24/outline';
-import { useCallback, useId, useMemo, useRef } from 'react';
+import { ChevronDownIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 
 import {
   ModalBody,
@@ -30,6 +30,8 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
   const backupInputId = useId();
   const txtInputRef = useRef<HTMLInputElement | null>(null);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
+  const additionalOptionsId = useId();
+  const [showAdditionalOptions, setShowAdditionalOptions] = useState(false);
 
   const handlePickTxt = useCallback(() => {
     txtInputRef.current?.click();
@@ -60,6 +62,12 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
   const tiles = useMemo<StartWizardTileConfig[]>(
     () => [
       {
+        key: 'new',
+        title: '新しくガチャを始める',
+        description: 'レアリティ・景品・ユーザーの初期設定をゼロから作成します。',
+        onSelect: handleCreateNew
+      },
+      {
         key: 'backup',
         title: 'バックアップから読み込む',
         description: 'エクスポートしたバックアップファイル（.shimmy）を取り込み、現在の環境へ復元します。',
@@ -76,36 +84,39 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
         title: '外部ガチャサイトと連携',
         description: '外部サイトでエクスポートしたTXTから排出設定と履歴を取り込みます。',
         onSelect: handlePickTxt
-      },
-      {
-        key: 'new',
-        title: '新しくガチャを始める',
-        description: 'レアリティ・景品・ユーザーの初期設定をゼロから作成します。',
-        onSelect: handleCreateNew
       }
     ],
-    [handleImportBackup, handleEnterTransferCode, handlePickTxt, handleCreateNew]
+    [handleCreateNew, handleImportBackup, handleEnterTransferCode, handlePickTxt]
   );
 
-  const renderTile = (tile: StartWizardTileConfig) => {
+  const primaryTile = tiles[0];
+  const secondaryTiles = tiles.slice(1);
+
+  const renderTile = (tile: StartWizardTileConfig, options?: { variant?: 'primary' | 'default' }) => {
+    const isPrimary = options?.variant === 'primary';
     return (
       <button
         key={tile.key}
         type="button"
         onClick={tile.onSelect}
-        className="start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border border-border/60 bg-surface/80 p-6 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={`start-wizard__tile group flex h-full flex-col gap-4 rounded-3xl border p-6 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+          isPrimary
+            ? 'border-accent/60 bg-gradient-to-br from-accent/20 via-accent/10 to-surface/80 shadow-lg shadow-accent/20 hover:border-accent/80 hover:from-accent/30 hover:via-accent/15 hover:to-surface/90'
+            : 'border-border/60 bg-surface/80 hover:border-accent/40 hover:bg-surface/90'
+        }`}
       >
         <div className="start-wizard__tile-content space-y-3">
-          <h3 className="start-wizard__tile-title text-lg font-semibold text-surface-foreground">
+          <h3
+            className={`start-wizard__tile-title text-lg font-semibold ${
+              isPrimary ? 'text-accent-foreground' : 'text-surface-foreground'
+            }`}
+          >
             {tile.title}
           </h3>
           <p className="start-wizard__tile-description text-sm leading-relaxed text-muted-foreground">
             {tile.description}
           </p>
         </div>
-        <span className="start-wizard__tile-cta mt-auto inline-flex items-center gap-1 text-xs font-semibold text-accent transition">
-          進む
-        </span>
       </button>
     );
   };
@@ -113,9 +124,28 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
   return (
     <>
       <ModalBody className="start-wizard__body space-y-6 text-sm leading-relaxed">
-        <section className="start-wizard__tiles-wrapper overflow-hidden rounded-3xl bg-surface/80 p-6 backdrop-blur">
-          <div className="start-wizard__grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {tiles.map((tile) => renderTile(tile))}
+        <section className="start-wizard__tiles-wrapper space-y-5 overflow-hidden rounded-3xl bg-surface/80 p-6 backdrop-blur">
+          {primaryTile ? <div>{renderTile(primaryTile, { variant: 'primary' })}</div> : null}
+          <div className="sm:hidden">
+            <button
+              type="button"
+              className="start-wizard__toggle flex w-full items-center justify-between rounded-2xl border border-border/60 bg-surface px-4 py-3 text-left text-sm font-semibold text-surface-foreground transition hover:border-accent/40 hover:bg-surface/90"
+              onClick={() => setShowAdditionalOptions((prev) => !prev)}
+              aria-expanded={showAdditionalOptions}
+              aria-controls={additionalOptionsId}
+            >
+              その他の方法で始める
+              <ChevronDownIcon
+                className={`h-5 w-5 transition-transform ${showAdditionalOptions ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </button>
+            <div id={additionalOptionsId} className={`mt-4 space-y-4 ${showAdditionalOptions ? 'block' : 'hidden'}`}>
+              {secondaryTiles.map((tile) => renderTile(tile))}
+            </div>
+          </div>
+          <div className="start-wizard__grid hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-3">
+            {secondaryTiles.map((tile) => renderTile(tile))}
           </div>
         </section>
         <div className="start-wizard__guide-note flex items-start gap-3 rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/15 via-surface/60 to-surface/80 px-5 py-4 text-sm text-muted-foreground">
