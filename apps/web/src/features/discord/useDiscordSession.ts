@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -42,6 +42,12 @@ interface PendingPwaStateRecord {
 const PWA_PENDING_STATE_STORAGE_KEY = 'discord:pwa:pending_state';
 const PWA_PENDING_STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 let localStorageAvailabilityCache: boolean | null = null;
+let activePwaClaimPromise: Promise<void> | null = null;
+let activePwaClaimState: string | null = null;
+
+function createStatePreview(state: string): string {
+  return state.length > 8 ? `${state.slice(0, 4)}...` : state;
+}
 
 function isLocalStorageAvailable(): boolean {
   if (localStorageAvailabilityCache !== null) {
@@ -212,15 +218,10 @@ async function fetchSession(): Promise<DiscordSessionData> {
 
 export function useDiscordSession(): UseDiscordSessionResult {
   const queryClient = useQueryClient();
-  const claimInProgressRef = useRef(false);
 
   const claimPendingPwaSession = useCallback(
     async (options?: { signal?: AbortSignal }) => {
       if (typeof window === 'undefined') {
-        return;
-      }
-
-      if (claimInProgressRef.current) {
         return;
       }
 
@@ -229,82 +230,114 @@ export function useDiscordSession(): UseDiscordSessionResult {
         return;
       }
 
-      const pendingState = readPendingPwaState();
-      if (!pendingState) {
-        return;
-      }
-
       const signal = options?.signal;
-      if (signal?.aborted) {
-        return;
-      }
 
-      const state = pendingState.state;
-      const statePreview = state.length > 8 ? `${state.slice(0, 4)}...` : state;
+      for (;;) {
+        if (signal?.aborted) {
+          console.info('Discord PWA セッション復旧が呼び出し元の指示で中断されました');
+          return;
+        }
 
-      claimInProgressRef.current = true;
+        const pendingState = readPendingPwaState();
+        if (!pendingState) {
+          return;
+        }
 
-      try {
-        console.info('Discord PWA セッション復旧を開始します', { statePreview });
-        const response = await fetch('/api/auth/discord/claim-session', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify({ state }),
-          signal
-        });
+        const state = pendingState.state;
+        const statePreview = createStatePreview(state);
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.warn('Discord PWA セッション復旧に失敗しました', {
-            statePreview,
-            status: response.status,
-            body: errorText
-          });
-          if ([401, 403, 404, 409, 410].includes(response.status)) {
-            console.info('Discord PWA pending state will be cleared after unrecoverable response', {
+        if (activePwaClaimPromise) {
+          const activeStatePreview =
+            activePwaClaimState != null ? createStatePreview(activePwaClaimState) : null;
+          if (activePwaClaimState === state) {
+            console.info('Discord PWA セッション復旧が既に進行中のため同一stateの再実行を待機します', {
               statePreview
             });
-            clearPendingPwaState();
+          } else {
+            console.info('別のDiscord PWA セッション復旧処理が進行中のため完了を待機します', {
+              statePreview,
+              activeStatePreview
+            });
           }
-          return;
+          try {
+            await activePwaClaimPromise;
+          } catch (error) {
+            console.warn('進行中のDiscord PWA セッション復旧処理でエラーが発生しました', error);
+          }
+          continue;
         }
 
-        const contentType = response.headers.get('Content-Type') ?? '';
-        if (!contentType.toLowerCase().includes('application/json')) {
-          console.warn('Discord PWA セッション復旧レスポンスの形式が不正です', {
-            statePreview
-          });
-          return;
-        }
+        activePwaClaimState = state;
+        activePwaClaimPromise = (async () => {
+          try {
+            if (signal?.aborted) {
+              console.info('Discord PWA セッション復旧が開始前に中断されました', {
+                statePreview
+              });
+              return;
+            }
 
-        const payload = (await response.json()) as { ok?: boolean; claimed?: boolean };
-        if (!payload?.ok || !payload?.claimed) {
-          console.warn('Discord PWA セッション復旧レスポンスが不正です', {
-            statePreview,
-            payload
-          });
-          console.info('Discord PWA pending state will be cleared because response payload is invalid', {
-            statePreview
-          });
-          clearPendingPwaState();
-          return;
-        }
+            console.info('Discord PWA セッション復旧を開始します', { statePreview });
+            const response = await fetch('/api/auth/discord/claim-session', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+              },
+              credentials: 'include',
+              body: JSON.stringify({ state })
+            });
 
-        clearPendingPwaState();
-        console.info('Discord PWA セッション復旧に成功しました', { statePreview });
-        await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
-      } catch (error) {
-        if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
-          console.info('Discord PWA セッション復旧が中断されました', { statePreview });
-          return;
-        }
-        console.error('Discord PWA セッション復旧中にエラーが発生しました', error);
-      } finally {
-        claimInProgressRef.current = false;
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.warn('Discord PWA セッション復旧に失敗しました', {
+                statePreview,
+                status: response.status,
+                body: errorText
+              });
+              if ([401, 403, 404, 409, 410].includes(response.status)) {
+                console.info('Discord PWA pending state will be cleared after unrecoverable response', {
+                  statePreview
+                });
+                clearPendingPwaState();
+              }
+              return;
+            }
+
+            const contentType = response.headers.get('Content-Type') ?? '';
+            if (!contentType.toLowerCase().includes('application/json')) {
+              console.warn('Discord PWA セッション復旧レスポンスの形式が不正です', {
+                statePreview
+              });
+              return;
+            }
+
+            const payload = (await response.json()) as { ok?: boolean; claimed?: boolean };
+            if (!payload?.ok || !payload?.claimed) {
+              console.warn('Discord PWA セッション復旧レスポンスが不正です', {
+                statePreview,
+                payload
+              });
+              console.info('Discord PWA pending state will be cleared because response payload is invalid', {
+                statePreview
+              });
+              clearPendingPwaState();
+              return;
+            }
+
+            clearPendingPwaState();
+            console.info('Discord PWA セッション復旧に成功しました', { statePreview });
+            await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+          } catch (error) {
+            console.error('Discord PWA セッション復旧中にエラーが発生しました', error);
+          } finally {
+            activePwaClaimState = null;
+            activePwaClaimPromise = null;
+          }
+        })();
+
+        await activePwaClaimPromise;
+        return;
       }
     },
     [queryClient]
