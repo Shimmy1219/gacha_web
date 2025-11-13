@@ -21,6 +21,8 @@ interface GachaDefinition {
   label: string;
   pool: GachaPoolDefinition;
   items: GachaItemDefinition[];
+  itemOrder: string[];
+  rarityOrder: string[];
 }
 
 interface GachaDefinitionsResult {
@@ -63,11 +65,21 @@ function useGachaDefinitions(): GachaDefinitionsResult {
         return;
       }
 
+      const catalogSnapshot = catalogByGacha[gachaId];
+      const rarityOrderFromState = rarityState?.byGacha?.[gachaId] ?? [];
+      const fallbackRarityOrder = Array.from(pool.rarityGroups.keys());
       const definition: GachaDefinition = {
         id: gachaId,
         label: appState?.meta?.[gachaId]?.displayName ?? gachaId,
         pool,
-        items: pool.items.map((item) => ({ ...item }))
+        items: pool.items.map((item) => ({ ...item })),
+        itemOrder: Array.isArray(catalogSnapshot?.order)
+          ? [...catalogSnapshot.order]
+          : pool.items.map((item) => item.itemId),
+        rarityOrder:
+          rarityOrderFromState.length > 0
+            ? [...rarityOrderFromState]
+            : fallbackRarityOrder
       };
 
       knownGacha.add(gachaId);
@@ -319,9 +331,24 @@ function simulateGacha({
     };
   });
 
+  const orderedItemIds = gacha.itemOrder.length > 0 ? gacha.itemOrder : gacha.items.map((item) => item.itemId);
+  const itemOrderIndex = new Map<string, number>();
+  orderedItemIds.forEach((itemId, index) => {
+    if (!itemOrderIndex.has(itemId)) {
+      itemOrderIndex.set(itemId, index);
+    }
+  });
+  gacha.items.forEach((item) => {
+    if (!itemOrderIndex.has(item.itemId)) {
+      itemOrderIndex.set(item.itemId, itemOrderIndex.size);
+    }
+  });
+
   items.sort((a, b) => {
-    if (b.count !== a.count) {
-      return b.count - a.count;
+    const aIndex = itemOrderIndex.get(a.itemId) ?? Number.POSITIVE_INFINITY;
+    const bIndex = itemOrderIndex.get(b.itemId) ?? Number.POSITIVE_INFINITY;
+    if (aIndex !== bIndex) {
+      return aIndex - bIndex;
     }
     return a.name.localeCompare(b.name, 'ja');
   });
@@ -341,7 +368,30 @@ function simulateGacha({
     rarity.acquisitionRateDisplay = formatObservedRate(acquisitionRate, rarityDigits, rarity.rarityId);
   });
 
-  const rarities = Array.from(rarityMap.values()).sort((a, b) => b.count - a.count);
+  const orderedRarityIds =
+    gacha.rarityOrder.length > 0
+      ? gacha.rarityOrder
+      : Array.from(gacha.pool.rarityGroups.keys());
+  const rarityOrderIndex = new Map<string, number>();
+  orderedRarityIds.forEach((rarityId, index) => {
+    if (!rarityOrderIndex.has(rarityId)) {
+      rarityOrderIndex.set(rarityId, index);
+    }
+  });
+  gacha.pool.rarityGroups.forEach((group) => {
+    if (!rarityOrderIndex.has(group.rarityId)) {
+      rarityOrderIndex.set(group.rarityId, rarityOrderIndex.size);
+    }
+  });
+
+  const rarities = Array.from(rarityMap.values()).sort((a, b) => {
+    const aIndex = rarityOrderIndex.get(a.rarityId) ?? Number.POSITIVE_INFINITY;
+    const bIndex = rarityOrderIndex.get(b.rarityId) ?? Number.POSITIVE_INFINITY;
+    if (aIndex !== bIndex) {
+      return aIndex - bIndex;
+    }
+    return a.label.localeCompare(b.label, 'ja');
+  });
 
   return {
     totalRuns: normalizedRuns,
