@@ -5,10 +5,11 @@ import {
   ShareIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { useNavigate } from 'react-router-dom';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -177,6 +178,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const userProfilesState = useStoreValue(userProfiles);
   const pullHistoryState = useStoreValue(pullHistory);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
+  const navigate = useNavigate();
+  const gachaSelectId = useId();
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -1051,6 +1054,35 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void copyShareText('draw-result', shareContent.shareText);
   }, [copyShareText, shareContent]);
 
+  const resolveIsStandalonePwa = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    const mediaStandalone =
+      typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
+
+    const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
+    const iosStandalone =
+      typeof navigatorWithStandalone.standalone === 'boolean' && navigatorWithStandalone.standalone;
+
+    return mediaStandalone || iosStandalone;
+  }, []);
+
+  const handleOpenGachaTestPage = useCallback(() => {
+    const targetUrl = '/gacha/test';
+
+    if (resolveIsStandalonePwa()) {
+      close();
+      navigate(targetUrl);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.open(targetUrl, '_blank', 'noopener');
+    }
+  }, [close, navigate, resolveIsStandalonePwa]);
+
   const handleOpenSettings = useCallback(() => {
     push(PageSettingsDialog, {
       id: 'page-settings',
@@ -1066,8 +1098,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       <ModalBody className="space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-muted-foreground">ガチャの種類</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-semibold text-muted-foreground" htmlFor={gachaSelectId}>
+                ガチャの種類
+              </label>
+              <button type="button" className="btn btn-ghost btn-xs" onClick={handleOpenGachaTestPage}>
+                テスト
+              </button>
+            </div>
             <SingleSelectDropdown
+              id={gachaSelectId}
               value={selectedGachaId}
               options={gachaOptions}
               onChange={handleGachaChange}
