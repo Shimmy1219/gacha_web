@@ -57,15 +57,6 @@ export default async function handler(req, res) {
     setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
     claimTokenDigest = digestDiscordPwaClaimToken(claimToken);
     log.info('PWAブリッジ用クレームトークンを発行しました', { claimTokenPreview });
-  } else {
-    // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
-    setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
-  }
-
-  if (normalizedContext === 'pwa') {
-    const claimToken = crypto.randomBytes(32).toString('base64url');
-    const claimTokenPreview = `${claimToken.slice(0, 4)}...`;
-    setCookie(res, 'd_pwa_bridge', claimToken, { maxAge: 600 });
     log.info('issued discord pwa claim token', { claimTokenPreview });
   } else {
     // 過去のPWAログイン用クッキーが残っている場合はクリアしておく
