@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -42,7 +42,15 @@ interface PendingPwaStateRecord {
 const PWA_PENDING_STATE_STORAGE_KEY = 'discord:pwa:pending_state';
 const PWA_PENDING_STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 let localStorageAvailabilityCache: boolean | null = null;
-let activePwaClaimPromise: Promise<void> | null = null;
+type PwaClaimResult =
+  | 'skipped'
+  | 'no-pending'
+  | 'claimed'
+  | 'cleared'
+  | 'failed'
+  | 'aborted';
+
+let activePwaClaimPromise: Promise<PwaClaimResult> | null = null;
 let activePwaClaimState: string | null = null;
 
 function createStatePreview(state: string): string {
@@ -218,16 +226,23 @@ async function fetchSession(): Promise<DiscordSessionData> {
 
 export function useDiscordSession(): UseDiscordSessionResult {
   const queryClient = useQueryClient();
+  const [shouldDelaySessionFetch, setShouldDelaySessionFetch] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return resolveLoginContext() === 'pwa' && readPendingPwaState() !== null;
+  });
 
   const claimPendingPwaSession = useCallback(
-    async (options?: { signal?: AbortSignal }) => {
+    async (options?: { signal?: AbortSignal }): Promise<PwaClaimResult> => {
       if (typeof window === 'undefined') {
-        return;
+        return 'skipped';
       }
 
       const loginContext = resolveLoginContext();
       if (loginContext !== 'pwa') {
-        return;
+        setShouldDelaySessionFetch(false);
+        return 'skipped';
       }
 
       const signal = options?.signal;
@@ -235,13 +250,17 @@ export function useDiscordSession(): UseDiscordSessionResult {
       for (;;) {
         if (signal?.aborted) {
           console.info('Discord PWA セッション復旧が呼び出し元の指示で中断されました');
-          return;
+          setShouldDelaySessionFetch(false);
+          return 'aborted';
         }
 
         const pendingState = readPendingPwaState();
         if (!pendingState) {
-          return;
+          setShouldDelaySessionFetch(false);
+          return 'no-pending';
         }
+
+        setShouldDelaySessionFetch(true);
 
         const state = pendingState.state;
         const statePreview = createStatePreview(state);
@@ -260,21 +279,26 @@ export function useDiscordSession(): UseDiscordSessionResult {
             });
           }
           try {
-            await activePwaClaimPromise;
+            const result = await activePwaClaimPromise;
+            if (result === 'claimed' || result === 'cleared' || result === 'no-pending') {
+              setShouldDelaySessionFetch(false);
+            }
+            return result;
           } catch (error) {
             console.warn('進行中のDiscord PWA セッション復旧処理でエラーが発生しました', error);
+            setShouldDelaySessionFetch(false);
+            return 'failed';
           }
-          continue;
         }
 
         activePwaClaimState = state;
-        activePwaClaimPromise = (async () => {
+        activePwaClaimPromise = (async (): Promise<PwaClaimResult> => {
           try {
             if (signal?.aborted) {
               console.info('Discord PWA セッション復旧が開始前に中断されました', {
                 statePreview
               });
-              return;
+              return 'aborted';
             }
 
             console.info('Discord PWA セッション復旧を開始します', { statePreview });
@@ -300,8 +324,9 @@ export function useDiscordSession(): UseDiscordSessionResult {
                   statePreview
                 });
                 clearPendingPwaState();
+                return 'cleared';
               }
-              return;
+              return 'failed';
             }
 
             const contentType = response.headers.get('Content-Type') ?? '';
@@ -309,7 +334,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
               console.warn('Discord PWA セッション復旧レスポンスの形式が不正です', {
                 statePreview
               });
-              return;
+              return 'failed';
             }
 
             const payload = (await response.json()) as { ok?: boolean; claimed?: boolean };
@@ -322,32 +347,54 @@ export function useDiscordSession(): UseDiscordSessionResult {
                 statePreview
               });
               clearPendingPwaState();
-              return;
+              return 'cleared';
             }
 
             clearPendingPwaState();
             console.info('Discord PWA セッション復旧に成功しました', { statePreview });
             await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
+            return 'claimed';
           } catch (error) {
             console.error('Discord PWA セッション復旧中にエラーが発生しました', error);
+            return 'failed';
           } finally {
             activePwaClaimState = null;
             activePwaClaimPromise = null;
           }
         })();
 
-        await activePwaClaimPromise;
-        return;
+        const result = await activePwaClaimPromise;
+        if (result === 'claimed' || result === 'cleared' || result === 'no-pending') {
+          setShouldDelaySessionFetch(false);
+        }
+        if (result === 'failed') {
+          return 'failed';
+        }
+        if (result === 'aborted') {
+          setShouldDelaySessionFetch(false);
+          return 'aborted';
+        }
+        if (result === 'claimed' || result === 'cleared') {
+          return result;
+        }
+
+        const stillPending = readPendingPwaState();
+        if (!stillPending) {
+          setShouldDelaySessionFetch(false);
+          return 'no-pending';
+        }
+        // pending state still exists (e.g. recoverable failure). Retry on next loop iteration.
       }
     },
-    [queryClient]
+    [queryClient, setShouldDelaySessionFetch]
   );
 
   const query = useQuery({
     queryKey: ['discord', 'session'],
     queryFn: fetchSession,
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false
+    refetchOnWindowFocus: false,
+    enabled: !shouldDelaySessionFetch
   });
   const { refetch: refetchQuery } = query;
 
@@ -361,9 +408,23 @@ export function useDiscordSession(): UseDiscordSessionResult {
         return;
       }
 
-      void claimPendingPwaSession();
-      logDiscordAuthEvent('アプリが前面に復帰したためDiscordセッション情報の再取得を開始します');
-      void refetchQuery();
+      void (async () => {
+        const result = await claimPendingPwaSession();
+        if (result === 'claimed') {
+          logDiscordAuthEvent('Discord PWA セッション復旧が完了したためセッション情報の反映を待機します');
+          return;
+        }
+        if (result === 'failed') {
+          logDiscordAuthError('Discord PWA セッション復旧に失敗したため再取得を延期します');
+          return;
+        }
+        if (result === 'aborted') {
+          logDiscordAuthEvent('Discord PWA セッション復旧がキャンセルされたためセッション再取得をスキップします');
+          return;
+        }
+        logDiscordAuthEvent('アプリが前面に復帰したためDiscordセッション情報の再取得を開始します');
+        await refetchQuery();
+      })();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
