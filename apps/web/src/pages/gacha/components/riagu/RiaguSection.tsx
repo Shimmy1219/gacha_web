@@ -218,7 +218,7 @@ export function RiaguSection(): JSX.Element {
         className="riagu-section__tabs"
       />
 
-      <div className="riagu-section__scroll section-scroll flex-1 px-4">
+      <div className="riagu-section__scroll section-scroll flex-1">
         <div className="riagu-section__scroll-content space-y-4">
           <div className="tab-panel-viewport">
             <div key={activeGachaId ?? 'none'} className={panelAnimationClass}>
