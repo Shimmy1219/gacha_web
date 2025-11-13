@@ -61,7 +61,7 @@ const DEFAULT_CLASS_NAMES: SingleSelectDropdownClassNames = {
   icon: 'h-4 w-4 text-muted-foreground transition-transform',
   iconOpen: 'rotate-180 text-accent',
   menu:
-    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm backdrop-blur-sm',
+    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[120] max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm shadow-xl shadow-black/20 backdrop-blur-sm',
   option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
   optionActive: 'bg-accent/10 text-surface-foreground',
   optionInactive: 'text-muted-foreground hover:bg-surface/40',
