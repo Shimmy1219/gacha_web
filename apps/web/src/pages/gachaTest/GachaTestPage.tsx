@@ -491,9 +491,6 @@ function GachaTestSection({
             </button>
             <div className="flex-1">
               <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
-              </p>
             </div>
           </div>
           {isExpanded ? (
