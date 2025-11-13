@@ -394,7 +394,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           ファイルを選ぶ
           <input
             type="file"
-            accept="image/*,video/*,audio/*"
+            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
             className="sr-only"
             onChange={handleFileInputChange}
           />

@@ -1059,7 +1059,7 @@ export function ItemsSection(): JSX.Element {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*,audio/*"
+            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
             multiple
             className="hidden"
             onChange={handleFileInputChange}
