@@ -140,7 +140,12 @@ export function DiscordLoginButton({
     };
 
     return (
-      <div className={clsx('discord-login-button__container relative inline-block', className)}>
+      <div
+        className={clsx(
+          'discord-login-button__container relative inline-flex items-center gap-2',
+          className
+        )}
+      >
         <button
           type="button"
           onClick={handleLoginClick}
@@ -159,9 +164,11 @@ export function DiscordLoginButton({
         <button
           type="button"
           onClick={handleOpenPageSettings}
-          className="discord-login-button__settings absolute left-1/2 top-full mt-3 -translate-x-1/2 whitespace-nowrap rounded-full border border-border/60 bg-panel px-4 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          className="discord-login-button__settings inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/60 bg-panel text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          aria-label="ページ設定を開く"
         >
-          設定モーダルを開く
+          <Cog6ToothIcon className="h-5 w-5" />
+          <span className="sr-only">設定</span>
         </button>
       </div>
     );
@@ -171,93 +178,105 @@ export function DiscordLoginButton({
   const displayName = user.name ?? 'Discord ユーザー';
 
   return (
-    <Menu
-      as="div"
-      className={clsx('discord-login-button relative inline-flex text-left', className)}
-      data-placement={placement}
+    <div
+      className={clsx(
+        'discord-login-button__container relative inline-flex items-center gap-2',
+        className
+      )}
     >
-      <Menu.Button
-        className="discord-login-button__trigger inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-        aria-label={`${displayName} のメニューを開く`}
-      >
-        <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="Discord avatar" className="h-full w-full object-cover" />
-          ) : (
-            <span className="text-base font-bold">{displayName.slice(0, 1)}</span>
-          )}
-        </span>
-        <span className="flex flex-col items-start leading-tight">
-          <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">ログイン中</span>
-          <span className="text-sm font-semibold text-white">{displayName}</span>
-        </span>
-        <ChevronDownIcon className="h-4 w-4 text-white/70" />
-      </Menu.Button>
-      <Transition
-        as={Fragment}
-        enter="transition ease-out duration-100"
-        enterFrom="transform opacity-0 scale-95"
-        enterTo="transform opacity-100 scale-100"
-        leave="transition ease-in duration-75"
-        leaveFrom="transform opacity-100 scale-100"
-        leaveTo="transform opacity-0 scale-95"
-      >
-        <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-panel/95">
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type="button"
-                onClick={openBotInviteModal}
-                className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
-                  active ? 'bg-surface/40' : undefined
-                )}
-              >
-                <UserGroupIcon className="h-4 w-4" />
-                <span className="flex flex-col text-left">
-                  <span>お渡し鯖を設定</span>
-                  <span className="text-xs text-muted-foreground">
-                    {guildSelection ? `現在: ${guildSelection.guildName}` : 'Bot招待が必要'}
+      <Menu as="div" className="discord-login-button relative inline-flex text-left" data-placement={placement}>
+        <Menu.Button
+          className="discord-login-button__trigger inline-flex h-11 items-center gap-3 rounded-xl bg-discord-primary px-5 text-sm font-semibold text-white transition hover:bg-discord-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          aria-label={`${displayName} のメニューを開く`}
+        >
+          <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Discord avatar" className="h-full w-full object-cover" />
+            ) : (
+              <span className="text-base font-bold">{displayName.slice(0, 1)}</span>
+            )}
+          </span>
+          <span className="flex flex-col items-start leading-tight">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">ログイン中</span>
+            <span className="text-sm font-semibold text-white">{displayName}</span>
+          </span>
+          <ChevronDownIcon className="h-4 w-4 text-white/70" />
+        </Menu.Button>
+        <Transition
+          as={Fragment}
+          enter="transition ease-out duration-100"
+          enterFrom="transform opacity-0 scale-95"
+          enterTo="transform opacity-100 scale-100"
+          leave="transition ease-in duration-75"
+          leaveFrom="transform opacity-100 scale-100"
+          leaveTo="transform opacity-0 scale-95"
+        >
+          <Menu.Items className="discord-login-button__menu absolute right-0 top-full z-20 mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-border/70 bg-panel/95">
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  type="button"
+                  onClick={openBotInviteModal}
+                  className={clsx(
+                    'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
+                    active ? 'bg-surface/40' : undefined
+                  )}
+                >
+                  <UserGroupIcon className="h-4 w-4" />
+                  <span className="flex flex-col text-left">
+                    <span>お渡し鯖を設定</span>
+                    <span className="text-xs text-muted-foreground">
+                      {guildSelection ? `現在: ${guildSelection.guildName}` : 'Bot招待が必要'}
+                    </span>
                   </span>
-                </span>
-              </button>
-            )}
-          </Menu.Item>
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type="button"
-                onClick={handleOpenPageSettings}
-                className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
-                  active ? 'bg-surface/40' : undefined
-                )}
-              >
-                <Cog6ToothIcon className="h-4 w-4" />
-                設定
-              </button>
-            )}
-          </Menu.Item>
-          <div className="discord-login-button__menu-divider border-t border-border/60" />
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                type="button"
-                onClick={async () => {
-                  await logout();
-                }}
-                className={clsx(
-                  'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
-                  active ? 'bg-surface/40' : undefined
-                )}
-              >
-                <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                ログアウト
-              </button>
-            )}
-          </Menu.Item>
-        </Menu.Items>
-      </Transition>
-    </Menu>
+                </button>
+              )}
+            </Menu.Item>
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  type="button"
+                  onClick={handleOpenPageSettings}
+                  className={clsx(
+                    'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
+                    active ? 'bg-surface/40' : undefined
+                  )}
+                >
+                  <Cog6ToothIcon className="h-4 w-4" />
+                  設定
+                </button>
+              )}
+            </Menu.Item>
+            <div className="discord-login-button__menu-divider border-t border-border/60" />
+            <Menu.Item>
+              {({ active }) => (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout();
+                  }}
+                  className={clsx(
+                    'discord-login-button__menu-item flex w-full items-center gap-3 px-5 py-3 text-sm text-surface-foreground transition',
+                    active ? 'bg-surface/40' : undefined
+                  )}
+                >
+                  <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                  ログアウト
+                </button>
+              )}
+            </Menu.Item>
+          </Menu.Items>
+        </Transition>
+      </Menu>
+      <button
+        type="button"
+        onClick={handleOpenPageSettings}
+        className="discord-login-button__settings inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/60 bg-panel text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        aria-label="ページ設定を開く"
+      >
+        <Cog6ToothIcon className="h-5 w-5" />
+        <span className="sr-only">設定</span>
+      </button>
+    </div>
   );
 }
