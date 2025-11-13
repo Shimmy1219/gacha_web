@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 
 import { clearDiscordAuthLogs, useDiscordAuthLogs } from './discordAuthDebugLogStore';
@@ -40,6 +40,7 @@ interface DiscordAuthDebugOverlayProps {
 export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayProps): JSX.Element | null {
   const logs = useDiscordAuthLogs();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   const enhancedLogs = useMemo(
     () =>
@@ -50,6 +51,28 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
       })),
     [logs]
   );
+
+  const logsForCopy = useMemo(
+    () =>
+      enhancedLogs
+        .map(({ entry, formattedTimestamp, formattedDetails }) => {
+          const lines = [
+            `[${formattedTimestamp}] [${entry.level === 'error' ? 'ERROR' : 'INFO'}] ${entry.message}`
+          ];
+
+          if (formattedDetails) {
+            lines.push(formattedDetails);
+          }
+
+          return lines.join('\n');
+        })
+        .join('\n\n'),
+    [enhancedLogs]
+  );
+
+  useEffect(() => {
+    setCopyStatus('idle');
+  }, [logsForCopy]);
 
   if (enhancedLogs.length === 0) {
     return null;
@@ -63,6 +86,34 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
     clearDiscordAuthLogs();
   };
 
+  const handleCopy = async () => {
+    if (!logsForCopy) {
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(logsForCopy);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = logsForCopy;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+
+      setCopyStatus('copied');
+    } catch (error) {
+      setCopyStatus('failed');
+      // eslint-disable-next-line no-console
+      console.error('Failed to copy Discord auth logs', error);
+    }
+  };
+
   return (
     <div
       className={clsx(
@@ -72,11 +123,25 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
     >
       <div className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-2xl bg-slate-900/90 text-white shadow-2xl ring-1 ring-white/15 backdrop-blur">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-          <span>Discordログインログ</span>
+          <span>デバッグログ</span>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest">
               {logs.length}件
             </span>
+            {!isCollapsed ? (
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={clsx(
+                  'rounded-full border px-3 py-1 text-[11px] font-semibold tracking-widest text-white transition',
+                  copyStatus === 'failed'
+                    ? 'border-red-500/60 bg-red-500/20 hover:border-red-500/70 hover:bg-red-500/30'
+                    : 'border-white/20 bg-white/10 hover:border-white/30 hover:bg-white/20'
+                )}
+              >
+                {copyStatus === 'copied' ? 'コピー済み' : copyStatus === 'failed' ? 'コピー失敗' : 'コピー'}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={handleToggle}
@@ -127,9 +192,7 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
               </div>
             ))}
           </div>
-        ) : (
-          <div className="px-4 py-3 text-[12px] text-white/80">ログは折りたたまれています。</div>
-        )}
+        ) : null}
       </div>
     </div>
   );

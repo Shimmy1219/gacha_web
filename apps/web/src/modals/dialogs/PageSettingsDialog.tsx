@@ -514,6 +514,18 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     handleCustomAccentCommit();
   }, [handleCustomAccentCommit]);
 
+  const showDiscordLogsPreference = useMemo(
+    () => uiPreferencesStore.getDiscordAuthLogsEnabled(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const [showDiscordDebugLogs, setShowDiscordDebugLogs] = useState<boolean>(showDiscordLogsPreference);
+
+  useEffect(() => {
+    setShowDiscordDebugLogs((previous) =>
+      previous === showDiscordLogsPreference ? previous : showDiscordLogsPreference
+    );
+  }, [showDiscordLogsPreference]);
+
   const handleMenuSelect = useCallback(
     (menu: SettingsMenuKey) => {
       setActiveMenu(menu);
@@ -522,6 +534,14 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       }
     },
     [isLargeLayout]
+  );
+
+  const handleToggleDiscordDebugLogs = useCallback(
+    (enabled: boolean) => {
+      setShowDiscordDebugLogs(enabled);
+      uiPreferencesStore.setDiscordAuthLogsEnabled(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
   );
 
   const handleBackToMenu = useCallback(() => {
@@ -983,6 +1003,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               </p>
             </div>
             <div className="space-y-4">
+              <SwitchField
+                label="Discordデバッグログを表示"
+                description="Discordログイン処理の詳細ログを画面下部に表示します。"
+                checked={showDiscordDebugLogs}
+                onChange={handleToggleDiscordDebugLogs}
+              />
               <SwitchField
                 label="最新機能のヒントを表示"
                 description="開発中の機能やリリースノートをダッシュボード上で通知します。"

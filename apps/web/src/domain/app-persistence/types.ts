@@ -190,6 +190,10 @@ export interface UiPreferencesStateV3 {
   };
   riagu?: Record<string, unknown>;
   lastSeenRelease?: string | null;
+  debug?: {
+    discordAuthLogs?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export interface SaveOptionsSnapshotV3 {
