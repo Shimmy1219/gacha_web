@@ -59,12 +59,10 @@ function normalizeDetails(details?: unknown): unknown {
   return details;
 }
 
-const DISCORD_KEYWORD_PATTERN = /discord/i;
-
-type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error';
+type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug';
 type ConsoleMethod = (...data: unknown[]) => void;
 
-const CONSOLE_METHODS: ConsoleMethodName[] = ['log', 'info', 'warn', 'error'];
+const CONSOLE_METHODS: ConsoleMethodName[] = ['log', 'info', 'warn', 'error', 'debug'];
 
 const globalObject = globalThis as typeof globalThis & {
   __discordAuthConsoleHooked__?: boolean;
@@ -94,18 +92,6 @@ function formatUnknown(value: unknown): string {
   } catch {
     return Object.prototype.toString.call(value);
   }
-}
-
-function shouldCaptureConsoleMessage(args: unknown[]): boolean {
-  return args.some((arg) => {
-    if (typeof arg === 'string') {
-      return DISCORD_KEYWORD_PATTERN.test(arg);
-    }
-    if (arg instanceof Error) {
-      return DISCORD_KEYWORD_PATTERN.test(`${arg.name ?? ''} ${arg.message ?? ''}`);
-    }
-    return false;
-  });
 }
 
 function extractConsolePayload(args: unknown[]): { message: string; details?: unknown } | null {
@@ -158,22 +144,20 @@ function initializeConsoleHook(): void {
     const boundOriginal = original.bind(console) as ConsoleMethod;
 
     (console as Record<string, ConsoleMethod>)[method] = ((...args: unknown[]) => {
-      if (shouldCaptureConsoleMessage(args)) {
-        try {
-          const payload = extractConsolePayload(args);
-          if (payload) {
-            const entry: DiscordAuthLogEntry = {
-              id: `discord-auth-log-${sequence++}`,
-              timestamp: Date.now(),
-              level: method === 'error' || method === 'warn' ? 'error' : 'info',
-              message: payload.message,
-              details: payload.details
-            };
-            addEntry(entry);
-          }
-        } catch {
-          // Swallow errors to avoid interfering with console output
+      try {
+        const payload = extractConsolePayload(args);
+        if (payload) {
+          const entry: DiscordAuthLogEntry = {
+            id: `discord-auth-log-${sequence++}`,
+            timestamp: Date.now(),
+            level: method === 'error' || method === 'warn' ? 'error' : 'info',
+            message: payload.message,
+            details: payload.details
+          };
+          addEntry(entry);
         }
+      } catch {
+        // Swallow errors to avoid interfering with console output
       }
 
       boundOriginal(...args);
