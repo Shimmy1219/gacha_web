@@ -140,7 +140,12 @@ export function DiscordLoginButton({
     };
 
     return (
-      <div className={clsx('discord-login-button__container relative inline-block', className)}>
+      <div
+        className={clsx(
+          'discord-login-button__container relative inline-flex items-center gap-2',
+          className
+        )}
+      >
         <button
           type="button"
           onClick={handleLoginClick}
@@ -159,9 +164,11 @@ export function DiscordLoginButton({
         <button
           type="button"
           onClick={handleOpenPageSettings}
-          className="discord-login-button__settings absolute left-1/2 top-full mt-3 -translate-x-1/2 whitespace-nowrap rounded-full border border-border/60 bg-panel px-4 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          className="discord-login-button__settings inline-flex h-11 w-11 items-center justify-center rounded-xl border border-border/60 bg-panel text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          aria-label="ページ設定を開く"
         >
-          設定モーダルを開く
+          <Cog6ToothIcon className="h-5 w-5" />
+          <span className="sr-only">設定</span>
         </button>
       </div>
     );
