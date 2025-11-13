@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { SingleSelectDropdown, type SingleSelectOption } from '../gacha/components/select/SingleSelectDropdown';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
@@ -357,6 +358,7 @@ function GachaTestSection({
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   const handleSimulate = useCallback(() => {
     if (!gacha) {
@@ -398,74 +400,92 @@ function GachaTestSection({
     }
   }, [gacha, ptSetting, pullsPerRun, runCount, rarityDigits]);
 
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded((previous) => !previous);
+  }, []);
+
   return (
     <section className="rounded-2xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <label className="flex flex-col text-sm text-muted-foreground">
-            1回あたりのガチャ回数
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={pullsPerRun}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                setPullsPerRun(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
-              }}
-              className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
-            />
-          </label>
-          <label className="flex flex-col text-sm text-muted-foreground">
-            試行回数
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={runCount}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                setRunCount(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
-              }}
-              className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handleSimulate}
-            disabled={isRunning || !gacha}
-            className="self-end rounded bg-accent px-6 py-2 text-sm font-semibold text-accent-foreground shadow-md transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
-          >
-            {isRunning ? '計算中...' : 'シミュレーション実行'}
-          </button>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="mt-4 rounded border border-red-500/50 bg-red-500/10 p-4 text-sm text-red-200">
-          <p className="font-semibold">{error}</p>
-          {warnings.length > 0 ? (
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex flex-1 items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleExpanded}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-border/60 bg-panel-muted/70 text-muted-foreground transition hover:text-surface-foreground"
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? `${title}を閉じる` : `${title}を開く`}
+            >
+              <ChevronDownIcon className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+          {isExpanded ? (
+            <div className="flex flex-wrap gap-3">
+              <label className="flex flex-col text-sm text-muted-foreground">
+                1回あたりのガチャ回数
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={pullsPerRun}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setPullsPerRun(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
+                  }}
+                  className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col text-sm text-muted-foreground">
+                試行回数
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={runCount}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setRunCount(Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1);
+                  }}
+                  className="mt-1 w-32 rounded border border-border/60 bg-panel-muted/70 px-3 py-2 text-right text-base text-surface-foreground focus:border-accent focus:outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleSimulate}
+                disabled={isRunning || !gacha}
+                className="self-end rounded bg-accent px-6 py-2 text-sm font-semibold text-accent-foreground shadow-md transition hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+              >
+                {isRunning ? '計算中...' : 'シミュレーション実行'}
+              </button>
+            </div>
           ) : null}
         </div>
-      ) : null}
 
-      {result ? (
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">合計試行回数</p>
-              <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalRuns.toLocaleString()}</p>
+        {isExpanded && error ? (
+          <div className="mt-2 rounded border border-red-500/50 bg-red-500/10 p-4 text-sm text-red-200">
+            <p className="font-semibold">{error}</p>
+            {warnings.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {isExpanded && result ? (
+          <div className="mt-4 space-y-6">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">合計試行回数</p>
+                <p className="mt-1 text-2xl font-semibold text-surface-foreground">{result.totalRuns.toLocaleString()}</p>
             </div>
             <div className="rounded-xl border border-border/60 bg-panel-muted/70 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">1回あたりの想定連数</p>
@@ -546,6 +566,7 @@ function GachaTestSection({
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">保証</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">想定排出率</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">実測排出率</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">獲得率（1試行あたり）</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -593,16 +614,16 @@ function GachaTestSection({
               </table>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }
 
 const DEFAULT_SECTIONS = [
-  { id: 'pulls-10', title: '10連を1回引く', pulls: 10, runs: 1 },
-  { id: 'pulls-100', title: '100連を1回引く', pulls: 100, runs: 1 },
-  { id: 'pulls-1000', title: '1000連を1回引く', pulls: 1000, runs: 1 }
+  { id: 'pulls-10', title: '10連', pulls: 10, runs: 1 },
+  { id: 'pulls-100', title: '100連', pulls: 100, runs: 1 },
+  { id: 'pulls-1000', title: '1000連', pulls: 1000, runs: 1 }
 ] as const;
 
 export function GachaTestPage(): JSX.Element {
@@ -634,6 +655,7 @@ export function GachaTestPage(): JSX.Element {
             value={selectedGachaId}
             onChange={handleSelectGacha}
             placeholder="ガチャを選択してください"
+            classNames={{ root: 'z-30' }}
           />
         </div>
       </header>
