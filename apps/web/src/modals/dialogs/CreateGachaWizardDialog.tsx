@@ -966,7 +966,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*,audio/*,.m4a,audio/mp4"
         multiple
         className="sr-only"
         onChange={(event) => {
