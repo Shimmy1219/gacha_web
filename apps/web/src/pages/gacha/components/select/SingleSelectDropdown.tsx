@@ -1,10 +1,13 @@
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
+import { createPortal } from 'react-dom';
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode
 } from 'react';
 
@@ -61,7 +64,7 @@ const DEFAULT_CLASS_NAMES: SingleSelectDropdownClassNames = {
   icon: 'h-4 w-4 text-muted-foreground transition-transform',
   iconOpen: 'rotate-180 text-accent',
   menu:
-    'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm backdrop-blur-sm',
+    'z-[9999] max-h-72 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-sm shadow-xl shadow-black/20 backdrop-blur-sm',
   option: 'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
   optionActive: 'bg-accent/10 text-surface-foreground',
   optionInactive: 'text-muted-foreground hover:bg-surface/40',
@@ -86,6 +89,10 @@ export function SingleSelectDropdown<Value extends string = string>({
 }: SingleSelectDropdownProps<Value>): JSX.Element {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isClient, setIsClient] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
 
   const classes = useMemo(
     () => ({
@@ -108,11 +115,11 @@ export function SingleSelectDropdown<Value extends string = string>({
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent): void {
-      if (!containerRef.current) {
-        return;
-      }
       const target = event.target as Node | null;
-      if (target && containerRef.current.contains(target)) {
+      if (
+        (containerRef.current && target && containerRef.current.contains(target)) ||
+        (menuContainerRef.current && target && menuContainerRef.current.contains(target))
+      ) {
         return;
       }
       setOpen(false);
@@ -135,6 +142,52 @@ export function SingleSelectDropdown<Value extends string = string>({
   useEffect(() => {
     onOpenChange?.(open);
   }, [open, onOpenChange]);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuStyle(null);
+      return;
+    }
+
+    if (!buttonRef.current) {
+      return;
+    }
+
+    const margin = 8;
+
+    const updatePosition = () => {
+      if (!buttonRef.current) {
+        return;
+      }
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const maxWidth = Math.max(rect.width, 0);
+      let left = rect.left;
+      if (left + maxWidth > viewportWidth - 8) {
+        left = Math.max(8, viewportWidth - maxWidth - 8);
+      }
+
+      setMenuStyle({
+        position: 'fixed',
+        top: rect.bottom + margin,
+        left,
+        width: maxWidth
+      });
+    };
+
+    updatePosition();
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open]);
 
   const resolvedValue = useMemo(() => {
     if (value !== undefined) {
@@ -170,6 +223,7 @@ export function SingleSelectDropdown<Value extends string = string>({
       <button
         id={id}
         type="button"
+        ref={buttonRef}
         className={clsx(
           classes.button,
           open ? classes.buttonOpen : classes.buttonClosed,
@@ -183,47 +237,55 @@ export function SingleSelectDropdown<Value extends string = string>({
         <span className={classes.optionLabel}>{buttonLabel}</span>
         <ChevronDownIcon className={clsx(classes.icon, open && classes.iconOpen)} aria-hidden />
       </button>
-      {open ? (
-        <div role="listbox" className={clsx(classes.menu)} style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS }}>
-          {options.map((option) => {
-            const active = option.value === resolvedValue;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="option"
-                aria-selected={active}
-                disabled={option.disabled}
-                className={clsx(
-                  classes.option,
-                  active ? classes.optionActive : classes.optionInactive,
-                  option.disabled && 'cursor-not-allowed opacity-60'
-                )}
-                onClick={() => {
-                  if (option.disabled) {
-                    return;
-                  }
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-              >
-                <span className={classes.optionLabel}>
-                  {renderOptionContent ? renderOptionContent(option, active) : option.label}
-                  {option.description ? (
-                    <span className={clsx(classes.optionDescription)}>{option.description}</span>
-                  ) : null}
-                </span>
-                {showCheckIndicator ? (
-                  <CheckIcon
-                    className={clsx(classes.checkIcon, active ? 'opacity-100' : 'opacity-0')}
-                    aria-hidden
-                  />
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {open && isClient && menuStyle
+        ? createPortal(
+            <div
+              ref={menuContainerRef}
+              role="listbox"
+              className={clsx(classes.menu)}
+              style={{ maxHeight: DEFAULT_MENU_HEIGHT_GUESS, ...menuStyle }}
+            >
+              {options.map((option) => {
+                const active = option.value === resolvedValue;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    disabled={option.disabled}
+                    className={clsx(
+                      classes.option,
+                      active ? classes.optionActive : classes.optionInactive,
+                      option.disabled && 'cursor-not-allowed opacity-60'
+                    )}
+                    onClick={() => {
+                      if (option.disabled) {
+                        return;
+                      }
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className={classes.optionLabel}>
+                      {renderOptionContent ? renderOptionContent(option, active) : option.label}
+                      {option.description ? (
+                        <span className={clsx(classes.optionDescription)}>{option.description}</span>
+                      ) : null}
+                    </span>
+                    {showCheckIndicator ? (
+                      <CheckIcon
+                        className={clsx(classes.checkIcon, active ? 'opacity-100' : 'opacity-0')}
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

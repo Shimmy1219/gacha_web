@@ -32,9 +32,10 @@ export function GachaLayout({
 }: GachaLayoutProps): JSX.Element {
   const location = useLocation();
   const isReceiveRoute = location.pathname.startsWith('/receive');
+  const isGachaTestRoute = location.pathname.startsWith('/gacha/test');
   const { shouldShowSplash } = useGachaRegistrationState();
 
-  const shouldShowToolbarActions = !isReceiveRoute && !shouldShowSplash;
+  const shouldShowToolbarActions = !isReceiveRoute && !isGachaTestRoute && !shouldShowSplash;
   const shouldShowDiscordLoginButton = !shouldShowSplash;
 
   return (

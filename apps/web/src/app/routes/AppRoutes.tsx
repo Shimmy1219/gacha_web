@@ -5,6 +5,7 @@ import { MarketingLayout } from '../../layouts/MarketingLayout';
 import { HomePage } from '../../pages/home/HomePage';
 import { ReceivePage } from '../../pages/receive/ReceivePage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
+import { GachaTestPage } from '../../pages/gachaTest/GachaTestPage';
 
 interface AppRoutesProps {
   gachaLayoutProps: Omit<GachaLayoutProps, 'children'>;
@@ -50,6 +51,7 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
             />
           )
         },
+        { path: 'gacha/test', element: <GachaTestPage /> },
         { path: 'receive', element: <ReceivePage /> }
       ]
     },
