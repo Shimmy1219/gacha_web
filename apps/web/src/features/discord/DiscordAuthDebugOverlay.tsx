@@ -123,7 +123,7 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
     >
       <div className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-2xl bg-slate-900/90 text-white shadow-2xl ring-1 ring-white/15 backdrop-blur">
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-          <span>Discordログインログ</span>
+          <span>デバッグログ</span>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest">
               {logs.length}件
