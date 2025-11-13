@@ -429,22 +429,22 @@ function GachaTestSection({
     <section className="rounded-2xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-1 items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
-              </p>
-            </div>
+          <div className="flex flex-1 items-start gap-4">
             <button
               type="button"
               onClick={toggleExpanded}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-border/60 bg-panel-muted/70 text-muted-foreground transition hover:text-surface-foreground"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/60 bg-panel-muted/70 text-muted-foreground transition hover:text-surface-foreground"
               aria-expanded={isExpanded}
               aria-label={isExpanded ? `${title}を閉じる` : `${title}を開く`}
             >
               <ChevronDownIcon className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
             </button>
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
+              </p>
+            </div>
           </div>
           {isExpanded ? (
             <div className="flex flex-wrap gap-3">
