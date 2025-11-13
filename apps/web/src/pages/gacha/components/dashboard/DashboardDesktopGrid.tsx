@@ -1,4 +1,5 @@
-import { ArrowsRightLeftIcon } from '@heroicons/react/20/solid';
+import { ArrowsRightLeftIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
+import { clsx } from 'clsx';
 import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
@@ -49,7 +50,7 @@ export function getBreakpoint(width: number): Breakpoint {
   if (width >= 1536) {
     return '2xl';
   }
-  if (width >= 1100) {
+  if (width >= 1280) {
     return 'xl';
   }
   if (width >= 900) {
@@ -166,6 +167,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     gap: 16
   });
   const [columnWidths, setColumnWidths] = useState<number[] | null>(null);
+  const [isOverlayOpen, setIsOverlayOpen] = useState(false);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -215,6 +217,38 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     }
     return activeConfig.minWidths.map((rem) => rem * rootFontSize);
   }, [activeConfig, rootFontSize]);
+
+  const { gridSections, overlaySections } = useMemo(() => {
+    if (!activeConfig) {
+      return { gridSections: sections, overlaySections: [] as DashboardSectionConfig[] };
+    }
+
+    const visibleCount = activeConfig.minWidths.length;
+    if (sections.length <= visibleCount) {
+      return { gridSections: sections, overlaySections: [] as DashboardSectionConfig[] };
+    }
+
+    return {
+      gridSections: sections.slice(0, visibleCount),
+      overlaySections: sections.slice(visibleCount)
+    };
+  }, [activeConfig, sections]);
+
+  const shouldShowOverlay = overlaySections.length > 0;
+  const overlayCollapsedPeek = 56;
+  const overlayExpandedPadding = 360;
+  const overlayCollapsedPadding = 120;
+  const overlayPaddingBottom = shouldShowOverlay
+    ? isOverlayOpen
+      ? overlayExpandedPadding
+      : overlayCollapsedPadding
+    : 0;
+
+  useEffect(() => {
+    if (!shouldShowOverlay && isOverlayOpen) {
+      setIsOverlayOpen(false);
+    }
+  }, [shouldShowOverlay, isOverlayOpen]);
 
   useEffect(() => {
     if (!activeConfig) {
@@ -314,10 +348,14 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     const gapTotal = containerMetrics.gap * Math.max(columnWidths.length - 1, 0);
     const available = Math.max(containerMetrics.width - gapTotal, 0);
     const safeWidths = clampWidthsToAvailable(columnWidths, available);
-    return {
+    const style: CSSProperties = {
       gridTemplateColumns: safeWidths.map((width) => `${Math.max(width, 0)}px`).join(' ')
-    } as CSSProperties;
-  }, [columnWidths, containerMetrics.gap, containerMetrics.width]);
+    };
+    if (overlayPaddingBottom > 0) {
+      style.paddingBottom = overlayPaddingBottom;
+    }
+    return style;
+  }, [columnWidths, containerMetrics.gap, containerMetrics.width, overlayPaddingBottom]);
 
   const handlePositions = useMemo(() => {
     if (!columnWidths) {
@@ -334,7 +372,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
 
   return (
     <div ref={containerRef} className="dashboard-desktop-grid relative grid items-start gap-4" style={gridStyle}>
-      {sections.map((section) => (
+      {gridSections.map((section) => (
         <div key={section.id} data-view={section.id} className="dashboard-desktop-grid__item h-full">
           {section.node}
         </div>
@@ -348,7 +386,7 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
               aria-orientation="vertical"
               aria-label="列幅の調整"
               className="dashboard-desktop-grid__handle absolute top-0 bottom-0 w-4 -translate-x-1/2 cursor-col-resize touch-none select-none rounded-full bg-panel/95 text-white/60 transition-colors hover:text-white/80 z-10"
-              style={{ left }}
+              style={{ left, bottom: overlayPaddingBottom > 0 ? overlayPaddingBottom : undefined }}
               onPointerDown={handlePointerDown(index)}
               onPointerMove={handlePointerMove}
               onPointerUp={clearDragState}
@@ -361,6 +399,50 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
             </div>
           ))
         : null}
+
+      {shouldShowOverlay && overlaySections.length > 0 ? (
+        <div className="dashboard-desktop-grid__overlay pointer-events-none absolute inset-x-0 bottom-0 flex justify-center">
+          <div
+            className="pointer-events-auto w-full max-w-[420px]"
+            style={{
+              transform: isOverlayOpen
+                ? 'translateY(0px)'
+                : `translateY(calc(100% - ${overlayCollapsedPeek}px))`,
+              transition: 'transform 200ms ease-out'
+            }}
+          >
+            <div className="rounded-t-2xl border border-border/60 bg-panel shadow-2xl">
+              <button
+                type="button"
+                className="flex h-14 w-full items-center justify-between gap-3 rounded-t-2xl bg-panel-contrast/90 px-4 text-left text-sm font-semibold text-surface-foreground"
+                aria-expanded={isOverlayOpen}
+                onClick={() => setIsOverlayOpen((value) => !value)}
+              >
+                <span>{overlaySections[0]?.label ?? '追加セクション'}</span>
+                <ChevronUpDownIcon
+                  aria-hidden
+                  className={clsx('h-4 w-4 transition-transform', isOverlayOpen ? 'rotate-180' : 'rotate-0')}
+                />
+              </button>
+              <div
+                className={clsx(
+                  'dashboard-desktop-grid__overlay-content overflow-hidden bg-panel-muted transition-all duration-200 ease-out',
+                  isOverlayOpen ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'
+                )}
+                aria-hidden={!isOverlayOpen}
+              >
+                <div className="p-4">
+                  {overlaySections.map((section) => (
+                    <div key={section.id} data-view={section.id} className="dashboard-desktop-grid__item">
+                      {section.node}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
