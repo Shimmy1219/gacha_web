@@ -643,6 +643,7 @@ function GachaTestSection({
               </table>
             </div>
           </div>
+          </div>
         ) : null}
       </div>
     </section>
