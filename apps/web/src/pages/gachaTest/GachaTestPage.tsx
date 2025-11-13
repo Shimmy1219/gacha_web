@@ -94,6 +94,9 @@ interface SimulationItemResult {
   guaranteedCount: number;
   observedRate: number;
   observedRateDisplay: string;
+  runSuccessCount: number;
+  acquisitionRate: number;
+  acquisitionRateDisplay: string;
 }
 
 interface SimulationRarityResult {
@@ -207,6 +210,7 @@ function simulateGacha({
   const warnings = new Set(plan.warnings);
 
   const itemMap = new Map<string, SimulationItemResult>();
+  const itemRunSuccessCounts = new Map<string, number>();
   gacha.items.forEach((item) => {
     itemMap.set(item.itemId, {
       itemId: item.itemId,
@@ -220,8 +224,12 @@ function simulateGacha({
       count: 0,
       guaranteedCount: 0,
       observedRate: 0,
-      observedRateDisplay: '0%'
+      observedRateDisplay: '0%',
+      runSuccessCount: 0,
+      acquisitionRate: 0,
+      acquisitionRateDisplay: '0%'
     });
+    itemRunSuccessCounts.set(item.itemId, 0);
   });
 
   const rarityMap = new Map<string, SimulationRarityResult>();
@@ -257,6 +265,7 @@ function simulateGacha({
     totalPointsSpent += result.pointsSpent;
     totalPulls += result.totalPulls;
 
+    const successfulItems = new Set<string>();
     result.items.forEach((item) => {
       const entry = itemMap.get(item.itemId);
       if (!entry) {
@@ -264,6 +273,14 @@ function simulateGacha({
       }
       entry.count += item.count;
       entry.guaranteedCount += item.guaranteedCount;
+      if (item.count > 0) {
+        successfulItems.add(item.itemId);
+      }
+    });
+
+    successfulItems.forEach((itemId) => {
+      const previous = itemRunSuccessCounts.get(itemId) ?? 0;
+      itemRunSuccessCounts.set(itemId, previous + 1);
     });
   }
 
@@ -273,10 +290,15 @@ function simulateGacha({
 
   const items = Array.from(itemMap.values()).map((entry) => {
     const observedRate = entry.count / totalPulls;
+    const runSuccessCount = itemRunSuccessCounts.get(entry.itemId) ?? 0;
+    const acquisitionRate = normalizedRuns > 0 ? runSuccessCount / normalizedRuns : 0;
     return {
       ...entry,
       observedRate,
-      observedRateDisplay: formatObservedRate(observedRate, rarityDigits, entry.rarityId)
+      observedRateDisplay: formatObservedRate(observedRate, rarityDigits, entry.rarityId),
+      runSuccessCount,
+      acquisitionRate,
+      acquisitionRateDisplay: formatObservedRate(acquisitionRate, rarityDigits, entry.rarityId)
     };
   });
 
@@ -382,7 +404,7 @@ function GachaTestSection({
         <div>
           <h2 className="text-xl font-semibold text-surface-foreground">{title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            指定した回数でガチャをシミュレーションし、実際の排出率を確認できます。
+            指定した回数でガチャをシミュレーションし、実際の排出率や1試行あたりの獲得率を確認できます。
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -483,6 +505,7 @@ function GachaTestSection({
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">排出数</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">想定排出率</th>
                     <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">実測排出率</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">獲得率（1試行あたり）</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -556,6 +579,14 @@ function GachaTestSection({
                             : '―')}
                       </td>
                       <td className="px-4 py-2 text-right text-sm text-surface-foreground">{item.observedRateDisplay}</td>
+                      <td className="px-4 py-2 text-right text-sm text-surface-foreground">
+                        <div className="flex flex-col items-end">
+                          <span>{item.acquisitionRateDisplay}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {item.runSuccessCount.toLocaleString()} / {result.totalRuns.toLocaleString()}試行
+                          </span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
