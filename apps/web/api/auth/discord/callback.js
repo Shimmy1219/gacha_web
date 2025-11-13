@@ -77,15 +77,20 @@ export default async function handler(req, res) {
     const cookieValid = cookieStateMatches && cookieHasVerifier;
 
     if (!cookieValid) {
-      log.warn('state または verifier の検証に失敗したためKVを参照します', {
+      const fallbackLogContext = {
         hasCode: Boolean(codeParam),
         hasState: Boolean(stateParam),
         hasExpectedState: Boolean(expectedState),
         hasVerifier: Boolean(cookieVerifier),
+        loginContextCookie,
         statePreview,
-      });
+      };
       storedState = await consumeDiscordAuthState(stateParam);
       if (!storedState?.verifier) {
+        log.warn('state または verifier の検証に失敗しましたがKVに対応するレコードがありません', {
+          ...fallbackLogContext,
+          hasStoredState: Boolean(storedState),
+        });
         log.warn('kvに該当するDiscord認証stateが存在しません', {
           hasStoredState: Boolean(storedState),
           statePreview,
@@ -94,11 +99,22 @@ export default async function handler(req, res) {
       }
       stateRecordConsumed = true;
       verifierToUse = storedState.verifier;
+      const loginContextFromState = normalizeLoginContext(storedState.loginContext);
       if (!loginContext) {
-        loginContext = normalizeLoginContext(storedState.loginContext);
+        loginContext = loginContextFromState;
       }
+      const expectedPwaContext =
+        loginContextFromState === 'pwa' ||
+        loginContextCookie === 'pwa' ||
+        Boolean(storedState.claimTokenDigest);
       const restoredStatePreview =
         statePreview ?? (typeof stateParam === 'string' ? stateParam : null);
+      const logMethod = expectedPwaContext ? log.info.bind(log) : log.warn.bind(log);
+      logMethod('state または verifier の検証に失敗したためKVから認証情報を復元しました', {
+        ...fallbackLogContext,
+        expectedPwaContext,
+        loginContextFromState,
+      });
       log.info('KV から認証状態を復元しました', {
         statePreview: restoredStatePreview,
         hasLoginContext: Boolean(loginContext),
