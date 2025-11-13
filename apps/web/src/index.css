@@ -164,6 +164,7 @@
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
     scroll-padding-right: 0.75rem;
+    scrollbar-gutter: stable;
   }
 
   .section-scroll.section-scroll--no-scrollbar {

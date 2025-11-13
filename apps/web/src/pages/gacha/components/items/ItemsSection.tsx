@@ -826,7 +826,7 @@ export function ItemsSection(): JSX.Element {
   );
 
   const gridClassName = useMemo(
-    () => clsx('items-section__grid gap-4', isMobile ? 'flex flex-col' : 'grid'),
+    () => clsx('items-section__grid gap-4 px-4', isMobile ? 'flex flex-col' : 'grid'),
     [isMobile]
   );
 

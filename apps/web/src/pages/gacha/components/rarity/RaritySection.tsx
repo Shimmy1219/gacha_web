@@ -335,7 +335,7 @@ export function RaritySection(): JSX.Element {
         className="rarity-section__gacha-tabs"
       />
 
-      <div className="rarity-section__scroll section-scroll flex-1">
+      <div className="rarity-section__scroll section-scroll flex-1 px-4">
         <div className="rarity-section__scroll-content space-y-4">
           <PtControlsPanel
             settings={ptSettings}

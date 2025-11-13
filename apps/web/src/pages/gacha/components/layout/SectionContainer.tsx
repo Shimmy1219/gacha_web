@@ -75,7 +75,7 @@ export function SectionContainer({
     <section
       id={id}
       className={clsx(
-        'section-container group relative flex min-h-0 flex-col overflow-hidden bg-panel/95 p-4 text-sm ring-1 ring-inset ring-white/5',
+        'section-container group relative flex min-h-0 flex-col overflow-hidden bg-panel/95 py-4 text-sm ring-1 ring-inset ring-white/5',
         !isMobileLayout && 'h-full rounded-[1.5rem] border border-border/70',
         isMobileLayout && 'section-container--mobile',
         'before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-accent/40 before:to-transparent before:opacity-0 before:transition-opacity before:duration-300 group-hover:before:opacity-100',
@@ -84,7 +84,7 @@ export function SectionContainer({
       )}
     >
       <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-6">
-        <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4">
+        <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4 px-4">
           <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
             {accentLabel ? (
               <span className="section-container__accent badge">{accentLabel}</span>
@@ -114,7 +114,7 @@ export function SectionContainer({
           <div
             ref={contentRef}
             className={clsx(
-              'section-container__content min-h-0 space-y-4',
+              'section-container__content min-h-0 space-y-4 px-4',
               isMobileLayout ? 'h-auto overflow-visible' : 'section-scroll h-full',
               !isMobileLayout && !hasScrollbar && 'section-scroll--no-scrollbar',
               contentClassName
