@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
@@ -14,6 +14,7 @@ import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
 import {
   exportBackupToDevice,
   importBackupFromFile,
@@ -80,6 +81,12 @@ export function App(): JSX.Element {
   const { push, dismissAll } = useModal();
   const persistence = useAppPersistence();
   const stores = useDomainStores();
+  const uiPreferencesStore = stores.uiPreferences;
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
+  const showDiscordAuthLogs = useMemo(
+    () => uiPreferencesStore.getDiscordAuthLogsEnabled(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
 
   const resolveBackupDuplicate = useCallback(
     (entry: BackupDuplicateEntry) =>
@@ -436,7 +443,7 @@ export function App(): JSX.Element {
   return (
     <>
       <AppRoutes gachaLayoutProps={gachaLayoutProps} />
-      <DiscordAuthDebugOverlay />
+      {showDiscordAuthLogs ? <DiscordAuthDebugOverlay /> : null}
     </>
   );
 }

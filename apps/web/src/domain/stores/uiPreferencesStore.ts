@@ -126,6 +126,23 @@ function normalizeDashboardDesktopLayout(value: unknown): DashboardDesktopLayout
   return null;
 }
 
+function readDiscordAuthLogsEnabledFromState(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const debug = state.debug;
+  if (!isRecord(debug)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(debug, 'discordAuthLogs')) {
+    return null;
+  }
+
+  return normalizeBoolean(debug.discordAuthLogs, false);
+}
+
 function normalizeSiteTheme(value: unknown): SiteTheme | null {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
@@ -320,6 +337,7 @@ function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesS
   return {
     ...previous,
     appearance: previous.appearance && isRecord(previous.appearance) ? { ...previous.appearance } : undefined,
+    debug: previous.debug && isRecord(previous.debug) ? { ...previous.debug } : undefined,
     version: typeof previous.version === 'number' ? previous.version : 3,
     updatedAt: nowIso
   };
@@ -457,6 +475,46 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
             desktop: layout
           }
         };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getDiscordAuthLogsEnabled(): boolean {
+    return readDiscordAuthLogsEnabledFromState(this.state) ?? false;
+  }
+
+  setDiscordAuthLogsEnabled(enabled: boolean, options: UpdateOptions = { persist: 'debounced' }): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readDiscordAuthLogsEnabledFromState(previous) ?? false;
+        if (current === enabled) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousDebug = base.debug && isRecord(base.debug) ? base.debug : undefined;
+        const nextDebug = { ...(previousDebug ?? {}) } as Record<string, unknown>;
+
+        if (enabled) {
+          nextDebug.discordAuthLogs = true;
+        } else {
+          delete nextDebug.discordAuthLogs;
+        }
+
+        const hasDebugEntries = Object.keys(nextDebug).length > 0;
+        const nextState: UiPreferencesStateV3 = { ...base };
+
+        if (hasDebugEntries) {
+          nextState.debug = nextDebug;
+        } else {
+          delete nextState.debug;
+        }
+
+        return nextState;
       },
       { persist: persistMode, emit }
     );
