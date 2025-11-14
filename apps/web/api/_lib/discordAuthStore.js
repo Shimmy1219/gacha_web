@@ -23,15 +23,10 @@ function normalizeRecord(raw) {
     typeof raw.claimTokenDigest === 'string' && raw.claimTokenDigest.length > 0
       ? raw.claimTokenDigest
       : undefined;
-  const returnToOrigin =
-    typeof raw.returnToOrigin === 'string' && raw.returnToOrigin.length > 0
-      ? raw.returnToOrigin
-      : undefined;
   return {
     verifier,
     loginContext: typeof raw.loginContext === 'string' ? raw.loginContext : undefined,
     claimTokenDigest,
-    returnToOrigin,
   };
 }
 
@@ -72,12 +67,6 @@ export function digestDiscordPwaClaimToken(token) {
   return crypto.createHash('sha256').update(token).digest('base64');
 }
 
-/**
- * Upstash Redis では、プレーンな JS オブジェクトを保存すると JSON 文字列にシリアライズされます。
- * そのため `discord:auth:{state}` には以下のようなレコードが保存されます:
- * `{ "verifier": "...", "loginContext": "browser", "claimTokenDigest": "...", "returnToOrigin": "https://stg.shimmy3.com" }`
- * 既存データとの互換性を保つため、取得時はオブジェクトと文字列の両方を扱えるようにしています。
- */
 export async function saveDiscordAuthState(state, payload) {
   if (!payload || typeof payload.verifier !== 'string' || !payload.verifier) {
     throw new Error('Discord auth verifier is required to store state');
@@ -88,9 +77,6 @@ export async function saveDiscordAuthState(state, payload) {
   };
   if (typeof payload.claimTokenDigest === 'string' && payload.claimTokenDigest.length > 0) {
     record.claimTokenDigest = payload.claimTokenDigest;
-  }
-  if (typeof payload.returnToOrigin === 'string' && payload.returnToOrigin.length > 0) {
-    record.returnToOrigin = payload.returnToOrigin;
   }
   await kv.set(getKey(state), record, { ex: DISCORD_AUTH_TTL_SEC });
   return record;

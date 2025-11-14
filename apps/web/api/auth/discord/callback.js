@@ -10,30 +10,11 @@ import {
 } from '../../_lib/discordAuthStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
-import { normalizeSiteOrigin } from '../../_lib/siteOrigin.js';
 
 function normalizeLoginContext(value) {
   if (value === 'pwa') return 'pwa';
   if (value === 'browser') return 'browser';
   return null;
-}
-
-function hostHeaderToOrigin(hostValue, protocolHint = 'https') {
-  if (typeof hostValue !== 'string' || hostValue.length === 0) {
-    return '';
-  }
-  return `${protocolHint}://${hostValue}`;
-}
-
-function buildRedirectUrl(origin, path = '/') {
-  if (origin) {
-    try {
-      return new URL(path, origin).toString();
-    } catch (error) {
-      // ignore parse errors and fall back to the path
-    }
-  }
-  return path;
 }
 
 export default async function handler(req, res) {
@@ -133,13 +114,11 @@ export default async function handler(req, res) {
         ...fallbackLogContext,
         expectedPwaContext,
         loginContextFromState,
-        hasReturnToOrigin: Boolean(storedState.returnToOrigin),
       });
       log.info('KV から認証状態を復元しました', {
         statePreview: restoredStatePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
-        hasReturnToOrigin: Boolean(storedState.returnToOrigin),
       });
     } else {
       storedState = await getDiscordAuthState(stateParam);
@@ -148,7 +127,6 @@ export default async function handler(req, res) {
           statePreview,
           hasLoginContext: Boolean(storedState.loginContext),
           hasClaimTokenDigest: Boolean(storedState.claimTokenDigest),
-          hasReturnToOrigin: Boolean(storedState.returnToOrigin),
         });
       }
       if (!loginContext && storedState?.loginContext) {
@@ -291,12 +269,6 @@ export default async function handler(req, res) {
       loginContext,
     });
 
-    const envSiteOrigin = normalizeSiteOrigin(process.env.NEXT_PUBLIC_SITE_ORIGIN);
-    const requestOrigin = normalizeSiteOrigin(hostHeaderToOrigin(req.headers.host));
-    const storedOrigin = normalizeSiteOrigin(storedState?.returnToOrigin);
-    const redirectOrigin = storedOrigin || requestOrigin || envSiteOrigin || '';
-    const redirectTarget = buildRedirectUrl(redirectOrigin, '/');
-
     if (loginContext === 'pwa') {
       let claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
       if (!claimTokenDigest && storedState?.claimTokenDigest) {
@@ -340,23 +312,13 @@ export default async function handler(req, res) {
     setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
     if (acceptsJson) {
-      log.info('クライアントにログイン完了(JSON)を返却しました', {
-        loginContext,
-        redirectTarget,
-        redirectOrigin: redirectOrigin || null,
-        hasStoredReturnToOrigin: Boolean(storedState?.returnToOrigin),
-      });
-      return res.status(200).json({ ok: true, redirectTo: redirectTarget, loginContext });
+      log.info('クライアントにログイン完了(JSON)を返却しました', { loginContext });
+      return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
     }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-    log.info('Discordログイン完了後のリダイレクト先を決定しました', {
-      loginContext,
-      redirectTarget,
-      redirectOrigin: redirectOrigin || null,
-      hasStoredReturnToOrigin: Boolean(storedState?.returnToOrigin),
-    });
+    const redirectTarget = '/';
 
     if (loginContext === 'browser') {
       const redirectScript = `
