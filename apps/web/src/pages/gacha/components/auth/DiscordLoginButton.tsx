@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import {
+  ArrowPathIcon,
   ArrowRightOnRectangleIcon,
   Cog6ToothIcon,
   UserGroupIcon,
@@ -37,7 +38,7 @@ export function DiscordLoginButton({
   onOpenPageSettings,
   className
 }: DiscordLoginButtonProps): JSX.Element {
-  const { data, isLoading, login, logout } = useDiscordSession();
+  const { data, isFetching, login, logout } = useDiscordSession();
   const { push } = useModal();
   const user = data?.user;
   const previousUserIdRef = useRef<string | null>(null);
@@ -107,15 +108,6 @@ export function DiscordLoginButton({
     }
   }, [guildSelection, hasLoadedGuildSelection, openBotInviteModal, userId]);
 
-  if (isLoading && !data) {
-    return (
-      <div
-        className={clsx('discord-login-button h-11 w-44 animate-pulse rounded-xl bg-surface/40', className)}
-        aria-hidden
-      />
-    );
-  }
-
   const handleOpenPageSettings = () => {
     if (onOpenPageSettings) {
       onOpenPageSettings();
@@ -125,6 +117,7 @@ export function DiscordLoginButton({
   };
 
   if (!user) {
+    const showSessionLoadingIndicator = isFetching;
     const handleLoginClick = async () => {
       if (isLoggingIn) {
         return;
@@ -156,9 +149,13 @@ export function DiscordLoginButton({
           )}
           aria-label="Discordでログイン"
           disabled={isLoggingIn}
-          aria-busy={isLoggingIn}
+          aria-busy={isLoggingIn || showSessionLoadingIndicator}
         >
-          <ShieldCheckIcon className="h-5 w-5" />
+          {showSessionLoadingIndicator ? (
+            <ArrowPathIcon className="h-5 w-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <ShieldCheckIcon className="h-5 w-5" aria-hidden="true" />
+          )}
           Discordでログイン
         </button>
         <button
