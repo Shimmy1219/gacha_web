@@ -8,6 +8,8 @@ import {
 } from '..';
 import { GuideInfoDialog } from './GuideInfoDialog';
 
+const BACKUP_FILE_ACCEPT = '.shimmy,.zip,application/x-shimmy,application/zip';
+
 export interface StartWizardDialogPayload {
   onPickTxt?: (file: File) => void;
   onCreateNew?: () => void;
@@ -70,7 +72,8 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
       {
         key: 'backup',
         title: 'バックアップから読み込む',
-        description: 'エクスポートしたバックアップファイル（.shimmy）を取り込み、現在の環境へ復元します。',
+        description:
+          'エクスポートしたバックアップファイル（.shimmy または .shimmy.zip）を取り込み、現在の環境へ復元します。',
         onSelect: handleImportBackup
       },
       {
@@ -197,7 +200,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
           ref={backupInputRef}
           id={backupInputId}
           type="file"
-          accept=".shimmy,application/x-shimmy"
+          accept={BACKUP_FILE_ACCEPT}
           className="sr-only"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];
