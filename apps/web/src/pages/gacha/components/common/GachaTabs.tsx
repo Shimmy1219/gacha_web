@@ -16,11 +16,11 @@ interface GachaTabsProps {
 
 export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: GachaTabsProps): JSX.Element {
   if (!tabs.length) {
-    return <div className={clsx('gacha-tabs tab-scroll-area', className)} />;
+    return <div className={clsx('gacha-tabs tab-scroll-area px-4', className)} />;
   }
 
   return (
-    <div className={clsx('gacha-tabs tab-scroll-area', className)}>
+    <div className={clsx('gacha-tabs tab-scroll-area px-4', className)}>
       {tabs.map((tab) => {
         const isActive = activeId === tab.id;
         return (

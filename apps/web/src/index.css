@@ -164,6 +164,27 @@
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
     scroll-padding-right: 0.75rem;
+    scrollbar-gutter: stable;
+  }
+
+  .rarity-section__scroll.section-scroll,
+  .users-section__content,
+  .riagu-section__scroll.section-scroll {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 901px) {
+    .rarity-section__scroll.section-scroll,
+    .users-section__content.section-scroll,
+    .riagu-section__scroll.section-scroll {
+      padding-left: 16px;
+      padding-right: 8px;
+    }
+  }
+
+  .items-section__scroll.section-scroll {
+    padding: unset;
   }
 
   .section-scroll.section-scroll--no-scrollbar {
