@@ -544,7 +544,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       .map((item) => {
         const rarityLabel = item.rarityLabel ?? '景品';
         const countLabel = `${integerFormatter.format(item.count)}個`;
-        return `${rarityLabel}：${item.name}：${countLabel}`;
+        return `【${rarityLabel}】${item.name}：${countLabel}`;
       });
 
     const gachaLabel = lastGachaLabel ?? '四遊楽ガチャ';

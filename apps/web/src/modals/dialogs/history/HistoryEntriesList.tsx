@@ -127,7 +127,7 @@ export function HistoryEntriesList({
           .map((item) => {
             const rarityLabel = item.rarityLabel ?? '景品';
             const countLabel = `${numberFormatter.format(item.count)}個`;
-            return `${rarityLabel}：${item.itemLabel}：${countLabel}`;
+            return `【${rarityLabel}】${item.itemLabel}：${countLabel}`;
           });
 
         const shareLines = [`【${gachaName}結果】`, `${userName} ${pullCountLabel}`, ''];
