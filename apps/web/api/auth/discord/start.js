@@ -7,7 +7,6 @@ import {
   digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
-import { normalizeSiteOrigin } from '../../_lib/siteOrigin.js';
 
 function createStatePreview(value) {
   if (typeof value !== 'string') {
@@ -51,17 +50,6 @@ export default async function handler(req, res) {
     normalizedContext,
   });
 
-  const hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
-  const hostOrigin = hostHeader ? `https://${hostHeader}` : '';
-  const returnToOrigin =
-    normalizeSiteOrigin(hostOrigin) ||
-    normalizeSiteOrigin(process.env.NEXT_PUBLIC_SITE_ORIGIN) ||
-    undefined;
-  log.info('Discordログイン戻り先オリジンを決定しました', {
-    hostHeader,
-    hasReturnToOrigin: Boolean(returnToOrigin),
-  });
-
   let claimTokenDigest;
   if (normalizedContext === 'pwa') {
     const claimToken = crypto.randomBytes(32).toString('base64url');
@@ -79,13 +67,11 @@ export default async function handler(req, res) {
     verifier,
     loginContext: normalizedContext,
     claimTokenDigest,
-    returnToOrigin,
   });
   log.info('kvにDiscord認証stateレコードを保存しました', {
     statePreview: `${state.slice(0, 4)}...`,
     hasClaimTokenDigest: Boolean(claimTokenDigest),
     loginContext: normalizedContext,
-    hasReturnToOrigin: Boolean(returnToOrigin),
   });
 
   log.info('Upstash KV に認証状態を保存しました', {

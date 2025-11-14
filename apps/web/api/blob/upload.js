@@ -7,7 +7,6 @@
 // - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
 import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
-import { normalizeSiteOrigin, resolveSiteOrigin } from '../_lib/siteOrigin.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 
 function vLog(...args) {
@@ -272,29 +271,13 @@ export default async function handler(req, res) {
   }
 
   // ====== 1) 同一オリジン検証 ======
+  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN; // 例: https://shimmy3.com
+  const vercelUrl = process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`; // 例: https://xxx.vercel.app
+  const apex = envOrigin;
+  const www = envOrigin && envOrigin.replace('://', '://www.');
   const selfOriginFromHost = hostToOrigin(req.headers.host);
-  const envOriginRaw = process.env.NEXT_PUBLIC_SITE_ORIGIN;
-  const siteOrigin = resolveSiteOrigin(
-    envOriginRaw,
-    selfOriginFromHost
-  );
-  const envOrigin = normalizeSiteOrigin(envOriginRaw);
-  const vercelUrl = normalizeSiteOrigin(
-    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
-  );
-  const normalizedSelfOrigin = normalizeSiteOrigin(selfOriginFromHost);
-  const www = siteOrigin && normalizeSiteOrigin(siteOrigin.replace('://', '://www.'));
-  const wwwRaw = envOriginRaw && envOriginRaw.replace('://', '://www.');
 
-  const ALLOWED_ORIGINS = uniq([
-    siteOrigin,
-    www,
-    vercelUrl,
-    normalizedSelfOrigin,
-    envOrigin,
-    envOriginRaw,
-    wwwRaw
-  ]);
+  const ALLOWED_ORIGINS = uniq([apex, www, vercelUrl, selfOriginFromHost]);
   const originHdr = req.headers.origin || '';
   const referer = req.headers.referer || '';
   let derivedOrigin = '';
@@ -310,8 +293,7 @@ export default async function handler(req, res) {
   const originToCheck = originHdr || derivedOrigin || '';
   const isAllowed =
     (!!originToCheck && ALLOWED_ORIGINS.includes(originToCheck))
-    || (!!originToCheck && ALLOWED_ORIGINS.includes(normalizeSiteOrigin(originToCheck)))
-    || (!originToCheck && ALLOWED_ORIGINS.includes(normalizedSelfOrigin));
+    || (!originToCheck && ALLOWED_ORIGINS.includes(selfOriginFromHost));
 
   vLog('allowList:', ALLOWED_ORIGINS);
   vLog('headers.origin:', originHdr);

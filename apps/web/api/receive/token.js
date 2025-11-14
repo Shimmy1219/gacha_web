@@ -2,7 +2,6 @@
 import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
-import { normalizeSiteOrigin, resolveSiteOrigin } from '../_lib/siteOrigin.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 
@@ -95,19 +94,10 @@ function normalizeDownloadUrl(u){
 }
 
 function isAllowedOrigin(req){
-  const envOriginRaw = process.env.NEXT_PUBLIC_SITE_ORIGIN;
-  const preferredOrigin = resolveSiteOrigin(
-    envOriginRaw,
-    hostToOrigin(req.headers.host)
-  );
-  const envOrigin = normalizeSiteOrigin(envOriginRaw);
-  const vercelUrl = normalizeSiteOrigin(
-    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
-  );
-  const self = normalizeSiteOrigin(hostToOrigin(req.headers.host));
-  const www = preferredOrigin && normalizeSiteOrigin(preferredOrigin.replace('://','://www.'));
-  const wwwRaw = envOriginRaw && envOriginRaw.replace('://','://www.');
-  const allowed = uniq([preferredOrigin, www, vercelUrl, self, envOrigin, envOriginRaw, wwwRaw]);
+  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN; // e.g. https://shimmy3.com
+  const vercelUrl = process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`;
+  const self = hostToOrigin(req.headers.host);
+  const allowed = uniq([envOrigin, envOrigin && envOrigin.replace('://','://www.'), vercelUrl, self]);
 
   const originHdr = req.headers.origin || '';
   const referer = req.headers.referer || '';
@@ -122,8 +112,7 @@ function isAllowedOrigin(req){
   }
   const candidate = originHdr || derived || '';
 
-  const ok = (!!candidate && (allowed.includes(candidate) || allowed.includes(normalizeSiteOrigin(candidate))))
-    || (!candidate && allowed.includes(self));
+  const ok = (!!candidate && allowed.includes(candidate)) || (!candidate && allowed.includes(self));
   vLog('allowList:', allowed, 'origin:', originHdr, 'referer:', referer, 'derived:', derived, 'self:', self, 'ok:', ok);
   return ok;
 }
@@ -253,16 +242,8 @@ export default async function handler(req, res){
     const shortToken = await storeShortToken(token, exp, now);
 
     // 共有URL生成
-    const site = resolveSiteOrigin(
-      process.env.NEXT_PUBLIC_SITE_ORIGIN,
-      hostToOrigin(req.headers.host)
-    );
-    if (!site) {
-      throw new Error('Failed to resolve site origin');
-    }
-    const shareUrlUrl = new URL('/receive', site);
-    shareUrlUrl.searchParams.set('t', shortToken);
-    const shareUrl = shareUrlUrl.toString();
+    const site = process.env.NEXT_PUBLIC_SITE_ORIGIN || hostToOrigin(req.headers.host);
+    const shareUrl = `${site.replace(/\/+$/,'')}/receive?t=${encodeURIComponent(shortToken)}`;
 
     vLog('issued', { exp, name: filename, purpose: purp });
     log.info('token issued', { purpose: purp, exp, downloadHost: new URL(normalizedUrl).host });
