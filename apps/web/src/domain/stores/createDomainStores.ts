@@ -22,12 +22,13 @@ export interface DomainStores {
   uiPreferences: UiPreferencesStore;
   pullHistory: PullHistoryStore;
   dispose(): void;
+  activate(): void;
 }
 
 let domainStoreInstanceCounter = 0;
 
 export function createDomainStores(persistence: AppPersistence): DomainStores {
-  const cleanupTasks: Array<() => void> = [];
+  let cleanupTasks: Array<() => void> = [];
   let disposed = false;
   let legacyInventories: GachaLocalStorageSnapshot['userInventories'] | undefined;
   const domainStoreInstanceId = `domain-stores:${++domainStoreInstanceCounter}`;
@@ -47,17 +48,20 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
         return;
       }
       disposed = true;
-
-      while (cleanupTasks.length > 0) {
-        const cleanup = cleanupTasks.pop();
-        try {
-          cleanup?.();
-        } catch (error) {
-          console.warn('Failed to dispose domain store resource', error);
-        }
+      teardownCleanupTasks();
+      legacyInventories = undefined;
+    },
+    activate: () => {
+      if (!disposed) {
+        return;
       }
 
-      legacyInventories = undefined;
+      console.info('【デバッグ】domain-storesを再接続します', {
+        インスタンスID: domainStoreInstanceId
+      });
+
+      refreshLegacyInventories();
+      activateInternal('reactivate');
     }
   };
 
@@ -70,43 +74,6 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
   });
 
   legacyInventories = snapshot?.userInventories;
-
-  const unsubscribeUserInventories = stores.userInventories.subscribe((nextState) => {
-    const snapshotExists = Boolean(nextState);
-    console.info('【デバッグ】user-inventory購読通知を受信しました', {
-      スナップショット有無: snapshotExists ? 'あり' : 'なし',
-      永続化済みレガシー在庫有無: legacyInventories ? 'あり' : 'なし'
-    });
-
-    if (!nextState && legacyInventories) {
-      legacyInventories = undefined;
-    }
-  });
-  cleanupTasks.push(unsubscribeUserInventories);
-
-  if (typeof window !== 'undefined') {
-    const refreshLegacyInventories = () => {
-      try {
-        const latestSnapshot = persistence.loadSnapshot();
-        legacyInventories = latestSnapshot.userInventories;
-        console.info('【デバッグ】legacy-user-inventoriesを再読込しました', {
-          レガシー在庫ユーザー数: legacyInventories?.inventories
-            ? Object.keys(legacyInventories.inventories).length
-            : 0
-        });
-      } catch (error) {
-        console.warn('Failed to refresh legacy inventories from persistence snapshot', error);
-        legacyInventories = undefined;
-      }
-    };
-
-    window.addEventListener('storage', refreshLegacyInventories);
-    window.addEventListener(GACHA_STORAGE_UPDATED_EVENT, refreshLegacyInventories);
-    cleanupTasks.push(() => {
-      window.removeEventListener('storage', refreshLegacyInventories);
-      window.removeEventListener(GACHA_STORAGE_UPDATED_EVENT, refreshLegacyInventories);
-    });
-  }
 
   const runProjection = (reason: string) => {
     const startedAt = Date.now();
@@ -134,65 +101,140 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     stores.userInventories.saveDebounced();
   };
 
-  console.info('【デバッグ】inventoryProjectionの実行を要求しました', {
-    インスタンスID: domainStoreInstanceId,
-    実行理由: 'initial-hydration'
-  });
-  runProjection('initial-hydration');
-
-  let skipInitialPullHistory = true;
-  const unsubscribePullHistory = stores.pullHistory.subscribe((nextState) => {
-    console.info('【デバッグ】pull-history購読通知を受信しました(詳細)', {
-      インスタンスID: domainStoreInstanceId,
-      初期通知か: skipInitialPullHistory ? 'はい' : 'いいえ',
-      スナップショット有無: nextState ? 'あり' : 'なし',
-      プル履歴件数: nextState?.order?.length ?? 0,
-      更新日時: nextState?.updatedAt ?? '未設定'
-    });
-    if (skipInitialPullHistory) {
-      skipInitialPullHistory = false;
-      console.info('【デバッグ】pull-history購読通知(初期化)を受信しました', {
-        インスタンスID: domainStoreInstanceId
+  function refreshLegacyInventories(): void {
+    try {
+      const latestSnapshot = persistence.loadSnapshot();
+      legacyInventories = latestSnapshot.userInventories;
+      console.info('【デバッグ】legacy-user-inventoriesを再読込しました', {
+        レガシー在庫ユーザー数: legacyInventories?.inventories
+          ? Object.keys(legacyInventories.inventories).length
+          : 0
       });
+    } catch (error) {
+      console.warn('Failed to refresh legacy inventories from persistence snapshot', error);
+      legacyInventories = undefined;
+    }
+  }
+
+  function registerUserInventoriesSubscription(): void {
+    const unsubscribe = stores.userInventories.subscribe((nextState) => {
+      const snapshotExists = Boolean(nextState);
+      console.info('【デバッグ】user-inventory購読通知を受信しました', {
+        スナップショット有無: snapshotExists ? 'あり' : 'なし',
+        永続化済みレガシー在庫有無: legacyInventories ? 'あり' : 'なし'
+      });
+
+      if (!nextState && legacyInventories) {
+        legacyInventories = undefined;
+      }
+    });
+    cleanupTasks.push(unsubscribe);
+  }
+
+  function registerWindowListeners(): void {
+    if (typeof window === 'undefined') {
       return;
     }
-    console.info('【デバッグ】pull-history購読通知を受信しました', {
-      インスタンスID: domainStoreInstanceId
-    });
-    console.info('【デバッグ】inventoryProjectionの実行を要求しました', {
-      インスタンスID: domainStoreInstanceId,
-      実行理由: 'pull-history:update'
-    });
-    runProjection('pull-history:update');
-  });
-  cleanupTasks.push(unsubscribePullHistory);
 
-  let skipInitialCatalog = true;
-  const unsubscribeCatalog = stores.catalog.subscribe((nextState) => {
-    console.info('【デバッグ】catalog購読通知を受信しました(詳細)', {
-      インスタンスID: domainStoreInstanceId,
-      初期通知か: skipInitialCatalog ? 'はい' : 'いいえ',
-      スナップショット有無: nextState ? 'あり' : 'なし',
-      ガチャ数: nextState?.order?.length ?? 0,
-      更新日時: nextState?.updatedAt ?? '未設定'
+    const handleStorageUpdate = () => {
+      refreshLegacyInventories();
+    };
+
+    window.addEventListener('storage', handleStorageUpdate);
+    window.addEventListener(GACHA_STORAGE_UPDATED_EVENT, handleStorageUpdate);
+    cleanupTasks.push(() => {
+      window.removeEventListener('storage', handleStorageUpdate);
+      window.removeEventListener(GACHA_STORAGE_UPDATED_EVENT, handleStorageUpdate);
     });
-    if (skipInitialCatalog) {
-      skipInitialCatalog = false;
-      console.info('【デバッグ】catalog購読通知(初期化)を受信しました', {
+  }
+
+  function registerPullHistorySubscription(): void {
+    let skipInitialPullHistory = true;
+    const unsubscribe = stores.pullHistory.subscribe((nextState) => {
+      console.info('【デバッグ】pull-history購読通知を受信しました(詳細)', {
+        インスタンスID: domainStoreInstanceId,
+        初期通知か: skipInitialPullHistory ? 'はい' : 'いいえ',
+        スナップショット有無: nextState ? 'あり' : 'なし',
+        プル履歴件数: nextState?.order?.length ?? 0,
+        更新日時: nextState?.updatedAt ?? '未設定'
+      });
+      if (skipInitialPullHistory) {
+        skipInitialPullHistory = false;
+        console.info('【デバッグ】pull-history購読通知(初期化)を受信しました', {
+          インスタンスID: domainStoreInstanceId
+        });
+        return;
+      }
+      console.info('【デバッグ】pull-history購読通知を受信しました', {
         インスタンスID: domainStoreInstanceId
       });
-      return;
-    }
-    console.info('【デバッグ】catalog購読通知を受信しました', {
-      インスタンスID: domainStoreInstanceId
+      console.info('【デバッグ】inventoryProjectionの実行を要求しました', {
+        インスタンスID: domainStoreInstanceId,
+        実行理由: 'pull-history:update'
+      });
+      runProjection('pull-history:update');
     });
+    cleanupTasks.push(unsubscribe);
+  }
+
+  function registerCatalogSubscription(): void {
+    let skipInitialCatalog = true;
+    const unsubscribe = stores.catalog.subscribe((nextState) => {
+      console.info('【デバッグ】catalog購読通知を受信しました(詳細)', {
+        インスタンスID: domainStoreInstanceId,
+        初期通知か: skipInitialCatalog ? 'はい' : 'いいえ',
+        スナップショット有無: nextState ? 'あり' : 'なし',
+        ガチャ数: nextState?.order?.length ?? 0,
+        更新日時: nextState?.updatedAt ?? '未設定'
+      });
+      if (skipInitialCatalog) {
+        skipInitialCatalog = false;
+        console.info('【デバッグ】catalog購読通知(初期化)を受信しました', {
+          インスタンスID: domainStoreInstanceId
+        });
+        return;
+      }
+      console.info('【デバッグ】catalog購読通知を受信しました', {
+        インスタンスID: domainStoreInstanceId
+      });
+      console.info('【デバッグ】inventoryProjectionの実行を要求しました', {
+        インスタンスID: domainStoreInstanceId,
+        実行理由: 'catalog:update'
+      });
+      runProjection('catalog:update');
+    });
+    cleanupTasks.push(unsubscribe);
+  }
+
+  function teardownCleanupTasks(): void {
+    while (cleanupTasks.length > 0) {
+      const cleanup = cleanupTasks.pop();
+      try {
+        cleanup?.();
+      } catch (error) {
+        console.warn('Failed to dispose domain store resource', error);
+      }
+    }
+    cleanupTasks = [];
+  }
+
+  function activateInternal(reason: 'initial-hydration' | 'reactivate'): void {
+    cleanupTasks = [];
+    disposed = false;
+
+    registerUserInventoriesSubscription();
+    registerWindowListeners();
+    registerPullHistorySubscription();
+    registerCatalogSubscription();
+
     console.info('【デバッグ】inventoryProjectionの実行を要求しました', {
       インスタンスID: domainStoreInstanceId,
-      実行理由: 'catalog:update'
+      実行理由: reason
     });
-    runProjection('catalog:update');
-  });
-  cleanupTasks.push(unsubscribeCatalog);
+    runProjection(reason);
+  }
+
+  activateInternal('initial-hydration');
 
   return stores;
 }
