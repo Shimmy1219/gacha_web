@@ -63,6 +63,12 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
   legacyInventories = snapshot?.userInventories;
 
   const unsubscribeUserInventories = stores.userInventories.subscribe((nextState) => {
+    const snapshotExists = Boolean(nextState);
+    console.info('【デバッグ】user-inventory購読通知を受信しました', {
+      スナップショット有無: snapshotExists ? 'あり' : 'なし',
+      永続化済みレガシー在庫有無: legacyInventories ? 'あり' : 'なし'
+    });
+
     if (!nextState && legacyInventories) {
       legacyInventories = undefined;
     }
@@ -74,6 +80,11 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
       try {
         const latestSnapshot = persistence.loadSnapshot();
         legacyInventories = latestSnapshot.userInventories;
+        console.info('【デバッグ】legacy-user-inventoriesを再読込しました', {
+          レガシー在庫ユーザー数: legacyInventories?.inventories
+            ? Object.keys(legacyInventories.inventories).length
+            : 0
+        });
       } catch (error) {
         console.warn('Failed to refresh legacy inventories from persistence snapshot', error);
         legacyInventories = undefined;
@@ -88,26 +99,43 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     });
   }
 
-  const runProjection = () => {
-    const { state } = projectInventories({
-      pullHistory: stores.pullHistory.getState(),
+  const runProjection = (reason: string) => {
+    const startedAt = Date.now();
+    const pullHistoryState = stores.pullHistory.getState();
+    const pullEntryCount = pullHistoryState?.order?.length ?? 0;
+
+    const { state, diagnostics } = projectInventories({
+      pullHistory: pullHistoryState,
       catalogState: stores.catalog.getState(),
       legacyInventories
+    });
+
+    const durationMs = Date.now() - startedAt;
+
+    console.info('【デバッグ】inventoryProjectionを実行しました', {
+      実行理由: reason,
+      プル履歴件数: pullEntryCount,
+      プロジェクション対象ユーザー数: diagnostics.projectedUsers,
+      プロジェクション生成在庫数: diagnostics.projectedInventories,
+      処理時間ミリ秒: durationMs,
+      警告件数: diagnostics.warnings.length
     });
 
     stores.userInventories.applyProjectionResult(state);
     stores.userInventories.saveDebounced();
   };
 
-  runProjection();
+  runProjection('initial-hydration');
 
   let skipInitialPullHistory = true;
   const unsubscribePullHistory = stores.pullHistory.subscribe(() => {
     if (skipInitialPullHistory) {
       skipInitialPullHistory = false;
+      console.info('【デバッグ】pull-history購読通知(初期化)を受信しました');
       return;
     }
-    runProjection();
+    console.info('【デバッグ】pull-history購読通知を受信しました');
+    runProjection('pull-history:update');
   });
   cleanupTasks.push(unsubscribePullHistory);
 
@@ -115,9 +143,11 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
   const unsubscribeCatalog = stores.catalog.subscribe(() => {
     if (skipInitialCatalog) {
       skipInitialCatalog = false;
+      console.info('【デバッグ】catalog購読通知(初期化)を受信しました');
       return;
     }
-    runProjection();
+    console.info('【デバッグ】catalog購読通知を受信しました');
+    runProjection('catalog:update');
   });
   cleanupTasks.push(unsubscribeCatalog);
 
