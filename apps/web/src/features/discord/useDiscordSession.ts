@@ -21,6 +21,7 @@ export interface DiscordSessionData {
 export interface UseDiscordSessionResult {
   data?: DiscordSessionData;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   login(): Promise<void>;
   logout(): Promise<void>;
@@ -556,6 +557,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
   return {
     data: query.data,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     isError: query.isError,
     login,
     logout,
