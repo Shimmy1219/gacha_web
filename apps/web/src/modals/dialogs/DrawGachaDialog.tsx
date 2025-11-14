@@ -1432,15 +1432,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         <button type="button" className="btn btn-muted" onClick={close}>
           閉じる
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={handleExecute}
-          disabled={isExecuting || !gachaOptions.length || Boolean(planErrorMessage)}
-        >
-          <SparklesIcon className="h-5 w-5" />
-          ガチャを実行
-        </button>
+        {!resultItems ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleExecute}
+            disabled={isExecuting || !gachaOptions.length || Boolean(planErrorMessage)}
+          >
+            <SparklesIcon className="h-5 w-5" />
+            ガチャを実行
+          </button>
+        ) : null}
       </ModalFooter>
     </>
   );
