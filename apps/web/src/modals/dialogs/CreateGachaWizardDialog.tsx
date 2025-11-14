@@ -45,7 +45,8 @@ interface DraftRarity extends RarityRateRow {
 }
 
 interface DraftItem {
-  assetId: string;
+  id: string;
+  assetId: string | null;
   name: string;
   originalFilename: string | null;
   previewUrl: string;
@@ -64,6 +65,13 @@ const INITIAL_RARITY_PRESETS = [
 ] as const;
 
 const ITEM_NAME_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+function createDraftItemId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `draft-item-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 function safeRevokeObjectURL(url: string): void {
   if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
@@ -161,7 +169,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       }
       const list = map.get(rarityId) ?? [];
       const label = item.name || `景品${index + 1}`;
-      list.push({ value: item.assetId, label });
+      list.push({ value: item.id, label });
       map.set(rarityId, list);
     });
     return map;
@@ -440,6 +448,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           }
 
           nextItems.push({
+            id: createDraftItemId(),
             assetId: record.id,
             name: '',
             originalFilename: file.name ?? null,
@@ -465,36 +474,64 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     }
   }, [sortedRarities, applyItemNamingStrategy]);
 
-  const handleRemoveItem = useCallback((assetId: string) => {
-    setItems((previous) => {
-      const removedItem = previous.find((item) => item.assetId === assetId);
-      if (removedItem?.previewUrl) {
-        safeRevokeObjectURL(removedItem.previewUrl);
-        previewUrlMapRef.current.delete(assetId);
-      }
+  const handleRemoveItem = useCallback(
+    (draftItemId: string) => {
+      setItems((previous) => {
+        const removedItem = previous.find((item) => item.id === draftItemId);
+        if (removedItem?.previewUrl) {
+          safeRevokeObjectURL(removedItem.previewUrl);
+          if (removedItem.assetId) {
+            previewUrlMapRef.current.delete(removedItem.assetId);
+          }
+        }
 
-      const filteredItems = previous.filter((item) => item.assetId !== assetId);
-      return applyItemNamingStrategy(filteredItems);
-    });
-    if (createdAssetIdsRef.current.has(assetId)) {
-      createdAssetIdsRef.current.delete(assetId);
-      void deleteAsset(assetId);
-    }
-  }, [applyItemNamingStrategy]);
+        if (removedItem?.assetId && createdAssetIdsRef.current.has(removedItem.assetId)) {
+          createdAssetIdsRef.current.delete(removedItem.assetId);
+          void deleteAsset(removedItem.assetId);
+        }
+
+        const filteredItems = previous.filter((item) => item.id !== draftItemId);
+        return applyItemNamingStrategy(filteredItems);
+      });
+    },
+    [applyItemNamingStrategy]
+  );
 
   type ItemFlagKey = 'isRiagu' | 'isCompleteTarget';
 
-  const handleToggleItemFlag = useCallback((assetId: string, key: ItemFlagKey, checked: boolean) => {
+  const handleToggleItemFlag = useCallback((draftItemId: string, key: ItemFlagKey, checked: boolean) => {
     setItems((previous) =>
-      previous.map((item) => (item.assetId === assetId ? { ...item, [key]: checked } : item))
+      previous.map((item) => (item.id === draftItemId ? { ...item, [key]: checked } : item))
     );
   }, []);
 
-  const handleChangeItemRarity = useCallback((assetId: string, rarityId: string) => {
+  const handleChangeItemRarity = useCallback((draftItemId: string, rarityId: string) => {
     setItems((previous) =>
-      previous.map((item) => (item.assetId === assetId ? { ...item, rarityId } : item))
+      previous.map((item) => (item.id === draftItemId ? { ...item, rarityId } : item))
     );
   }, []);
+
+  const handleAddEmptyItem = useCallback(() => {
+    const defaultRarityId =
+      sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
+    setItems((previous) => {
+      const nextItems = [
+        ...previous,
+        {
+          id: createDraftItemId(),
+          assetId: null,
+          name: '',
+          originalFilename: null,
+          previewUrl: '',
+          thumbnailAssetId: null,
+          isRiagu: false,
+          isCompleteTarget: true,
+          rarityId: defaultRarityId
+        }
+      ];
+      return applyItemNamingStrategy(nextItems);
+    });
+  }, [applyItemNamingStrategy, sortedRarities]);
 
   useEffect(() => {
     const availableRarityIds = new Set(sortedRarities.map((rarity) => rarity.id));
@@ -645,7 +682,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       }
 
       const riaguCardInputs: Array<{ itemId: string }> = [];
-      const assetToItemId = new Map<string, string>();
+      const draftIdToItemId = new Map<string, string>();
 
       items.forEach((item, index) => {
         const resolvedRarityId = item.rarityId && availableRarityIds.has(item.rarityId) ? item.rarityId : fallbackRarityId;
@@ -656,14 +693,14 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           name: item.name || `景品${index + 1}`,
           rarityId: resolvedRarityId,
           order: index,
-          imageAssetId: item.assetId,
+          imageAssetId: item.assetId ?? undefined,
           thumbnailAssetId: item.thumbnailAssetId ?? null,
           ...(item.isRiagu ? { riagu: true } : {}),
           ...(item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
         } satisfies GachaCatalogItemV3;
 
-        assetToItemId.set(item.assetId, itemId);
+        draftIdToItemId.set(item.id, itemId);
 
         if (item.isRiagu) {
           riaguCardInputs.push({ itemId });
@@ -698,7 +735,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                       target: { ...guarantee.target }
                     };
                   }
-                  const mapped = assetToItemId.get(guarantee.target.itemId);
+                  const mapped = draftIdToItemId.get(guarantee.target.itemId);
                   if (!mapped) {
                     return {
                       ...guarantee,
@@ -803,7 +840,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground">選択済みの画像</h3>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-4">
               <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
@@ -821,6 +858,14 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               >
                 {isProcessingAssets ? '処理中…' : '追加'}
               </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+                onClick={handleAddEmptyItem}
+                disabled={isProcessingAssets}
+              >
+                画像なしで追加
+              </button>
             </div>
           </div>
           <div className="space-y-2 rounded-2xl border border-border/60 bg-surface/50 p-4">
@@ -830,7 +875,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               <ul className="space-y-2 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
                 {items.map((item) => (
                   <li
-                    key={item.assetId}
+                    key={item.id}
                     className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3 sm:flex-row sm:items-center"
                   >
                     <div className="flex w-full items-start gap-3 sm:w-auto">
@@ -849,7 +894,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                           <SingleSelectDropdown
                             value={item.rarityId ?? undefined}
                             options={rarityOptions}
-                            onChange={(value) => handleChangeItemRarity(item.assetId, value)}
+                            onChange={(value) => handleChangeItemRarity(item.id, value)}
                             placeholder="レアリティ未設定"
                             fallbackToFirstOption={false}
                             classNames={{
@@ -901,7 +946,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                           type="checkbox"
                           className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
                           checked={item.isRiagu}
-                          onChange={(event) => handleToggleItemFlag(item.assetId, 'isRiagu', event.target.checked)}
+                          onChange={(event) => handleToggleItemFlag(item.id, 'isRiagu', event.target.checked)}
                         />
                         <span>リアグとして登録</span>
                       </label>
@@ -911,7 +956,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                           className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
                           checked={item.isCompleteTarget}
                           onChange={(event) =>
-                            handleToggleItemFlag(item.assetId, 'isCompleteTarget', event.target.checked)
+                            handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
                           }
                         />
                         <span>コンプ対象</span>
@@ -921,7 +966,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                       <button
                         type="button"
                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
-                        onClick={() => handleRemoveItem(item.assetId)}
+                        onClick={() => handleRemoveItem(item.id)}
                       >
                         削除
                       </button>
