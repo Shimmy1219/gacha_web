@@ -47,6 +47,7 @@ interface DraftRarity extends RarityRateRow {
 interface DraftItem {
   assetId: string;
   name: string;
+  originalFilename: string | null;
   previewUrl: string;
   thumbnailAssetId: string | null;
   isRiagu: boolean;
@@ -104,6 +105,24 @@ function createInitialRarities(): DraftRarity[] {
   });
 }
 
+function formatFilenameAsItemName(filename: string | null | undefined): string {
+  if (!filename) {
+    return '';
+  }
+
+  const trimmed = filename.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const lastDotIndex = trimmed.lastIndexOf('.');
+  if (lastDotIndex <= 0) {
+    return trimmed;
+  }
+
+  return trimmed.slice(0, lastDotIndex);
+}
+
 export interface CreateGachaWizardDialogPayload {}
 
 export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
@@ -125,6 +144,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNameError, setShowNameError] = useState(false);
+  const [useFilenameAsItemName, setUseFilenameAsItemName] = useState(false);
 
   const sortedRarities = useMemo(() => sortRarityRows(rarities), [rarities]);
   const autoAdjustRarityId = useMemo(
@@ -151,6 +171,29 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
   const previewUrlMapRef = useRef<Map<string, string>>(new Map());
   const committedRef = useRef(false);
+
+  const computeItemName = useCallback(
+    (item: DraftItem, index: number) => {
+      if (useFilenameAsItemName) {
+        const filenameBasedName = formatFilenameAsItemName(item.originalFilename);
+        if (filenameBasedName) {
+          return filenameBasedName;
+        }
+      }
+
+      return getSequentialItemName(index);
+    },
+    [useFilenameAsItemName]
+  );
+
+  const applyItemNamingStrategy = useCallback(
+    (draftItems: DraftItem[]) =>
+      draftItems.map((item, index) => ({
+        ...item,
+        name: computeItemName(item, index)
+      })),
+    [computeItemName]
+  );
 
   useEffect(() => {
     return () => {
@@ -375,8 +418,11 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     setAssetError(null);
 
     try {
-      const records = await Promise.all(
-        Array.from(fileList, async (file) => await saveAsset(file))
+      const assetEntries = await Promise.all(
+        Array.from(fileList, async (file) => ({
+          record: await saveAsset(file),
+          file
+        }))
       );
 
       const defaultRarityId =
@@ -385,7 +431,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       setItems((previous) => {
         const nextItems = [...previous];
 
-        records.forEach((record) => {
+        assetEntries.forEach(({ record, file }) => {
           let previewUrl = '';
           const previewSource = record.previewBlob ?? record.blob;
           if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && previewSource) {
@@ -396,6 +442,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           nextItems.push({
             assetId: record.id,
             name: '',
+            originalFilename: file.name ?? null,
             previewUrl,
             thumbnailAssetId: record.previewId ?? null,
             isRiagu: false,
@@ -404,13 +451,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           });
         });
 
-        return nextItems.map((item, index) => ({
-          ...item,
-          name: getSequentialItemName(index)
-        }));
+        return applyItemNamingStrategy(nextItems);
       });
 
-      records.forEach((record) => {
+      assetEntries.forEach(({ record }) => {
         createdAssetIdsRef.current.add(record.id);
       });
     } catch (error) {
@@ -419,7 +463,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     } finally {
       setIsProcessingAssets(false);
     }
-  }, [sortedRarities]);
+  }, [sortedRarities, applyItemNamingStrategy]);
 
   const handleRemoveItem = useCallback((assetId: string) => {
     setItems((previous) => {
@@ -429,18 +473,14 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         previewUrlMapRef.current.delete(assetId);
       }
 
-      return previous
-        .filter((item) => item.assetId !== assetId)
-        .map((item, index) => ({
-          ...item,
-          name: getSequentialItemName(index)
-        }));
+      const filteredItems = previous.filter((item) => item.assetId !== assetId);
+      return applyItemNamingStrategy(filteredItems);
     });
     if (createdAssetIdsRef.current.has(assetId)) {
       createdAssetIdsRef.current.delete(assetId);
       void deleteAsset(assetId);
     }
-  }, []);
+  }, [applyItemNamingStrategy]);
 
   type ItemFlagKey = 'isRiagu' | 'isCompleteTarget';
 
@@ -474,6 +514,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       })
     );
   }, [sortedRarities]);
+
+  useEffect(() => {
+    setItems((previous) => applyItemNamingStrategy(previous));
+  }, [applyItemNamingStrategy]);
 
   const handleProceedFromBasicStep = useCallback(() => {
     const trimmedName = gachaName.trim();
@@ -751,29 +795,33 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const renderAssetStep = () => {
     return (
       <div className="space-y-5">
-        <div className="rounded-2xl border border-dashed border-accent/40 bg-surface/40 p-5 text-sm text-muted-foreground">
-          <p className="leading-relaxed">
-            景品画像やリアルグッズの画像を登録してください。選択した画像は最も高いレアリティ
-            「{highestRarity?.label || highestRarity?.id || '未設定'}」として追加されます。
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">複数のファイルを一度に選択できます。</p>
-        </div>
         {assetError ? (
           <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {assetError}
           </div>
         ) : null}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground">選択済みの画像</h3>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:opacity-60"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isProcessingAssets}
-            >
-              {isProcessingAssets ? '処理中…' : '画像を追加する'}
-            </button>
+            <div className="flex items-center gap-4">
+              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                  checked={useFilenameAsItemName}
+                  onChange={(event) => setUseFilenameAsItemName(event.target.checked)}
+                />
+                <span>ファイル名をアイテム名として使う</span>
+              </label>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:opacity-60"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessingAssets}
+              >
+                {isProcessingAssets ? '処理中…' : '追加'}
+              </button>
+            </div>
           </div>
           <div className="space-y-2 rounded-2xl border border-border/60 bg-surface/50 p-4">
             {items.length === 0 ? (
@@ -909,16 +957,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   return (
     <>
       <ModalBody className="space-y-6">
-        <div className="space-y-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <h2 className="text-lg font-semibold text-surface-foreground">新規ガチャを作成</h2>
-            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              ステップ{stepIndex} / {totalSteps}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            基本情報の入力から景品画像、ポイント設定まで順番に登録できます。
-          </p>
+        <div className="flex justify-end">
+          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            ステップ{stepIndex} / {totalSteps}
+          </span>
         </div>
         {step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep()}
       </ModalBody>
