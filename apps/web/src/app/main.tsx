@@ -1,4 +1,3 @@
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import '../index.css';
@@ -14,11 +13,9 @@ if (!container) {
 const root = createRoot(container);
 
 root.render(
-  <StrictMode>
-    <AppProviders>
-      <App />
-    </AppProviders>
-  </StrictMode>
+  <AppProviders>
+    <App />
+  </AppProviders>
 );
 
 const registerServiceWorker = () => {
