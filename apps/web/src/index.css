@@ -207,8 +207,7 @@
       rgb(var(--color-accent-bright) / 0.4)
     );
     border-radius: 9999px;
-
-    border: 2px solid rgb(var(--color-surface-deep) / 0);
+    border: 2px solid rgb(var(--color-surface-deep) / 0.9);
   }
 
   .section-scroll::-webkit-scrollbar-thumb:hover {
@@ -305,7 +304,6 @@
   .tab-scroll-area {
     @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
     scrollbar-width: thin;
-
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
 
