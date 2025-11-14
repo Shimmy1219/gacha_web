@@ -202,14 +202,12 @@
   .section-scroll::-webkit-scrollbar-track {
     background-color: rgb(var(--color-surface-deep) / 0);
     border-radius: 9999px;
-    transition: background-color 0.25s ease;
   }
 
   .section-scroll::-webkit-scrollbar-thumb {
     background-color: rgb(var(--color-accent) / 0);
     border-radius: 9999px;
     border: 2px solid rgb(var(--color-surface-deep) / 0);
-    transition: background-color 0.25s ease, border-color 0.25s ease;
   }
 
   .section-scroll:hover::-webkit-scrollbar-track {
@@ -320,14 +318,12 @@
 
   .tab-scroll-area::-webkit-scrollbar-track {
     background-color: rgb(var(--color-surface-deep) / 0);
-    transition: background-color 0.25s ease;
   }
 
   .tab-scroll-area::-webkit-scrollbar-thumb {
     background-color: rgb(var(--color-accent) / 0);
     border-radius: 9999px;
     border: 2px solid rgb(var(--color-surface-deep) / 0);
-    transition: background-color 0.25s ease, border-color 0.25s ease;
   }
 
   .tab-scroll-area:hover::-webkit-scrollbar-track {
