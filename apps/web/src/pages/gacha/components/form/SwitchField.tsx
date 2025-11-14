@@ -1,6 +1,5 @@
 import { Switch } from '@headlessui/react';
 import { clsx } from 'clsx';
-import { type ComponentPropsWithoutRef, useCallback } from 'react';
 
 interface SwitchFieldProps {
   label: string;
@@ -8,27 +7,9 @@ interface SwitchFieldProps {
   checked: boolean;
   onChange: (value: boolean) => void;
   name?: string;
-  switchProps?: ComponentPropsWithoutRef<typeof Switch>;
 }
 
-export function SwitchField({
-  label,
-  description,
-  checked,
-  onChange,
-  name,
-  switchProps
-}: SwitchFieldProps): JSX.Element {
-  const { onChange: switchOnChange, className: switchClassName, ...restSwitchProps } = switchProps ?? {};
-
-  const handleSwitchChange = useCallback(
-    (value: boolean) => {
-      switchOnChange?.(value);
-      onChange(value);
-    },
-    [onChange, switchOnChange]
-  );
-
+export function SwitchField({ label, description, checked, onChange, name }: SwitchFieldProps): JSX.Element {
   return (
     <Switch.Group
       as="div"
@@ -41,14 +22,12 @@ export function SwitchField({
         ) : null}
       </div>
       <Switch
-        {...restSwitchProps}
         name={name}
         checked={checked}
-        onChange={handleSwitchChange}
+        onChange={onChange}
         className={clsx(
           'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-transparent transition-colors duration-150',
-          checked ? 'bg-accent' : 'bg-muted/40',
-          switchClassName
+          checked ? 'bg-accent' : 'bg-muted/40'
         )}
       >
         <span

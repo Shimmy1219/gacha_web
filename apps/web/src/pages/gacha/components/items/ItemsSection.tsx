@@ -18,7 +18,6 @@ import {
   type ItemCardPreviewPayload,
   type RarityMeta
 } from '../cards/ItemCard';
-import { SwitchField } from '../form/SwitchField';
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useModal } from '../../../../modals';
@@ -1288,66 +1287,53 @@ interface AddItemModeSelectorProps {
   onDismiss: () => void;
 }
 
-const AddItemModeSelector = forwardRef<HTMLDivElement, AddItemModeSelectorProps>((props, ref) => {
-  const { onSelect, onDismiss } = props;
-  const [selectedMode, setSelectedMode] = useState<'asset' | 'empty'>('asset');
-
-  const handleConfirm = useCallback(() => {
-    onSelect(selectedMode);
-  }, [onSelect, selectedMode]);
-
-  return (
-    <div
-      ref={ref}
-      role="dialog"
-      aria-modal="false"
-      aria-label="景品の追加方法"
-      className="absolute inset-0 z-10 flex flex-col justify-between rounded-2xl border border-border/70 bg-panel/95 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-sm"
-    >
-      <div className="space-y-3">
+const AddItemModeSelector = forwardRef<HTMLDivElement, AddItemModeSelectorProps>(
+  ({ onSelect, onDismiss }, ref) => {
+    return (
+      <div
+        ref={ref}
+        role="menu"
+        aria-label="景品の追加方法"
+        className="absolute inset-0 z-10 flex flex-col justify-between rounded-2xl border border-border/70 bg-panel/95 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-sm"
+      >
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-surface-foreground">追加方法を選択</h3>
           <p className="text-xs text-muted-foreground">景品をどのように追加するか選んでください。</p>
         </div>
-        <div className="space-y-2">
-          <SwitchField
-            label="画像・ファイルあり"
-            description="ファイルを選択して追加します"
-            checked={selectedMode === 'asset'}
-            onChange={() => setSelectedMode('asset')}
-            switchProps={{
-              'data-add-mode-option': 'asset'
-            }}
-          />
-          <SwitchField
-            label="画像・ファイルなし"
-            description="あとからファイルを設定できます"
-            checked={selectedMode === 'empty'}
-            onChange={() => setSelectedMode('empty')}
-            switchProps={{
-              'data-add-mode-option': 'empty'
-            }}
-          />
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            role="menuitem"
+            data-add-mode-option="asset"
+            className="flex flex-col items-start gap-1 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-left transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={() => onSelect('asset')}
+          >
+            <span className="text-sm font-semibold text-surface-foreground">画像ファイルあり</span>
+            <span className="text-xs text-muted-foreground">ファイルを選択して追加します</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-add-mode-option="empty"
+            className="flex flex-col items-start gap-1 rounded-xl border border-border/60 bg-panel px-3 py-2 text-left transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={() => onSelect('empty')}
+          >
+            <span className="text-sm font-semibold text-surface-foreground">画像なし</span>
+            <span className="text-xs text-muted-foreground">あとからファイルを設定できます</span>
+          </button>
+        </div>
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-border/60 px-2 py-1 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={onDismiss}
+          >
+            キャンセル
+          </button>
         </div>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <button
-          type="button"
-          className="rounded-lg border border-border/60 px-3 py-1 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
-          onClick={onDismiss}
-        >
-          キャンセル
-        </button>
-        <button
-          type="button"
-          className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-white transition hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
-          onClick={handleConfirm}
-        >
-          追加
-        </button>
-      </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 AddItemModeSelector.displayName = 'AddItemModeSelector';
