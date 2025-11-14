@@ -134,7 +134,7 @@ export function HistoryEntriesList({
         if (positiveItemLines.length > 0) {
           shareLines.push(...positiveItemLines, '');
         }
-        shareLines.push('#四遊楽ガチャ');
+        shareLines.push('#四遊楽ガチャ(β)');
         const shareText = shareLines.join('\n');
 
         const urlParams = new URLSearchParams();
