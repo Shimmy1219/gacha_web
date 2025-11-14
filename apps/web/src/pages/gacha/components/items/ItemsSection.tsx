@@ -1,6 +1,7 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import {
+  forwardRef,
   useCallback,
   useEffect,
   useMemo,
@@ -76,6 +77,9 @@ export function ItemsSection(): JSX.Element {
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const addCardContainerRef = useRef<HTMLDivElement | null>(null);
+  const addModeSelectorRef = useRef<HTMLDivElement | null>(null);
+  const [isAddModeSelectorOpen, setIsAddModeSelectorOpen] = useState(false);
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
@@ -719,6 +723,61 @@ export function ItemsSection(): JSX.Element {
 
   const showAddCard = status === 'ready' && Boolean(activeGachaId);
 
+  useEffect(() => {
+    if (!showAddCard || !canAddItems) {
+      setIsAddModeSelectorOpen(false);
+    }
+  }, [canAddItems, showAddCard]);
+
+  useEffect(() => {
+    if (!isAddModeSelectorOpen) {
+      return;
+    }
+    const firstOption = addModeSelectorRef.current?.querySelector<HTMLButtonElement>(
+      '[data-add-mode-option="asset"]'
+    );
+    firstOption?.focus();
+  }, [isAddModeSelectorOpen]);
+
+  useEffect(() => {
+    if (!isAddModeSelectorOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const selectorElement = addModeSelectorRef.current;
+      if (!selectorElement) {
+        return;
+      }
+
+      const targetNode = event.target as Node | null;
+      if (targetNode && selectorElement.contains(targetNode)) {
+        return;
+      }
+
+      const wrapperElement = addCardContainerRef.current;
+      if (targetNode && wrapperElement && wrapperElement.contains(targetNode)) {
+        return;
+      }
+
+      setIsAddModeSelectorOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsAddModeSelectorOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAddModeSelectorOpen]);
+
   const getDefaultRarityId = useCallback(
     (gachaId: string): string | null => {
       const rarityState = data?.rarityState;
@@ -753,11 +812,79 @@ export function ItemsSection(): JSX.Element {
       return;
     }
 
-    const input = fileInputRef.current;
-    if (input) {
-      input.click();
-    }
+    setIsAddModeSelectorOpen((previous) => !previous);
   }, [canAddItems, showAddCard]);
+
+  const handleAddEmptyCatalogItem = useCallback(() => {
+    if (!activeGachaId) {
+      console.warn('画像なしアイテムの追加時に有効なガチャが見つかりませんでした');
+      return;
+    }
+
+    const catalogState = data?.catalogState;
+    const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
+    if (!gachaCatalog) {
+      console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
+      return;
+    }
+
+    const rarityId = getDefaultRarityId(activeGachaId);
+    if (!rarityId) {
+      console.warn('追加可能なレアリティが見つかりませんでした');
+      return;
+    }
+
+    try {
+      const baseOrder = gachaCatalog.order?.length ?? 0;
+      const timestamp = new Date().toISOString();
+      const newItem: GachaCatalogItemV3 = {
+        itemId: generateItemId(),
+        name: getSequentialItemName(baseOrder),
+        rarityId,
+        order: baseOrder + 1,
+        pickupTarget: false,
+        completeTarget: false,
+        riagu: false,
+        thumbnailAssetId: null,
+        updatedAt: timestamp
+      };
+
+      catalogStore.addItems({
+        gachaId: activeGachaId,
+        items: [newItem],
+        updatedAt: timestamp
+      });
+    } catch (error) {
+      console.error('画像なし景品の追加に失敗しました', error);
+    }
+  }, [
+    activeGachaId,
+    catalogStore,
+    data?.catalogState,
+    getDefaultRarityId
+  ]);
+
+  const handleSelectAddMode = useCallback(
+    (mode: 'asset' | 'empty') => {
+      if (!showAddCard || !canAddItems) {
+        setIsAddModeSelectorOpen(false);
+        return;
+      }
+
+      setIsAddModeSelectorOpen(false);
+
+      if (mode === 'asset') {
+        const input = fileInputRef.current;
+        if (input) {
+          input.click();
+        }
+        return;
+      }
+
+      handleAddEmptyCatalogItem();
+    },
+    [canAddItems, handleAddEmptyCatalogItem, showAddCard]
+  );
 
   const handleFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1038,7 +1165,20 @@ export function ItemsSection(): JSX.Element {
                     <div onMouseDown={handleSurfaceMouseDown}>
                       <div className={gridClassName} style={gridStyle}>
                         {showAddCard ? (
-                          <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
+                          <div ref={addCardContainerRef} className="relative h-full">
+                            <AddItemCard
+                              onClick={handleAddCardClick}
+                              disabled={!canAddItems}
+                              isSelectorOpen={isAddModeSelectorOpen}
+                            />
+                            {isAddModeSelectorOpen ? (
+                              <AddItemModeSelector
+                                ref={addModeSelectorRef}
+                                onSelect={handleSelectAddMode}
+                                onDismiss={() => setIsAddModeSelectorOpen(false)}
+                              />
+                            ) : null}
+                          </div>
                         ) : null}
                         {items.map(({ model, rarity, itemRateDisplay }) => (
                           <ItemCard
@@ -1099,9 +1239,10 @@ export function ItemsSection(): JSX.Element {
 interface AddItemCardProps {
   onClick: () => void;
   disabled?: boolean;
+  isSelectorOpen?: boolean;
 }
 
-function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
+function AddItemCard({ onClick, disabled, isSelectorOpen }: AddItemCardProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
 
   return (
@@ -1110,14 +1251,18 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
       aria-label="景品を追加"
       data-add-item-card="true"
       className={clsx(
-        'item-card item-card--add relative flex h-full overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none',
+        'item-card item-card--add relative flex h-full overflow-visible rounded-2xl border border-dashed border-accent/40 bg-surface/20 p-[10px] text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
         disabled
           ? 'cursor-not-allowed opacity-60'
-          : 'hover:border-accent/70 hover:bg-accent/5 focus-visible:ring-2 focus-visible:ring-accent/50'
+          : isSelectorOpen
+          ? 'border-accent/70 bg-accent/10'
+          : 'hover:border-accent/70 hover:bg-accent/5'
       )}
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
+      aria-haspopup="menu"
+      aria-expanded={isSelectorOpen}
     >
       <div className={clsx('flex w-full gap-3', isMobile ? 'flex-row items-start' : 'flex-col')}>
         <div
@@ -1136,3 +1281,59 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
     </button>
   );
 }
+
+interface AddItemModeSelectorProps {
+  onSelect: (mode: 'asset' | 'empty') => void;
+  onDismiss: () => void;
+}
+
+const AddItemModeSelector = forwardRef<HTMLDivElement, AddItemModeSelectorProps>(
+  ({ onSelect, onDismiss }, ref) => {
+    return (
+      <div
+        ref={ref}
+        role="menu"
+        aria-label="景品の追加方法"
+        className="absolute inset-0 z-10 flex flex-col justify-between rounded-2xl border border-border/70 bg-panel/95 p-4 shadow-[0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-sm"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-surface-foreground">追加方法を選択</h3>
+          <p className="text-xs text-muted-foreground">景品をどのように追加するか選んでください。</p>
+        </div>
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            role="menuitem"
+            data-add-mode-option="asset"
+            className="flex flex-col items-start gap-1 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-left transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={() => onSelect('asset')}
+          >
+            <span className="text-sm font-semibold text-surface-foreground">画像ファイルあり</span>
+            <span className="text-xs text-muted-foreground">ファイルを選択して追加します</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            data-add-mode-option="empty"
+            className="flex flex-col items-start gap-1 rounded-xl border border-border/60 bg-panel px-3 py-2 text-left transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={() => onSelect('empty')}
+          >
+            <span className="text-sm font-semibold text-surface-foreground">画像なし</span>
+            <span className="text-xs text-muted-foreground">あとからファイルを設定できます</span>
+          </button>
+        </div>
+        <div className="mt-3 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-border/60 px-2 py-1 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-panel"
+            onClick={onDismiss}
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    );
+  }
+);
+
+AddItemModeSelector.displayName = 'AddItemModeSelector';
