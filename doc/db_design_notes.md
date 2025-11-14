@@ -18,6 +18,18 @@
 | `receive:token:{short}` | 共有リンクの短縮トークン→暗号化トークン | 文字列（AES-GCMで暗号化したトークン） | 共有リンクの期限まで（最大14日） | `storeShortToken`, Upstash `kv.get` | `/api/receive/token`, `/api/receive/resolve` |
 | `lock:sess:{sid}` | セッション更新のための排他ロック | 文字列 `'1'` | 5秒 | `getSessionWithRefresh` | `/api/discord/me` などセッションを参照するAPI |
 
+### `discord:auth:{state}` の詳細構造
+```json
+{
+  "verifier": "base64url",
+  "loginContext": "browser",
+  "claimTokenDigest": "sha256(base64)",
+  "returnToOrigin": "https://stg.shimmy3.com"
+}
+```
+- `@upstash/redis` クライアントにオブジェクトを渡すと JSON 文字列にシリアライズされて保存されます。
+- 過去の実装では JSON 文字列を手動で保存していたため、互換性確保のため取得時はオブジェクト形式と文字列形式の両方を扱えるようにしています。
+
 ### `sess:{sid}` の詳細構造
 ```json
 {
