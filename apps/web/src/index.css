@@ -161,15 +161,13 @@
   .section-scroll {
     @apply h-full overflow-y-auto pr-0 md:pr-3;
     max-height: inherit;
-    scrollbar-width: none;
+    scrollbar-width: thin;
     scrollbar-color: transparent transparent;
     scroll-padding-right: 0.75rem;
     scrollbar-gutter: stable;
-    -ms-overflow-style: none;
   }
 
   .section-scroll:hover {
-    scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
 
@@ -198,11 +196,18 @@
   }
 
   .section-scroll::-webkit-scrollbar {
-    width: 0;
+    width: 0.6rem;
   }
 
-  .section-scroll:hover::-webkit-scrollbar {
-    width: 0.6rem;
+  .section-scroll::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 9999px;
+  }
+
+  .section-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+    border: 2px solid transparent;
   }
 
   .section-scroll:hover::-webkit-scrollbar-track {
@@ -313,13 +318,11 @@
 
   .tab-scroll-area {
     @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
-    scrollbar-width: none;
+    scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    -ms-overflow-style: none;
   }
 
   .tab-scroll-area:hover {
-    scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
 
@@ -409,11 +412,18 @@
   }
 
   .tab-scroll-area::-webkit-scrollbar {
-    height: 0;
+    height: 0.5rem;
   }
 
-  .tab-scroll-area:hover::-webkit-scrollbar {
-    height: 0.5rem;
+  .tab-scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 9999px;
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+    border: 2px solid transparent;
   }
 
   .tab-scroll-area:hover::-webkit-scrollbar-track {
