@@ -137,6 +137,20 @@ export function UserCard({
     const [first] = Array.from(source);
     return first ? first.toUpperCase() : '';
   }, [normalizedDiscordDisplayName, userName]);
+  const inventoryDigest = useMemo(() => {
+    return inventories
+      .map((entry) => `${entry.gachaId}:${entry.pulls.reduce((sum, item) => sum + item.count, 0)}`)
+      .join(',');
+  }, [inventories]);
+
+  useEffect(() => {
+    console.info('【デバッグ】ユーザーごとの獲得内訳カードを表示しました', {
+      ユーザーID: userId,
+      ユーザー名: userName,
+      表示中ガチャ数: inventories.length,
+      表示サマリー: totalSummary
+    });
+  }, [inventories.length, inventoryDigest, totalSummary, userId, userName]);
 
   const handleOpenUserMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();

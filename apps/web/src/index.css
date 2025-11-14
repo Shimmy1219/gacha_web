@@ -162,9 +162,13 @@
     @apply h-full overflow-y-auto pr-0 md:pr-3;
     max-height: inherit;
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0) transparent;
     scroll-padding-right: 0.75rem;
     scrollbar-gutter: stable;
+  }
+
+  .section-scroll:hover {
+    scrollbar-color: rgba(var(--color-accent) / 0.75) transparent;
   }
 
   .rarity-section__scroll.section-scroll,
@@ -196,26 +200,27 @@
   }
 
   .section-scroll::-webkit-scrollbar-track {
-    background: rgb(var(--color-surface-deep) / 0.7);
+    background-color: rgb(var(--color-surface-deep) / 0);
     border-radius: 9999px;
   }
 
   .section-scroll::-webkit-scrollbar-thumb {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-accent) / 0.55),
-      rgb(var(--color-accent-bright) / 0.4)
-    );
+    background-color: rgb(var(--color-accent) / 0);
     border-radius: 9999px;
-    border: 2px solid rgb(var(--color-surface-deep) / 0.9);
+    border: 2px solid rgb(var(--color-surface-deep) / 0);
   }
 
-  .section-scroll::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-accent-bright) / 0.75),
-      rgb(var(--color-accent-bright) / 0.55)
-    );
+  .section-scroll:hover::-webkit-scrollbar-track {
+    background-color: rgb(var(--color-surface-deep) / 0.7);
+  }
+
+  .section-scroll:hover::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-accent) / 0.55);
+    border-color: rgb(var(--color-surface-deep) / 0.9);
+  }
+
+  .section-scroll:hover::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--color-accent-bright) / 0.75);
   }
 
   .inventory-history-dialog__scroll {
@@ -304,7 +309,30 @@
   .tab-scroll-area {
     @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0) transparent;
+  }
+
+  .tab-scroll-area:hover {
+    scrollbar-color: rgba(var(--color-accent) / 0.75) transparent;
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-track {
+    background-color: rgb(var(--color-surface-deep) / 0);
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-accent) / 0);
+    border-radius: 9999px;
+    border: 2px solid rgb(var(--color-surface-deep) / 0);
+  }
+
+  .tab-scroll-area:hover::-webkit-scrollbar-track {
+    background-color: rgb(var(--color-surface-deep) / 0.7);
+  }
+
+  .tab-scroll-area:hover::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--color-accent) / 0.55);
+    border-color: rgb(var(--color-surface-deep) / 0.9);
   }
 
   .gacha-tabs {
@@ -397,17 +425,28 @@
   }
 
   .tab-scroll-area::-webkit-scrollbar-track {
-    background: rgba(8, 8, 14, 0.7);
+    background: transparent;
     border-radius: 9999px;
   }
 
   .tab-scroll-area::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+  }
+
+  .tab-scroll-area:hover::-webkit-scrollbar-track {
+    background: rgba(8, 8, 14, 0.7);
+    border-radius: 9999px;
+  }
+
+  .tab-scroll-area:hover::-webkit-scrollbar-thumb {
     background: linear-gradient(90deg, rgba(255, 47, 93, 0.55), rgba(255, 110, 150, 0.4));
     border-radius: 9999px;
     border: 2px solid rgba(11, 11, 19, 0.9);
   }
 
-  .tab-scroll-area::-webkit-scrollbar-thumb:hover {
+  .tab-scroll-area:hover::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(90deg, rgba(255, 71, 119, 0.75), rgba(255, 132, 170, 0.55));
   }
 
