@@ -230,6 +230,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [isDiscordDelivering, setIsDiscordDelivering] = useState(false);
   const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
+  const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -279,6 +280,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastUserId(null);
     setDiscordDeliveryError(null);
     setDiscordDeliveryNotice(null);
+    setDiscordDeliveryCompleted(false);
     if (noticeTimerRef.current) {
       clearTimeout(noticeTimerRef.current);
       noticeTimerRef.current = null;
@@ -364,6 +366,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastPullId(null);
       setDiscordDeliveryError(null);
       setDiscordDeliveryNotice(null);
+      setDiscordDeliveryCompleted(false);
       if (noticeTimerRef.current) {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
@@ -627,6 +630,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       targetUserId: string;
       guildSelection?: DiscordGuildSelection;
     }) => {
+      setDiscordDeliveryCompleted(false);
       if (!resultItems || resultItems.length === 0) {
         const message = '共有できるガチャ結果がありません。';
         setDiscordDeliveryError(message);
@@ -873,6 +877,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         setDiscordDeliveryError(null);
         setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
+        setDiscordDeliveryCompleted(true);
       } catch (error) {
         const message =
           error instanceof DiscordGuildSelectionMissingError
@@ -885,6 +890,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
         setDiscordDeliveryError(displayMessage);
+        setDiscordDeliveryCompleted(false);
         throw new Error(displayMessage);
       } finally {
         setIsDiscordDelivering(false);
@@ -920,6 +926,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     void (async () => {
       try {
+        setDiscordDeliveryCompleted(false);
         await performDiscordDelivery({
           profile,
           targetUserId: userId,
@@ -957,6 +964,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     setDiscordDeliveryError(null);
     setDiscordDeliveryNotice(null);
+    setDiscordDeliveryCompleted(false);
 
     let guildSelection: DiscordGuildSelection;
     try {
@@ -1021,6 +1029,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             share: shareInfo
           });
 
+          setDiscordDeliveryCompleted(false);
           setQueuedDiscordDelivery({
             userId: targetUserId,
             selection: guildSelection,
@@ -1343,7 +1352,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     ) : (
                       <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
-                    お渡し部屋に景品を送信
+                    {discordDeliveryCompleted ? '送信済み' : 'お渡し部屋に景品を送信'}
                   </button>
                   <button
                     type="button"
