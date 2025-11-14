@@ -214,6 +214,14 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       } satisfies PullHistoryStateV1;
     }, options);
 
+    console.info('【デバッグ】pull-historyを更新しました', {
+      プルID: entryId,
+      ガチャID: gachaId,
+      ユーザーID: userId ?? '未指定',
+      永続化モード: options.persist ?? 'none',
+      アイテム種類数: Object.keys(sanitizedItemCounts).length
+    });
+
     return entryId;
   }
 
