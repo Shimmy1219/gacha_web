@@ -166,6 +166,13 @@ export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | 
     } else if (persist === 'debounced') {
       this.saveDebounced();
     }
+
+    const userCount = state?.inventories ? Object.keys(state.inventories).length : 0;
+    console.info('【デバッグ】user-inventoryを更新しました', {
+      ユーザー数: userCount,
+      永続化モード: persist,
+      スナップショット有無: state ? 'あり' : 'なし'
+    });
   }
 
   protected persistImmediate(state: UserInventoriesStateV3 | undefined): void {

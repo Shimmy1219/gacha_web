@@ -448,6 +448,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         items: itemsForStore
       };
 
+      console.info('【デバッグ】ガチャを引きました', {
+        ガチャID: selectedGacha.id,
+        ユーザーID: userId ?? '未指定',
+        実行日時: executedAt,
+        連続回数: executionResult.totalPulls,
+        消費ポイント: executionResult.pointsSpent,
+        抽選アイテム数: itemsForStore.length
+      });
+
       const pullId = pullHistory.recordGachaResult(payload);
       if (!pullId) {
         setErrorMessage('ガチャ結果の保存に失敗しました。');
