@@ -162,13 +162,13 @@
     @apply h-full overflow-y-auto pr-0 md:pr-3;
     max-height: inherit;
     scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0) transparent;
     scroll-padding-right: 0.75rem;
     scrollbar-gutter: stable;
   }
 
   .section-scroll:hover {
-    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0.75) transparent;
   }
 
   .rarity-section__scroll.section-scroll,
@@ -199,23 +199,18 @@
     width: 0.6rem;
   }
 
-  .section-scroll::-webkit-scrollbar-track {
-    background: transparent;
-    border-radius: 9999px;
-  }
-
+  .section-scroll::-webkit-scrollbar-track,
   .section-scroll::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 9999px;
-    border: 2px solid transparent;
+    opacity: 0;
+    transition: opacity 0.25s ease;
   }
 
-  .section-scroll:hover::-webkit-scrollbar-track {
+  .section-scroll::-webkit-scrollbar-track {
     background: rgb(var(--color-surface-deep) / 0.7);
     border-radius: 9999px;
   }
 
-  .section-scroll:hover::-webkit-scrollbar-thumb {
+  .section-scroll::-webkit-scrollbar-thumb {
     background: linear-gradient(
       180deg,
       rgb(var(--color-accent) / 0.55),
@@ -223,6 +218,11 @@
     );
     border-radius: 9999px;
     border: 2px solid rgb(var(--color-surface-deep) / 0.9);
+  }
+
+  .section-scroll:hover::-webkit-scrollbar-track,
+  .section-scroll:hover::-webkit-scrollbar-thumb {
+    opacity: 1;
   }
 
   .section-scroll:hover::-webkit-scrollbar-thumb:hover {
@@ -319,11 +319,36 @@
   .tab-scroll-area {
     @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
     scrollbar-width: thin;
-    scrollbar-color: transparent transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0) transparent;
   }
 
   .tab-scroll-area:hover {
-    scrollbar-color: rgb(var(--color-accent) / 1) transparent;
+    scrollbar-color: rgba(var(--color-accent) / 0.75) transparent;
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-track,
+  .tab-scroll-area::-webkit-scrollbar-thumb {
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-track {
+    background: rgb(var(--color-surface-deep) / 0.7);
+  }
+
+  .tab-scroll-area::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      rgb(var(--color-accent) / 0.55),
+      rgb(var(--color-accent-bright) / 0.4)
+    );
+    border-radius: 9999px;
+    border: 2px solid rgb(var(--color-surface-deep) / 0.9);
+  }
+
+  .tab-scroll-area:hover::-webkit-scrollbar-track,
+  .tab-scroll-area:hover::-webkit-scrollbar-thumb {
+    opacity: 1;
   }
 
   .gacha-tabs {
