@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type CSSProperties
@@ -27,13 +26,11 @@ import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPrev
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
-import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
-import { SwitchField } from '../form/SwitchField';
 import {
   buildGachaPools,
   formatItemRateWithPrecision,
@@ -56,8 +53,6 @@ const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
 
-type AddItemMode = 'withAsset' | 'withoutAsset';
-
 function getSequentialItemName(position: number): string {
   if (Number.isNaN(position) || !Number.isFinite(position)) {
     return 'A';
@@ -79,7 +74,6 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
@@ -89,10 +83,6 @@ export function ItemsSection(): JSX.Element {
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
     'repeat(auto-fit,minmax(150px,181px))'
   );
-  const [addItemMode, setAddItemMode] = useState<AddItemMode>('withAsset');
-  const handleAddItemModeChange = useCallback((mode: AddItemMode) => {
-    setAddItemMode(mode);
-  }, []);
   const computeGridTemplateColumns = useCallback((width: number) => {
     const gap = 16; // gap-4 => 1rem
     const minWidth = 150;
@@ -799,82 +789,8 @@ export function ItemsSection(): JSX.Element {
       return;
     }
 
-    if (addItemMode === 'withoutAsset') {
-      handleAddItemWithoutAsset();
-      return;
-    }
-
-    const input = fileInputRef.current;
-    if (input) {
-      input.click();
-    }
-  }, [addItemMode, canAddItems, handleAddItemWithoutAsset, showAddCard]);
-
-  const handleFileInputChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const input = event.target;
-      const files = input.files ? Array.from(input.files) : [];
-      input.value = '';
-
-      if (files.length === 0) {
-        return;
-      }
-
-      if (!activeGachaId) {
-        console.warn('ファイル選択時に有効なガチャが見つかりませんでした');
-        return;
-      }
-
-      const catalogState = data?.catalogState;
-      const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
-      if (!gachaCatalog) {
-        console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
-        return;
-      }
-
-      const rarityId = getDefaultRarityId(activeGachaId);
-      if (!rarityId) {
-        console.warn('追加可能なレアリティが見つかりませんでした');
-        return;
-      }
-
-      let assetRecords: StoredAssetRecord[] = [];
-
-      try {
-        const storedRecords = await Promise.all(
-          Array.from(files, async (file) => await saveAsset(file))
-        );
-        assetRecords = storedRecords;
-
-        const baseOrder = gachaCatalog.order?.length ?? 0;
-        const timestamp = new Date().toISOString();
-
-        const itemsToAdd: GachaCatalogItemV3[] = assetRecords.map((asset, index) => {
-          const position = baseOrder + index;
-          return {
-            itemId: generateItemId(),
-            name: getSequentialItemName(position),
-            rarityId,
-            order: position + 1,
-            pickupTarget: false,
-            completeTarget: false,
-            imageAssetId: asset.id,
-            thumbnailAssetId: asset.previewId ?? null,
-            riagu: false,
-            updatedAt: timestamp
-          } satisfies GachaCatalogItemV3;
-        });
-
-        catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
-      } catch (error) {
-        console.error('景品の追加に失敗しました', error);
-        if (assetRecords.length > 0) {
-          void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
-        }
-      }
-    },
-    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
-  );
+    handleAddItemWithoutAsset();
+  }, [canAddItems, handleAddItemWithoutAsset, showAddCard]);
 
   const gridClassName = useMemo(
     () =>
@@ -1089,12 +1005,7 @@ export function ItemsSection(): JSX.Element {
                     <div onMouseDown={handleSurfaceMouseDown}>
                       <div className={gridClassName} style={gridStyle}>
                         {showAddCard ? (
-                          <AddItemCard
-                            onClick={handleAddCardClick}
-                            disabled={!canAddItems}
-                            addItemMode={addItemMode}
-                            onAddItemModeChange={handleAddItemModeChange}
-                          />
+                          <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                         ) : null}
                         {items.map(({ model, rarity, itemRateDisplay }) => (
                           <ItemCard
@@ -1116,14 +1027,6 @@ export function ItemsSection(): JSX.Element {
               </div>
             </div>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
-            multiple
-            className="hidden"
-            onChange={handleFileInputChange}
-          />
           {contextMenuState ? (
             <ItemContextMenu
               anchor={contextMenuState.anchor}
@@ -1155,48 +1058,10 @@ export function ItemsSection(): JSX.Element {
 interface AddItemCardProps {
   onClick: () => void;
   disabled?: boolean;
-  addItemMode: AddItemMode;
-  onAddItemModeChange: (mode: AddItemMode) => void;
 }
 
-function AddItemCard({ onClick, disabled, addItemMode, onAddItemModeChange }: AddItemCardProps): JSX.Element {
+function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
-  const [showModeMenu, setShowModeMenu] = useState(false);
-  const modeMenuRef = useRef<HTMLDivElement | null>(null);
-  const modeButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (!showModeMenu) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
-      if (modeMenuRef.current?.contains(target)) {
-        return;
-      }
-      if (modeButtonRef.current?.contains(target)) {
-        return;
-      }
-      setShowModeMenu(false);
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowModeMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('touchstart', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('touchstart', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showModeMenu]);
 
   const handleCardClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1205,13 +1070,9 @@ function AddItemCard({ onClick, disabled, addItemMode, onAddItemModeChange }: Ad
         return;
       }
 
-      if (showModeMenu) {
-        setShowModeMenu(false);
-      }
-
       onClick();
     },
-    [disabled, onClick, showModeMenu]
+    [disabled, onClick]
   );
 
   const handleCardKeyDown = useCallback(
@@ -1222,55 +1083,10 @@ function AddItemCard({ onClick, disabled, addItemMode, onAddItemModeChange }: Ad
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        if (showModeMenu) {
-          setShowModeMenu(false);
-        }
         onClick();
       }
     },
-    [disabled, onClick, showModeMenu]
-  );
-
-  const handleModeSelect = useCallback(
-    (mode: AddItemMode) => {
-      onAddItemModeChange(mode);
-      setShowModeMenu(false);
-    },
-    [onAddItemModeChange]
-  );
-
-  const handleMenuButtonClick = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      event.preventDefault();
-      if (disabled) {
-        return;
-      }
-      setShowModeMenu((previous) => !previous);
-    },
-    [disabled]
-  );
-
-  const handleWithAssetChange = useCallback(
-    (checked: boolean) => {
-      if (checked) {
-        handleModeSelect('withAsset');
-      } else if (addItemMode === 'withAsset') {
-        handleModeSelect('withoutAsset');
-      }
-    },
-    [addItemMode, handleModeSelect]
-  );
-
-  const handleWithoutAssetChange = useCallback(
-    (checked: boolean) => {
-      if (checked) {
-        handleModeSelect('withoutAsset');
-      } else if (addItemMode === 'withoutAsset') {
-        handleModeSelect('withAsset');
-      }
-    },
-    [addItemMode, handleModeSelect]
+    [disabled, onClick]
   );
 
   return (
@@ -1301,48 +1117,8 @@ function AddItemCard({ onClick, disabled, addItemMode, onAddItemModeChange }: Ad
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-1')}>
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-sm font-semibold text-surface-foreground">景品を追加</h3>
-            <div className="relative">
-              <button
-                type="button"
-                ref={modeButtonRef}
-                className={clsx(
-                  'flex h-6 w-6 items-center justify-center rounded-full text-lg leading-none text-muted-foreground transition',
-                  disabled
-                    ? 'cursor-not-allowed opacity-50'
-                    : 'hover:bg-accent/10 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep'
-                )}
-                onClick={handleMenuButtonClick}
-                aria-haspopup="true"
-                aria-expanded={showModeMenu}
-                aria-label="追加モードを切り替え"
-                disabled={disabled}
-              >
-                ︙
-              </button>
-              {showModeMenu ? (
-                <div
-                  ref={modeMenuRef}
-                  className="absolute right-0 top-8 z-10 w-64 space-y-2 rounded-xl border border-border/60 bg-panel/95 p-3 shadow-[0_18px_44px_rgba(0,0,0,0.55)] backdrop-blur"
-                >
-                  <SwitchField
-                    label="画像・ファイルあり"
-                    description="ファイルを選択して景品を追加"
-                    checked={addItemMode === 'withAsset'}
-                    onChange={handleWithAssetChange}
-                    name="add-item-mode-with-assets"
-                  />
-                  <SwitchField
-                    label="画像・ファイルなし"
-                    description="ファイルなしで景品カードを追加"
-                    checked={addItemMode === 'withoutAsset'}
-                    onChange={handleWithoutAssetChange}
-                    name="add-item-mode-without-assets"
-                  />
-                </div>
-              ) : null}
-            </div>
           </div>
-          <p className="text-xs text-muted-foreground">画像・動画・音声ファイルを登録</p>
+          <p className="text-xs text-muted-foreground">画像は後から設定できます</p>
         </div>
       </div>
     </div>
