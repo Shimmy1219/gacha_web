@@ -1,4 +1,3 @@
-import { GACHA_STORAGE_UPDATED_EVENT } from '../app-persistence';
 import type { AppPersistence, GachaLocalStorageSnapshot } from '../app-persistence';
 import { projectInventories } from '../inventoryProjection';
 import { AppStateStore } from './appStateStore';
@@ -30,7 +29,6 @@ let domainStoreInstanceCounter = 0;
 export function createDomainStores(persistence: AppPersistence): DomainStores {
   let cleanupTasks: Array<() => void> = [];
   let disposed = false;
-  let legacyInventories: GachaLocalStorageSnapshot['userInventories'] | undefined;
   const domainStoreInstanceId = `domain-stores:${++domainStoreInstanceCounter}`;
 
   const stores: DomainStores = {
@@ -49,7 +47,6 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
       }
       disposed = true;
       teardownCleanupTasks();
-      legacyInventories = undefined;
     },
     activate: () => {
       if (!disposed) {
@@ -60,7 +57,6 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
         インスタンスID: domainStoreInstanceId
       });
 
-      refreshLegacyInventories();
       activateInternal('reactivate');
     }
   };
@@ -73,8 +69,6 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     userInventoryStoreHydrated: stores.userInventories.isHydrated() ? '済' : '未'
   });
 
-  legacyInventories = snapshot?.userInventories;
-
   const runProjection = (reason: string) => {
     const startedAt = Date.now();
     const pullHistoryState = stores.pullHistory.getState();
@@ -82,8 +76,7 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
 
     const { state, diagnostics } = projectInventories({
       pullHistory: pullHistoryState,
-      catalogState: stores.catalog.getState(),
-      legacyInventories
+      catalogState: stores.catalog.getState()
     });
 
     const durationMs = Date.now() - startedAt;
@@ -101,51 +94,14 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     stores.userInventories.saveDebounced();
   };
 
-  function refreshLegacyInventories(): void {
-    try {
-      const latestSnapshot = persistence.loadSnapshot();
-      legacyInventories = latestSnapshot.userInventories;
-      console.info('【デバッグ】legacy-user-inventoriesを再読込しました', {
-        レガシー在庫ユーザー数: legacyInventories?.inventories
-          ? Object.keys(legacyInventories.inventories).length
-          : 0
-      });
-    } catch (error) {
-      console.warn('Failed to refresh legacy inventories from persistence snapshot', error);
-      legacyInventories = undefined;
-    }
-  }
-
   function registerUserInventoriesSubscription(): void {
     const unsubscribe = stores.userInventories.subscribe((nextState) => {
       const snapshotExists = Boolean(nextState);
       console.info('【デバッグ】user-inventory購読通知を受信しました', {
-        スナップショット有無: snapshotExists ? 'あり' : 'なし',
-        永続化済みレガシー在庫有無: legacyInventories ? 'あり' : 'なし'
+        スナップショット有無: snapshotExists ? 'あり' : 'なし'
       });
-
-      if (!nextState && legacyInventories) {
-        legacyInventories = undefined;
-      }
     });
     cleanupTasks.push(unsubscribe);
-  }
-
-  function registerWindowListeners(): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const handleStorageUpdate = () => {
-      refreshLegacyInventories();
-    };
-
-    window.addEventListener('storage', handleStorageUpdate);
-    window.addEventListener(GACHA_STORAGE_UPDATED_EVENT, handleStorageUpdate);
-    cleanupTasks.push(() => {
-      window.removeEventListener('storage', handleStorageUpdate);
-      window.removeEventListener(GACHA_STORAGE_UPDATED_EVENT, handleStorageUpdate);
-    });
   }
 
   function registerPullHistorySubscription(): void {
@@ -223,7 +179,6 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     disposed = false;
 
     registerUserInventoriesSubscription();
-    registerWindowListeners();
     registerPullHistorySubscription();
     registerCatalogSubscription();
 

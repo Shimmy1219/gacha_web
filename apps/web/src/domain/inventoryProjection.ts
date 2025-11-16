@@ -22,7 +22,6 @@ interface AggregatedSnapshot {
 export interface InventoryProjectionParams {
   pullHistory: PullHistoryStateV1 | undefined;
   catalogState?: GachaCatalogStateV3 | undefined;
-  legacyInventories?: UserInventoriesStateV3 | undefined;
   now?: string;
 }
 
@@ -31,7 +30,6 @@ export interface InventoryProjectionDiagnostics {
   readonly projectedInventories: number;
   readonly pullEntries: number;
   readonly warnings: string[];
-  readonly orphanInventories: Array<{ userId: string; inventoryId: string; gachaId: string }>;
 }
 
 export interface InventoryProjectionResult {
@@ -172,52 +170,6 @@ function updateAggregatedSnapshot(
   });
 }
 
-function cloneSnapshot(snapshot: UserInventorySnapshotV3): UserInventorySnapshotV3 {
-  const nextItems: Record<string, string[]> = {};
-  Object.entries(snapshot.items ?? {}).forEach(([rarityId, items]) => {
-    if (!Array.isArray(items)) {
-      return;
-    }
-    nextItems[rarityId] = [...items];
-  });
-
-  const nextCounts: Record<string, Record<string, number>> = {};
-  Object.entries(snapshot.counts ?? {}).forEach(([rarityId, record]) => {
-    if (!record) {
-      return;
-    }
-    const clonedRecord: Record<string, number> = {};
-    Object.entries(record).forEach(([itemId, value]) => {
-      const normalized = sanitizePositiveCount(value);
-      if (normalized > 0) {
-        clonedRecord[itemId] = normalized;
-      }
-    });
-    if (Object.keys(clonedRecord).length > 0) {
-      nextCounts[rarityId] = clonedRecord;
-    }
-  });
-
-  const totalCount = Object.values(nextCounts).reduce((total, record) => {
-    return (
-      total +
-      Object.values(record).reduce((rarityTotal, value) => rarityTotal + sanitizePositiveCount(value), 0)
-    );
-  }, 0);
-
-  const result: UserInventorySnapshotV3 = {
-    inventoryId: snapshot.inventoryId,
-    gachaId: snapshot.gachaId,
-    createdAt: snapshot.createdAt,
-    updatedAt: snapshot.updatedAt,
-    totalCount: totalCount > 0 ? totalCount : undefined,
-    items: nextItems,
-    counts: nextCounts
-  };
-
-  return result;
-}
-
 function applySnapshotToIndex(
   index: UserInventoriesStateV3['byItemId'],
   snapshot: UserInventorySnapshotV3,
@@ -340,7 +292,7 @@ function buildSnapshotFromAggregate(
 }
 
 export function projectInventories(params: InventoryProjectionParams): InventoryProjectionResult {
-  const { pullHistory, catalogState, legacyInventories, now } = params;
+  const { pullHistory, catalogState, now } = params;
   const nowIso = ensureIsoString(now, new Date().toISOString());
   const itemRarityIndex = buildItemRarityIndex(catalogState);
   const aggregated = new Map<string, Map<string, AggregatedSnapshot>>();
@@ -422,48 +374,6 @@ export function projectInventories(params: InventoryProjectionParams): Inventory
     }
   });
 
-  const orphanInventories: Array<{ userId: string; inventoryId: string; gachaId: string }> = [];
-
-  if (legacyInventories?.inventories) {
-    Object.entries(legacyInventories.inventories).forEach(([userId, legacySnapshots]) => {
-      if (!legacySnapshots) {
-        return;
-      }
-
-      const nextSnapshots = { ...(inventories[userId] ?? {}) };
-      let mutated = false;
-
-      Object.entries(legacySnapshots).forEach(([inventoryId, snapshot]) => {
-        if (!snapshot) {
-          return;
-        }
-
-        const hasSameGacha = Object.values(nextSnapshots).some((candidate) => candidate.gachaId === snapshot.gachaId);
-        if (hasSameGacha) {
-          return;
-        }
-
-        const cloned = cloneSnapshot(snapshot);
-        cloned.inventoryId = snapshot.inventoryId ?? inventoryId;
-        cloned.updatedAt = cloned.updatedAt ?? legacyInventories.updatedAt ?? nowIso;
-        cloned.createdAt = cloned.createdAt ?? cloned.updatedAt;
-
-        nextSnapshots[cloned.inventoryId] = cloned;
-        applySnapshotToIndex(byItemId, cloned, userId);
-        orphanInventories.push({
-          userId,
-          inventoryId: cloned.inventoryId,
-          gachaId: cloned.gachaId
-        });
-        mutated = true;
-      });
-
-      if (mutated) {
-        inventories[userId] = nextSnapshots;
-      }
-    });
-  }
-
   const projectedUsers = Object.keys(inventories).length;
   const projectedInventories = Object.values(inventories).reduce(
     (total, snapshotMap) => total + Object.keys(snapshotMap ?? {}).length,
@@ -500,8 +410,7 @@ export function projectInventories(params: InventoryProjectionParams): Inventory
     projectedUsers,
     projectedInventories,
     pullEntries,
-    warnings,
-    orphanInventories
+    warnings
   };
 
   return { state, diagnostics };
