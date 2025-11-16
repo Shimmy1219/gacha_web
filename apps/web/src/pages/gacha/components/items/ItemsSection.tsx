@@ -6,8 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type CSSProperties
 } from 'react';
 
@@ -26,7 +26,6 @@ import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPrev
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
-import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
@@ -75,7 +74,6 @@ export function ItemsSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
@@ -748,82 +746,51 @@ export function ItemsSection(): JSX.Element {
     [data?.rarityState]
   );
 
+  const handleAddItemWithoutAsset = useCallback(() => {
+    if (!activeGachaId) {
+      console.warn('ファイルなしの追加時に有効なガチャが見つかりませんでした');
+      return;
+    }
+
+    const catalogState = data?.catalogState;
+    const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
+    if (!gachaCatalog) {
+      console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
+      return;
+    }
+
+    const rarityId = getDefaultRarityId(activeGachaId);
+    if (!rarityId) {
+      console.warn('追加可能なレアリティが見つかりませんでした');
+      return;
+    }
+
+    const baseOrder = gachaCatalog.order?.length ?? 0;
+    const timestamp = new Date().toISOString();
+
+    const item: GachaCatalogItemV3 = {
+      itemId: generateItemId(),
+      name: getSequentialItemName(baseOrder),
+      rarityId,
+      order: baseOrder + 1,
+      pickupTarget: false,
+      completeTarget: false,
+      imageAssetId: null,
+      thumbnailAssetId: null,
+      riagu: false,
+      updatedAt: timestamp
+    };
+
+    catalogStore.addItems({ gachaId: activeGachaId, items: [item], updatedAt: timestamp });
+  }, [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]);
+
   const handleAddCardClick = useCallback(() => {
     if (!showAddCard || !canAddItems) {
       return;
     }
 
-    const input = fileInputRef.current;
-    if (input) {
-      input.click();
-    }
-  }, [canAddItems, showAddCard]);
-
-  const handleFileInputChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const input = event.target;
-      const files = input.files ? Array.from(input.files) : [];
-      input.value = '';
-
-      if (files.length === 0) {
-        return;
-      }
-
-      if (!activeGachaId) {
-        console.warn('ファイル選択時に有効なガチャが見つかりませんでした');
-        return;
-      }
-
-      const catalogState = data?.catalogState;
-      const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
-      if (!gachaCatalog) {
-        console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
-        return;
-      }
-
-      const rarityId = getDefaultRarityId(activeGachaId);
-      if (!rarityId) {
-        console.warn('追加可能なレアリティが見つかりませんでした');
-        return;
-      }
-
-      let assetRecords: StoredAssetRecord[] = [];
-
-      try {
-        const storedRecords = await Promise.all(
-          Array.from(files, async (file) => await saveAsset(file))
-        );
-        assetRecords = storedRecords;
-
-        const baseOrder = gachaCatalog.order?.length ?? 0;
-        const timestamp = new Date().toISOString();
-
-        const itemsToAdd: GachaCatalogItemV3[] = assetRecords.map((asset, index) => {
-          const position = baseOrder + index;
-          return {
-            itemId: generateItemId(),
-            name: getSequentialItemName(position),
-            rarityId,
-            order: position + 1,
-            pickupTarget: false,
-            completeTarget: false,
-            imageAssetId: asset.id,
-            thumbnailAssetId: asset.previewId ?? null,
-            riagu: false,
-            updatedAt: timestamp
-          } satisfies GachaCatalogItemV3;
-        });
-
-        catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
-      } catch (error) {
-        console.error('景品の追加に失敗しました', error);
-        if (assetRecords.length > 0) {
-          void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
-        }
-      }
-    },
-    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
-  );
+    handleAddItemWithoutAsset();
+  }, [canAddItems, handleAddItemWithoutAsset, showAddCard]);
 
   const gridClassName = useMemo(
     () =>
@@ -1060,14 +1027,6 @@ export function ItemsSection(): JSX.Element {
               </div>
             </div>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
-            multiple
-            className="hidden"
-            onChange={handleFileInputChange}
-          />
           {contextMenuState ? (
             <ItemContextMenu
               anchor={contextMenuState.anchor}
@@ -1104,9 +1063,36 @@ interface AddItemCardProps {
 function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
 
+  const handleCardClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (disabled) {
+        event.preventDefault();
+        return;
+      }
+
+      onClick();
+    },
+    [disabled, onClick]
+  );
+
+  const handleCardKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (disabled) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onClick();
+      }
+    },
+    [disabled, onClick]
+  );
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       aria-label="景品を追加"
       data-add-item-card="true"
       className={clsx(
@@ -1115,8 +1101,8 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
           ? 'cursor-not-allowed opacity-60'
           : 'hover:border-accent/70 hover:bg-accent/5 focus-visible:ring-2 focus-visible:ring-accent/50'
       )}
-      onClick={onClick}
-      disabled={disabled}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       aria-disabled={disabled}
     >
       <div className={clsx('flex w-full gap-3', isMobile ? 'flex-row items-start' : 'flex-col')}>
@@ -1129,10 +1115,12 @@ function AddItemCard({ onClick, disabled }: AddItemCardProps): JSX.Element {
           +
         </div>
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-1')}>
-          <h3 className="text-sm font-semibold text-surface-foreground">景品を追加</h3>
-          <p className="text-xs text-muted-foreground">画像・動画・音声ファイルを登録</p>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-sm font-semibold text-surface-foreground">景品を追加</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">画像は後から設定できます</p>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
