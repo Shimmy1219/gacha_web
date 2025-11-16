@@ -71,7 +71,7 @@ function getSequentialItemName(position: number): string {
 }
 
 export function ItemsSection(): JSX.Element {
-  const { catalog: catalogStore, pullHistory: pullHistoryStore, riagu: riaguStore } = useDomainStores();
+  const { catalog: catalogStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
@@ -620,17 +620,13 @@ export function ItemsSection(): JSX.Element {
         }
 
         catalogStore.removeItem({ gachaId: entry.model.gachaId, itemId, updatedAt: timestamp });
-        pullHistoryStore.deleteManualEntriesForItem({
-          gachaId: entry.model.gachaId,
-          itemId
-        });
         riaguStore.removeByItemId(itemId, { persist: 'immediate' });
       });
 
       setSelectedItemIds([]);
       closeContextMenu();
     },
-    [catalogStore, closeContextMenu, itemEntryById, pullHistoryStore, riaguStore]
+    [catalogStore, closeContextMenu, itemEntryById, riaguStore]
   );
 
   const handleDeleteRequest = useCallback(
@@ -934,10 +930,6 @@ export function ItemsSection(): JSX.Element {
             try {
               const timestamp = new Date().toISOString();
               catalogStore.removeItem({ gachaId, itemId, updatedAt: timestamp });
-              pullHistoryStore.deleteManualEntriesForItem({
-                gachaId,
-                itemId
-              });
               riaguStore.removeByItemId(itemId, { persist: 'immediate' });
             } catch (error) {
               console.error('景品の削除に失敗しました', error);
@@ -953,8 +945,7 @@ export function ItemsSection(): JSX.Element {
       flatItems,
       push,
       rarityOptionsByGacha,
-      riaguStore,
-      pullHistoryStore
+      riaguStore
     ]
   );
 
