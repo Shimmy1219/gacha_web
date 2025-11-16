@@ -56,14 +56,14 @@ Pull History の `order` 配列は最近の更新順で並び、プロジェク�
 3. 集計結果から `UserInventorySnapshotV3` を構築。
    - 個数が 0 以下になったアイテムは自動的に除去される。
    - レアリティ別のリストをソートし、`items` と `counts` を同期させる。
-4. `byItemId` インデックスを再生成し、オプションで旧在庫 (`legacyInventories`) をマージして孤児データを保持する。
-5. ダイアグノスティクス（投影されたユーザー数、在庫数、警告、孤児リスト）を返す。
+4. `byItemId` インデックスを再生成し、Pull History 由来のスナップショットのみを `UserInventoryStore` に渡す。
+5. ダイアグノスティクス（投影されたユーザー数、在庫数、警告）を返す。
 
 ## ストア間の同期
 `createDomainStores` は Pull History と User Inventory を次のように同期させる。【F:apps/web/src/domain/stores/createDomainStores.ts†L1-L66】
 
 1. 永続化スナップショットを読み込み、各ストアを `hydrate` する。
-2. 初期ロード直後に一度だけ `projectInventories` を実行し、旧在庫 (`legacyInventories`) を加味した結果を `UserInventoryStore.applyProjectionResult` に流し込む。
+2. 初期ロード直後に一度だけ `projectInventories` を実行し、Pull History から再構築した結果を `UserInventoryStore.applyProjectionResult` に流し込む。
 3. `PullHistoryStore` を購読し、履歴更新が発生したタイミングで再度プロジェクションを実行。結果を在庫ストアへ反映し、`saveDebounced` で `user-inventory:v3` を遅延保存する。
 4. User Inventory は他ストアから mutate されないため、Pull History の変更が唯一の再計算トリガーとなる。
 
