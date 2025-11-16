@@ -110,11 +110,11 @@ export function useDashboardShell(): DashboardContextValue {
 }
 
 export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
-  const { isMobile } = useResponsiveDashboard();
+  const { isMobile, forceSidebarLayout } = useResponsiveDashboard();
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
-  const isSidebarLayout = !isMobile && desktopLayout === 'sidebar';
+  const isSidebarLayout = forceSidebarLayout || (!isMobile && desktopLayout === 'sidebar');
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
   const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
     deriveSidebarViews([], sections)
@@ -354,7 +354,12 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
         ) : null}
 
         {!isMobile && isSidebarLayout ? (
-          <div className="dashboard-shell__desktop-sidebar hidden lg:block">
+          <div
+            className={clsx(
+              'dashboard-shell__desktop-sidebar',
+              forceSidebarLayout ? 'block' : 'hidden lg:block'
+            )}
+          >
             <DashboardSidebarLayout
               sections={sections}
               selectedViewIds={activeSidebarViews}
@@ -364,7 +369,12 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
         ) : null}
 
         {!isMobile && !isSidebarLayout ? (
-          <div className="dashboard-shell__desktop hidden lg:block">
+          <div
+            className={clsx(
+              'dashboard-shell__desktop',
+              forceSidebarLayout ? 'hidden' : 'hidden lg:block'
+            )}
+          >
             <DashboardDesktopGrid sections={sections} />
           </div>
         ) : null}
