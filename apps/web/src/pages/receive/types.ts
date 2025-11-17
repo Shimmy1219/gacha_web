@@ -6,6 +6,7 @@ export interface ReceiveItemMetadata {
   gachaName: string;
   itemName: string;
   rarity: string;
+  rarityColor: string | null;
   isRiagu: boolean;
   riaguType: string | null;
   obtainedCount: number;
