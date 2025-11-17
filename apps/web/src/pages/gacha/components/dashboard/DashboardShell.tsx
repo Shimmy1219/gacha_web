@@ -55,7 +55,8 @@ type ControlsPosition = { top: number; left: number };
 
 function deriveSidebarViews(
   previous: readonly string[],
-  sections: DashboardSectionConfig[]
+  sections: DashboardSectionConfig[],
+  maxSelections: number
 ): string[] {
   const availableIds = sections.map((section) => section.id);
 
@@ -63,17 +64,15 @@ function deriveSidebarViews(
     return [];
   }
 
-  const filtered = previous.filter((viewId) => availableIds.includes(viewId)).slice(0, 2);
+  const filtered = previous.filter((viewId) => availableIds.includes(viewId)).slice(0, maxSelections);
 
   if (filtered.length === 0) {
-    return availableIds.slice(0, Math.min(2, availableIds.length));
+    return availableIds.slice(0, Math.min(maxSelections, availableIds.length));
   }
 
-  if (filtered.length === 1 && availableIds.length > 1) {
-    const fallback = availableIds.find((id) => id !== filtered[0]);
-    if (fallback) {
-      return [filtered[0], fallback];
-    }
+  if (filtered.length < maxSelections && availableIds.length > filtered.length) {
+    const fallbackIds = availableIds.filter((id) => !filtered.includes(id)).slice(0, maxSelections - filtered.length);
+    return [...filtered, ...fallbackIds];
   }
 
   return filtered;
@@ -110,14 +109,15 @@ export function useDashboardShell(): DashboardContextValue {
 }
 
 export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
-  const { isMobile, forceSidebarLayout } = useResponsiveDashboard();
+  const { isMobile, isLgDown, forceSidebarLayout } = useResponsiveDashboard();
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
   const isSidebarLayout = forceSidebarLayout || (!isMobile && desktopLayout === 'sidebar');
+  const maxSidebarSelections = isLgDown ? 1 : 2;
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
   const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
-    deriveSidebarViews([], sections)
+    deriveSidebarViews([], sections, maxSidebarSelections)
   );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -135,13 +135,13 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
 
   useEffect(() => {
     setActiveSidebarViews((previous) => {
-      const next = deriveSidebarViews(previous, sections);
+      const next = deriveSidebarViews(previous, sections, maxSidebarSelections);
       if (shallowEqualArrays(previous, next)) {
         return previous;
       }
       return next;
     });
-  }, [sections]);
+  }, [sections, maxSidebarSelections]);
 
   useEffect(() => {
     if (!isSidebarLayout) {
@@ -305,7 +305,11 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
         const isSelected = previous.includes(viewId);
 
         if (isSelected) {
-          const next = previous.filter((id) => id !== viewId);
+          const next = deriveSidebarViews(
+            previous.filter((id) => id !== viewId),
+            sections,
+            maxSidebarSelections
+          );
           if (next.length === 0) {
             const fallback = availableIds.find((id) => id !== viewId);
             return fallback ? [fallback] : [viewId];
@@ -313,14 +317,19 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           return next;
         }
 
-        if (previous.length >= 2) {
-          return [...previous.slice(1), viewId];
+        if (previous.length >= maxSidebarSelections) {
+          if (maxSidebarSelections === 1) {
+            return deriveSidebarViews([viewId], sections, maxSidebarSelections);
+          }
+
+          const trimmed = previous.slice(-(maxSidebarSelections - 1));
+          return deriveSidebarViews([...trimmed, viewId], sections, maxSidebarSelections);
         }
 
-        return [...previous, viewId];
+        return deriveSidebarViews([...previous, viewId], sections, maxSidebarSelections);
       });
     },
-    [sections]
+    [sections, maxSidebarSelections]
   );
 
   const value = useMemo(
@@ -363,6 +372,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
             <DashboardSidebarLayout
               sections={sections}
               selectedViewIds={activeSidebarViews}
+              maxSelections={maxSidebarSelections}
               onToggleView={handleToggleSidebarView}
             />
           </div>

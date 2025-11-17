@@ -5,18 +5,20 @@ const SIDEBAR_FALLBACK_QUERY = '(min-width: 901px) and (max-width: 1025px)';
 
 interface ResponsiveDashboardState {
   isMobile: boolean;
+  isLgDown: boolean;
   forceSidebarLayout: boolean;
 }
 
 function readResponsiveState(): ResponsiveDashboardState {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return { isMobile: false, forceSidebarLayout: false };
+    return { isMobile: false, isLgDown: false, forceSidebarLayout: false };
   }
 
-  return {
-    isMobile: window.matchMedia(MOBILE_QUERY).matches,
-    forceSidebarLayout: window.matchMedia(SIDEBAR_FALLBACK_QUERY).matches
-  };
+  const isMobile = window.matchMedia(MOBILE_QUERY).matches;
+  const isLgDown = window.matchMedia('(max-width: 1023px)').matches;
+  const forceSidebarLayout = window.matchMedia(SIDEBAR_FALLBACK_QUERY).matches;
+
+  return { isMobile, isLgDown, forceSidebarLayout };
 }
 
 export function useResponsiveDashboard(): ResponsiveDashboardState {
@@ -28,11 +30,13 @@ export function useResponsiveDashboard(): ResponsiveDashboardState {
     }
 
     const mobileMedia = window.matchMedia(MOBILE_QUERY);
+    const lgDownMedia = window.matchMedia('(max-width: 1023px)');
     const sidebarMedia = window.matchMedia(SIDEBAR_FALLBACK_QUERY);
 
     const update = () => {
       setState({
         isMobile: mobileMedia.matches,
+        isLgDown: lgDownMedia.matches,
         forceSidebarLayout: sidebarMedia.matches
       });
     };
@@ -50,10 +54,12 @@ export function useResponsiveDashboard(): ResponsiveDashboardState {
     };
 
     const removeMobileListener = addListener(mobileMedia);
+    const removeLgDownListener = addListener(lgDownMedia);
     const removeSidebarListener = addListener(sidebarMedia);
 
     return () => {
       removeMobileListener();
+      removeLgDownListener();
       removeSidebarListener();
     };
   }, []);

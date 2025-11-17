@@ -5,12 +5,14 @@ import type { DashboardSectionConfig } from './DashboardShell';
 interface DashboardSidebarLayoutProps {
   sections: DashboardSectionConfig[];
   selectedViewIds: readonly string[];
+  maxSelections: number;
   onToggleView: (view: string) => void;
 }
 
 export function DashboardSidebarLayout({
   sections,
   selectedViewIds,
+  maxSelections,
   onToggleView
 }: DashboardSidebarLayoutProps): JSX.Element {
   if (sections.length === 0) {
@@ -59,7 +61,7 @@ export function DashboardSidebarLayout({
       <div className="dashboard-sidebar-layout__content rounded-2xl border border-border/60 bg-panel p-4">
         {selectedSections.length === 0 ? (
           <div className="flex h-full min-h-[200px] items-center justify-center rounded-xl border border-dashed border-border/60 bg-panel-contrast/40 text-sm text-muted-foreground">
-            表示するセクションを2つまで選択してください。
+            表示するセクションを{maxSelections}つまで選択してください。
           </div>
         ) : (
           <div
