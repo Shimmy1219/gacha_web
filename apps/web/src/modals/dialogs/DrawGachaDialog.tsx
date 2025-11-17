@@ -26,6 +26,7 @@ import {
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -230,6 +231,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastUserId, setLastUserId] = useState<string | null>(null);
   const [queuedDiscordDelivery, setQueuedDiscordDelivery] = useState<QueuedDiscordDeliveryRequest | null>(null);
   const [isDiscordDelivering, setIsDiscordDelivering] = useState(false);
+  const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
+    'idle' | 'building-zip' | 'uploading' | 'sending'
+  >('idle');
   const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
@@ -600,6 +604,22 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const discordDeliveryButtonDisabled =
     isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
+  const discordDeliveryButtonMinWidth = '14.5rem';
+  const discordDeliveryButtonLabel = useMemo(() => {
+    if (discordDeliveryCompleted) {
+      return '送信済み';
+    }
+    switch (discordDeliveryStage) {
+      case 'building-zip':
+        return 'ZIPファイル作成中...';
+      case 'uploading':
+        return 'ファイルアップロード中...';
+      case 'sending':
+        return '送信中...';
+      default:
+        return 'お渡し部屋に景品を送信';
+    }
+  }, [discordDeliveryCompleted, discordDeliveryStage]);
 
   useEffect(() => {
     return () => {
@@ -629,6 +649,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     void shareResult('draw-result', shareContent.shareText);
   }, [shareContent, shareResult]);
+
+  const queuedDeliveryProcessingRef = useRef<string | null>(null);
 
   const performDiscordDelivery = useCallback(
     async ({
@@ -683,6 +705,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
 
       setIsDiscordDelivering(true);
+      setDiscordDeliveryStage('building-zip');
       setDiscordDeliveryError(null);
 
       try {
@@ -706,6 +729,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           userId: targetUserId,
           userName: receiverDisplayName
         });
+
+        setDiscordDeliveryStage('uploading');
 
         const uploadResponse = await uploadZip({
           file: zip.blob,
@@ -762,9 +787,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
 
+        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+
+        if (!channelId && !preferredCategory) {
+          const category = await ensurePrivateChannelCategory({
+            push,
+            discordUserId: staffDiscordId,
+            guildSelection,
+            dialogTitle: 'お渡しカテゴリの設定'
+          });
+          preferredCategory = category.id;
+        }
+
         if (!channelId) {
-          const preferredCategory =
-            channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
           if (!preferredCategory) {
             throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
           }
@@ -824,6 +859,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         if (!channelId) {
           throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
         }
+
+        setDiscordDeliveryStage('sending');
 
         const payload: Record<string, unknown> = {
           channel_id: channelId,
@@ -904,6 +941,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         throw new Error(displayMessage);
       } finally {
         setIsDiscordDelivering(false);
+        setDiscordDeliveryStage('idle');
       }
     }, [
       resultItems,
@@ -922,9 +960,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   useEffect(() => {
     if (!queuedDiscordDelivery) {
+      queuedDeliveryProcessingRef.current = null;
       return;
     }
-    const { userId, selection } = queuedDiscordDelivery;
+    const { userId, selection, requestedAt } = queuedDiscordDelivery;
+    const processingKey = `${userId}:${requestedAt}`;
+
+    if (queuedDeliveryProcessingRef.current === processingKey) {
+      return;
+    }
+
+    queuedDeliveryProcessingRef.current = processingKey;
     if (!userId) {
       setQueuedDiscordDelivery(null);
       return;
@@ -946,6 +992,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         console.error('Failed to deliver prize after linking Discord profile', error);
       } finally {
         setQueuedDiscordDelivery(null);
+        queuedDeliveryProcessingRef.current = null;
       }
     })();
   }, [queuedDiscordDelivery, userProfilesState, performDiscordDelivery]);
@@ -1354,6 +1401,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   <button
                     type="button"
                     className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+                    style={{ minWidth: discordDeliveryButtonMinWidth }}
                     onClick={handleDeliverToDiscord}
                     disabled={discordDeliveryButtonDisabled}
                   >
@@ -1362,7 +1410,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     ) : (
                       <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
-                    {discordDeliveryCompleted ? '送信済み' : 'お渡し部屋に景品を送信'}
+                    {discordDeliveryButtonLabel}
                   </button>
                   <button
                     type="button"

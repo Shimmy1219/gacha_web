@@ -25,6 +25,7 @@ import { useAppPersistence, useDomainStores } from '../../features/storage/AppPe
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
+import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -548,8 +549,19 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
 
+        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+
+        if (!channelId && !preferredCategory) {
+          const category = await ensurePrivateChannelCategory({
+            push,
+            discordUserId,
+            guildSelection,
+            dialogTitle: 'お渡しカテゴリの設定'
+          });
+          preferredCategory = category.id;
+        }
+
         if (!channelId) {
-          const preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
           if (!preferredCategory) {
             throw new Error(
               'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。'
