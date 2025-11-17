@@ -102,6 +102,24 @@ describe('calculateDrawPlan', () => {
     expect(plan.pointsRemainder).toBe(0);
   });
 
+  test('applies global complete mode overrides', () => {
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      complete: { price: 100, mode: 'repeat' }
+    };
+
+    const plan = calculateDrawPlan({
+      points: 200,
+      settings,
+      totalItemTypes: 2,
+      completeMode: 'frontload'
+    });
+
+    expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
+    expect(plan.completePulls).toBe(2);
+    expect(plan.completeExecutions).toBe(2);
+  });
+
   test('accepts legacy complate field for complete settings', () => {
     const settings = {
       complate: { price: 90, mode: 'frontload' }

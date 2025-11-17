@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { useStoreValue } from '@domain/stores';
+import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
@@ -181,6 +181,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const navigate = useNavigate();
   const gachaSelectId = useId();
+  const completeMode = resolveCompleteModePreference(ptSettingsState);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -407,7 +408,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         gachaId: selectedGacha.id,
         pool: selectedGacha.pool,
         settings: selectedPtSetting,
-        points: parsedPoints
+        points: parsedPoints,
+        completeMode
       });
 
       if (executionResult.errors.length > 0) {
