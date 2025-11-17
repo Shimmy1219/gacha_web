@@ -83,11 +83,11 @@ export function ItemsSection(): JSX.Element {
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const { isMobile } = useResponsiveDashboard();
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
-    'repeat(auto-fit,minmax(150px,181px))'
+    'repeat(auto-fit,minmax(100px,181px))'
   );
   const computeGridTemplateColumns = useCallback((width: number) => {
     const gap = 16; // gap-4 => 1rem
-    const minWidth = 150;
+    const minWidth = 100;
     const maxWidth = 200;
     const idealWidth = 181;
 
