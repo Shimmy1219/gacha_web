@@ -355,9 +355,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return calculateDrawPlan({
       points: parsedPoints,
       settings: selectedPtSetting,
-      totalItemTypes: selectedGacha.pool.items.length
+      totalItemTypes: selectedGacha.pool.items.length,
+      completeMode
     });
-  }, [parsedPoints, selectedGacha, selectedPtSetting]);
+  }, [completeMode, parsedPoints, selectedGacha, selectedPtSetting]);
 
   const handleExecute = async () => {
     if (isExecuting) {
