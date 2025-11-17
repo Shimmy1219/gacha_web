@@ -231,6 +231,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastUserId, setLastUserId] = useState<string | null>(null);
   const [queuedDiscordDelivery, setQueuedDiscordDelivery] = useState<QueuedDiscordDeliveryRequest | null>(null);
   const [isDiscordDelivering, setIsDiscordDelivering] = useState(false);
+  const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
+    'idle' | 'building-zip' | 'uploading' | 'sending'
+  >('idle');
   const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
@@ -601,6 +604,21 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const discordDeliveryButtonDisabled =
     isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
+  const discordDeliveryButtonLabel = useMemo(() => {
+    if (discordDeliveryCompleted) {
+      return '送信済み';
+    }
+    switch (discordDeliveryStage) {
+      case 'building-zip':
+        return 'ZIPファイル作成中...';
+      case 'uploading':
+        return 'ファイルアップロード中...';
+      case 'sending':
+        return '送信中...';
+      default:
+        return 'お渡し部屋に景品を送信';
+    }
+  }, [discordDeliveryCompleted, discordDeliveryStage]);
 
   useEffect(() => {
     return () => {
@@ -684,6 +702,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
 
       setIsDiscordDelivering(true);
+      setDiscordDeliveryStage('building-zip');
       setDiscordDeliveryError(null);
 
       try {
@@ -707,6 +726,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           userId: targetUserId,
           userName: receiverDisplayName
         });
+
+        setDiscordDeliveryStage('uploading');
 
         const uploadResponse = await uploadZip({
           file: zip.blob,
@@ -836,6 +857,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
         }
 
+        setDiscordDeliveryStage('sending');
+
         const payload: Record<string, unknown> = {
           channel_id: channelId,
           share_url: shareUrl,
@@ -915,6 +938,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         throw new Error(displayMessage);
       } finally {
         setIsDiscordDelivering(false);
+        setDiscordDeliveryStage('idle');
       }
     }, [
       resultItems,
@@ -1373,7 +1397,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     ) : (
                       <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
-                    {discordDeliveryCompleted ? '送信済み' : 'お渡し部屋に景品を送信'}
+                    {discordDeliveryButtonLabel}
                   </button>
                   <button
                     type="button"
