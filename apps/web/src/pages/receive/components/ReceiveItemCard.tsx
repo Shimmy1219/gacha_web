@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import { ArrowDownTrayIcon, ArrowUpTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import clsx from 'clsx';
 
+import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 
@@ -22,8 +24,34 @@ function resolveKindIcon(kind: ReceiveMediaItem['kind']): JSX.Element {
   }
 }
 
+function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | undefined {
+  if (!rarityColor) {
+    return undefined;
+  }
+
+  const trimmed = rarityColor.trim();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) {
+    return {
+      backgroundColor: trimmed,
+      borderColor: trimmed,
+      color: '#fff',
+      boxShadow: `0 10px 25px ${trimmed}40`
+    };
+  }
+
+  return undefined;
+}
+
 export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Element {
   const objectUrl = useObjectUrl(item.blob);
+  const rarityPresentation = useMemo(
+    () => getRarityTextPresentation(item.metadata?.rarityColor),
+    [item.metadata?.rarityColor]
+  );
+  const rarityBadgeStyle = useMemo(
+    () => buildRarityBadgeStyle(item.metadata?.rarityColor),
+    [item.metadata?.rarityColor]
+  );
   const previewNode = useMemo(() => {
     if (!objectUrl) {
       return (
@@ -88,7 +116,11 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
           <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-white/10 bg-black/60 md:aspect-video md:h-auto md:rounded-2xl md:border-transparent">
             {item.metadata?.rarity ? (
               <span
-                className="receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full bg-rose-500 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-rose-900/50"
+                className={clsx(
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-white/15 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/30',
+                  rarityPresentation.className
+                )}
+                style={{ ...rarityBadgeStyle, ...rarityPresentation.style }}
               >
                 {item.metadata.rarity}
               </span>

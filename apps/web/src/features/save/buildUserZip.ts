@@ -28,6 +28,7 @@ interface ZipItemMetadata {
   gachaName: string;
   itemName: string;
   rarity: string;
+  rarityColor: string | null;
   isRiagu: boolean;
   riaguType: string | null;
   obtainedCount: number;
@@ -566,11 +567,13 @@ export async function buildUserZipFromSelection({
 
     const filePath = `items/${sanitizedGachaName}/${fileName}`;
     const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
+    const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
     itemMetadataMap[item.assetId] = {
       filePath,
       gachaName: item.gachaName,
       itemName: item.itemName,
       rarity: rarityLabel,
+      rarityColor,
       isRiagu: item.isRiagu,
       riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
       obtainedCount: item.count,

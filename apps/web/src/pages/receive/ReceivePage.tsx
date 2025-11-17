@@ -202,7 +202,7 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
     const parsed = JSON.parse(jsonText) as Record<string, Omit<ReceiveItemMetadata, 'id'>>;
     const mapped: Record<string, ReceiveItemMetadata> = {};
     for (const [id, metadata] of Object.entries(parsed)) {
-      mapped[id] = { id, ...metadata };
+      mapped[id] = { id, ...metadata, rarityColor: metadata.rarityColor ?? null };
     }
     return mapped;
   } catch (error) {
