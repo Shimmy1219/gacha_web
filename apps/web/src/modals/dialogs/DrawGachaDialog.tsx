@@ -502,9 +502,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
-  const completeMode: CompleteDrawMode =
+  const displayCompleteMode: CompleteDrawMode =
     normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
-  const completeModeLabel = COMPLETE_MODE_LABELS[completeMode];
+  const completeModeLabel = COMPLETE_MODE_LABELS[displayCompleteMode];
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{
