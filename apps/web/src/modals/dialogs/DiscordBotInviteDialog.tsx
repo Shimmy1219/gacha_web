@@ -91,6 +91,7 @@ export function DiscordBotInviteDialog({
     }
 
     push(DiscordPrivateChannelCategoryDialog, {
+      id: 'discord-private-channel-category',
       title: 'お渡しカテゴリの選択',
       size: 'lg',
       payload: {
