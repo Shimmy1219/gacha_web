@@ -24,6 +24,7 @@ import { useStoreValue } from '@domain/stores';
 import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
 import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
+import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import type { CompleteDrawMode } from '../../logic/gacha/types';
 import type { DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
@@ -134,6 +135,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     }
     return window.matchMedia('(min-width: 1024px)').matches;
   });
+  const { forceSidebarLayout } = useResponsiveDashboard();
+  const isSidebarLayoutForced = forceSidebarLayout;
   const [activeView, setActiveView] = useState<'menu' | 'content'>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return 'content';
@@ -228,10 +231,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const handleDesktopLayoutChange = useCallback(
     (layout: DashboardDesktopLayout) => {
+      if (isSidebarLayoutForced) {
+        return;
+      }
       setDesktopLayout(layout);
       uiPreferencesStore.setDashboardDesktopLayout(layout);
     },
-    [uiPreferencesStore]
+    [isSidebarLayoutForced, uiPreferencesStore]
   );
 
   const handleDeleteAllData = useCallback(async () => {
@@ -376,6 +382,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [normalizedAccent]
   );
   const desktopLayoutOptions = useMemo(() => DASHBOARD_DESKTOP_LAYOUT_OPTIONS, []);
+  const effectiveDesktopLayout: DashboardDesktopLayout = isSidebarLayoutForced ? 'sidebar' : desktopLayout;
 
   useEffect(() => {
     if (!selectedPalette) {
@@ -761,40 +768,64 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
                 </p>
               </div>
-              <RadioGroup value={desktopLayout} onChange={handleDesktopLayoutChange} className="space-y-2">
-                {desktopLayoutOptions.map((option) => (
-                  <RadioGroup.Option
-                    key={option.value}
-                    value={option.value}
-                    className={({ checked, active }) =>
-                      clsx(
-                        'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 transition',
-                        checked
-                          ? 'border-accent bg-accent/10'
-                          : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
-                        active && !checked ? 'ring-2 ring-accent/40' : undefined
-                      )
-                    }
-                  >
-                    {({ checked }) => (
-                      <div className="flex w-full flex-col gap-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
-                            {option.label}
-                          </RadioGroup.Label>
-                          {checked ? (
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
-                              適用中
-                            </span>
+              {isSidebarLayoutForced ? (
+                <p className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
+                  画面幅が900〜1025pxのため、サイドタブレイアウトが自動的に適用されています。
+                </p>
+              ) : null}
+              <RadioGroup
+                value={effectiveDesktopLayout}
+                onChange={handleDesktopLayoutChange}
+                className="space-y-2"
+              >
+                {desktopLayoutOptions.map((option) => {
+                  const optionDisabled = isSidebarLayoutForced && option.value !== 'sidebar';
+                  return (
+                    <RadioGroup.Option
+                      key={option.value}
+                      value={option.value}
+                      disabled={optionDisabled}
+                      className={({ checked, active, disabled }) =>
+                        clsx(
+                          'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 transition',
+                          checked
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
+                          active && !checked ? 'ring-2 ring-accent/40' : undefined,
+                          disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                        )
+                      }
+                    >
+                      {({ checked }) => (
+                        <div className="flex w-full flex-col gap-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <RadioGroup.Label className="text-sm font-semibold text-surface-foreground">
+                              {option.label}
+                            </RadioGroup.Label>
+                            {checked ? (
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                適用中
+                              </span>
+                            ) : null}
+                          </div>
+                          <RadioGroup.Description className="text-xs leading-relaxed text-muted-foreground">
+                            {option.description}
+                          </RadioGroup.Description>
+                          {optionDisabled ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              現在の画面幅ではサイドタブのみ利用できます。
+                            </p>
+                          ) : null}
+                          {isSidebarLayoutForced && option.value === 'sidebar' ? (
+                            <p className="text-[11px] text-accent">
+                              中間幅の画面では自動的にこのレイアウトが適用されます。
+                            </p>
                           ) : null}
                         </div>
-                        <RadioGroup.Description className="text-xs leading-relaxed text-muted-foreground">
-                          {option.description}
-                        </RadioGroup.Description>
-                      </div>
-                    )}
-                  </RadioGroup.Option>
-                ))}
+                      )}
+                    </RadioGroup.Option>
+                  );
+                })}
               </RadioGroup>
             </div>
           </div>
