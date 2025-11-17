@@ -25,6 +25,7 @@ import { PrizeSettingsDialog } from '../../../../modals/dialogs/PrizeSettingsDia
 import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { saveAsset, deleteAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { generateItemId } from '@domain/idGenerators';
@@ -82,6 +83,7 @@ export function ItemsSection(): JSX.Element {
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const { isMobile } = useResponsiveDashboard();
+  const { triggerConfirmation, triggerError } = useHaptics();
   const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
     `repeat(${defaultColumnCount}, minmax(100px,181px))`
@@ -682,6 +684,7 @@ export function ItemsSection(): JSX.Element {
       push(ItemDeleteConfirmDialog, {
         id: `items-delete-${targetIds[0]}`,
         title: 'アイテムを削除',
+        intent: 'warning',
         payload: {
           itemId: targetIds[0],
           itemName: displayItemName,
@@ -816,14 +819,16 @@ export function ItemsSection(): JSX.Element {
         });
 
         catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
+        triggerConfirmation();
       } catch (error) {
         console.error('景品の追加に失敗しました', error);
         if (assetRecords.length > 0) {
           void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
         }
+        triggerError();
       }
     },
-    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]
+    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId, triggerConfirmation, triggerError]
   );
 
   const gridClassName = useMemo(

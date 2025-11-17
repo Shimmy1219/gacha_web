@@ -20,6 +20,7 @@ import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
+import { useHaptics } from '../../features/haptics/HapticsProvider';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection,
@@ -190,6 +191,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getLastSelectedDrawGachaId() ?? undefined,
     [uiPreferencesState, uiPreferencesStore]
   );
+  const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
     if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
@@ -360,6 +362,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     if (isExecuting) {
       return;
     }
+    triggerSelection();
     setIsExecuting(true);
     try {
       setErrorMessage(null);
@@ -378,6 +381,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -386,6 +390,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -394,6 +399,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -409,6 +415,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -417,6 +424,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -468,6 +476,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastTotalPulls(executionResult.totalPulls);
       setLastUserName(normalizedUserName);
       setLastUserId(userId ?? null);
+      triggerConfirmation();
     } catch (error) {
       console.error('ガチャ実行中にエラーが発生しました', error);
       setErrorMessage('ガチャの実行中にエラーが発生しました。');
@@ -479,6 +488,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastExecutionWarnings([]);
       setLastPlan(null);
       setLastUserId(null);
+      triggerError();
     } finally {
       setIsExecuting(false);
     }

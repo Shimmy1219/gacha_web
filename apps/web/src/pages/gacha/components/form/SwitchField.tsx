@@ -1,5 +1,8 @@
 import { Switch } from '@headlessui/react';
 import { clsx } from 'clsx';
+import { useCallback } from 'react';
+
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
 interface SwitchFieldProps {
   label: string;
@@ -10,6 +13,15 @@ interface SwitchFieldProps {
 }
 
 export function SwitchField({ label, description, checked, onChange, name }: SwitchFieldProps): JSX.Element {
+  const { triggerSelection } = useHaptics();
+  const handleChange = useCallback(
+    (value: boolean) => {
+      triggerSelection();
+      onChange(value);
+    },
+    [onChange, triggerSelection]
+  );
+
   return (
     <Switch.Group
       as="div"
@@ -24,7 +36,7 @@ export function SwitchField({ label, description, checked, onChange, name }: Swi
       <Switch
         name={name}
         checked={checked}
-        onChange={onChange}
+        onChange={handleChange}
         className={clsx(
           'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-transparent transition-colors duration-150',
           checked ? 'bg-accent' : 'bg-muted/40'

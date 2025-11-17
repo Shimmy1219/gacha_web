@@ -254,6 +254,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         push(RarityRateErrorDialog, {
           id: 'rarity-rate-error',
           size: 'sm',
+          intent: 'warning',
           payload: {
             reason: 'precision-exceeded',
             detail: `入力値「${input}」は小数点以下が${fractionDigits}桁あります。`
@@ -266,6 +267,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           id: 'rarity-rate-error',
           title: '排出率エラー',
           size: 'sm',
+          intent: 'warning',
           payload: { detail }
         });
       }

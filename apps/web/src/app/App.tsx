@@ -20,6 +20,7 @@ import {
 import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
+import { useHaptics } from '../features/haptics/HapticsProvider';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
@@ -29,6 +30,7 @@ export function App(): JSX.Element {
   const stores = useDomainStores();
   const uiPreferencesStore = stores.uiPreferences;
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
+  const { triggerConfirmation, triggerError } = useHaptics();
   const showDiscordAuthLogs = useMemo(
     () => uiPreferencesStore.getDiscordAuthLogsEnabled(),
     [uiPreferencesState, uiPreferencesStore]
@@ -136,8 +138,10 @@ export function App(): JSX.Element {
           try {
             const result = await importTxtFile(file, { persistence, stores });
             console.info(`TXTインポートが完了しました: ${result.displayName}`, result);
+            triggerConfirmation();
           } catch (error) {
             console.error('TXTインポートに失敗しました', error);
+            triggerError();
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               const message =
                 error instanceof Error ? error.message : 'TXTの取り込みで不明なエラーが発生しました';
@@ -156,6 +160,7 @@ export function App(): JSX.Element {
               resolveDuplicate: resolveBackupDuplicate
             });
             console.info('バックアップの読み込みが完了しました', result);
+            triggerConfirmation();
 
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               if (result.importedGachaIds.length === 0) {
@@ -177,12 +182,15 @@ export function App(): JSX.Element {
                       .filter(Boolean)
                       .join(', ')}`
                   : '';
-                const assetsLine = result.importedAssetCount > 0 ? `\n復元したアセット数: ${result.importedAssetCount}` : '';
+                const assetsLine = result.importedAssetCount > 0
+                  ? `\n復元したアセット数: ${result.importedAssetCount}`
+                  : '';
                 window.alert(`バックアップの復元が完了しました。\n${importedList}${assetsLine}${skippedList}`);
               }
             }
           } catch (error) {
             console.error('バックアップの復元に失敗しました', error);
+            triggerError();
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               const message =
                 error instanceof Error
@@ -228,8 +236,10 @@ export function App(): JSX.Element {
           try {
             await exportBackupToDevice(persistence);
             console.info('バックアップファイルを保存しました');
+            triggerConfirmation();
           } catch (error) {
             console.error('バックアップのエクスポートに失敗しました', error);
+            triggerError();
             if (typeof window !== 'undefined' && typeof window.alert === 'function') {
               const message =
                 error instanceof Error
