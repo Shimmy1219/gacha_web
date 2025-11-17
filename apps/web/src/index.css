@@ -220,7 +220,7 @@
   }
 
   .page-settings__content-scroll {
-    max-height: inherit;
+    min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 0.8) transparent;
     scrollbar-gutter: stable;
