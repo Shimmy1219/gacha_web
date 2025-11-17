@@ -9,18 +9,20 @@ export function HomePage(): JSX.Element {
       return;
     }
 
-    const mobileMediaQuery = window.matchMedia(
-      '(max-width: 900px), (hover: none) and (pointer: coarse)'
-    );
+    const isMatchMediaSupported = typeof window.matchMedia === 'function';
+    const mobileMediaQuery = isMatchMediaSupported
+      ? window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)')
+      : null;
     const mediaStandalone =
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(display-mode: standalone)').matches;
+      isMatchMediaSupported && window.matchMedia('(display-mode: standalone)').matches;
     const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
     const isIosStandalone =
       typeof navigatorWithStandalone.standalone === 'boolean' && navigatorWithStandalone.standalone;
 
     const isStandalone = mediaStandalone || isIosStandalone;
-    setShowPwaSuggestion(!isStandalone && mobileMediaQuery.matches);
+    const isMobile = mobileMediaQuery?.matches ?? false;
+
+    setShowPwaSuggestion(!isStandalone && isMobile);
   }, []);
 
   return (
