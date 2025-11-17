@@ -14,12 +14,10 @@ export interface AppHeaderShellProps {
   tagline?: string;
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
-  onOpenRealtime?: () => void;
   onExportAll?: () => void;
   onOpenPageSettings?: () => void;
   showDrawGachaButton?: boolean;
   showRegisterGachaButton?: boolean;
-  showRealtimeButton?: boolean;
   showExportButton?: boolean;
   showDiscordLoginButton?: boolean;
   appearance?: 'default' | 'dark';
@@ -30,12 +28,10 @@ export function AppHeaderShell({
   tagline,
   onDrawGacha,
   onRegisterGacha,
-  onOpenRealtime,
   onExportAll,
   onOpenPageSettings,
   showDrawGachaButton = true,
   showRegisterGachaButton = true,
-  showRealtimeButton = true,
   showExportButton = true,
   showDiscordLoginButton = true,
   appearance = 'default'
@@ -176,11 +172,9 @@ export function AppHeaderShell({
             mode="desktop"
             onDrawGacha={onDrawGacha}
             onRegisterGacha={onRegisterGacha}
-            onOpenRealtime={onOpenRealtime}
             onExportAll={onExportAll}
             showDrawGachaButton={showDrawGachaButton}
             showRegisterGachaButton={showRegisterGachaButton}
-            showRealtimeButton={showRealtimeButton}
             showExportButton={showExportButton}
           />
           {showDiscordLoginButton ? (
@@ -229,11 +223,9 @@ export function AppHeaderShell({
               mode="mobile"
               onDrawGacha={onDrawGacha}
               onRegisterGacha={onRegisterGacha}
-              onOpenRealtime={onOpenRealtime}
               onExportAll={onExportAll}
               showDrawGachaButton={showDrawGachaButton}
               showRegisterGachaButton={showRegisterGachaButton}
-              showRealtimeButton={showRealtimeButton}
               showExportButton={showExportButton}
             />
             {showDiscordLoginButton ? (
