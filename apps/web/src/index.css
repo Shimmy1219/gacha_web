@@ -321,22 +321,30 @@
     color: theme('colors.muted.foreground');
     --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.88);
     --gacha-tab-border: rgb(var(--color-border) / 0.45);
+    --gacha-tab-girth: 12px;
   }
 
   .gacha-tab::before {
     content: '';
     position: absolute;
-    inset: 0 -1px -0.6rem;
+    inset: 0 -1px -0.5rem;
     border: 1px solid var(--gacha-tab-border);
     background-color: var(--gacha-tab-bg);
     opacity: 0.9;
     transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
-    clip-path: path(
-      'M0 95% C0 64% 12% 42% 20% 42% L20% 24% C20% 10% 32% 4% 42% 4% L58% 4% C68% 4% 80% 10% 80% 24% L80% 42% C88% 42% 100% 64% 100% 95% Q50% 118% 0 95% Z'
+    clip-path: shape(
+      from bottom left,
+      curve to var(--gacha-tab-girth) calc(100% - var(--gacha-tab-girth)) with var(--gacha-tab-girth) 100%,
+      vline to var(--gacha-tab-girth),
+      curve to calc(var(--gacha-tab-girth) * 2) 0 with var(--gacha-tab-girth) 0,
+      hline to calc(100% - calc(var(--gacha-tab-girth) * 2)),
+      curve to calc(100% - var(--gacha-tab-girth)) var(--gacha-tab-girth) with calc(100% - var(--gacha-tab-girth)) 0,
+      vline to calc(100% - var(--gacha-tab-girth)),
+      curve to 100% 100% with calc(100% - var(--gacha-tab-girth)) 100%
     );
   }
 
-  @supports not (clip-path: path('M0 0')) {
+  @supports not (clip-path: shape(from bottom left)) {
     .gacha-tab::before {
       inset: 0;
       border-radius: 1rem 1rem 0 0;
