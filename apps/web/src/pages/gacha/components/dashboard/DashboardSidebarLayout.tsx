@@ -22,7 +22,7 @@ export function DashboardSidebarLayout({
     .filter((section): section is DashboardSectionConfig => Boolean(section));
 
   return (
-    <div className="dashboard-sidebar-layout grid gap-4 lg:grid-cols-[240px_1fr] xl:grid-cols-[260px_1fr]">
+    <div className="dashboard-sidebar-layout grid gap-4 min-[901px]:grid-cols-[240px_1fr] lg:grid-cols-[240px_1fr] xl:grid-cols-[260px_1fr]">
       <nav className="dashboard-sidebar-layout__nav flex flex-col gap-2">
         {sections.map((section) => {
           const selectionIndex = selectedViewIds.indexOf(section.id);
