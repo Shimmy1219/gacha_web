@@ -1149,7 +1149,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         </nav>
         <div
           className={clsx(
-            'flex-1 max-h-full overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm',
+            'page-settings__content-scroll flex-1 max-h-full overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm',
             isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
           )}
         >
