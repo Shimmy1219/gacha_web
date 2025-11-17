@@ -684,6 +684,7 @@ export function ItemsSection(): JSX.Element {
       push(ItemDeleteConfirmDialog, {
         id: `items-delete-${targetIds[0]}`,
         title: 'アイテムを削除',
+        intent: 'warning',
         payload: {
           itemId: targetIds[0],
           itemName: displayItemName,

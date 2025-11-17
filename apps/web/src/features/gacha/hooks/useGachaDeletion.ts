@@ -70,6 +70,7 @@ export function useGachaDeletion(options: UseGachaDeletionOptions = {}): (target
 
       push(GachaDeleteConfirmDialog, {
         id: `gacha-delete-${gachaId}`,
+        intent: 'warning',
         payload: {
           gachaId,
           gachaName,
