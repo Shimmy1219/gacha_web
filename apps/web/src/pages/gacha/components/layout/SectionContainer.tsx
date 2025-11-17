@@ -83,7 +83,7 @@ export function SectionContainer({
         className
       )}
     >
-      <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-6">
+      <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-2">
         <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4 px-4">
           <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
             {accentLabel ? (
