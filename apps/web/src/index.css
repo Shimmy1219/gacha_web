@@ -346,7 +346,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.5rem 1.3rem 0.75rem;
+    padding: 0.3rem 1.3rem 0.4rem;
     cursor: pointer;
     filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.2));
     color: theme('colors.muted.foreground');
