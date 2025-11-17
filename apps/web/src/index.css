@@ -464,7 +464,7 @@
   }
 
   .tab-panel-viewport {
-    @apply relative mt-1 overflow-x-hidden py-3;
+    @apply relative overflow-x-hidden py-3;
     overflow-y: visible;
   }
 
