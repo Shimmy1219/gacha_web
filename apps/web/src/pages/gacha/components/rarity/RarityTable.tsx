@@ -1,7 +1,150 @@
 import { clsx } from 'clsx';
+import {
+  useEffect,
+  useRef,
+  type ClipboardEvent,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent
+} from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
+
+interface RarityLabelFieldProps {
+  value: string;
+  gradientClassName?: string;
+  className?: string;
+  style?: CSSProperties;
+  placeholder?: string;
+  ariaLabel?: string;
+  onValueChange?: (nextValue: string) => void;
+}
+
+function sanitizeSingleLineText(text: string): string {
+  return text.replace(/[\r\n]+/g, '');
+}
+
+function RarityLabelField({
+  value,
+  gradientClassName,
+  className,
+  style,
+  placeholder,
+  ariaLabel,
+  onValueChange
+}: RarityLabelFieldProps): JSX.Element {
+  const editableRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const node = editableRef.current;
+    if (!node) {
+      return;
+    }
+
+    if (node.textContent !== value) {
+      node.textContent = value;
+    }
+  }, [value]);
+
+  const handleInput = (event: FormEvent<HTMLSpanElement>) => {
+    const rawValue = event.currentTarget.textContent ?? '';
+    const nextValue = sanitizeSingleLineText(rawValue);
+
+    if (nextValue !== rawValue) {
+      event.currentTarget.textContent = nextValue;
+    }
+
+    onValueChange?.(nextValue);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  };
+
+  const handleBeforeInput = (event: FormEvent<HTMLSpanElement>) => {
+    const nativeEvent = event.nativeEvent;
+    if (
+      nativeEvent instanceof InputEvent &&
+      (nativeEvent.inputType === 'insertLineBreak' || nativeEvent.inputType === 'insertParagraph')
+    ) {
+      event.preventDefault();
+    }
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLSpanElement>) => {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text) {
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      return;
+    }
+
+    selection.deleteFromDocument();
+    const range = selection.getRangeAt(0);
+    range.insertNode(document.createTextNode(sanitizeSingleLineText(text)));
+    range.collapse(false);
+
+    const node = editableRef.current;
+    if (!node) {
+      return;
+    }
+
+    const nextValue = sanitizeSingleLineText(node.textContent ?? '');
+    if (node.textContent !== nextValue) {
+      node.textContent = nextValue;
+    }
+
+    onValueChange?.(nextValue);
+  };
+
+  const displayGradientClass = gradientClassName && value ? gradientClassName : undefined;
+
+  const handleWrapperMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === editableRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    editableRef.current?.focus();
+  };
+
+  return (
+    <div
+      className={clsx(
+        'rarity-section__label-field-wrapper flex w-full min-w-0 items-center rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold text-surface-foreground transition focus-within:border-accent focus-within:outline-none',
+        className
+      )}
+      onMouseDown={handleWrapperMouseDown}
+    >
+      <span
+        ref={editableRef}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-label={ariaLabel}
+        aria-multiline={false}
+        spellCheck={false}
+        tabIndex={0}
+        data-placeholder={placeholder}
+        className={clsx('rarity-section__label-field', displayGradientClass)}
+        style={style}
+        onBeforeInput={handleBeforeInput}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+      />
+    </div>
+  );
+}
 
 export interface RarityTableRow {
   id: string;
@@ -63,16 +206,13 @@ export function RarityTable({
             return (
               <tr key={row.id} className="rarity-section__row text-sm text-surface-foreground">
                 <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
-                  <input
-                    type="text"
+                  <RarityLabelField
                     value={label}
-                    onChange={(event) => onLabelChange?.(row.id, event.target.value)}
-                    className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none',
-                      presentation.className ?? 'text-surface-foreground'
-                    )}
+                    onValueChange={(next) => onLabelChange?.(row.id, next)}
+                    className="rarity-section__label-input"
+                    gradientClassName={presentation.className}
                     style={presentation.style}
-                    aria-label={ariaLabel}
+                    ariaLabel={ariaLabel}
                     placeholder={row.placeholder ?? row.id}
                   />
                 </td>
