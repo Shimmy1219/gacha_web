@@ -338,7 +338,9 @@
 
   .gacha-tabs {
     @apply flex flex-nowrap items-end;
+    position: relative;
     gap: 0;
+    box-shadow: inset 0 -10px 12px -12px rgba(0, 0, 0, 0.45);
   }
 
   .gacha-tab {
@@ -410,6 +412,10 @@
   .gacha-tab--inactive:hover {
     --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.96);
     --gacha-tab-border: rgba(255, 63, 102, 0.6);
+  }
+
+  .gacha-tab--inactive::before {
+    box-shadow: inset 0 -10px 12px -12px rgba(0, 0, 0, 0.45);
   }
 
   .gacha-tab:hover {
