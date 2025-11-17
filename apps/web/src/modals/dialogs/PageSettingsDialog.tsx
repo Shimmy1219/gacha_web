@@ -558,13 +558,16 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-surface-foreground">コンプリート排出モード</h3>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   ここで選択したモードが、登録済みのすべてのガチャに共通して適用されます。
                 </p>
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  例えばコンプptが10000ptで30000pt分引くとき、「コンプ回数分全て排出」を選択すると、全てのコンプ対象のアイテムが3つずつ排出されます。「初回のみ全種→残りは通常排出」を選択すると、10000pt分で、全てのコンプ対象のアイテムが1つずつ排出され、残りの20000pt分は通常のガチャとして消費されます。
+                </p>
               </div>
-              <div className="grid gap-3 md:grid-cols-[minmax(260px,320px),1fr] md:items-center">
+              <div className="space-y-2">
                 <SingleSelectDropdown<CompleteDrawMode>
                   value={completeMode}
                   onChange={handleCompleteModeChange}
