@@ -3,6 +3,11 @@ import { ArrowDownTrayIcon, ArrowUpTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCir
 import clsx from 'clsx';
 
 import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
+import {
+  GOLD_HEX,
+  RAINBOW_VALUE,
+  SILVER_HEX
+} from '../../../pages/gacha/components/rarity/color-picker/palette';
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 
@@ -30,6 +35,38 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
   }
 
   const trimmed = rarityColor.trim();
+  const normalized = trimmed.toLowerCase();
+
+  if (normalized === RAINBOW_VALUE) {
+    return {
+      backgroundImage:
+        'linear-gradient(120deg, #ff6b6b 0%, #fbbf24 25%, #34d399 50%, #60a5fa 70%, #a78bfa 85%, #f472b6 100%)',
+      borderColor: '#ffffff26',
+      color: '#fff',
+      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25)'
+    };
+  }
+
+  if (normalized === GOLD_HEX) {
+    return {
+      backgroundImage:
+        'linear-gradient(135deg, #7a5c13 0%, #ffd56a 30%, #a67c00 50%, #ffe69a 70%, #7a5c13 100%)',
+      borderColor: '#facc1540',
+      color: '#fff',
+      boxShadow: '0 10px 25px #facc1540'
+    };
+  }
+
+  if (normalized === SILVER_HEX) {
+    return {
+      backgroundImage:
+        'linear-gradient(135deg, #6b7280 0%, #e5e7eb 35%, #9ca3af 55%, #f3f4f6 75%, #6b7280 100%)',
+      borderColor: '#e5e7eb40',
+      color: '#fff',
+      boxShadow: '0 10px 25px #e5e7eb40'
+    };
+  }
+
   if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)) {
     return {
       backgroundColor: trimmed,
