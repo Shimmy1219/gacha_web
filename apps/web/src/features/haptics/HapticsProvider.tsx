@@ -37,6 +37,7 @@ export function HapticsProvider({ children }: PropsWithChildren): JSX.Element {
 
     let disposed = false;
     let clickListener: ((event: MouseEvent) => void) | undefined;
+    let toggleChangeListener: ((event: Event) => void) | undefined;
 
     const setup = async () => {
       try {
@@ -72,9 +73,27 @@ export function HapticsProvider({ children }: PropsWithChildren): JSX.Element {
           triggerSelection();
         };
 
+        const handleToggleFeedback = (target: HTMLElement | null) => {
+          if (!target) {
+            return false;
+          }
+
+          const toggleLikeElement = target.closest('[role="switch"], [aria-pressed]');
+          if (toggleLikeElement) {
+            triggerSelection();
+            return true;
+          }
+
+          return false;
+        };
+
         clickListener = (event: MouseEvent) => {
           const target = event.target instanceof HTMLElement ? event.target : null;
           if (!target) {
+            return;
+          }
+
+          if (handleToggleFeedback(target)) {
             return;
           }
 
@@ -86,7 +105,19 @@ export function HapticsProvider({ children }: PropsWithChildren): JSX.Element {
           }
         };
 
+        toggleChangeListener = (event: Event) => {
+          const target = event.target instanceof HTMLInputElement ? event.target : null;
+          if (!target) {
+            return;
+          }
+
+          if (target.type === 'checkbox' || target.getAttribute('role') === 'switch') {
+            triggerSelection();
+          }
+        };
+
         document.addEventListener('click', clickListener, true);
+        document.addEventListener('change', toggleChangeListener, true);
 
         setContextValue({
           isSupported: true,
@@ -105,6 +136,9 @@ export function HapticsProvider({ children }: PropsWithChildren): JSX.Element {
       disposed = true;
       if (clickListener) {
         document.removeEventListener('click', clickListener, true);
+      }
+      if (toggleChangeListener) {
+        document.removeEventListener('change', toggleChangeListener, true);
       }
     };
   }, []);
