@@ -26,6 +26,7 @@ import {
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -762,9 +763,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
 
+        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+
+        if (!channelId && !preferredCategory) {
+          const category = await ensurePrivateChannelCategory({
+            push,
+            discordUserId: staffDiscordId,
+            guildSelection,
+            dialogTitle: 'お渡しカテゴリの設定'
+          });
+          preferredCategory = category.id;
+        }
+
         if (!channelId) {
-          const preferredCategory =
-            channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
           if (!preferredCategory) {
             throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
           }

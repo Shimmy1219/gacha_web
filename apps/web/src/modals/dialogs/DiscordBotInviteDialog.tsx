@@ -6,6 +6,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/discord/useDiscordOwnedGuilds';
 import {
   loadDiscordGuildSelection,
@@ -50,7 +51,8 @@ function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
 
 export function DiscordBotInviteDialog({
   payload,
-  close
+  close,
+  push
 }: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
   const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
@@ -76,6 +78,28 @@ export function DiscordBotInviteDialog({
       }
     }
   }, [guilds, selectedGuildId]);
+
+  const openCategorySetupDialog = (selection: DiscordGuildSelection) => {
+    if (!userId) {
+      return;
+    }
+    if (selection.privateChannelCategory?.id) {
+      return;
+    }
+
+    push(DiscordPrivateChannelCategoryDialog, {
+      title: 'お渡しカテゴリの選択',
+      size: 'lg',
+      payload: {
+        guildId: selection.guildId,
+        discordUserId: userId,
+        initialCategory: selection.privateChannelCategory ?? null,
+        onCategorySelected: (category) => {
+          payload?.onGuildSelected?.({ ...selection, privateChannelCategory: category });
+        }
+      }
+    });
+  };
 
   const handleSelect = (guild: DiscordGuildSummary) => {
     if (!guild.botJoined) {
@@ -168,6 +192,7 @@ export function DiscordBotInviteDialog({
 
       saveDiscordGuildSelection(userId, selection);
       payload?.onGuildSelected?.(selection);
+      openCategorySetupDialog(selection);
       close();
     } finally {
       setSubmitStage('idle');
