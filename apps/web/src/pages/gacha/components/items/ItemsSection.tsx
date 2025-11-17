@@ -1,4 +1,4 @@
-import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
+import { ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import {
   useCallback,
@@ -52,6 +52,8 @@ type ItemsByGacha = Record<string, ItemEntry[]>;
 type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+type ItemSortOption = 'catalog' | 'rarity' | 'name' | 'rate';
+
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
 
 function getSequentialItemName(position: number): string {
@@ -81,6 +83,7 @@ export function ItemsSection(): JSX.Element {
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
+  const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
   const { isMobile } = useResponsiveDashboard();
   const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
@@ -326,7 +329,48 @@ export function ItemsSection(): JSX.Element {
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
 
-  const visibleIdSet = useMemo(() => new Set(items.map((entry) => entry.model.itemId)), [items]);
+  const displayedItems = useMemo(() => {
+    const entries = [...items];
+
+    switch (sortOption) {
+      case 'rarity':
+        return entries.sort((a, b) => {
+          const rarityDiff = (a.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER) -
+            (b.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER);
+          if (rarityDiff !== 0) {
+            return rarityDiff;
+          }
+
+          const emitDiff = (b.rarity.emitRate ?? 0) - (a.rarity.emitRate ?? 0);
+          if (emitDiff !== 0) {
+            return emitDiff;
+          }
+
+          return a.model.name.localeCompare(b.model.name, 'ja');
+        });
+      case 'name':
+        return entries.sort((a, b) => a.model.name.localeCompare(b.model.name, 'ja'));
+      case 'rate':
+        return entries.sort((a, b) => {
+          const normalizeRate = (value?: number) => (typeof value === 'number' ? value : -1);
+          const aRate = normalizeRate(a.itemRate ?? a.rarity.itemRate);
+          const bRate = normalizeRate(b.itemRate ?? b.rarity.itemRate);
+          const rateDiff = bRate - aRate;
+          if (rateDiff !== 0) {
+            return rateDiff;
+          }
+
+          return a.model.name.localeCompare(b.model.name, 'ja');
+        });
+      default:
+        return entries;
+    }
+  }, [items, sortOption]);
+
+  const visibleIdSet = useMemo(
+    () => new Set(displayedItems.map((entry) => entry.model.itemId)),
+    [displayedItems]
+  );
 
   useEffect(() => {
     setSelectedItemIds((previous) => {
@@ -997,14 +1041,23 @@ export function ItemsSection(): JSX.Element {
           title="アイテム設定"
           description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
           actions={
-            <button
-              type="button"
-              className="items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
-              onClick={() => console.info('フィルタモーダルは未実装です')}
-            >
-              <AdjustmentsHorizontalIcon className="h-4 w-4" />
-              フィルタ
-            </button>
+            <div className="items-section__sort-control chip flex items-center gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-accent">
+              <ArrowsUpDownIcon className="h-4 w-4" />
+              <label className="text-sm font-semibold" htmlFor="items-sort-select">
+                並べ替え
+              </label>
+              <select
+                id="items-sort-select"
+                className="items-section__sort-select rounded-md bg-transparent text-sm font-semibold text-accent outline-none"
+                value={sortOption}
+                onChange={(event) => setSortOption(event.target.value as ItemSortOption)}
+              >
+                <option value="catalog">カタログ順</option>
+                <option value="rarity">レアリティ順</option>
+                <option value="name">名前順</option>
+                <option value="rate">排出率順</option>
+              </select>
+            </div>
           }
           contentClassName="items-section__content"
           forceMobile={forceMobileSection}
@@ -1041,7 +1094,7 @@ export function ItemsSection(): JSX.Element {
                         {showAddCard ? (
                           <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                         ) : null}
-                        {items.map(({ model, rarity, itemRateDisplay }) => (
+                        {displayedItems.map(({ model, rarity, itemRateDisplay }) => (
                           <ItemCard
                             key={model.itemId}
                             model={model}
