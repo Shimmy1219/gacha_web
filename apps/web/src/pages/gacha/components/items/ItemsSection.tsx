@@ -82,8 +82,9 @@ export function ItemsSection(): JSX.Element {
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const { isMobile } = useResponsiveDashboard();
+  const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
-    'repeat(auto-fit,minmax(100px,181px))'
+    `repeat(${defaultColumnCount}, minmax(100px,181px))`
   );
   const computeGridTemplateColumns = useCallback((width: number) => {
     const gap = 16; // gap-4 => 1rem
@@ -92,7 +93,7 @@ export function ItemsSection(): JSX.Element {
     const idealWidth = 181;
 
     if (!Number.isFinite(width) || width <= 0) {
-      return `repeat(auto-fit,minmax(${minWidth}px,${idealWidth}px))`;
+      return `repeat(${defaultColumnCount}, minmax(${minWidth}px,${idealWidth}px))`;
     }
 
     const calculateCardWidth = (columns: number) => {
