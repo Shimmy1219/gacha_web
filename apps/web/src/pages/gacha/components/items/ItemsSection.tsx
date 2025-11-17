@@ -1,4 +1,3 @@
-import { ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import {
   useCallback,
@@ -17,6 +16,7 @@ import {
   type ItemCardPreviewPayload,
   type RarityMeta
 } from '../cards/ItemCard';
+import { SingleSelectDropdown, type SingleSelectOption } from '../select/SingleSelectDropdown';
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useModal } from '../../../../modals';
@@ -84,6 +84,15 @@ export function ItemsSection(): JSX.Element {
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
+  const sortOptions = useMemo<SingleSelectOption<ItemSortOption>[]>(
+    () => [
+      { value: 'catalog', label: 'カタログ順' },
+      { value: 'rarity', label: 'レアリティ順' },
+      { value: 'name', label: '名前順' },
+      { value: 'rate', label: '排出率順' }
+    ],
+    []
+  );
   const { isMobile } = useResponsiveDashboard();
   const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
@@ -1041,23 +1050,19 @@ export function ItemsSection(): JSX.Element {
           title="アイテム設定"
           description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
           actions={
-            <div className="items-section__sort-control chip flex items-center gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-accent">
-              <ArrowsUpDownIcon className="h-4 w-4" />
-              <label className="text-sm font-semibold" htmlFor="items-sort-select">
-                並べ替え
-              </label>
-              <select
-                id="items-sort-select"
-                className="items-section__sort-select rounded-md bg-transparent text-sm font-semibold text-accent outline-none"
-                value={sortOption}
-                onChange={(event) => setSortOption(event.target.value as ItemSortOption)}
-              >
-                <option value="catalog">カタログ順</option>
-                <option value="rarity">レアリティ順</option>
-                <option value="name">名前順</option>
-                <option value="rate">排出率順</option>
-              </select>
-            </div>
+            <SingleSelectDropdown
+              id="items-sort-select"
+              value={sortOption}
+              options={sortOptions}
+              onChange={(value) => setSortOption(value)}
+              classNames={{
+                root: 'items-section__sort-control',
+                button:
+                  'chip inline-flex min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent',
+                icon: 'h-4 w-4 text-accent',
+                menu: 'mt-2'
+              }}
+            />
           }
           contentClassName="items-section__content"
           forceMobile={forceMobileSection}
