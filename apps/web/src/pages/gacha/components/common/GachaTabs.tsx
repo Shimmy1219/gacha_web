@@ -1,6 +1,6 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useMemo } from 'react';
+import { useCallback } from 'react';
 
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
@@ -20,18 +20,17 @@ interface GachaTabsProps {
 export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: GachaTabsProps): JSX.Element {
   const { triggerSelection } = useHaptics();
 
+  const handleSelect = useCallback(
+    (gachaId: string) => {
+      triggerSelection();
+      onSelect(gachaId);
+    },
+    [onSelect, triggerSelection]
+  );
+
   if (!tabs.length) {
     return <div className={clsx('gacha-tabs tab-scroll-area px-4', className)} />;
   }
-
-  const handleSelect = useMemo(
-    () =>
-      (gachaId: string) => {
-        triggerSelection();
-        onSelect(gachaId);
-      },
-    [onSelect, triggerSelection]
-  );
 
   return (
     <div className={clsx('gacha-tabs tab-scroll-area px-4', className)}>
