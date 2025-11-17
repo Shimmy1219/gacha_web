@@ -36,14 +36,12 @@ export function GachaSplashScreen({
         >
           ガチャを登録
         </button>
-        <div className="flex w-full flex-col gap-3 sm:max-w-2xl sm:flex-row sm:items-stretch sm:justify-center">
-          <div className="flex-1">
-            <DiscordLoginButton
-              placement="splash"
-              onOpenPageSettings={onOpenPageSettings}
-              className="w-full justify-center"
-            />
-          </div>
+        <div className="w-full max-w-md">
+          <DiscordLoginButton
+            placement="splash"
+            onOpenPageSettings={onOpenPageSettings}
+            className="w-full justify-center"
+          />
         </div>
       </div>
     </section>
