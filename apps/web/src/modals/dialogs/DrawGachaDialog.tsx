@@ -604,6 +604,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const discordDeliveryButtonDisabled =
     isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
+  const discordDeliveryButtonMinWidth = '14.5rem';
   const discordDeliveryButtonLabel = useMemo(() => {
     if (discordDeliveryCompleted) {
       return '送信済み';
@@ -648,6 +649,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     void shareResult('draw-result', shareContent.shareText);
   }, [shareContent, shareResult]);
+
+  const queuedDeliveryProcessingRef = useRef<string | null>(null);
 
   const performDiscordDelivery = useCallback(
     async ({
@@ -957,9 +960,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   useEffect(() => {
     if (!queuedDiscordDelivery) {
+      queuedDeliveryProcessingRef.current = null;
       return;
     }
-    const { userId, selection } = queuedDiscordDelivery;
+    const { userId, selection, requestedAt } = queuedDiscordDelivery;
+    const processingKey = `${userId}:${requestedAt}`;
+
+    if (queuedDeliveryProcessingRef.current === processingKey) {
+      return;
+    }
+
+    queuedDeliveryProcessingRef.current = processingKey;
     if (!userId) {
       setQueuedDiscordDelivery(null);
       return;
@@ -981,6 +992,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         console.error('Failed to deliver prize after linking Discord profile', error);
       } finally {
         setQueuedDiscordDelivery(null);
+        queuedDeliveryProcessingRef.current = null;
       }
     })();
   }, [queuedDiscordDelivery, userProfilesState, performDiscordDelivery]);
@@ -1389,6 +1401,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   <button
                     type="button"
                     className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+                    style={{ minWidth: discordDeliveryButtonMinWidth }}
                     onClick={handleDeliverToDiscord}
                     disabled={discordDeliveryButtonDisabled}
                   >
