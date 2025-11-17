@@ -185,6 +185,7 @@
 
   .items-section__scroll.section-scroll {
     padding: unset;
+    box-shadow: inset 0 10px 12px -10px rgb(var(--color-overlay) / 0.9);
   }
 
   .section-scroll.section-scroll--no-scrollbar {
@@ -375,9 +376,12 @@
   .gacha-tab--active {
     z-index: 2;
     --gacha-tab-bg: rgb(var(--color-surface) / 1);
-    --gacha-tab-border: rgb(var(--color-accent) / 0.9);
     --gacha-tab-text: rgb(var(--color-surface-foreground) / 1);
     filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+  }
+
+  .gacha-tab--active::before {
+    border-width: 0;
   }
 
   .gacha-tab--inactive:hover {
