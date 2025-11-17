@@ -58,11 +58,50 @@ function getBreakpoint(width: number): Breakpoint {
   return 'base';
 }
 
-function distributeWidths(minWidths: number[], weights: number[], available: number): number[] {
-  const minTotal = minWidths.reduce((sum, value) => sum + value, 0);
-  const leftover = Math.max(available - minTotal, 0);
-  const weightSum = weights.reduce((sum, value) => sum + value, 0) || 1;
-  return minWidths.map((minWidth, index) => minWidth + (leftover * weights[index]) / weightSum);
+export function distributeWidths(minWidths: number[], weights: number[], available: number): number[] {
+  if (minWidths.length === 0) {
+    return [];
+  }
+
+  const safeAvailable = Math.max(available, 0);
+  const safeMinWidths = minWidths.map((value) => Math.max(value, 0));
+  const minTotal = safeMinWidths.reduce((sum, value) => sum + value, 0);
+
+  if (minTotal > safeAvailable && minTotal > 0) {
+    const scale = safeAvailable / minTotal;
+    return safeMinWidths.map((minWidth) => minWidth * scale);
+  }
+
+  const leftover = safeAvailable - minTotal;
+  const safeWeights = weights.map((value) => Math.max(value, 0));
+  const weightSum = safeWeights.reduce((sum, value) => sum + value, 0);
+  const fallbackWeights = weightSum > 0 ? safeWeights : safeMinWidths.map(() => 1);
+  const fallbackSum = weightSum > 0 ? weightSum : fallbackWeights.length || 1;
+
+  return safeMinWidths.map(
+    (minWidth, index) => minWidth + (leftover * (fallbackWeights[index] ?? 0)) / fallbackSum
+  );
+}
+
+export function clampWidthsToAvailable(widths: number[], available: number): number[] {
+  if (widths.length === 0) {
+    return widths;
+  }
+
+  const safeAvailable = Math.max(available, 0);
+  const sanitized = widths.map((value) => Math.max(value, 0));
+  const total = sanitized.reduce((sum, value) => sum + value, 0);
+
+  if (total === 0 || safeAvailable === 0) {
+    return sanitized.map(() => 0);
+  }
+
+  if (total <= safeAvailable) {
+    return sanitized;
+  }
+
+  const scale = safeAvailable / total;
+  return sanitized.map((value) => value * scale);
 }
 
 function calculateDraggedWidths(
@@ -201,13 +240,15 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
 
     setColumnWidths((previous) => {
       if (!previous || previous.length !== columnCount) {
-        return distributeWidths(minWidthsPx, activeConfig.weights, available);
+        const distributed = distributeWidths(minWidthsPx, activeConfig.weights, available);
+        return clampWidthsToAvailable(distributed, available);
       }
 
       const extras = previous.map((value, index) => Math.max(value - minWidthsPx[index], 0));
       const sumExtras = extras.reduce((sum, value) => sum + value, 0);
       const ratios = sumExtras > 0 ? extras : activeConfig.weights;
-      return distributeWidths(minWidthsPx, ratios, available);
+      const distributed = distributeWidths(minWidthsPx, ratios, available);
+      return clampWidthsToAvailable(distributed, available);
     });
   }, [activeConfig, containerMetrics.width, containerMetrics.gap, minWidthsPx]);
 
@@ -249,11 +290,15 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
         return current;
       }
       if (current.length !== nextWidths.length) {
-        return nextWidths;
+        const gapTotal = containerMetrics.gap * Math.max(nextWidths.length - 1, 0);
+        const available = Math.max(containerMetrics.width - gapTotal, 0);
+        return clampWidthsToAvailable(nextWidths, available);
       }
       for (let i = 0; i < current.length; i += 1) {
         if (current[i] !== nextWidths[i]) {
-          return nextWidths;
+          const gapTotal = containerMetrics.gap * Math.max(nextWidths.length - 1, 0);
+          const available = Math.max(containerMetrics.width - gapTotal, 0);
+          return clampWidthsToAvailable(nextWidths, available);
         }
       }
       return current;
@@ -275,10 +320,13 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     if (!columnWidths) {
       return undefined;
     }
+    const gapTotal = containerMetrics.gap * Math.max(columnWidths.length - 1, 0);
+    const available = Math.max(containerMetrics.width - gapTotal, 0);
+    const safeWidths = clampWidthsToAvailable(columnWidths, available);
     return {
-      gridTemplateColumns: columnWidths.map((width) => `${Math.max(width, 0)}px`).join(' ')
+      gridTemplateColumns: safeWidths.map((width) => `${Math.max(width, 0)}px`).join(' ')
     } as CSSProperties;
-  }, [columnWidths]);
+  }, [columnWidths, containerMetrics.gap, containerMetrics.width]);
 
   const handlePositions = useMemo(() => {
     if (!columnWidths) {
