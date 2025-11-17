@@ -40,6 +40,7 @@ export async function ensurePrivateChannelCategory({
     };
 
     push(DiscordPrivateChannelCategoryDialog, {
+      id: 'discord-private-channel-category',
       title: dialogTitle ?? 'お渡しカテゴリの選択',
       size: 'lg',
       payload: {
