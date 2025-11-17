@@ -294,7 +294,8 @@ function simulateGacha({
       gachaId: gacha.id,
       pool: gacha.pool,
       settings: ptSetting,
-      points
+      points,
+      completeMode
     });
 
     if (result.errors.length > 0) {
