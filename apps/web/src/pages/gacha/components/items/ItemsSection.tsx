@@ -53,6 +53,13 @@ type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 type ItemSortOption = 'catalog' | 'rarity' | 'name' | 'rate';
+type ItemSortDirection = 'asc' | 'desc';
+const sortDirectionDefaults: Record<ItemSortOption, ItemSortDirection> = {
+  catalog: 'asc',
+  rarity: 'asc',
+  name: 'asc',
+  rate: 'desc'
+};
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
 
@@ -84,6 +91,9 @@ export function ItemsSection(): JSX.Element {
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
+  const [sortDirection, setSortDirection] = useState<ItemSortDirection>(
+    sortDirectionDefaults.catalog
+  );
   const sortOptions = useMemo<SingleSelectOption<ItemSortOption>[]>(
     () => [
       { value: 'catalog', label: 'カタログ順' },
@@ -340,6 +350,7 @@ export function ItemsSection(): JSX.Element {
 
   const displayedItems = useMemo(() => {
     const entries = [...items];
+    const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
 
     switch (sortOption) {
       case 'rarity':
@@ -347,34 +358,50 @@ export function ItemsSection(): JSX.Element {
           const rarityDiff = (a.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER) -
             (b.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER);
           if (rarityDiff !== 0) {
-            return rarityDiff;
+            return rarityDiff * directionMultiplier;
           }
 
           const emitDiff = (b.rarity.emitRate ?? 0) - (a.rarity.emitRate ?? 0);
           if (emitDiff !== 0) {
-            return emitDiff;
+            return emitDiff * directionMultiplier;
           }
 
-          return a.model.name.localeCompare(b.model.name, 'ja');
+          return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
         });
       case 'name':
-        return entries.sort((a, b) => a.model.name.localeCompare(b.model.name, 'ja'));
+        return entries.sort(
+          (a, b) => a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier
+        );
       case 'rate':
         return entries.sort((a, b) => {
-          const normalizeRate = (value?: number) => (typeof value === 'number' ? value : -1);
+          const normalizeRate = (value?: number) =>
+            typeof value === 'number' ? value : null;
           const aRate = normalizeRate(a.itemRate ?? a.rarity.itemRate);
           const bRate = normalizeRate(b.itemRate ?? b.rarity.itemRate);
-          const rateDiff = bRate - aRate;
-          if (rateDiff !== 0) {
-            return rateDiff;
+
+          if (aRate === bRate) {
+            return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
           }
 
-          return a.model.name.localeCompare(b.model.name, 'ja');
+          if (aRate === null) {
+            return 1;
+          }
+
+          if (bRate === null) {
+            return -1;
+          }
+
+          const rateDiff = aRate - bRate;
+          if (rateDiff !== 0) {
+            return rateDiff * directionMultiplier;
+          }
+
+          return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
         });
       default:
-        return entries;
+        return directionMultiplier === -1 ? entries.reverse() : entries;
     }
-  }, [items, sortOption]);
+  }, [items, sortDirection, sortOption]);
 
   const visibleIdSet = useMemo(
     () => new Set(displayedItems.map((entry) => entry.model.itemId)),
@@ -1042,6 +1069,16 @@ export function ItemsSection(): JSX.Element {
   const pickupActionLabel = selectionSummary.allPickup ? 'ピックアップを解除' : 'ピックアップに設定';
   const completeActionLabel = selectionSummary.allComplete ? 'コンプ対象から除外' : 'コンプ対象に設定';
   const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
+  const sortDirectionLabel = sortDirection === 'asc' ? '昇順' : '降順';
+
+  const handleSortOptionChange = useCallback((value: ItemSortOption) => {
+    setSortOption(value);
+    setSortDirection(sortDirectionDefaults[value]);
+  }, []);
+
+  const handleSortDirectionToggle = useCallback(() => {
+    setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+  }, []);
 
   return (
       <div ref={sectionWrapperRef} className="h-full">
@@ -1050,19 +1087,29 @@ export function ItemsSection(): JSX.Element {
           title="アイテム設定"
           description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
           actions={
-            <SingleSelectDropdown
-              id="items-sort-select"
-              value={sortOption}
-              options={sortOptions}
-              onChange={(value) => setSortOption(value)}
-              classNames={{
-                root: 'items-section__sort-control',
-                button:
-                  'chip inline-flex min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent',
-                icon: 'h-4 w-4 text-accent',
-                menu: 'mt-2'
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <SingleSelectDropdown
+                id="items-sort-select"
+                value={sortOption}
+                options={sortOptions}
+                onChange={handleSortOptionChange}
+                classNames={{
+                  root: 'items-section__sort-control',
+                  button:
+                    'chip inline-flex min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent',
+                  icon: 'h-4 w-4 text-accent',
+                  menu: 'mt-2'
+                }}
+              />
+              <button
+                type="button"
+                className="chip inline-flex items-center gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent transition hover:border-accent/70 hover:bg-accent/15"
+                onClick={handleSortDirectionToggle}
+                aria-label={`表示順を${sortDirection === 'asc' ? '降順' : '昇順'}に切り替える`}
+              >
+                {sortDirectionLabel}
+              </button>
+            </div>
           }
           contentClassName="items-section__content"
           forceMobile={forceMobileSection}
