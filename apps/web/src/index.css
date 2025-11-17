@@ -302,26 +302,47 @@
   }
 
   .tab-scroll-area {
-    @apply flex flex-nowrap items-end gap-2 overflow-x-auto pb-1 pt-2;
+    @apply flex flex-nowrap items-end;
+    margin-inline-start: 1rem;
+    padding: 8px 8px 0 8px;
+    gap: 0;
+    overflow-x: auto;
+    overflow-y: clip;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 1) transparent;
   }
 
   .gacha-tabs {
-    @apply flex flex-nowrap items-end gap-2;
+    @apply flex flex-nowrap items-end;
+    gap: 0;
   }
 
   .gacha-tab {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.2rem;
-    padding: 0.45rem 0.85rem 0.7rem;
+    gap: 0.3rem;
+    padding: 0.5rem 1.3rem 0.75rem;
     cursor: pointer;
+    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.2));
     color: theme('colors.muted.foreground');
-    --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.88);
-    --gacha-tab-border: rgb(var(--color-border) / 0.45);
+    --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.9);
+    --gacha-tab-border: rgb(var(--color-border) / 0.55);
+    --gacha-tab-text: theme('colors.muted.foreground');
     --gacha-tab-girth: 12px;
+    transition: translate 0.1s ease, filter 0.2s ease;
+  }
+
+  @supports (clip-path: shape(from top left, hline to 0)) {
+    .gacha-tab:not(:first-child) {
+      margin-inline-start: calc(var(--gacha-tab-girth) * 2 * -1);
+    }
+  }
+
+  @supports not (clip-path: shape(from top left, hline to 0)) {
+    .gacha-tab:not(:last-child) {
+      margin-inline-end: 0.5rem;
+    }
   }
 
   .gacha-tab::before {
@@ -330,7 +351,7 @@
     inset: 0 -1px -0.5rem;
     border: 1px solid var(--gacha-tab-border);
     background-color: var(--gacha-tab-bg);
-    opacity: 0.9;
+    opacity: 0.95;
     transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     clip-path: shape(
       from bottom left,
@@ -352,17 +373,29 @@
   }
 
   .gacha-tab--active {
-    --gacha-tab-bg: rgb(var(--color-accent) / 0.92);
-    --gacha-tab-border: rgb(var(--color-accent) / 0.95);
+    z-index: 2;
+    --gacha-tab-bg: rgb(var(--color-surface) / 1);
+    --gacha-tab-border: rgb(var(--color-accent) / 0.9);
+    --gacha-tab-text: rgb(var(--color-surface-foreground) / 1);
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
   }
 
   .gacha-tab--inactive:hover {
-    --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.95);
-    --gacha-tab-border: rgba(255, 63, 102, 0.55);
+    --gacha-tab-bg: rgb(var(--color-panel-contrast) / 0.96);
+    --gacha-tab-border: rgba(255, 63, 102, 0.6);
+  }
+
+  .gacha-tab:hover {
+    translate: 0 2px;
+  }
+
+  .gacha-tab:active {
+    translate: 0 4px;
   }
 
   .gacha-tab__label {
-    @apply relative z-10 flex-1 select-none whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground transition;
+    @apply relative z-10 flex-1 select-none whitespace-nowrap text-left text-[11px] font-semibold uppercase tracking-[0.18em] transition;
+    color: var(--gacha-tab-text);
     background: transparent;
     border: none;
     padding: 0.1rem 0.15rem;
@@ -375,11 +408,8 @@
   }
 
   .gacha-tab--active .gacha-tab__label {
-    @apply text-white;
-  }
-
-  .gacha-tab--inactive .gacha-tab__label {
-    @apply text-muted-foreground;
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em];
+    color: var(--gacha-tab-text);
   }
 
   .gacha-tab__label-text {
@@ -387,7 +417,9 @@
   }
 
   .gacha-tab__close {
-    @apply relative z-10 inline-flex items-center justify-center text-muted-foreground/70 transition;
+    @apply relative z-10 inline-flex items-center justify-center transition;
+    color: var(--gacha-tab-text);
+    opacity: 0.75;
     background: transparent;
     border: none;
     padding: 0.1rem;
@@ -395,7 +427,8 @@
   }
 
   .gacha-tab__close:hover {
-    color: rgba(255, 132, 170, 0.95);
+    color: rgb(var(--color-accent) / 1);
+    opacity: 1;
   }
 
   .gacha-tab__close:focus-visible {
