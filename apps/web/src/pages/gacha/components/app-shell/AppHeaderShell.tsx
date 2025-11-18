@@ -240,7 +240,7 @@ export function AppHeaderShell({
               showExportButton={showExportButton}
             />
               {showDiscordLoginButton ? (
-                <div className="app-header-shell__mobile-login lg:hidden">
+                <div className="app-header-shell__mobile-login">
                   <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
                 </div>
               ) : null}
