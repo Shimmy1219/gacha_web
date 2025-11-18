@@ -148,7 +148,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}
         />
-        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-3')}>
+        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
             <span
@@ -162,8 +162,8 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
               </span>
               <span
                 className={clsx(
-                  'ml-2 shrink-0 text-right text-[10px] font-normal text-muted-foreground tabular-nums',
-                  isMobile && 'ml-0 text-left'
+                  'text-[10px] font-normal text-muted-foreground tabular-nums',
+                  isMobile ? 'ml-0 text-left' : 'ml-2 shrink-0 text-right'
                 )}
               >
                 {hasRate ? rateDisplay : '—'}
