@@ -22,8 +22,8 @@ export function ToolbarActions({
 }: ToolbarActionsProps): JSX.Element {
   const containerClass =
     mode === 'desktop'
-      ? 'hidden items-center gap-3 lg:flex'
-      : 'flex w-full flex-col gap-3 lg:hidden';
+      ? 'flex items-center gap-3'
+      : 'flex w-full flex-col gap-3';
 
   const canShowDrawButton = showDrawGachaButton && mode !== 'mobile';
 
