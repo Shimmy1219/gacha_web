@@ -98,12 +98,16 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     const badgeStyle = buildRarityBadgeStyle(item.metadata?.rarityColor);
     const textStyle = rarityPresentation.style;
 
-    if (!badgeStyle || !textStyle) {
-      return badgeStyle ?? textStyle;
+    if (!badgeStyle && !textStyle) {
+      return undefined;
     }
 
-    const { color: _textColor, ...restTextStyle } = textStyle;
-    return { ...badgeStyle, ...restTextStyle };
+    return {
+      ...badgeStyle,
+      ...textStyle,
+      color: '#fff',
+      WebkitTextFillColor: '#fff'
+    };
   }, [item.metadata?.rarityColor, rarityPresentation.style]);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
@@ -170,10 +174,9 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
-                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-white/15 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/30',
-                  rarityPresentation.className
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-white/15 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/30'
                 )}
-                style={{ ...rarityBadgeStyle, ...rarityPresentation.style }}
+                style={rarityBadgeStyle}
               >
                 {item.metadata.rarity}
               </span>
