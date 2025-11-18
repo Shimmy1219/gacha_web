@@ -187,16 +187,16 @@ export function AppHeaderShell({
               showExportButton={showExportButton}
             />
           ) : null}
-          {showDiscordLoginButton ? (
-            <div className="hidden lg:block">
-              <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
-            </div>
+          {showDiscordLoginButton && !isMobile ? (
+            <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
           ) : null}
-          <MobileMenuButton
-            open={open}
-            onToggle={() => setOpen((prev) => !prev)}
-            controlsId={drawerId}
-          />
+          {isMobile ? (
+            <MobileMenuButton
+              open={open}
+              onToggle={() => setOpen((prev) => !prev)}
+              controlsId={drawerId}
+            />
+          ) : null}
         </div>
       </div>
       {isMobile ? (

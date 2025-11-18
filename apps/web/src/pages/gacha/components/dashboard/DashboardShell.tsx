@@ -113,7 +113,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
-  const isSidebarLayout = forceSidebarLayout || (!isMobile && desktopLayout === 'sidebar');
+  const isSidebarLayout = !isMobile && (forceSidebarLayout || desktopLayout === 'sidebar');
   const maxSidebarSelections = isLgDown ? 1 : 2;
   const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
   const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
