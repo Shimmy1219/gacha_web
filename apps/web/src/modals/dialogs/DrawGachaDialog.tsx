@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { useStoreValue } from '@domain/stores';
+import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
@@ -182,6 +182,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const navigate = useNavigate();
   const gachaSelectId = useId();
+  const completeMode = resolveCompleteModePreference(ptSettingsState);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -358,9 +359,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return calculateDrawPlan({
       points: parsedPoints,
       settings: selectedPtSetting,
-      totalItemTypes: selectedGacha.pool.items.length
+      totalItemTypes: selectedGacha.pool.items.length,
+      completeMode
     });
-  }, [parsedPoints, selectedGacha, selectedPtSetting]);
+  }, [completeMode, parsedPoints, selectedGacha, selectedPtSetting]);
 
   const handleExecute = async () => {
     if (isExecuting) {
@@ -411,7 +413,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         gachaId: selectedGacha.id,
         pool: selectedGacha.pool,
         settings: selectedPtSetting,
-        points: parsedPoints
+        points: parsedPoints,
+        completeMode
       });
 
       if (executionResult.errors.length > 0) {
@@ -504,9 +507,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
-  const completeMode: CompleteDrawMode =
+  const displayCompleteMode: CompleteDrawMode =
     normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
-  const completeModeLabel = COMPLETE_MODE_LABELS[completeMode];
+  const completeModeLabel = COMPLETE_MODE_LABELS[displayCompleteMode];
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{

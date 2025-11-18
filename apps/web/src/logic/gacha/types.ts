@@ -107,6 +107,7 @@ export interface CalculateDrawPlanArgs {
   points: number;
   settings: PtSettingV3 | undefined;
   totalItemTypes: number;
+  completeMode?: CompleteDrawMode;
 }
 
 export interface ExecuteGachaArgs {
@@ -114,6 +115,7 @@ export interface ExecuteGachaArgs {
   pool: GachaPoolDefinition;
   settings: PtSettingV3 | undefined;
   points: number;
+  completeMode?: CompleteDrawMode;
   rng?: () => number;
 }
 

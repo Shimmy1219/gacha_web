@@ -29,6 +29,10 @@ function toPositiveInteger(value: unknown): number | null {
   return Math.floor(positive);
 }
 
+function resolveCompleteMode(mode: unknown): CompleteDrawMode {
+  return mode === 'frontload' ? 'frontload' : 'repeat';
+}
+
 export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizePtSettingResult {
   const normalized: NormalizedPtSetting = {
     bundles: [],
@@ -255,9 +259,16 @@ function createEmptyPlan(normalized: NormalizedPtSetting, warnings: string[]): D
 export function calculateDrawPlan({
   points,
   settings,
-  totalItemTypes
+  totalItemTypes,
+  completeMode: preferredCompleteMode
 }: CalculateDrawPlanArgs): DrawPlan {
   const { normalized, warnings: normalizeWarnings } = normalizePtSetting(settings);
+  if (normalized.complete) {
+    normalized.complete = {
+      ...normalized.complete,
+      mode: resolveCompleteMode(preferredCompleteMode ?? normalized.complete.mode)
+    };
+  }
   const warnings = [...normalizeWarnings];
   const errors: string[] = [];
 
