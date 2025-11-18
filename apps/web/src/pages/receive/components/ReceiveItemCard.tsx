@@ -157,7 +157,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
                   'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-white/15 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/30',
                   rarityPresentation.className
                 )}
-                style={{ ...rarityBadgeStyle, ...rarityPresentation.style }}
+                style={{ ...rarityPresentation.style, ...rarityBadgeStyle }}
               >
                 {item.metadata.rarity}
               </span>
