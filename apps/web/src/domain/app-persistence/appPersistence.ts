@@ -35,6 +35,12 @@ export const STORAGE_KEYS = {
 
 type StorageKey = keyof typeof STORAGE_KEYS;
 
+const STORAGE_KEY_LABELS: Partial<Record<StorageKey, string>> = {
+  userInventories: 'ユーザー在庫',
+  userProfiles: 'ユーザープロフィール',
+  pullHistory: 'ガチャ履歴'
+};
+
 const SAVE_OPTIONS_STORAGE_KEY = 'gacha:save-options:last-upload:v3';
 
 export interface StorageLike {
@@ -431,10 +437,19 @@ export class AppPersistence {
     }
 
     const storageKey = STORAGE_KEYS[key];
-    if (typeof value === 'undefined') {
+    const hasValue = typeof value !== 'undefined';
+    if (!hasValue) {
       storage.removeItem(storageKey);
     } else {
       storage.setItem(storageKey, JSON.stringify(value));
+    }
+
+    const label = STORAGE_KEY_LABELS[key];
+    if (label) {
+      console.info(`【デバッグ】${label}をローカルストレージに${hasValue ? '保存しました' : '削除しました'}`, {
+        ストレージキー: storageKey,
+        永続化状態: hasValue ? '保存済み' : '未保存'
+      });
     }
   }
 

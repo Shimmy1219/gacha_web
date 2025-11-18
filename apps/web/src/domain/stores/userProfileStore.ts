@@ -185,6 +185,7 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
     }
 
     let resolvedId = generateDeterministicUserId(trimmed);
+    let wasCreated = false;
     this.update((previous) => {
       const base = normalizeState(previous);
       const now = new Date().toISOString();
@@ -192,6 +193,7 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
       const userId = existingByName?.id ?? resolvedId;
       resolvedId = userId;
       const existing = base.users[userId];
+      wasCreated = !existing;
       const nextUsers = {
         ...base.users,
         [userId]: {
@@ -209,6 +211,12 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
         users: nextUsers
       } satisfies UserProfilesStateV3;
     }, options);
+
+    console.info('【デバッグ】user-profileを更新しました', {
+      ユーザーID: resolvedId,
+      表示名: trimmed,
+      操作種別: wasCreated ? '新規作成' : '既存更新'
+    });
 
     return resolvedId;
   }

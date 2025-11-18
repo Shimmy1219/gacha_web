@@ -36,6 +36,7 @@ export function AppPersistenceProvider({ children }: PropsWithChildren): JSX.Ele
   });
 
   useEffect(() => {
+    value.stores.activate();
     return () => {
       value.stores.dispose();
     };

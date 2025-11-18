@@ -1097,8 +1097,7 @@ export async function importBackupFromFile(
 
   const projection = projectInventories({
     pullHistory: mergedSnapshot.pullHistory,
-    catalogState: mergedSnapshot.catalogState,
-    legacyInventories: mergedSnapshot.userInventories
+    catalogState: mergedSnapshot.catalogState
   });
   stores.userInventories.applyProjectionResult(projection.state, { emit: true, persist: 'debounced' });
 
