@@ -18,8 +18,11 @@ interface GradientConfig {
 
 const GRADIENTS: Record<string, GradientConfig> = {
   [RAINBOW_VALUE]: { className: 'text-gradient-rainbow', caretColor: '#f4f4f5' },
+  rainbow: { className: 'text-gradient-rainbow', caretColor: '#f4f4f5' },
   [GOLD_HEX]: { className: 'text-gradient-gold', caretColor: '#facc15' },
-  [SILVER_HEX]: { className: 'text-gradient-silver', caretColor: '#e5e7eb' }
+  gold: { className: 'text-gradient-gold', caretColor: '#facc15' },
+  [SILVER_HEX]: { className: 'text-gradient-silver', caretColor: '#e5e7eb' },
+  silver: { className: 'text-gradient-silver', caretColor: '#e5e7eb' }
 };
 
 export function getRarityTextPresentation(color?: string | null): RarityTextPresentation {
