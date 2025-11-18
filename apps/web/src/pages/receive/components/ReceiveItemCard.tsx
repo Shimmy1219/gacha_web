@@ -94,10 +94,17 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     () => getRarityTextPresentation(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
   );
-  const rarityBadgeStyle = useMemo(
-    () => buildRarityBadgeStyle(item.metadata?.rarityColor),
-    [item.metadata?.rarityColor]
-  );
+  const rarityBadgeStyle = useMemo(() => {
+    const badgeStyle = buildRarityBadgeStyle(item.metadata?.rarityColor);
+    const textStyle = rarityPresentation.style;
+
+    if (!badgeStyle || !textStyle) {
+      return badgeStyle ?? textStyle;
+    }
+
+    const { color: _textColor, ...restTextStyle } = textStyle;
+    return { ...badgeStyle, ...restTextStyle };
+  }, [item.metadata?.rarityColor, rarityPresentation.style]);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
       return (
