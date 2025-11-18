@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { HomeIcon } from '@heroicons/react/24/outline';
+import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 import { HeaderBrand } from './HeaderBrand';
@@ -38,6 +39,7 @@ export function AppHeaderShell({
 }: AppHeaderShellProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+  const { isMobile } = useResponsiveDashboard();
   const drawerId = useId();
   const drawerTitleId = useId();
   const headerRef = useRef<HTMLElement>(null);
@@ -150,6 +152,12 @@ export function AppHeaderShell({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!isMobile && open) {
+      setOpen(false);
+    }
+  }, [isMobile, open]);
+
   const isDarkAppearance = appearance === 'dark';
 
   return (
@@ -168,15 +176,17 @@ export function AppHeaderShell({
           <HeaderBrand title={title} tagline={tagline} appearance={appearance} />
         </div>
         <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
-          <ToolbarActions
-            mode="desktop"
-            onDrawGacha={onDrawGacha}
-            onRegisterGacha={onRegisterGacha}
-            onExportAll={onExportAll}
-            showDrawGachaButton={showDrawGachaButton}
-            showRegisterGachaButton={showRegisterGachaButton}
-            showExportButton={showExportButton}
-          />
+          {!isMobile ? (
+            <ToolbarActions
+              mode="desktop"
+              onDrawGacha={onDrawGacha}
+              onRegisterGacha={onRegisterGacha}
+              onExportAll={onExportAll}
+              showDrawGachaButton={showDrawGachaButton}
+              showRegisterGachaButton={showRegisterGachaButton}
+              showExportButton={showExportButton}
+            />
+          ) : null}
           {showDiscordLoginButton ? (
             <div className="hidden lg:block">
               <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
@@ -189,18 +199,19 @@ export function AppHeaderShell({
           />
         </div>
       </div>
-      <ResponsiveToolbarRail
-        open={open}
-        onClose={handleClose}
-        id={drawerId}
-        labelledBy={drawerTitleId}
-        appearance={appearance}
-      >
-        <div className="app-header-shell__mobile-layout flex h-full flex-col">
-          <div className="app-header-shell__mobile-main flex flex-col gap-6 pb-6">
-            <div className="app-header-shell__mobile-header flex items-center justify-between">
-              <h2
-                id={drawerTitleId}
+      {isMobile ? (
+        <ResponsiveToolbarRail
+          open={open}
+          onClose={handleClose}
+          id={drawerId}
+          labelledBy={drawerTitleId}
+          appearance={appearance}
+        >
+          <div className="app-header-shell__mobile-layout flex h-full flex-col">
+            <div className="app-header-shell__mobile-main flex flex-col gap-6 pb-6">
+              <div className="app-header-shell__mobile-header flex items-center justify-between">
+                <h2
+                  id={drawerTitleId}
                 className={clsx(
                   'text-xs font-semibold uppercase tracking-[0.3em]',
                   isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
@@ -228,35 +239,36 @@ export function AppHeaderShell({
               showRegisterGachaButton={showRegisterGachaButton}
               showExportButton={showExportButton}
             />
-            {showDiscordLoginButton ? (
-              <div className="app-header-shell__mobile-login lg:hidden">
-                <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
-              </div>
-            ) : null}
-          </div>
-          <div
-            className={clsx(
-              'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
-              isDarkAppearance
-                ? 'border-white/10 bg-slate-950/90'
-                : 'border-border/60 bg-panel bg-opacity-95'
-            )}
-          >
-            <Link
-              to="/home"
+              {showDiscordLoginButton ? (
+                <div className="app-header-shell__mobile-login lg:hidden">
+                  <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+                </div>
+              ) : null}
+            </div>
+            <div
               className={clsx(
-                'app-header-shell__mobile-home-button inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
                 isDarkAppearance
-                  ? 'border border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950'
-                  : 'border border-border bg-panel text-surface-foreground hover:border-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
+                  ? 'border-white/10 bg-slate-950/90'
+                  : 'border-border/60 bg-panel bg-opacity-95'
               )}
             >
-              <HomeIcon className="h-5 w-5" />
-              ホームに戻る
-            </Link>
+              <Link
+                to="/home"
+                className={clsx(
+                  'app-header-shell__mobile-home-button inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
+                  isDarkAppearance
+                    ? 'border border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950'
+                    : 'border border-border bg-panel text-surface-foreground hover:border-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
+                )}
+              >
+                <HomeIcon className="h-5 w-5" />
+                ホームに戻る
+              </Link>
+            </div>
           </div>
-        </div>
-      </ResponsiveToolbarRail>
+        </ResponsiveToolbarRail>
+      ) : null}
     </header>
   );
 }

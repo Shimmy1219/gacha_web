@@ -96,7 +96,7 @@ export function ResponsiveToolbarRail({
   }, [open]);
 
   const content = (
-    <div className="responsive-toolbar-rail lg:hidden" aria-hidden={!rendered}>
+    <div className="responsive-toolbar-rail" aria-hidden={!rendered}>
       {rendered ? (
         <>
           <div

@@ -390,7 +390,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
         ) : null}
 
         {isMobile ? (
-          <div className="dashboard-shell__mobile lg:hidden">
+          <div className="dashboard-shell__mobile">
             {sections.map((section) => (
               <div
                 key={section.id}
