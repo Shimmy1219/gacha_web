@@ -875,45 +875,6 @@ export function ItemsSection(): JSX.Element {
 
     handleAddItemWithoutAsset();
   }, [canAddItems, handleAddItemWithoutAsset, showAddCard]);
-      let assetRecords: StoredAssetRecord[] = [];
-
-      try {
-        const storedRecords = await Promise.all(
-          Array.from(files, async (file) => await saveAsset(file))
-        );
-        assetRecords = storedRecords;
-
-        const baseOrder = gachaCatalog.order?.length ?? 0;
-        const timestamp = new Date().toISOString();
-
-        const itemsToAdd: GachaCatalogItemV3[] = assetRecords.map((asset, index) => {
-          const position = baseOrder + index;
-          return {
-            itemId: generateItemId(),
-            name: getSequentialItemName(position),
-            rarityId,
-            order: position + 1,
-            pickupTarget: false,
-            completeTarget: false,
-            imageAssetId: asset.id,
-            thumbnailAssetId: asset.previewId ?? null,
-            riagu: false,
-            updatedAt: timestamp
-          } satisfies GachaCatalogItemV3;
-        });
-
-        catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
-        triggerConfirmation();
-      } catch (error) {
-        console.error('景品の追加に失敗しました', error);
-        if (assetRecords.length > 0) {
-          void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
-        }
-        triggerError();
-      }
-    },
-    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId, triggerConfirmation, triggerError]
-  );
 
   const gridClassName = useMemo(
     () =>
