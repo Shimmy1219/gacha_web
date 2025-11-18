@@ -13,18 +13,20 @@ import { useNavigate } from 'react-router-dom';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { useStoreValue } from '@domain/stores';
+import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
+import { useHaptics } from '../../features/haptics/HapticsProvider';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV3,
@@ -180,6 +182,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const navigate = useNavigate();
   const gachaSelectId = useId();
+  const completeMode = resolveCompleteModePreference(ptSettingsState);
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -190,6 +193,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getLastSelectedDrawGachaId() ?? undefined,
     [uiPreferencesState, uiPreferencesStore]
   );
+  const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
     if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
@@ -228,8 +232,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastUserId, setLastUserId] = useState<string | null>(null);
   const [queuedDiscordDelivery, setQueuedDiscordDelivery] = useState<QueuedDiscordDeliveryRequest | null>(null);
   const [isDiscordDelivering, setIsDiscordDelivering] = useState(false);
+  const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
+    'idle' | 'building-zip' | 'uploading' | 'sending'
+  >('idle');
   const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
+  const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -279,6 +287,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastUserId(null);
     setDiscordDeliveryError(null);
     setDiscordDeliveryNotice(null);
+    setDiscordDeliveryCompleted(false);
     if (noticeTimerRef.current) {
       clearTimeout(noticeTimerRef.current);
       noticeTimerRef.current = null;
@@ -350,20 +359,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return calculateDrawPlan({
       points: parsedPoints,
       settings: selectedPtSetting,
-      totalItemTypes: selectedGacha.pool.items.length
+      totalItemTypes: selectedGacha.pool.items.length,
+      completeMode
     });
-  }, [parsedPoints, selectedGacha, selectedPtSetting]);
+  }, [completeMode, parsedPoints, selectedGacha, selectedPtSetting]);
 
   const handleExecute = async () => {
     if (isExecuting) {
       return;
     }
+    triggerSelection();
     setIsExecuting(true);
     try {
       setErrorMessage(null);
       setLastPullId(null);
       setDiscordDeliveryError(null);
       setDiscordDeliveryNotice(null);
+      setDiscordDeliveryCompleted(false);
       if (noticeTimerRef.current) {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
@@ -375,6 +387,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -383,6 +396,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -391,6 +405,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -398,7 +413,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         gachaId: selectedGacha.id,
         pool: selectedGacha.pool,
         settings: selectedPtSetting,
-        points: parsedPoints
+        points: parsedPoints,
+        completeMode
       });
 
       if (executionResult.errors.length > 0) {
@@ -406,6 +422,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -414,6 +431,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
+        triggerError();
         return;
       }
 
@@ -474,6 +492,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastTotalPulls(executionResult.totalPulls);
       setLastUserName(normalizedUserName);
       setLastUserId(userId ?? null);
+      triggerConfirmation();
     } catch (error) {
       console.error('ガチャ実行中にエラーが発生しました', error);
       setErrorMessage('ガチャの実行中にエラーが発生しました。');
@@ -485,6 +504,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastExecutionWarnings([]);
       setLastPlan(null);
       setLastUserId(null);
+      triggerError();
     } finally {
       setIsExecuting(false);
     }
@@ -496,9 +516,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
-  const completeMode: CompleteDrawMode =
+  const displayCompleteMode: CompleteDrawMode =
     normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
-  const completeModeLabel = COMPLETE_MODE_LABELS[completeMode];
+  const completeModeLabel = COMPLETE_MODE_LABELS[displayCompleteMode];
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{
@@ -553,7 +573,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       .map((item) => {
         const rarityLabel = item.rarityLabel ?? '景品';
         const countLabel = `${integerFormatter.format(item.count)}個`;
-        return `${rarityLabel}：${item.name}：${countLabel}`;
+        return `【${rarityLabel}】${item.name}：${countLabel}`;
       });
 
     const gachaLabel = lastGachaLabel ?? '四遊楽ガチャ';
@@ -561,7 +581,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     if (positiveItemLines.length > 0) {
       shareLines.push(...positiveItemLines, '');
     }
-    shareLines.push('# 四遊楽ガチャ');
+    shareLines.push('#四遊楽ガチャ(β)');
     const shareText = shareLines.join('\n');
 
     const urlParams = new URLSearchParams();
@@ -596,6 +616,22 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const discordDeliveryButtonDisabled =
     isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
+  const discordDeliveryButtonMinWidth = '14.5rem';
+  const discordDeliveryButtonLabel = useMemo(() => {
+    if (discordDeliveryCompleted) {
+      return '送信済み';
+    }
+    switch (discordDeliveryStage) {
+      case 'building-zip':
+        return 'ZIPファイル作成中...';
+      case 'uploading':
+        return 'ファイルアップロード中...';
+      case 'sending':
+        return '送信中...';
+      default:
+        return 'お渡し部屋に景品を送信';
+    }
+  }, [discordDeliveryCompleted, discordDeliveryStage]);
 
   useEffect(() => {
     return () => {
@@ -626,6 +662,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void shareResult('draw-result', shareContent.shareText);
   }, [shareContent, shareResult]);
 
+  const queuedDeliveryProcessingRef = useRef<string | null>(null);
+
   const performDiscordDelivery = useCallback(
     async ({
       profile,
@@ -636,6 +674,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       targetUserId: string;
       guildSelection?: DiscordGuildSelection;
     }) => {
+      setDiscordDeliveryCompleted(false);
       if (!resultItems || resultItems.length === 0) {
         const message = '共有できるガチャ結果がありません。';
         setDiscordDeliveryError(message);
@@ -678,6 +717,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
 
       setIsDiscordDelivering(true);
+      setDiscordDeliveryStage('building-zip');
       setDiscordDeliveryError(null);
 
       try {
@@ -701,6 +741,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           userId: targetUserId,
           userName: receiverDisplayName
         });
+
+        setDiscordDeliveryStage('uploading');
 
         const uploadResponse = await uploadZip({
           file: zip.blob,
@@ -757,9 +799,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
 
+        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+
+        if (!channelId && !preferredCategory) {
+          const category = await ensurePrivateChannelCategory({
+            push,
+            discordUserId: staffDiscordId,
+            guildSelection,
+            dialogTitle: 'お渡しカテゴリの設定'
+          });
+          preferredCategory = category.id;
+        }
+
         if (!channelId) {
-          const preferredCategory =
-            channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
           if (!preferredCategory) {
             throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
           }
@@ -819,6 +871,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         if (!channelId) {
           throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
         }
+
+        setDiscordDeliveryStage('sending');
 
         const payload: Record<string, unknown> = {
           channel_id: channelId,
@@ -882,6 +936,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         setDiscordDeliveryError(null);
         setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
+        setDiscordDeliveryCompleted(true);
       } catch (error) {
         const message =
           error instanceof DiscordGuildSelectionMissingError
@@ -894,9 +949,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
         setDiscordDeliveryError(displayMessage);
+        setDiscordDeliveryCompleted(false);
         throw new Error(displayMessage);
       } finally {
         setIsDiscordDelivering(false);
+        setDiscordDeliveryStage('idle');
       }
     }, [
       resultItems,
@@ -915,9 +972,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   useEffect(() => {
     if (!queuedDiscordDelivery) {
+      queuedDeliveryProcessingRef.current = null;
       return;
     }
-    const { userId, selection } = queuedDiscordDelivery;
+    const { userId, selection, requestedAt } = queuedDiscordDelivery;
+    const processingKey = `${userId}:${requestedAt}`;
+
+    if (queuedDeliveryProcessingRef.current === processingKey) {
+      return;
+    }
+
+    queuedDeliveryProcessingRef.current = processingKey;
     if (!userId) {
       setQueuedDiscordDelivery(null);
       return;
@@ -929,6 +994,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     void (async () => {
       try {
+        setDiscordDeliveryCompleted(false);
         await performDiscordDelivery({
           profile,
           targetUserId: userId,
@@ -938,6 +1004,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         console.error('Failed to deliver prize after linking Discord profile', error);
       } finally {
         setQueuedDiscordDelivery(null);
+        queuedDeliveryProcessingRef.current = null;
       }
     })();
   }, [queuedDiscordDelivery, userProfilesState, performDiscordDelivery]);
@@ -966,6 +1033,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     setDiscordDeliveryError(null);
     setDiscordDeliveryNotice(null);
+    setDiscordDeliveryCompleted(false);
 
     let guildSelection: DiscordGuildSelection;
     try {
@@ -1030,6 +1098,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             share: shareInfo
           });
 
+          setDiscordDeliveryCompleted(false);
           setQueuedDiscordDelivery({
             userId: targetUserId,
             selection: guildSelection,
@@ -1344,6 +1413,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   <button
                     type="button"
                     className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+                    style={{ minWidth: discordDeliveryButtonMinWidth }}
                     onClick={handleDeliverToDiscord}
                     disabled={discordDeliveryButtonDisabled}
                   >
@@ -1352,7 +1422,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     ) : (
                       <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
-                    お渡し部屋に景品を送信
+                    {discordDeliveryButtonLabel}
                   </button>
                   <button
                     type="button"
@@ -1432,15 +1502,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         <button type="button" className="btn btn-muted" onClick={close}>
           閉じる
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={handleExecute}
-          disabled={isExecuting || !gachaOptions.length || Boolean(planErrorMessage)}
-        >
-          <SparklesIcon className="h-5 w-5" />
-          ガチャを実行
-        </button>
+        {!resultItems ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleExecute}
+            disabled={isExecuting || !gachaOptions.length || Boolean(planErrorMessage)}
+          >
+            <SparklesIcon className="h-5 w-5" />
+            ガチャを実行
+          </button>
+        ) : null}
       </ModalFooter>
     </>
   );

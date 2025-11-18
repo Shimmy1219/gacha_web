@@ -165,12 +165,14 @@ export function executeGacha({
   pool,
   settings,
   points,
+  completeMode,
   rng = Math.random
 }: ExecuteGachaArgs): ExecuteGachaResult {
   const plan = calculateDrawPlan({
     points,
     settings,
-    totalItemTypes: pool.items.length
+    totalItemTypes: pool.items.length,
+    completeMode
   });
 
   const warnings = [...plan.warnings];

@@ -1,19 +1,15 @@
-import { ChevronDownIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useCallback, useId, useMemo, useRef, useState } from 'react';
 
-import {
-  ModalBody,
-  ModalFooter,
-  type ModalComponentProps
-} from '..';
-import { GuideInfoDialog } from './GuideInfoDialog';
+import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+
+const BACKUP_FILE_ACCEPT = '.shimmy,.zip,application/x-shimmy,application/zip';
 
 export interface StartWizardDialogPayload {
   onPickTxt?: (file: File) => void;
   onCreateNew?: () => void;
   onImportBackup?: (file: File) => void;
   onEnterTransferCode?: () => void;
-  onOpenGuide?: () => void;
 }
 
 type StartWizardTileKey = 'backup' | 'transfer' | 'txt' | 'new';
@@ -25,7 +21,7 @@ interface StartWizardTileConfig {
   onSelect: () => void;
 }
 
-export function StartWizardDialog({ payload, close, push }: ModalComponentProps<StartWizardDialogPayload>): JSX.Element {
+export function StartWizardDialog({ payload, close }: ModalComponentProps<StartWizardDialogPayload>): JSX.Element {
   const txtInputId = useId();
   const backupInputId = useId();
   const txtInputRef = useRef<HTMLInputElement | null>(null);
@@ -70,7 +66,8 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
       {
         key: 'backup',
         title: 'バックアップから読み込む',
-        description: 'エクスポートしたバックアップファイル（.shimmy）を取り込み、現在の環境へ復元します。',
+        description:
+          'エクスポートしたバックアップファイル（.shimmy または .shimmy.zip）を取り込み、現在の環境へ復元します。',
         onSelect: handleImportBackup
       },
       {
@@ -148,36 +145,6 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
             )}
           </div>
         </section>
-        <div className="start-wizard__guide-note flex items-start gap-3 rounded-3xl border border-accent/20 bg-gradient-to-r from-accent/15 via-surface/60 to-surface/80 px-5 py-4 text-sm text-muted-foreground">
-          <InformationCircleIcon className="mt-0.5 h-5 w-5 text-accent" aria-hidden="true" />
-          <div className="space-y-2">
-            <p className="text-[13px] leading-relaxed">
-              手動入力で結果を貼り付ける場合は、画面上部の「手動入力」ボタンから専用モーダルを開いてください。
-            </p>
-            <button
-              type="button"
-              className="start-wizard__guide-button inline-flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent/60 hover:bg-accent hover:text-white"
-              onClick={() => {
-                if (payload?.onOpenGuide) {
-                  payload.onOpenGuide();
-                  return;
-                }
-                push(GuideInfoDialog, {
-                  id: 'guide-info',
-                  title: '次のステップ',
-                  size: 'sm',
-                  payload: {
-                    message:
-                      'ガチャ結果は画面上部の「手動入力」ボタンを押してペーストしてください。',
-                    confirmLabel: '分かった'
-                  }
-                });
-              }}
-            >
-              ガイドを確認する
-            </button>
-          </div>
-        </div>
         <input
           ref={txtInputRef}
           id={txtInputId}
@@ -197,7 +164,7 @@ export function StartWizardDialog({ payload, close, push }: ModalComponentProps<
           ref={backupInputRef}
           id={backupInputId}
           type="file"
-          accept=".shimmy,application/x-shimmy"
+          accept={BACKUP_FILE_ACCEPT}
           className="sr-only"
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];

@@ -176,7 +176,7 @@ export const ModalPanel = forwardRef<
       {...restProps}
       ref={ref}
       className={clsx(
-        'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur md:max-h-none',
+        'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
         !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
         'max-h-[calc(100vh-4rem)]',
         SIZE_CLASS_MAP[size],
@@ -222,7 +222,16 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
   { className, ...props },
   ref
 ) {
-  return <div {...props} ref={ref} className={clsx('modal-body mt-2 space-y-2 text-sm', className)} />;
+  return (
+    <div
+      {...props}
+      ref={ref}
+      className={clsx(
+        'modal-body mt-2 space-y-2 text-sm flex-1 overflow-y-auto overscroll-contain md:pr-1',
+        className
+      )}
+    />
+  );
 });
 
 interface ModalFooterProps extends ComponentPropsWithoutRef<'div'> {}

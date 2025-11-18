@@ -299,11 +299,16 @@ export function RiaguSection(): JSX.Element {
                               type="button"
                               onClick={() =>
                                 push(RiaguConfigDialog, {
-                                  gachaId: entry.gachaId,
-                                  itemId: entry.itemId,
-                                  itemName: entry.itemName,
-                                  defaultPrice: entry.unitCost,
-                                  defaultType: entry.typeLabel
+                                  id: `${entry.itemId}-riagu`,
+                                  title: 'リアルグッズ設定',
+                                  size: 'sm',
+                                  payload: {
+                                    gachaId: entry.gachaId,
+                                    itemId: entry.itemId,
+                                    itemName: entry.itemName,
+                                    defaultPrice: entry.unitCost,
+                                    defaultType: entry.typeLabel
+                                  }
                                 })
                               }
                               className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"

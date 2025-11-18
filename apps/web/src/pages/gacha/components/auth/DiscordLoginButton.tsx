@@ -16,6 +16,7 @@ import {
   loadDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../../../features/discord/discordGuildSelectionStorage';
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
 function getAvatarUrl(id: string, avatar?: string): string | undefined {
   if (!avatar) {
@@ -40,6 +41,7 @@ export function DiscordLoginButton({
 }: DiscordLoginButtonProps): JSX.Element {
   const { data, isFetching, login, logout } = useDiscordSession();
   const { push } = useModal();
+  const { triggerConfirmation } = useHaptics();
   const user = data?.user;
   const previousUserIdRef = useRef<string | null>(null);
   const openedGuildModalUserRef = useRef<string | null>(null);
@@ -53,9 +55,10 @@ export function DiscordLoginButton({
   useEffect(() => {
     if (userId && previousUserIdRef.current !== userId) {
       console.info('Discordログインに成功しました', { userId, userName });
+      triggerConfirmation();
     }
     previousUserIdRef.current = userId ?? null;
-  }, [userId, userName]);
+  }, [triggerConfirmation, userId, userName]);
 
   useEffect(() => {
     if (!userId) {

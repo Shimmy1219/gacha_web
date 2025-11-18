@@ -8,6 +8,7 @@ export interface ModalBaseProps<T = unknown> {
   size?: ModalSize;
   description?: string;
   dismissible?: boolean;
+  intent?: 'default' | 'warning' | 'error';
   payload?: T;
   onClose?: () => void;
   panelClassName?: string;

@@ -1,4 +1,3 @@
-import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import {
   useCallback,
@@ -17,6 +16,7 @@ import {
   type ItemCardPreviewPayload,
   type RarityMeta
 } from '../cards/ItemCard';
+import { SingleSelectDropdown, type SingleSelectOption } from '../select/SingleSelectDropdown';
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useModal } from '../../../../modals';
@@ -25,6 +25,7 @@ import { PrizeSettingsDialog } from '../../../../modals/dialogs/PrizeSettingsDia
 import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
@@ -50,6 +51,15 @@ type ItemEntry = {
 type ItemsByGacha = Record<string, ItemEntry[]>;
 type RarityOptionEntry = { id: string; label: string; color?: string | null };
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+type ItemSortOption = 'catalog' | 'rarity' | 'name' | 'rate';
+type ItemSortDirection = 'asc' | 'desc';
+const sortDirectionDefaults: Record<ItemSortOption, ItemSortDirection> = {
+  catalog: 'asc',
+  rarity: 'asc',
+  name: 'asc',
+  rate: 'desc'
+};
 
 type ContextMenuState = { anchor: { x: number; y: number }; targetIds: string[]; anchorId: string };
 
@@ -79,18 +89,33 @@ export function ItemsSection(): JSX.Element {
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
   const [forceMobileSection, setForceMobileSection] = useState(false);
+  const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
+  const [sortDirection, setSortDirection] = useState<ItemSortDirection>(
+    sortDirectionDefaults.catalog
+  );
+  const sortOptions = useMemo<SingleSelectOption<ItemSortOption>[]>(
+    () => [
+      { value: 'catalog', label: 'カタログ順' },
+      { value: 'rarity', label: 'レアリティ順' },
+      { value: 'name', label: '名前順' },
+      { value: 'rate', label: '排出率順' }
+    ],
+    []
+  );
   const { isMobile } = useResponsiveDashboard();
+  const { triggerConfirmation, triggerError } = useHaptics();
+  const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
-    'repeat(auto-fit,minmax(150px,181px))'
+    `repeat(${defaultColumnCount}, minmax(100px,181px))`
   );
   const computeGridTemplateColumns = useCallback((width: number) => {
     const gap = 16; // gap-4 => 1rem
-    const minWidth = 150;
+    const minWidth = 100;
     const maxWidth = 200;
     const idealWidth = 181;
 
     if (!Number.isFinite(width) || width <= 0) {
-      return `repeat(auto-fit,minmax(${minWidth}px,${idealWidth}px))`;
+      return `repeat(${defaultColumnCount}, minmax(${minWidth}px,${idealWidth}px))`;
     }
 
     const calculateCardWidth = (columns: number) => {
@@ -323,7 +348,65 @@ export function ItemsSection(): JSX.Element {
 
   const items = activeGachaId ? itemsByGacha[activeGachaId] ?? [] : [];
 
-  const visibleIdSet = useMemo(() => new Set(items.map((entry) => entry.model.itemId)), [items]);
+  const displayedItems = useMemo(() => {
+    const entries = [...items];
+    const directionMultiplier = sortDirection === 'desc' ? -1 : 1;
+
+    switch (sortOption) {
+      case 'rarity':
+        return entries.sort((a, b) => {
+          const rarityDiff = (a.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER) -
+            (b.rarity.rarityNum ?? Number.MAX_SAFE_INTEGER);
+          if (rarityDiff !== 0) {
+            return rarityDiff * directionMultiplier;
+          }
+
+          const emitDiff = (b.rarity.emitRate ?? 0) - (a.rarity.emitRate ?? 0);
+          if (emitDiff !== 0) {
+            return emitDiff * directionMultiplier;
+          }
+
+          return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
+        });
+      case 'name':
+        return entries.sort(
+          (a, b) => a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier
+        );
+      case 'rate':
+        return entries.sort((a, b) => {
+          const normalizeRate = (value?: number) =>
+            typeof value === 'number' ? value : null;
+          const aRate = normalizeRate(a.itemRate ?? a.rarity.itemRate);
+          const bRate = normalizeRate(b.itemRate ?? b.rarity.itemRate);
+
+          if (aRate === bRate) {
+            return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
+          }
+
+          if (aRate === null) {
+            return 1;
+          }
+
+          if (bRate === null) {
+            return -1;
+          }
+
+          const rateDiff = aRate - bRate;
+          if (rateDiff !== 0) {
+            return rateDiff * directionMultiplier;
+          }
+
+          return a.model.name.localeCompare(b.model.name, 'ja') * directionMultiplier;
+        });
+      default:
+        return directionMultiplier === -1 ? entries.reverse() : entries;
+    }
+  }, [items, sortDirection, sortOption]);
+
+  const visibleIdSet = useMemo(
+    () => new Set(displayedItems.map((entry) => entry.model.itemId)),
+    [displayedItems]
+  );
 
   useEffect(() => {
     setSelectedItemIds((previous) => {
@@ -679,6 +762,7 @@ export function ItemsSection(): JSX.Element {
       push(ItemDeleteConfirmDialog, {
         id: `items-delete-${targetIds[0]}`,
         title: 'アイテムを削除',
+        intent: 'warning',
         payload: {
           itemId: targetIds[0],
           itemName: displayItemName,
@@ -791,6 +875,45 @@ export function ItemsSection(): JSX.Element {
 
     handleAddItemWithoutAsset();
   }, [canAddItems, handleAddItemWithoutAsset, showAddCard]);
+      let assetRecords: StoredAssetRecord[] = [];
+
+      try {
+        const storedRecords = await Promise.all(
+          Array.from(files, async (file) => await saveAsset(file))
+        );
+        assetRecords = storedRecords;
+
+        const baseOrder = gachaCatalog.order?.length ?? 0;
+        const timestamp = new Date().toISOString();
+
+        const itemsToAdd: GachaCatalogItemV3[] = assetRecords.map((asset, index) => {
+          const position = baseOrder + index;
+          return {
+            itemId: generateItemId(),
+            name: getSequentialItemName(position),
+            rarityId,
+            order: position + 1,
+            pickupTarget: false,
+            completeTarget: false,
+            imageAssetId: asset.id,
+            thumbnailAssetId: asset.previewId ?? null,
+            riagu: false,
+            updatedAt: timestamp
+          } satisfies GachaCatalogItemV3;
+        });
+
+        catalogStore.addItems({ gachaId: activeGachaId, items: itemsToAdd, updatedAt: timestamp });
+        triggerConfirmation();
+      } catch (error) {
+        console.error('景品の追加に失敗しました', error);
+        if (assetRecords.length > 0) {
+          void Promise.allSettled(assetRecords.map((record) => deleteAsset(record.id)));
+        }
+        triggerError();
+      }
+    },
+    [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId, triggerConfirmation, triggerError]
+  );
 
   const gridClassName = useMemo(
     () =>
@@ -955,6 +1078,16 @@ export function ItemsSection(): JSX.Element {
   const pickupActionLabel = selectionSummary.allPickup ? 'ピックアップを解除' : 'ピックアップに設定';
   const completeActionLabel = selectionSummary.allComplete ? 'コンプ対象から除外' : 'コンプ対象に設定';
   const riaguActionLabel = selectionSummary.allRiagu ? 'リアグを解除' : 'リアグに設定';
+  const sortDirectionLabel = sortDirection === 'asc' ? '昇順' : '降順';
+
+  const handleSortOptionChange = useCallback((value: ItemSortOption) => {
+    setSortOption(value);
+    setSortDirection(sortDirectionDefaults[value]);
+  }, []);
+
+  const handleSortDirectionToggle = useCallback(() => {
+    setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+  }, []);
 
   return (
       <div ref={sectionWrapperRef} className="h-full">
@@ -963,14 +1096,29 @@ export function ItemsSection(): JSX.Element {
           title="アイテム設定"
           description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
           actions={
-            <button
-              type="button"
-              className="items-section__filter-button chip border-accent/40 bg-accent/10 text-accent"
-              onClick={() => console.info('フィルタモーダルは未実装です')}
-            >
-              <AdjustmentsHorizontalIcon className="h-4 w-4" />
-              フィルタ
-            </button>
+            <div className="flex items-center gap-2">
+              <SingleSelectDropdown
+                id="items-sort-select"
+                value={sortOption}
+                options={sortOptions}
+                onChange={handleSortOptionChange}
+                classNames={{
+                  root: 'items-section__sort-control',
+                  button:
+                    'chip inline-flex min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent',
+                  icon: 'h-4 w-4 text-accent',
+                  menu: 'mt-2'
+                }}
+              />
+              <button
+                type="button"
+                className="chip inline-flex items-center gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent transition hover:border-accent/70 hover:bg-accent/15"
+                onClick={handleSortDirectionToggle}
+                aria-label={`表示順を${sortDirection === 'asc' ? '降順' : '昇順'}に切り替える`}
+              >
+                {sortDirectionLabel}
+              </button>
+            </div>
           }
           contentClassName="items-section__content"
           forceMobile={forceMobileSection}
@@ -1007,7 +1155,7 @@ export function ItemsSection(): JSX.Element {
                         {showAddCard ? (
                           <AddItemCard onClick={handleAddCardClick} disabled={!canAddItems} />
                         ) : null}
-                        {items.map(({ model, rarity, itemRateDisplay }) => (
+                        {displayedItems.map(({ model, rarity, itemRateDisplay }) => (
                           <ItemCard
                             key={model.itemId}
                             model={model}

@@ -1,36 +1,68 @@
 import { useEffect, useState } from 'react';
 
-const QUERY = '(max-width: 900px), (hover: none) and (pointer: coarse)';
+const MOBILE_QUERY = '(max-width: 900px), (hover: none) and (pointer: coarse)';
+const SIDEBAR_FALLBACK_QUERY = '(min-width: 901px) and (max-width: 1025px)';
 
-export function useResponsiveDashboard(): { isMobile: boolean } {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return false;
-    }
+interface ResponsiveDashboardState {
+  isMobile: boolean;
+  isLgDown: boolean;
+  forceSidebarLayout: boolean;
+}
 
-    return window.matchMedia(QUERY).matches;
-  });
+function readResponsiveState(): ResponsiveDashboardState {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return { isMobile: false, isLgDown: false, forceSidebarLayout: false };
+  }
+
+  const isMobile = window.matchMedia(MOBILE_QUERY).matches;
+  const isLgDown = window.matchMedia('(max-width: 1023px)').matches;
+  const forceSidebarLayout = window.matchMedia(SIDEBAR_FALLBACK_QUERY).matches;
+
+  return { isMobile, isLgDown, forceSidebarLayout };
+}
+
+export function useResponsiveDashboard(): ResponsiveDashboardState {
+  const [state, setState] = useState<ResponsiveDashboardState>(() => readResponsiveState());
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }
 
-    const media = window.matchMedia(QUERY);
+    const mobileMedia = window.matchMedia(MOBILE_QUERY);
+    const lgDownMedia = window.matchMedia('(max-width: 1023px)');
+    const sidebarMedia = window.matchMedia(SIDEBAR_FALLBACK_QUERY);
+
     const update = () => {
-      setIsMobile(media.matches);
+      setState({
+        isMobile: mobileMedia.matches,
+        isLgDown: lgDownMedia.matches,
+        forceSidebarLayout: sidebarMedia.matches
+      });
     };
 
     update();
 
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', update);
-      return () => media.removeEventListener('change', update);
-    }
+    const addListener = (media: MediaQueryList) => {
+      if (typeof media.addEventListener === 'function') {
+        media.addEventListener('change', update);
+        return () => media.removeEventListener('change', update);
+      }
 
-    media.addListener(update);
-    return () => media.removeListener(update);
+      media.addListener(update);
+      return () => media.removeListener(update);
+    };
+
+    const removeMobileListener = addListener(mobileMedia);
+    const removeLgDownListener = addListener(lgDownMedia);
+    const removeSidebarListener = addListener(sidebarMedia);
+
+    return () => {
+      removeMobileListener();
+      removeLgDownListener();
+      removeSidebarListener();
+    };
   }, []);
 
-  return { isMobile };
+  return state;
 }

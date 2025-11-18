@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useModal } from './ModalProvider';
 import { ModalHeader, ModalOverlay, ModalPanel } from './ModalComponents';
 import { type ModalComponentProps, type ModalStackEntry } from './ModalTypes';
+import { useHaptics } from '../features/haptics/HapticsProvider';
 
 function ensureModalRoot(): HTMLElement | null {
   if (typeof document === 'undefined') {
@@ -54,6 +55,18 @@ export function ModalRoot(): JSX.Element | null {
 
 function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Element {
   const { pop, dismissAll, push, replace } = useModal();
+  const { triggerError } = useHaptics();
+  const intent = entry.props.intent ?? 'default';
+
+  useEffect(() => {
+    if (!isTop) {
+      return;
+    }
+
+    if (intent === 'warning' || intent === 'error') {
+      triggerError();
+    }
+  }, [intent, isTop, triggerError]);
 
   const handleClose = () => {
     pop(entry.key);

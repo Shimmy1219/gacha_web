@@ -168,6 +168,7 @@ export interface PtSettingV3 {
 export interface PtSettingsStateV3 {
   version: number;
   updatedAt: string;
+  completeMode?: 'repeat' | 'frontload';
   byGachaId: Record<string, PtSettingV3>;
 }
 

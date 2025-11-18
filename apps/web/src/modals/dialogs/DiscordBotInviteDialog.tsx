@@ -6,6 +6,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/discord/useDiscordOwnedGuilds';
 import {
   loadDiscordGuildSelection,
@@ -50,7 +51,8 @@ function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
 
 export function DiscordBotInviteDialog({
   payload,
-  close
+  close,
+  push
 }: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
   const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
@@ -58,6 +60,7 @@ export function DiscordBotInviteDialog({
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
   const [submitStage, setSubmitStage] = useState<'idle' | 'members' | 'channels'>('idle');
   const isSaving = submitStage !== 'idle';
+  const [storedSelection, setStoredSelection] = useState<DiscordGuildSelection | null>(null);
 
   const guilds = useMemo(() => data ?? [], [data]);
 
@@ -65,17 +68,42 @@ export function DiscordBotInviteDialog({
     const stored = loadDiscordGuildSelection(userId);
     if (stored?.guildId) {
       setSelectedGuildId(stored.guildId);
+      setStoredSelection(stored);
     }
   }, [userId]);
 
   useEffect(() => {
-    if (selectedGuildId) {
-      const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId);
-      if (!selectedGuild || !selectedGuild.botJoined) {
-        setSelectedGuildId(null);
-      }
+    if (!selectedGuildId || isLoading || isFetching) {
+      return;
     }
-  }, [guilds, selectedGuildId]);
+    const selectedGuild = guilds.find((guild) => guild.id === selectedGuildId);
+    if (!selectedGuild || !selectedGuild.botJoined) {
+      setSelectedGuildId(null);
+    }
+  }, [guilds, isFetching, isLoading, selectedGuildId]);
+
+  const openCategorySetupDialog = (selection: DiscordGuildSelection) => {
+    if (!userId) {
+      return;
+    }
+    if (selection.privateChannelCategory?.id) {
+      return;
+    }
+
+    push(DiscordPrivateChannelCategoryDialog, {
+      id: 'discord-private-channel-category',
+      title: 'お渡しカテゴリの選択',
+      size: 'lg',
+      payload: {
+        guildId: selection.guildId,
+        discordUserId: userId,
+        initialCategory: selection.privateChannelCategory ?? null,
+        onCategorySelected: (category) => {
+          payload?.onGuildSelected?.({ ...selection, privateChannelCategory: category });
+        }
+      }
+    });
+  };
 
   const handleSelect = (guild: DiscordGuildSummary) => {
     if (!guild.botJoined) {
@@ -167,7 +195,9 @@ export function DiscordBotInviteDialog({
       };
 
       saveDiscordGuildSelection(userId, selection);
+      setStoredSelection(selection);
       payload?.onGuildSelected?.(selection);
+      openCategorySetupDialog(selection);
       close();
     } finally {
       setSubmitStage('idle');
@@ -256,6 +286,12 @@ export function DiscordBotInviteDialog({
                 const isSelected = guild.id === selectedGuildId;
                 const iconUrl = getGuildIconUrl(guild);
                 const isDisabled = !guild.botJoined;
+                const isStoredSelection = storedSelection?.guildId === guild.id;
+                const categoryLabel = isStoredSelection
+                  ? storedSelection?.privateChannelCategory?.name
+                    ? `お渡しカテゴリ：${storedSelection.privateChannelCategory.name}`
+                    : 'お渡しカテゴリ：未設定'
+                  : 'お渡しカテゴリ：未設定';
                 return (
                   <li key={guild.id}>
                     <button
@@ -278,7 +314,7 @@ export function DiscordBotInviteDialog({
                       </span>
                       <div className="flex flex-1 flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{guild.name}</span>
-                        <span className="text-xs text-muted-foreground">ID: {guild.id}</span>
+                        <span className="text-xs text-muted-foreground">{categoryLabel}</span>
                         <div className="mt-1 flex flex-wrap gap-2">
                           <span
                             className={
@@ -311,9 +347,11 @@ export function DiscordBotInviteDialog({
       </ModalBody>
 
       <ModalFooter>
-        <button type="button" className="btn btn-muted" onClick={close}>
-          キャンセル
-        </button>
+        {!isSaving ? (
+          <button type="button" className="btn btn-muted" onClick={close}>
+            キャンセル
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-primary"

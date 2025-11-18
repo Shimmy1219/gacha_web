@@ -3,6 +3,7 @@ import { clsx } from 'clsx';
 import { useMemo } from 'react';
 
 import { MultiSelectDropdown } from '../select/MultiSelectDropdown';
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
 import {
   type UserFilterOption,
@@ -70,7 +71,11 @@ interface ToggleRowProps {
 }
 
 function ToggleRow({ label, value, onChange, helperText }: ToggleRowProps): JSX.Element {
-  const toggle = (): void => onChange(!value);
+  const { triggerSelection } = useHaptics();
+  const toggle = (): void => {
+    triggerSelection();
+    onChange(!value);
+  };
 
   return (
     <div className="user-filter-panel__toggle-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">

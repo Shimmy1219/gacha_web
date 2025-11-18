@@ -1,5 +1,8 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
+import { useCallback } from 'react';
+
+import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
 export interface GachaTabOption {
   id: string;
@@ -15,6 +18,16 @@ interface GachaTabsProps {
 }
 
 export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: GachaTabsProps): JSX.Element {
+  const { triggerSelection } = useHaptics();
+
+  const handleSelect = useCallback(
+    (gachaId: string) => {
+      triggerSelection();
+      onSelect(gachaId);
+    },
+    [onSelect, triggerSelection]
+  );
+
   if (!tabs.length) {
     return <div className={clsx('gacha-tabs tab-scroll-area px-4', className)} />;
   }
@@ -31,7 +44,7 @@ export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: Gac
             <button
               type="button"
               className="gacha-tab__label"
-              onClick={() => onSelect(tab.id)}
+              onClick={() => handleSelect(tab.id)}
             >
               <span className="gacha-tab__label-text">{tab.label}</span>
             </button>

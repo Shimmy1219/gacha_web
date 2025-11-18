@@ -7,6 +7,7 @@ import { ModalProvider } from '../modals';
 import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
 import { AppPersistenceProvider } from '../features/storage/AppPersistenceProvider';
 import { SiteThemeProvider } from '../features/theme/SiteThemeProvider';
+import { HapticsProvider } from '../features/haptics/HapticsProvider';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   const [queryClient] = useState(
@@ -29,9 +30,11 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
         >
         <AppPersistenceProvider>
           <SiteThemeProvider>
-            <ModalProvider>
-              <ToolbarStateProvider>{children}</ToolbarStateProvider>
-            </ModalProvider>
+            <HapticsProvider>
+              <ModalProvider>
+                <ToolbarStateProvider>{children}</ToolbarStateProvider>
+              </ModalProvider>
+            </HapticsProvider>
           </SiteThemeProvider>
         </AppPersistenceProvider>
       </BrowserRouter>

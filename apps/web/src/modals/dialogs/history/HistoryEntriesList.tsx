@@ -127,14 +127,14 @@ export function HistoryEntriesList({
           .map((item) => {
             const rarityLabel = item.rarityLabel ?? '景品';
             const countLabel = `${numberFormatter.format(item.count)}個`;
-            return `${rarityLabel}：${item.itemLabel}：${countLabel}`;
+            return `【${rarityLabel}】${item.itemLabel}：${countLabel}`;
           });
 
         const shareLines = [`【${gachaName}結果】`, `${userName} ${pullCountLabel}`, ''];
         if (positiveItemLines.length > 0) {
           shareLines.push(...positiveItemLines, '');
         }
-        shareLines.push('# 四遊楽ガチャ');
+        shareLines.push('#四遊楽ガチャ(β)');
         const shareText = shareLines.join('\n');
 
         const urlParams = new URLSearchParams();

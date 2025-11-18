@@ -1,15 +1,13 @@
 import { clsx } from 'clsx';
-import { ArrowUpTrayIcon, PlayIcon, PlusCircleIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon, PlusCircleIcon, SparklesIcon } from '@heroicons/react/24/outline';
 
 interface ToolbarActionsProps {
   mode?: 'desktop' | 'mobile';
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
-  onOpenRealtime?: () => void;
   onExportAll?: () => void;
   showDrawGachaButton?: boolean;
   showRegisterGachaButton?: boolean;
-  showRealtimeButton?: boolean;
   showExportButton?: boolean;
 }
 
@@ -17,11 +15,9 @@ export function ToolbarActions({
   mode = 'desktop',
   onDrawGacha,
   onRegisterGacha,
-  onOpenRealtime,
   onExportAll,
   showDrawGachaButton = true,
   showRegisterGachaButton = true,
-  showRealtimeButton = true,
   showExportButton = true
 }: ToolbarActionsProps): JSX.Element {
   const containerClass =
@@ -51,16 +47,6 @@ export function ToolbarActions({
         >
           <PlusCircleIcon className="h-4 w-4" />
           ガチャを登録
-        </button>
-      ) : null}
-      {showRealtimeButton ? (
-        <button
-          type="button"
-          onClick={() => onOpenRealtime?.()}
-          className="toolbar-actions__realtime-button btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 lg:w-auto"
-        >
-          <PlayIcon className="h-4 w-4" />
-          手動入力
         </button>
       ) : null}
       {showExportButton ? (

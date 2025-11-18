@@ -1,6 +1,30 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 export function HomePage(): JSX.Element {
+  const [showPwaSuggestion, setShowPwaSuggestion] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return;
+    }
+
+    const isMatchMediaSupported = typeof window.matchMedia === 'function';
+    const mobileMediaQuery = isMatchMediaSupported
+      ? window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)')
+      : null;
+    const mediaStandalone =
+      isMatchMediaSupported && window.matchMedia('(display-mode: standalone)').matches;
+    const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
+    const isIosStandalone =
+      typeof navigatorWithStandalone.standalone === 'boolean' && navigatorWithStandalone.standalone;
+
+    const isStandalone = mediaStandalone || isIosStandalone;
+    const isMobile = mobileMediaQuery?.matches ?? false;
+
+    setShowPwaSuggestion(!isStandalone && isMobile);
+  }, []);
+
   return (
     <main className="home-page mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center px-6 py-16 text-center">
       <span className="rounded-full border border-border px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -10,6 +34,11 @@ export function HomePage(): JSX.Element {
       <p className="mt-6 max-w-2xl text-base text-muted-foreground sm:text-lg">
         ガチャ企画の設定から景品受け取り管理まで、四遊楽ガチャツールがサポートします。利用シーンにあわせて下記のページへお進みください。
       </p>
+      {showPwaSuggestion && (
+        <div className="mt-6 w-full max-w-2xl rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-left text-sm text-foreground shadow-sm sm:text-base">
+          このウェブサイトはPWAに対応しています。「共有」ボタンから「ホーム画面に追加」ボタンを押して、ホーム画面に追加すると、非常に使いやすくなります。ぜひご利用ください。
+        </div>
+      )}
       <div className="mt-10 flex w-full flex-col items-center justify-center gap-4 sm:flex-row">
         <Link
           to="/gacha"

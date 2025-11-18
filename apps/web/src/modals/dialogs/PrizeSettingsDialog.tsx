@@ -340,6 +340,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       id: `${payload.itemId}-confirm-delete`,
       title: 'アイテムを削除',
       size: 'sm',
+      intent: 'warning',
       payload: {
         itemId: payload.itemId,
         itemName: payload.itemName,
