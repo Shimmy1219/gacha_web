@@ -189,6 +189,16 @@ src/receive/
   - 404/410 時は `{ ok:false, code:'NOT_FOUND'|'EXPIRED' }`。
 - 上記フィールド構成は `doc/blob_upload_react_spec.md` の `POST /api/receive/edge-resolve`（アップロード完了時に 10 桁キーと `expiresAt` を返却）と対になる契約であり、共有 URL 生成と受け取りページ解決の双方で `key` / `expiresAt` を同一フォーマット（10 桁英数字 + ISO-8601）として扱う。
 - 既存の `/api/receive/resolve` は互換性のため残し、React ページでは新 API を優先。旧トークン `t` を受け取った際は既存 API をフォールバックで呼ぶ。
+- `expires_at` と `blob_name` は、日次の期限切れ削除 Cron が参照する一次情報として DB に必ず保存する（Blob 削除時のキー照合に利用）。
+
+#### 期限切れ削除フロー
+- 実行タイミング: 日次 Cron が `receive_keys`（`/api/receive/edge-resolve` 用メタ）から `expires_at < now()` のレコードを抽出。
+- 処理順序:
+  1. 抽出したレコードをキーに、`blob_name` を用いて `@vercel/blob` で対象ファイルの削除を試行する。
+     - 一時的な失敗時は指数バックオフで数回リトライし、それでも失敗した場合はスキップしてエラーをログに残す。
+  2. Blob 削除が成功またはスキップ扱いになったレコードから、対応する `receive_keys` レコードおよび短縮トークン（Upstash 等）を削除する。
+  3. 削除成功件数・失敗件数・リトライ回数・スキップ件数をメトリクスとして計測し、監査用に永続化または監視通知する。
+  4. ジョブ全体の開始/終了時刻と結果概要（成功/失敗理由）をログ出力し、異常時は通知チャネル（Slack/Webhook など）へ送信する。
 
 ### 6.2 `metadata.json` 仕様
 `blob-upload` React 版で生成される `meta/metadata.json`（詳しくは `doc/blob_upload_react_spec.md` §4 を参照）を受け取り側で解釈する。
