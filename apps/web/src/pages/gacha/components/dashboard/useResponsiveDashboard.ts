@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const MOBILE_QUERY = '(max-width: 900px), (hover: none) and (pointer: coarse)';
+const MOBILE_QUERY = '(max-width: 1024px), (pointer: coarse)';
 const SIDEBAR_FALLBACK_QUERY = '(min-width: 901px) and (max-width: 1025px)';
 
 interface ResponsiveDashboardState {
