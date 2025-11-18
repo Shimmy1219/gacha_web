@@ -1,5 +1,4 @@
-import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import {
@@ -98,7 +97,7 @@ export function UserCard({
   const [nameDraft, setNameDraft] = useState(userName);
   const [nameError, setNameError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
   const panelId = `user-card-panel-${userId}`;
 
@@ -267,6 +266,61 @@ export function UserCard({
     });
   }, [pullHistoryStore, push, userId, userInventoriesStore, userProfilesStore, userName]);
 
+  const [isCardOpen, setIsCardOpen] = useState(Boolean(expandedByDefault));
+
+  const cardState = isCardOpen ? 'open' : 'closed';
+  const toggleLabel = userName ? `ユーザー「${userName}」の詳細を切り替える` : 'ユーザー詳細の表示を切り替える';
+
+  const triggerCardToggle = useCallback(() => {
+    setIsCardOpen((previous) => !previous);
+  }, []);
+
+  const handleCardClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      if (panelRef.current?.contains(target)) {
+        return;
+      }
+
+      if (
+        target.closest(
+          'button, a, input, textarea, select, label, [role="button"], [role="menuitem"], [role="option"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [contenteditable="true"], [data-user-card-ignore-toggle="true"]'
+        )
+      ) {
+        return;
+      }
+
+      triggerCardToggle();
+    },
+    [triggerCardToggle]
+  );
+
+  const handleCardKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (event.currentTarget !== event.target) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        triggerCardToggle();
+      }
+    },
+    [triggerCardToggle]
+  );
+
   const userMenuItems = useMemo<ContextMenuEntry[]>(
     () => [
       {
@@ -300,172 +354,153 @@ export function UserCard({
   );
 
   return (
-    <Disclosure defaultOpen={expandedByDefault}>
-      {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
-          <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              <Disclosure.Button
-                ref={toggleButtonRef}
-                type="button"
-                className={clsx(
-                  'user-card__toggle mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-                  open && 'text-accent'
-                )}
-                aria-label="ユーザー詳細の表示を切り替える"
-              >
-                <ChevronRightIcon
-                  className={clsx(
-                    'user-card__chevron h-5 w-5 transition-transform duration-300 ease-linear',
-                    open && 'rotate-90 text-accent'
-                  )}
+    <article
+      className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      data-state={cardState}
+      role="button"
+      tabIndex={0}
+      aria-expanded={isCardOpen}
+      aria-controls={panelId}
+      aria-label={toggleLabel}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+    >
+      <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <div className="flex min-w-0 flex-1 items-start gap-1">
+          {avatarSrc ? (
+            <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
+              <img
+                src={avatarSrc}
+                alt={`${userName}のDiscordアイコン`}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : normalizedDiscordDisplayName ? (
+            <div className="user-card__avatar-fallback relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-surface/50 text-sm font-semibold text-muted-foreground">
+              <span aria-hidden="true">{avatarFallback}</span>
+            </div>
+          ) : null}
+          <div className="user-card__summary min-w-0 space-y-1">
+            {isEditingName ? (
+              <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
+                <label className="sr-only" htmlFor={nameFieldId}>
+                  ユーザー名
+                </label>
+                <input
+                  ref={nameInputRef}
+                  id={nameFieldId}
+                  type="text"
+                  className="min-w-[10rem] flex-1 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1.5 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                  value={nameDraft}
+                  onChange={(event) => {
+                    setNameDraft(event.target.value);
+                    if (nameError) {
+                      setNameError(null);
+                    }
+                  }}
+                  onKeyDown={handleNameKeyDown}
+                  aria-invalid={nameError ? 'true' : undefined}
                 />
-              </Disclosure.Button>
-              <div className="flex min-w-0 flex-1 items-start gap-1">
-                {avatarSrc ? (
-                  <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
-                    <img
-                      src={avatarSrc}
-                      alt={`${userName}のDiscordアイコン`}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : normalizedDiscordDisplayName ? (
-                  <div className="user-card__avatar-fallback relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-surface/50 text-sm font-semibold text-muted-foreground">
-                    <span aria-hidden="true">{avatarFallback}</span>
-                  </div>
-                ) : null}
-                <div className="user-card__summary min-w-0 space-y-1">
-                  {isEditingName ? (
-                    <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
-                      <label className="sr-only" htmlFor={nameFieldId}>
-                        ユーザー名
-                      </label>
-                      <input
-                        ref={nameInputRef}
-                        id={nameFieldId}
-                        type="text"
-                        className="min-w-[10rem] flex-1 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1.5 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-                        value={nameDraft}
-                        onChange={(event) => {
-                          setNameDraft(event.target.value);
-                          if (nameError) {
-                            setNameError(null);
-                          }
-                        }}
-                        onKeyDown={handleNameKeyDown}
-                        aria-invalid={nameError ? 'true' : undefined}
-                      />
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="submit"
-                          className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-white transition hover:bg-accent-bright focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        >
-                          保存
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-border/60 px-3 py-1 text-sm text-muted-foreground transition hover:border-border/40 hover:text-surface-foreground"
-                          onClick={handleCancelEditName}
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <button
-                      type="button"
-                      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-expanded={open}
-                      aria-controls={panelId}
-                      onClick={() => {
-                        toggleButtonRef.current?.click();
-                      }}
-                    >
-                      <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
-                      {normalizedDiscordDisplayName ? (
-                        <span className="user-card__discord-display text-xs text-muted-foreground">
-                          {normalizedDiscordDisplayName}
-                        </span>
-                      ) : null}
-                    </button>
-                  )}
-                  {isEditingName && normalizedDiscordDisplayName ? (
-                    <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
-                  ) : null}
-                  {nameError ? <p className="text-xs text-red-500">{nameError}</p> : null}
-                  {memo ? (
-                    <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
-                  ) : null}
-                  {showCounts && totalSummary ? (
-                    <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
-                  ) : null}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-white transition hover:bg-accent-bright focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-border/60 px-3 py-1 text-sm text-muted-foreground transition hover:border-border/40 hover:text-surface-foreground"
+                    onClick={handleCancelEditName}
+                  >
+                    キャンセル
+                  </button>
                 </div>
+              </form>
+            ) : (
+              <div className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left">
+                <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
+                {normalizedDiscordDisplayName ? (
+                  <span className="user-card__discord-display text-xs text-muted-foreground">
+                    {normalizedDiscordDisplayName}
+                  </span>
+                ) : null}
               </div>
-            </div>
-            <div className="user-card__actions flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
-                onClick={() => onExport?.(userId)}
-              >
-                <FolderArrowDownIcon className="h-5 w-5" />
-                保存
-              </button>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                aria-label="ユーザーメニューを開く"
-                onClick={handleOpenUserMenu}
-              >
-                <EllipsisVerticalIcon className="h-5 w-5" />
-              </button>
-              {userMenuAnchor ? (
-                <ContextMenu
-                  anchor={userMenuAnchor}
-                  header="ユーザー操作"
-                  items={userMenuItems}
-                  onClose={handleCloseUserMenu}
-                  width={220}
-                />
-              ) : null}
-            </div>
-          </header>
-          <div
-            data-state={open ? 'open' : 'closed'}
-            className={clsx(
-              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
-              'data-[state=open]:grid-rows-[1fr]',
-              'data-[state=closed]:grid-rows-[0fr]'
             )}
-          >
-            <Disclosure.Panel
-              static
-              id={panelId}
-              className={clsx(
-                'overflow-hidden transition-opacity duration-300 ease-linear',
-                'group-data-[state=open]:opacity-100',
-                'group-data-[state=closed]:opacity-0'
-              )}
-            >
-              <div className="user-card__inventories space-y-4">
-                {inventories.map((inventory) => (
-                  <GachaInventoryCard
-                    key={inventory.inventoryId}
-                    inventory={inventory}
-                    showCounts={showCounts}
-                    userId={userId}
-                    userName={userName}
-                    catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
-                    rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
-                  />
-                ))}
-              </div>
-            </Disclosure.Panel>
+            {isEditingName && normalizedDiscordDisplayName ? (
+              <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
+            ) : null}
+            {nameError ? <p className="text-xs text-red-500">{nameError}</p> : null}
+            {memo ? <p className="user-card__memo text-xs text-muted-foreground">{memo}</p> : null}
+            {showCounts && totalSummary ? (
+              <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
+            ) : null}
           </div>
-        </article>
-      )}
-    </Disclosure>
+        </div>
+        <div className="user-card__actions flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
+            data-user-card-ignore-toggle="true"
+            onClick={() => onExport?.(userId)}
+          >
+            <FolderArrowDownIcon className="h-5 w-5" />
+            保存
+          </button>
+          <button
+            type="button"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            aria-label="ユーザーメニューを開く"
+            data-user-card-ignore-toggle="true"
+            onClick={handleOpenUserMenu}
+          >
+            <EllipsisVerticalIcon className="h-5 w-5" />
+          </button>
+          {userMenuAnchor ? (
+            <ContextMenu
+              anchor={userMenuAnchor}
+              header="ユーザー操作"
+              items={userMenuItems}
+              onClose={handleCloseUserMenu}
+              width={220}
+            />
+          ) : null}
+        </div>
+      </header>
+      <div
+        data-state={cardState}
+        className={clsx(
+          'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+          'data-[state=open]:grid-rows-[1fr]',
+          'data-[state=closed]:grid-rows-[0fr]'
+        )}
+      >
+        <div
+          id={panelId}
+          ref={panelRef}
+          aria-hidden={!isCardOpen}
+          className={clsx(
+            'overflow-hidden transition-opacity duration-300 ease-linear',
+            'group-data-[state=open]:opacity-100',
+            'group-data-[state=closed]:opacity-0'
+          )}
+        >
+          <div className="user-card__inventories space-y-4">
+            {inventories.map((inventory) => (
+              <GachaInventoryCard
+                key={inventory.inventoryId}
+                inventory={inventory}
+                showCounts={showCounts}
+                userId={userId}
+                userName={userName}
+                catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
+                rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
