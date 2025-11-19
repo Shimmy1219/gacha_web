@@ -122,6 +122,33 @@
    - 応答の `deleted`, `missingMeta`, `errors` を確認し、Upstash側で `zrange receive:edge:index 0 -1` が空になっていることを確認する。
    - Blob が実際に削除されたかは Vercel Blob 管理画面または `@vercel/blob` の `list` コマンドで確認する。
 
+## Vercelデプロイ環境でのE2E検証フロー
+1. **デプロイ先の環境変数を揃える**
+   - `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `BLOB_READ_WRITE_TOKEN`, `RECEIVE_CLEANUP_SECRET` を Vercel プロジェクトに設定し、`vercel env pull` でローカルと差分がないか確認する。
+   - Cron シミュレーション時は `RECEIVE_CLEANUP_SECRET` または `x-vercel-cron` ヘッダーのどちらかが必要になる。
+
+2. **プレビュー/本番デプロイを用意する**
+   - 検証ブランチをデプロイし、`https://<deployment>.vercel.app/api/cron/receive-cleanup?health=1` が 200 を返すことを確認する。
+   - スケジュール起動の時刻（UTC 15:00）より前にデプロイが完了していることを確認する。
+
+3. **テストデータをデプロイ先の Upstash に投入する**
+   - 上記「テストデータ投入」のスクリプトをそのまま利用し、`KV_REST_API_*` にデプロイ環境の値が入っていることを必ず確認する（誤ってローカルの KV を操作しないように注意）。
+
+4. **Vercel 経由で Cron を手動トリガーする**
+   ```bash
+   curl -X POST \\
+     -H "Authorization: Bearer $RECEIVE_CLEANUP_SECRET" \\
+     "https://<deployment>.vercel.app/api/cron/receive-cleanup?limit=10"
+   ```
+   - 自動スケジュール時の挙動を模倣したい場合は `-H 'x-vercel-cron: preview-manual'` を付与し、`RECEIVE_CLEANUP_SECRET` が空でも実行できるかを確認する。
+
+5. **削除結果を両側で確認する**
+   - レスポンスの `deleted` と `errors` を記録し、Upstash 側で `receive:edge:index` が空になっていることを `zrange` で確認する。
+   - Blob 側は Vercel ダッシュボードまたは CLI の `npx vercel blob ls user_prize/<owner>/<dir>` で削除結果を確認する。
+
+6. **スケジュール起動の実績を確認する**
+   - Cron 実行時は自動で `x-vercel-cron` が付与されるため、`vercel logs --since 1h https://<deployment>.vercel.app | grep "receive-cleanup"` で直近の実行ログを取得し、定刻に走っているかを確認する。
+
 ## 既知の課題・改善案
 1. **`last_seen_at` の未更新**
    - セッション構造に含まれているものの、アクセス時に更新されていません。分析やセッション無効化の指標に活用するなら、`getSessionWithRefresh` 内で更新処理を追加する必要があります。
