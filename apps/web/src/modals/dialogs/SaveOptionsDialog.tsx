@@ -267,7 +267,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         snapshot,
         selection,
         userId,
-        userName: receiverDisplayName
+        userName: receiverDisplayName,
+        includeMetadata: false
       });
 
       if (result.pullIds.length > 0) {
