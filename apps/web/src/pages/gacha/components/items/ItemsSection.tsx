@@ -1052,38 +1052,38 @@ export function ItemsSection(): JSX.Element {
 
   return (
       <div ref={sectionWrapperRef} className="h-full">
-        <SectionContainer
-          id="items"
-          title="アイテム設定"
-          description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
-          actions={
-            <div className="flex items-center gap-2">
-              <SingleSelectDropdown
-                id="items-sort-select"
-                value={sortOption}
-                options={sortOptions}
-                onChange={handleSortOptionChange}
-                classNames={{
-                  root: 'items-section__sort-control',
-                  button:
-                    'chip inline-flex min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent',
-                  icon: 'h-4 w-4 text-accent',
-                  menu: 'mt-2'
-                }}
-              />
-              <button
-                type="button"
-                className="chip inline-flex items-center gap-2 border-accent/40 bg-accent/10 px-3 py-2 text-sm font-semibold text-accent transition hover:border-accent/70 hover:bg-accent/15"
-                onClick={handleSortDirectionToggle}
-                aria-label={`表示順を${sortDirection === 'asc' ? '降順' : '昇順'}に切り替える`}
-              >
-                {sortDirectionLabel}
-              </button>
-            </div>
-          }
-          contentClassName="items-section__content"
-          forceMobile={forceMobileSection}
-        >
+          <SectionContainer
+            id="items"
+            title="アイテム設定"
+            description="カタログ内のアイテムを整理し、画像・リアグ状態を管理します。"
+            filterButton={
+              <div className="flex items-center gap-2">
+                <SingleSelectDropdown
+                  id="items-sort-select"
+                  value={sortOption}
+                  options={sortOptions}
+                  onChange={handleSortOptionChange}
+                  classNames={{
+                    root: 'items-section__sort-control',
+                    button:
+                      'chip inline-flex h-7 min-w-[9rem] items-center justify-between gap-2 border-accent/40 bg-accent/10 px-3 text-xs font-semibold text-accent',
+                    icon: 'h-4 w-4 text-accent',
+                    menu: 'mt-2'
+                  }}
+                />
+                <button
+                  type="button"
+                  className="chip inline-flex h-7 items-center gap-2 border-accent/40 bg-accent/10 px-3 text-xs font-semibold text-accent transition hover:border-accent/70 hover:bg-accent/15"
+                  onClick={handleSortDirectionToggle}
+                  aria-label={`表示順を${sortDirection === 'asc' ? '降順' : '昇順'}に切り替える`}
+                >
+                  {sortDirectionLabel}
+                </button>
+              </div>
+            }
+            contentClassName="items-section__content"
+            forceMobile={forceMobileSection}
+          >
           <GachaTabs
             tabs={gachaTabs}
             activeId={activeGachaId}

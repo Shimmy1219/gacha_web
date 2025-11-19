@@ -148,14 +148,24 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
           className={clsx(isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}
         />
-        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-2' : 'gap-3')}>
+        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
-            <span className="flex items-baseline justify-between gap-2 text-[11px] font-medium text-surface-foreground">
+            <span
+              className={clsx(
+                'flex text-[11px] font-medium text-surface-foreground',
+                isMobile ? 'flex-col gap-1' : 'items-baseline justify-between gap-2'
+              )}
+            >
               <span className={clsx('flex-1 truncate', rarityClassName)} style={rarityStyle}>
                 {rarity.label}
               </span>
-              <span className="ml-2 shrink-0 text-right text-[10px] font-normal text-muted-foreground tabular-nums">
+              <span
+                className={clsx(
+                  'text-[10px] font-normal text-muted-foreground tabular-nums',
+                  isMobile ? 'ml-0 text-left' : 'ml-2 shrink-0 text-right'
+                )}
+              >
                 {hasRate ? rateDisplay : '—'}
               </span>
             </span>
