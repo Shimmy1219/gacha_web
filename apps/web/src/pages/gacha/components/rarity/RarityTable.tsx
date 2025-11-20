@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
@@ -38,6 +38,45 @@ export function RarityTable({
 }: RarityTableProps): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null);
   const labelRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const caretOffsets = useRef<Record<string, number>>({});
+
+  const updateCaretOffset = (id: string) => {
+    const target = labelRefs.current[id];
+    if (!target) return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!target.contains(range.startContainer)) return;
+    const preRange = range.cloneRange();
+    preRange.selectNodeContents(target);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    caretOffsets.current[id] = preRange.toString().length;
+  };
+
+  const restoreCaretPosition = (id: string) => {
+    const target = labelRefs.current[id];
+    if (!target) return;
+    const selection = window.getSelection();
+    if (!selection) return;
+    const caretOffset = caretOffsets.current[id];
+    if (caretOffset == null) return;
+    const textLength = target.textContent?.length ?? 0;
+    const clampedOffset = Math.min(caretOffset, textLength);
+    const range = document.createRange();
+    const textNode = target.firstChild ?? target;
+    range.setStart(textNode, clampedOffset);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  const syncLabelContent = (id: string, label: string) => {
+    const target = labelRefs.current[id];
+    if (!target) return;
+    if (target.textContent !== label) {
+      target.textContent = label;
+    }
+  };
 
   useEffect(() => {
     if (!editingId) return;
@@ -51,6 +90,16 @@ export function RarityTable({
     selection?.removeAllRanges();
     selection?.addRange(range);
   }, [editingId]);
+
+  useLayoutEffect(() => {
+    rows.forEach((row) => {
+      if (editingId === row.id) {
+        restoreCaretPosition(row.id);
+        return;
+      }
+      syncLabelContent(row.id, row.label);
+    });
+  }, [rows, editingId]);
 
   return (
     <div className="rarity-section__table-wrapper rounded-2xl border border-border/60 bg-panel shadow-sm">
@@ -86,7 +135,7 @@ export function RarityTable({
                   >
                     <span
                       className={clsx(
-                        'rarity-section__label-input inline-flex max-w-min flex-1 items-center whitespace-pre-wrap focus:outline-none',
+                        'rarity-section__label-input inline-flex h-6 min-w-fit max-w-min flex-1 items-center whitespace-pre-wrap focus:outline-none',
                         presentation.className ?? 'text-surface-foreground'
                       )}
                       style={presentation.style}
@@ -96,7 +145,11 @@ export function RarityTable({
                       aria-label={ariaLabel}
                       aria-multiline="false"
                       data-placeholder={row.placeholder ?? row.id}
-                      onInput={(event) => onLabelChange?.(row.id, event.currentTarget.textContent ?? '')}
+                      onInput={(event) => {
+                        const next = event.currentTarget.textContent ?? '';
+                        updateCaretOffset(row.id);
+                        onLabelChange?.(row.id, next);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           event.preventDefault();
