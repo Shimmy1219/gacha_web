@@ -258,8 +258,13 @@ export function RiaguSection(): JSX.Element {
                                 emptyLabel="noImage"
                               />
                               <div className="riagu-card__meta-text flex-1 space-y-2">
-                                <span className={clsx('riagu-card__rarity badge', className)} style={style}>
-                                  {entry.rarityLabel}
+                                <span className="riagu-card__rarity inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
+                                  <span
+                                    className={clsx('inventory-history-dialog__rarity-badge__label', className)}
+                                    style={style}
+                                  >
+                                    {entry.rarityLabel}
+                                  </span>
                                 </span>
                                 <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
                               </div>

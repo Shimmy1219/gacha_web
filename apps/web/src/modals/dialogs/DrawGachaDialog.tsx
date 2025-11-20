@@ -6,6 +6,7 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
+import clsx from 'clsx';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -43,6 +44,7 @@ import {
   type GachaPoolDefinition
 } from '../../logic/gacha';
 import type { CompleteDrawMode } from '../../logic/gacha/types';
+import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 
 const COMPLETE_MODE_LABELS: Record<CompleteDrawMode, string> = {
   repeat: 'コンプ回数分すべて排出',
@@ -1359,25 +1361,40 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               <span className="font-mono text-xs">合計 {totalCount} 個</span>
             </div>
             <div className="space-y-2 rounded-2xl border border-border/60 bg-surface-alt p-4">
-              {resultItems.map((item) => (
-                <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
-                  <span
-                    className="inline-flex min-w-[3rem] items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                    style={item.rarityColor ? { backgroundColor: `${item.rarityColor}1a`, color: item.rarityColor } : undefined}
-                  >
-                    {item.rarityLabel}
-                  </span>
-                  <span className="flex-1 font-medium">{item.name}</span>
-                  <span className="flex items-center gap-2 font-mono">
-                    ×{item.count}
-                    {item.guaranteedCount ? (
-                      <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                        保証 {item.guaranteedCount}
+              {resultItems.map((item) => {
+                const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
+                  item.rarityColor
+                );
+                const hasSolidColor = typeof item.rarityColor === 'string' && item.rarityColor.startsWith('#');
+                const rarityBadgeStyle = hasSolidColor
+                  ? { backgroundColor: `${item.rarityColor}1a`, color: item.rarityColor }
+                  : undefined;
+
+                return (
+                  <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
+                    <span
+                      className="inventory-history-dialog__rarity-badge inline-flex min-w-[3rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-semibold shadow-sm"
+                      style={rarityBadgeStyle}
+                    >
+                      <span
+                        className={clsx('inventory-history-dialog__rarity-badge__label', rarityTextClassName)}
+                        style={rarityTextStyle}
+                      >
+                        {item.rarityLabel}
                       </span>
-                    ) : null}
-                  </span>
-                </div>
-              ))}
+                    </span>
+                    <span className="flex-1 font-medium">{item.name}</span>
+                    <span className="flex items-center gap-2 font-mono">
+                      ×{item.count}
+                      {item.guaranteedCount ? (
+                        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          保証 {item.guaranteedCount}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             <div className="flex flex-wrap items-start justify-between gap-3 text-xs text-muted-foreground">
               <div className="space-y-1">
