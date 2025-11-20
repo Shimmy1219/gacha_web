@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { forwardRef, type MouseEvent as ReactMouseEvent } from 'react';
+import { forwardRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
@@ -83,6 +83,11 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
   const canPreviewAsset = Boolean(onPreviewAsset && (assetId || previewAssetId || fallbackUrl));
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
+  const rarityTextStyle: CSSProperties = {
+    display: 'inline-block',
+    maxWidth: 'fit-content',
+    ...(rarityStyle ?? {})
+  };
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (event.ctrlKey || event.metaKey) {
@@ -107,6 +112,12 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
 
   const rateDisplay = rarityRateLabel ?? rarity.itemRateDisplay ?? '';
   const hasRate = rateDisplay.trim().length > 0;
+
+  const rarityLabel = (
+    <span className={clsx('truncate', rarityClassName)} style={rarityTextStyle}>
+      {rarity.label}
+    </span>
+  );
 
   return (
     <article
@@ -157,9 +168,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
                 isMobile ? 'flex-col gap-1' : 'items-baseline justify-between gap-2'
               )}
             >
-              <span className={clsx('flex-1 truncate', rarityClassName)} style={rarityStyle}>
-                {rarity.label}
-              </span>
+              {rarityLabel}
               <span
                 className={clsx(
                   'text-[10px] font-normal text-muted-foreground tabular-nums',
