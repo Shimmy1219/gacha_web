@@ -113,6 +113,21 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const rateDisplay = rarityRateLabel ?? rarity.itemRateDisplay ?? '';
   const hasRate = rateDisplay.trim().length > 0;
 
+  const rarityLabel = model.isRiagu ? (
+    <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
+      <span
+        className="inventory-history-dialog__rarity-badge__label text-gradient-rainbow"
+        style={{ caretColor: 'rgb(244, 244, 245)' }}
+      >
+        {rarity.label}
+      </span>
+    </span>
+  ) : (
+    <span className={clsx('truncate', rarityClassName)} style={rarityTextStyle}>
+      {rarity.label}
+    </span>
+  );
+
   return (
     <article
       data-item-id={model.itemId}
@@ -162,9 +177,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
                 isMobile ? 'flex-col gap-1' : 'items-baseline justify-between gap-2'
               )}
             >
-              <span className={clsx('truncate', rarityClassName)} style={rarityTextStyle}>
-                {rarity.label}
-              </span>
+              {rarityLabel}
               <span
                 className={clsx(
                   'text-[10px] font-normal text-muted-foreground tabular-nums',
