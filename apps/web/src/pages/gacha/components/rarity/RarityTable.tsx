@@ -86,7 +86,7 @@ export function RarityTable({
                   >
                     <span
                       className={clsx(
-                        'rarity-section__label-input inline-flex min-w-[3rem] max-w-min flex-1 items-center whitespace-pre-wrap focus:outline-none',
+                        'rarity-section__label-input inline-flex max-w-min flex-1 items-center whitespace-pre-wrap focus:outline-none',
                         presentation.className ?? 'text-surface-foreground'
                       )}
                       style={presentation.style}
