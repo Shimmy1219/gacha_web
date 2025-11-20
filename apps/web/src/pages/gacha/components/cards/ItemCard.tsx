@@ -160,6 +160,12 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
               <span className={clsx('flex-1 truncate', rarityClassName)} style={rarityStyle}>
                 {rarity.label}
               </span>
+              {!isMobile ? (
+                <span
+                  aria-hidden="true"
+                  className="mx-1 inline-block h-3 w-px self-center bg-border/70"
+                />
+              ) : null}
               <span
                 className={clsx(
                   'text-[10px] font-normal text-muted-foreground tabular-nums',
