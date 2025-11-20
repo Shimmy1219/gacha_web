@@ -145,6 +145,7 @@ export function RarityTable({
                       aria-label={ariaLabel}
                       aria-multiline="false"
                       data-placeholder={row.placeholder ?? row.id}
+                      spellCheck={false}
                       onInput={(event) => {
                         const next = event.currentTarget.textContent ?? '';
                         updateCaretOffset(row.id);
