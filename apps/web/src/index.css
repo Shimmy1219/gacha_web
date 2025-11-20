@@ -605,7 +605,7 @@
 }
 
 .rarity-section__label-input {
-  min-width: 6ch;
+  min-width: fit-content;
 }
 
 .rarity-section__rate-control {
