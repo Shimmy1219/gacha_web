@@ -91,6 +91,18 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const { data: discordSession } = useDiscordSession();
   const discordUserId = discordSession?.user?.id;
 
+  const resolvePullIdsForStatus = useCallback(
+    (zipPullIds: string[]): string[] => {
+      if (selection.mode !== 'history') {
+        return zipPullIds;
+      }
+      const merged = new Set<string>(selection.pullIds);
+      zipPullIds.forEach((id) => merged.add(id));
+      return Array.from(merged);
+    },
+    [selection]
+  );
+
   const receiverDisplayName = useMemo(() => {
     const profileName = snapshot.userProfiles?.users?.[userId]?.displayName;
     const candidates = [profileName, userName, userId];
@@ -270,8 +282,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         userName: receiverDisplayName
       });
 
-      if (result.pullIds.length > 0) {
-        pullHistoryStore.markPullStatus(result.pullIds, 'ziped');
+      const pullIdsForStatus = resolvePullIdsForStatus(result.pullIds);
+      if (pullIdsForStatus.length > 0) {
+        pullHistoryStore.markPullStatus(pullIdsForStatus, 'ziped');
       }
 
       const blobUrl = window.URL.createObjectURL(result.blob);
@@ -381,8 +394,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         userName: receiverDisplayName
       });
 
-      if (zip.pullIds.length > 0) {
-        pullHistoryStore.markPullStatus(zip.pullIds, 'ziped');
+      const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
+      if (pullIdsForStatus.length > 0) {
+        pullHistoryStore.markPullStatus(pullIdsForStatus, 'ziped');
       }
 
       const uploadResponse = await uploadZip({
@@ -419,8 +433,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         label: uploadResponse.shareUrl,
         expiresAt: expiresAtDisplay
       });
-      if (zip.pullIds.length > 0) {
-        pullHistoryStore.markPullStatus(zip.pullIds, 'uploaded');
+      if (pullIdsForStatus.length > 0) {
+        pullHistoryStore.markPullStatus(pullIdsForStatus, 'uploaded');
       }
       setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
