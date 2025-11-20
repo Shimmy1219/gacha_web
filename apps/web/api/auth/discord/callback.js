@@ -10,11 +10,27 @@ import {
 } from '../../_lib/discordAuthStore.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
+import {
+  normalizeSiteOrigin,
+  resolveRequestSiteOrigin,
+  isAllowedShimmySiteOrigin,
+} from '../../_lib/siteOrigin.js';
 
 function normalizeLoginContext(value) {
   if (value === 'pwa') return 'pwa';
   if (value === 'browser') return 'browser';
   return null;
+}
+
+function buildRedirectUrl(origin, path = '/') {
+  if (origin) {
+    try {
+      return new URL(path, origin).toString();
+    } catch (error) {
+      // ignore parse errors and fall back to the path
+    }
+  }
+  return path;
 }
 
 export default async function handler(req, res) {
@@ -114,11 +130,13 @@ export default async function handler(req, res) {
         ...fallbackLogContext,
         expectedPwaContext,
         loginContextFromState,
+        hasReturnToOrigin: Boolean(storedState.returnToOrigin),
       });
       log.info('KV から認証状態を復元しました', {
         statePreview: restoredStatePreview,
         hasLoginContext: Boolean(loginContext),
         hasVerifier: typeof verifierToUse === 'string' && verifierToUse.length > 0,
+        hasReturnToOrigin: Boolean(storedState.returnToOrigin),
       });
     } else {
       storedState = await getDiscordAuthState(stateParam);
@@ -127,6 +145,7 @@ export default async function handler(req, res) {
           statePreview,
           hasLoginContext: Boolean(storedState.loginContext),
           hasClaimTokenDigest: Boolean(storedState.claimTokenDigest),
+          hasReturnToOrigin: Boolean(storedState.returnToOrigin),
         });
       }
       if (!loginContext && storedState?.loginContext) {
@@ -269,6 +288,22 @@ export default async function handler(req, res) {
       loginContext,
     });
 
+    const envOriginRaw = process.env.NEXT_PUBLIC_SITE_ORIGIN;
+    const {
+      origin: requestOrigin,
+      source: requestOriginSource,
+      details: originDetails,
+      fallbackOrigin,
+      fallbackApplied,
+    } = resolveRequestSiteOrigin(req, { fallbackOrigin: envOriginRaw });
+    const envSiteOrigin = normalizeSiteOrigin(envOriginRaw);
+    const storedOriginCandidate = normalizeSiteOrigin(storedState?.returnToOrigin);
+    const storedOrigin = isAllowedShimmySiteOrigin(storedOriginCandidate)
+      ? storedOriginCandidate
+      : '';
+    const redirectOrigin = storedOrigin || requestOrigin || envSiteOrigin || '';
+    const redirectTarget = buildRedirectUrl(redirectOrigin, '/');
+
     if (loginContext === 'pwa') {
       let claimTokenDigest = digestDiscordPwaClaimToken(pwaClaimTokenCookie);
       if (!claimTokenDigest && storedState?.claimTokenDigest) {
@@ -312,13 +347,41 @@ export default async function handler(req, res) {
     setCookie(res, 'd_login_context', '', { maxAge: 0 });
 
     if (acceptsJson) {
-      log.info('クライアントにログイン完了(JSON)を返却しました', { loginContext });
-      return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
+      log.info('クライアントにログイン完了(JSON)を返却しました', {
+        loginContext,
+        redirectTarget,
+        redirectOrigin: redirectOrigin || null,
+        hasStoredReturnToOrigin: Boolean(storedState?.returnToOrigin),
+        requestOriginSource,
+        requestOrigin: requestOrigin || null,
+        originHeader: originDetails.originHeader || null,
+        refererHeader: originDetails.refererHeader || null,
+        xForwardedHost: originDetails.forwardedHost || null,
+        xForwardedProto: originDetails.forwardedProto || null,
+        hostHeader: originDetails.hostHeader || null,
+        fallbackOrigin: fallbackOrigin || null,
+        fallbackApplied,
+      });
+      return res.status(200).json({ ok: true, redirectTo: redirectTarget, loginContext });
     }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-    const redirectTarget = '/';
+    log.info('Discordログイン完了後のリダイレクト先を決定しました', {
+      loginContext,
+      redirectTarget,
+      redirectOrigin: redirectOrigin || null,
+      hasStoredReturnToOrigin: Boolean(storedState?.returnToOrigin),
+      requestOriginSource,
+      requestOrigin: requestOrigin || null,
+      originHeader: originDetails.originHeader || null,
+      refererHeader: originDetails.refererHeader || null,
+      xForwardedHost: originDetails.forwardedHost || null,
+      xForwardedProto: originDetails.forwardedProto || null,
+      hostHeader: originDetails.hostHeader || null,
+      fallbackOrigin: fallbackOrigin || null,
+      fallbackApplied,
+    });
 
     if (loginContext === 'browser') {
       const redirectScript = `

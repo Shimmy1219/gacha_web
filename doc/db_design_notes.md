@@ -14,9 +14,21 @@
 | --- | --- | --- | --- | --- | --- |
 | `sess:{sid}` | ログインセッション本体 | JSONオブジェクト（下記参照） | 30日 (`SESSION_TTL_SEC`) | `saveSession`, `getSession`, `touchSession`, `deleteSession` | `/api/auth/discord/callback`, `/api/discord/me`, `/api/auth/logout` |
 | `user:{uid}:sessions` | ユーザーが保持する `sid` の集合 | Set（Upstash上では `SADD` / `SMEMBERS`） | 30日（セッション削除時にクリーンアップ） | `saveSession`, `deleteSession`, `deleteAllSessions` | `/api/auth/discord/callback`, `/api/auth/logout` |
-| `discord:auth:{state}` | Discord OAuthの `state` と `code_verifier` | JSON `{ verifier, loginContext?, claimTokenDigest? }` | 10分 (`DISCORD_AUTH_TTL_SEC`) | `saveDiscordAuthState`, `getDiscordAuthState`, `consumeDiscordAuthState`, `deleteDiscordAuthState` | `/api/auth/discord/start`, `/api/auth/discord/callback` |
+| `discord:auth:{state}` | Discord OAuthの `state` と `code_verifier` | JSON `{ verifier, loginContext?, claimTokenDigest?, returnToOrigin? }` | 10分 (`DISCORD_AUTH_TTL_SEC`) | `saveDiscordAuthState`, `getDiscordAuthState`, `consumeDiscordAuthState`, `deleteDiscordAuthState` | `/api/auth/discord/start`, `/api/auth/discord/callback` |
 | `receive:token:{short}` | 共有リンクの短縮トークン→暗号化トークン | 文字列（AES-GCMで暗号化したトークン） | 共有リンクの期限まで（最大14日） | `storeShortToken`, Upstash `kv.get` | `/api/receive/token`, `/api/receive/resolve` |
 | `lock:sess:{sid}` | セッション更新のための排他ロック | 文字列 `'1'` | 5秒 | `getSessionWithRefresh` | `/api/discord/me` などセッションを参照するAPI |
+
+### `discord:auth:{state}` の詳細構造
+```json
+{
+  "verifier": "base64url",
+  "loginContext": "browser",
+  "claimTokenDigest": "sha256(base64)",
+  "returnToOrigin": "https://stg.shimmy3.com"
+}
+```
+- `@upstash/redis` クライアントにオブジェクトを渡すと JSON 文字列にシリアライズされて保存されます。
+- 過去の実装では JSON 文字列を手動で保存していたため、互換性確保のため取得時はオブジェクト形式と文字列形式の両方を扱えるようにしています。
 
 ### `sess:{sid}` の詳細構造
 ```json
@@ -50,6 +62,7 @@
 2. **OAuth stateの検証**
    - `/api/auth/discord/start` で `state` と `code_verifier` を `saveDiscordAuthState` で保存。
    - `/api/auth/discord/callback` で `consumeDiscordAuthState` を使い一度のみ取得し、クッキーの欠損にも対応。
+   - `returnToOrigin` を保持し、Discordからのコールバック後にアクセス元ドメインへリダイレクトする際の基準として利用。
 
 3. **共有リンクの短縮**
    - `/api/receive/token` で暗号化トークン生成後、`storeShortToken` により `receive:token:{short}` を保存。
