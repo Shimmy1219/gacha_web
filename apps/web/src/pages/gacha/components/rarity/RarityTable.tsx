@@ -63,18 +63,31 @@ export function RarityTable({
             return (
               <tr key={row.id} className="rarity-section__row text-sm text-surface-foreground">
                 <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
-                  <input
-                    type="text"
-                    value={label}
-                    onChange={(event) => onLabelChange?.(row.id, event.target.value)}
-                    className={clsx(
-                      'rarity-section__label-input w-full rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus:border-accent focus:outline-none',
-                      presentation.className ?? 'text-surface-foreground'
-                    )}
-                    style={presentation.style}
-                    aria-label={ariaLabel}
-                    placeholder={row.placeholder ?? row.id}
-                  />
+                  <span
+                    className="rarity-section__label-shell inline-flex w-full items-center rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus-within:border-accent focus-within:outline-none"
+                  >
+                    <span
+                      className={clsx(
+                        'rarity-section__label-input inline-flex min-w-[3rem] flex-1 items-center whitespace-pre-wrap focus:outline-none',
+                        presentation.className ?? 'text-surface-foreground'
+                      )}
+                      style={presentation.style}
+                      contentEditable
+                      suppressContentEditableWarning
+                      role="textbox"
+                      aria-label={ariaLabel}
+                      aria-multiline="false"
+                      data-placeholder={row.placeholder ?? row.id}
+                      onInput={(event) => onLabelChange?.(row.id, event.currentTarget.textContent ?? '')}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </span>
                 </td>
                 <td className="rarity-section__cell rarity-section__cell-color px-1 py-2">
                   <RarityColorPicker
