@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { useEffect, useRef, useState } from 'react';
 
 import { RarityColorPicker } from './color-picker/RarityColorPicker';
 import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
@@ -35,6 +36,22 @@ export function RarityTable({
   onAdd,
   canDeleteRow
 }: RarityTableProps): JSX.Element {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const labelRefs = useRef<Record<string, HTMLSpanElement | null>>({});
+
+  useEffect(() => {
+    if (!editingId) return;
+    const target = labelRefs.current[editingId];
+    if (!target) return;
+    target.focus();
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, [editingId]);
+
   return (
     <div className="rarity-section__table-wrapper rounded-2xl border border-border/60 bg-panel shadow-sm">
       <table className="rarity-section__table w-full border-separate border-spacing-0 divide-y divide-border/60 text-left">
@@ -64,15 +81,16 @@ export function RarityTable({
               <tr key={row.id} className="rarity-section__row text-sm text-surface-foreground">
                 <td className="rarity-section__cell rarity-section__cell-label px-1 py-2">
                   <span
-                    className="rarity-section__label-shell inline-flex w-full items-center rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-base font-semibold transition focus-within:border-accent focus-within:outline-none"
+                    className="rarity-section__label-shell inline-flex w-full items-center rounded-xl border border-border/60 bg-panel-contrast px-3 py-1 text-base font-semibold transition focus-within:border-accent focus-within:outline-none"
+                    onClick={() => setEditingId(row.id)}
                   >
                     <span
                       className={clsx(
-                        'rarity-section__label-input inline-flex min-w-[3rem] flex-1 items-center whitespace-pre-wrap focus:outline-none',
+                        'rarity-section__label-input inline-flex min-w-[3rem] max-w-min flex-1 items-center whitespace-pre-wrap focus:outline-none',
                         presentation.className ?? 'text-surface-foreground'
                       )}
                       style={presentation.style}
-                      contentEditable
+                      contentEditable={editingId === row.id}
                       suppressContentEditableWarning
                       role="textbox"
                       aria-label={ariaLabel}
@@ -83,6 +101,10 @@ export function RarityTable({
                         if (event.key === 'Enter') {
                           event.preventDefault();
                         }
+                      }}
+                      onBlur={() => setEditingId((current) => (current === row.id ? null : current))}
+                      ref={(node) => {
+                        labelRefs.current[row.id] = node;
                       }}
                     >
                       {label}
