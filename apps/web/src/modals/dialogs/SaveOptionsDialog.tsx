@@ -279,7 +279,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         snapshot,
         selection,
         userId,
-        userName: receiverDisplayName
+        userName: receiverDisplayName,
+        includeMetadata: false
       });
 
       const pullIdsForStatus = resolvePullIdsForStatus(result.pullIds);

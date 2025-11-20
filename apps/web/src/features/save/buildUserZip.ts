@@ -46,6 +46,7 @@ interface BuildParams {
   selection: SaveTargetSelection;
   userId: string;
   userName: string;
+  includeMetadata?: boolean;
 }
 
 type CatalogGacha = GachaCatalogStateV3['byGacha'][string] | undefined;
@@ -488,7 +489,8 @@ export async function buildUserZipFromSelection({
   snapshot,
   selection,
   userId,
-  userName
+  userName,
+  includeMetadata = true
 }: BuildParams): Promise<ZipBuildResult> {
   ensureBrowserEnvironment();
 
@@ -544,7 +546,7 @@ export async function buildUserZipFromSelection({
 
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
-  const itemMetadataMap: Record<string, ZipItemMetadata> = {};
+  const itemMetadataMap: Record<string, ZipItemMetadata> | null = includeMetadata ? {} : null;
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -565,26 +567,28 @@ export async function buildUserZipFromSelection({
       compression: 'STORE'
     });
 
-    const filePath = `items/${sanitizedGachaName}/${fileName}`;
-    const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
-    const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
-    itemMetadataMap[item.assetId] = {
-      filePath,
-      gachaName: item.gachaName,
-      itemName: item.itemName,
-      rarity: rarityLabel,
-      rarityColor,
-      isRiagu: item.isRiagu,
-      riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
-      obtainedCount: item.count,
-      isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
-    };
+    if (itemMetadataMap) {
+      const filePath = `items/${sanitizedGachaName}/${fileName}`;
+      const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
+      const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
+      itemMetadataMap[item.assetId] = {
+        filePath,
+        gachaName: item.gachaName,
+        itemName: item.itemName,
+        rarity: rarityLabel,
+        rarityColor,
+        isRiagu: item.isRiagu,
+        riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+        obtainedCount: item.count,
+        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
+      };
+    }
   });
 
-  const metaFolder = zip.folder('meta');
-  const generatedAt = new Date().toISOString();
+  const metaFolder = includeMetadata ? zip.folder('meta') : null;
+  const generatedAt = includeMetadata ? new Date().toISOString() : null;
   const pullIds = Array.from(includedPullIds);
-  if (metaFolder) {
+  if (includeMetadata && metaFolder && generatedAt && itemMetadataMap) {
     metaFolder.file(
       'selection.json',
       JSON.stringify(
