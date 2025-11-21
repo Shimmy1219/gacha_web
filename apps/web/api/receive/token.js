@@ -119,6 +119,7 @@ function isAllowedOrigin(req){
 
 function urlHostAllowed(u){
   const url = new URL(u);
+  if (url.protocol !== 'https:') return false;
   const suffixes = (process.env.ALLOWED_DOWNLOAD_HOST_SUFFIXES ||
     'public.blob.vercel-storage.com,blob.vercel-storage.com'
   ).split(',').map(s=>s.trim()).filter(Boolean);
