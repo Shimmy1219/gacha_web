@@ -893,7 +893,7 @@ export function ReceivePage(): JSX.Element {
                 全ての景品を受け取ったらこちらのボタンを押してください
               </p>
               <p className="receive-page-cleanup-description text-amber-50/80">
-                ブラウザへの保存が完了したら、アップロード元のZIPファイルを削除して共有リンクを無効化できます。
+                サーバーに保存されているファイルを削除します。削除後は同じ受け取りIDで再度ダウンロードすることはできなくなります。<br />ストレージには限りがありますので、ご協力をお願いいたします。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -909,7 +909,7 @@ export function ReceivePage(): JSX.Element {
                   <CheckIcon className="receive-page-cleanup-icon h-5 w-5" aria-hidden="true" />
                 )}
                 <span className="receive-page-cleanup-button-text">
-                  {cleanupStatus === 'success' ? 'アップロード元の削除が完了しました' : 'アップロード元を削除する'}
+                  {cleanupStatus === 'success' ? '削除が完了しました。ご協力ありがとうございました。' : 'アップロード元を削除する'}
                 </span>
               </button>
               {cleanupStatus === 'success' ? (
