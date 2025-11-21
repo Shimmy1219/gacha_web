@@ -1,5 +1,6 @@
 // /api/receive/delete.js
 import { del } from '@vercel/blob';
+import { isAllowedOrigin } from '../_lib/origin.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { ReceiveTokenError, resolveReceivePayload } from '../_lib/receiveToken.js';
 
@@ -9,7 +10,7 @@ function parseBody(req) {
   }
   try {
     return JSON.parse(req.body || '{}');
-  } catch (error) {
+  } catch {
     return {};
   }
 }
@@ -27,6 +28,12 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST, GET');
     log.warn('method not allowed', { method: req.method });
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+  }
+
+  const originCheck = isAllowedOrigin(req);
+  if (!originCheck.ok) {
+    log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
+    return res.status(403).json({ ok: false, error: 'Forbidden: origin not allowed' });
   }
 
   const body = parseBody(req);

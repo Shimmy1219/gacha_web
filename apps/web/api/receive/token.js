@@ -1,5 +1,6 @@
 // /api/receive/token.js
 import crypto from 'crypto';
+import { hostToOrigin, isAllowedOrigin } from '../_lib/origin.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 
@@ -7,14 +8,6 @@ const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 
 // ===== Helpers =====
 function vLog(...args){ if (VERBOSE) console.log('[receive/token]', ...args); }
-
-function uniq(arr){ return [...new Set(arr.filter(Boolean))]; }
-
-function hostToOrigin(host){
-  if (!host) return '';
-  const proto = process.env.VERCEL_ENV ? 'https' : 'https';
-  return `${proto}://${host}`;
-}
 
 function parseCookies(header) {
   const out = {};
@@ -93,30 +86,6 @@ function normalizeDownloadUrl(u){
   return url.toString();
 }
 
-function isAllowedOrigin(req){
-  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN; // e.g. https://shimmy3.com
-  const vercelUrl = process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`;
-  const self = hostToOrigin(req.headers.host);
-  const allowed = uniq([envOrigin, envOrigin && envOrigin.replace('://','://www.'), vercelUrl, self]);
-
-  const originHdr = req.headers.origin || '';
-  const referer = req.headers.referer || '';
-  let derived = '';
-  try {
-    derived = referer ? new URL(referer).origin : '';
-  } catch (error) {
-    vLog('failed to parse referer URL', {
-      referer,
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-  const candidate = originHdr || derived || '';
-
-  const ok = (!!candidate && allowed.includes(candidate)) || (!candidate && allowed.includes(self));
-  vLog('allowList:', allowed, 'origin:', originHdr, 'referer:', referer, 'derived:', derived, 'self:', self, 'ok:', ok);
-  return ok;
-}
-
 function urlHostAllowed(u){
   const url = new URL(u);
   if (url.protocol !== 'https:') return false;
@@ -175,8 +144,9 @@ export default async function handler(req, res){
 
   try{
     // 同一オリジン検証
-    if (!isAllowedOrigin(req)) {
-      log.warn('origin check failed');
+    const originCheck = isAllowedOrigin(req);
+    if (!originCheck.ok) {
+      log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
       return res.status(403).json({ ok:false, error:'Forbidden: origin not allowed' });
     }
 
