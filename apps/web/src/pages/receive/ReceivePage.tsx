@@ -443,6 +443,8 @@ export function ReceivePage(): JSX.Element {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const [isBulkDownloading, setIsBulkDownloading] = useState<boolean>(false);
   const [bulkDownloadError, setBulkDownloadError] = useState<string | null>(null);
+  const [cleanupStatus, setCleanupStatus] = useState<'idle' | 'working' | 'success' | 'error'>('idle');
+  const [cleanupError, setCleanupError] = useState<string | null>(null);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
@@ -520,6 +522,11 @@ export function ReceivePage(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    setCleanupStatus('idle');
+    setCleanupError(null);
+  }, [activeToken]);
+
+  useEffect(() => {
     if (typeof document === 'undefined') {
       return;
     }
@@ -566,6 +573,8 @@ export function ReceivePage(): JSX.Element {
     setMediaItems([]);
     setBulkDownloadError(null);
     setIsBulkDownloading(false);
+    setCleanupStatus('idle');
+    setCleanupError(null);
 
     try {
       const blob = await downloadZipWithProgress(resolved.url, {
@@ -651,6 +660,47 @@ export function ReceivePage(): JSX.Element {
       setTimeout(() => setCopyState('idle'), 1600);
     }
   }, []);
+
+  const handleCleanupBlob = useCallback(async () => {
+    if (cleanupStatus === 'working' || cleanupStatus === 'success') {
+      return;
+    }
+    if (!activeToken) {
+      setCleanupStatus('error');
+      setCleanupError('受け取りIDが確認できません。もう一度お試しください。');
+      return;
+    }
+
+    setCleanupStatus('working');
+    setCleanupError(null);
+
+    try {
+      const response = await fetch('/api/receive/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: activeToken })
+      });
+
+      let payload: { ok?: boolean; error?: string } | null = null;
+      try {
+        payload = (await response.json()) as { ok?: boolean; error?: string };
+      } catch {
+        // ignore json parse errors
+      }
+
+      if (!response.ok || !payload?.ok) {
+        const message = payload?.error ?? 'ファイルの削除に失敗しました。時間を置いて再度お試しください。';
+        throw new Error(message);
+      }
+
+      setCleanupStatus('success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ファイルの削除に失敗しました。もう一度お試しください。';
+      setCleanupError(message);
+      setCleanupStatus('error');
+    }
+  }, [activeToken, cleanupStatus]);
 
   const renderResolveStatus = () => {
     if (resolveStatus === 'loading') {
@@ -833,6 +883,44 @@ export function ReceivePage(): JSX.Element {
         ) : resolveStatus === 'success' && downloadPhase === 'waiting' ? (
           <div className="receive-page-download-prompt rounded-3xl border border-dashed border-white/10 bg-black/30 p-10 text-center text-sm text-muted-foreground">
             <span className="receive-page-download-prompt-text">受け取りボタンを押すとファイルのダウンロードが始まります。</span>
+          </div>
+        ) : null}
+
+        {downloadPhase === 'complete' && mediaItems.length > 0 ? (
+          <div className="receive-page-cleanup-callout mt-8 space-y-3 rounded-3xl border border-amber-400/30 bg-amber-500/10 p-6 text-sm text-amber-50">
+            <div className="space-y-1">
+              <p className="receive-page-cleanup-title text-base font-semibold text-amber-100">
+                全ての景品を受け取ったらこちらのボタンを押してください
+              </p>
+              <p className="receive-page-cleanup-description text-amber-50/80">
+                ブラウザへの保存が完了したら、アップロード元のZIPファイルを削除して共有リンクを無効化できます。
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCleanupBlob}
+                disabled={cleanupStatus === 'working' || cleanupStatus === 'success'}
+                className="receive-page-cleanup-button inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 font-semibold text-white shadow-lg shadow-amber-900/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+              >
+                {cleanupStatus === 'working' ? (
+                  <ArrowPathIcon className="receive-page-cleanup-spinner h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <CheckIcon className="receive-page-cleanup-icon h-5 w-5" aria-hidden="true" />
+                )}
+                <span className="receive-page-cleanup-button-text">
+                  {cleanupStatus === 'success' ? 'アップロード元の削除が完了しました' : 'アップロード元を削除する'}
+                </span>
+              </button>
+              {cleanupStatus === 'success' ? (
+                <span className="receive-page-cleanup-status text-xs uppercase tracking-wide text-amber-200">削除済み</span>
+              ) : null}
+            </div>
+            {cleanupError ? (
+              <div className="receive-page-cleanup-error rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-rose-200">
+                {cleanupError}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </main>
