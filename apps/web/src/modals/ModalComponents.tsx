@@ -24,39 +24,10 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   md: 'max-w-xl',
   lg: 'max-w-[55rem]',
   xl: 'max-w-[64rem]',
-  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)] md:max-h-[96vh]'
+  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)]'
 };
 
-const DESKTOP_INLINE_MAX_HEIGHT_THRESHOLD = 900;
-
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
-
-function useMediaQuery(query: string): boolean | undefined {
-  const [matches, setMatches] = useState<boolean | undefined>(undefined);
-
-  useIsomorphicLayoutEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const updateMatchState = (event?: MediaQueryListEvent) => {
-      setMatches(event?.matches ?? mediaQuery.matches);
-    };
-
-    updateMatchState();
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', updateMatchState);
-      return () => mediaQuery.removeEventListener('change', updateMatchState);
-    }
-
-    mediaQuery.addListener(updateMatchState);
-    return () => mediaQuery.removeListener(updateMatchState);
-  }, [query]);
-
-  return matches;
-}
 
 interface ModalViewportMetrics {
   maxHeight?: number;
@@ -88,15 +59,14 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
     const computeViewportMetrics = () => {
       const layoutViewportHeight = window.innerHeight;
       const viewport = window.visualViewport;
-      const viewportHeight = viewport?.height ?? layoutViewportHeight;
       const keyboardVisible = isKeyboardVisible(viewport, layoutViewportHeight);
       const keyboardInset = keyboardVisible
-        ? Math.max(layoutViewportHeight - viewportHeight, 0)
+        ? Math.max(layoutViewportHeight - (viewport?.height ?? layoutViewportHeight), 0)
         : 0;
-      const stableViewportHeight = stableViewportHeightRef.current;
+      const stableViewportHeight = stableViewportHeightRef.current ?? layoutViewportHeight;
 
       if (!keyboardVisible) {
-        stableViewportHeightRef.current = viewportHeight;
+        stableViewportHeightRef.current = layoutViewportHeight;
       }
 
       const rootFontSize = Number.parseFloat(
@@ -105,12 +75,12 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
       const remInPx = Number.isFinite(rootFontSize) ? rootFontSize : 16;
       const offsetPx = offsetRem * remInPx;
       const heightForMax = keyboardVisible
-        ? stableViewportHeight ?? layoutViewportHeight
-        : viewportHeight;
-      const nextHeight = Math.max((heightForMax ?? layoutViewportHeight) - offsetPx, 0);
+        ? stableViewportHeight
+        : layoutViewportHeight;
+      const nextHeight = Math.max(heightForMax - offsetPx, 0);
 
       setMetrics((previous) => {
-        const hasViewportHeightChanged = previous.viewportHeight !== viewportHeight;
+        const hasViewportHeightChanged = previous.viewportHeight !== layoutViewportHeight;
         const hasMaxHeightChanged =
           previous.maxHeight === undefined || Math.abs(previous.maxHeight - nextHeight) > 0.5;
         const hasKeyboardInsetChanged = previous.keyboardInset !== keyboardInset;
@@ -121,7 +91,7 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
 
         return {
           maxHeight: nextHeight,
-          viewportHeight,
+          viewportHeight: layoutViewportHeight,
           keyboardInset
         };
       });
@@ -174,22 +144,11 @@ export const ModalPanel = forwardRef<
   ModalPanelProps
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
-  const { maxHeight: viewportMaxHeight, viewportHeight, keyboardInset } = useModalViewportMetrics();
-  const isBelowMdViewport = useMediaQuery('(max-width: 767px)');
+  const { maxHeight: viewportMaxHeight, keyboardInset } = useModalViewportMetrics();
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
-    if (viewportMaxHeight === undefined) {
-      return false;
-    }
-
-    if (isBelowMdViewport !== false) {
-      return true;
-    }
-
-    return (
-      viewportHeight !== undefined && viewportHeight < DESKTOP_INLINE_MAX_HEIGHT_THRESHOLD
-    );
-  }, [viewportMaxHeight, isBelowMdViewport, viewportHeight]);
+    return viewportMaxHeight !== undefined;
+  }, [viewportMaxHeight]);
 
   const mergedStyle = useMemo(() => {
     const nextStyle = { ...style };
@@ -222,7 +181,6 @@ export const ModalPanel = forwardRef<
       className={clsx(
         'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
         !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
-        'max-h-[calc(100vh-4rem)]',
         SIZE_CLASS_MAP[size],
         paddingClassName,
         className
