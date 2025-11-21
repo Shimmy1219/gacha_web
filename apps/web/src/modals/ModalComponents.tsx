@@ -62,6 +62,18 @@ interface ModalViewportMetrics {
   viewportHeight?: number;
 }
 
+const KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD = 160;
+
+function isKeyboardVisible(viewport: VisualViewport | null, layoutViewportHeight: number): boolean {
+  if (!viewport) {
+    return false;
+  }
+
+  const heightDelta = layoutViewportHeight - viewport.height;
+
+  return heightDelta > KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD && viewport.height < layoutViewportHeight;
+}
+
 function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
   const [metrics, setMetrics] = useState<ModalViewportMetrics>({});
 
@@ -71,7 +83,14 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
     }
 
     const computeViewportMetrics = () => {
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const layoutViewportHeight = window.innerHeight;
+      const viewport = window.visualViewport;
+
+      if (isKeyboardVisible(viewport, layoutViewportHeight)) {
+        return;
+      }
+
+      const viewportHeight = viewport?.height ?? layoutViewportHeight;
       const rootFontSize = Number.parseFloat(
         window.getComputedStyle(window.document.documentElement).fontSize
       );
