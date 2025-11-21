@@ -36,12 +36,13 @@
 | `/api/blob/csrf` | GET | ZIPアップロード用のCSRFトークンを発行する。 | なし | `200 OK` `{ ok:true, token }` | `sid` クッキー（推奨） | `csrf` クッキーに同じ値が保存される。|
 | `/api/blob/upload` | POST | Vercel Blobへの直接アップロードを許可するためのトークンを発行する。 | JSON: `{ action:'prepare-upload', csrf, userId, fileName, ownerDiscordId?, ownerDiscordName?, receiverName? }` | `200 OK` `{ ok:true, token, pathname, fileName, expiresAt, ownerDirectory, receiverDirectory }` | `sid` クッキー + CSRF | `health` クエリでヘルスチェック可能。Origin/Referer検証あり。|
 
-## 共有リンク発行・解決エンドポイント
+## 共有リンク発行・解決・削除エンドポイント
 
 | エンドポイント | メソッド | 概要 | リクエスト | レスポンス | 認証 | 備考 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/api/receive/token` | POST | Vercel BlobのダウンロードURLを暗号化し、共有リンクを生成する。 | JSON: `{ url, name, purpose, validUntil?, csrf }` | `200 OK` `{ ok:true, token, shortToken, shareUrl, exp }` | `sid` クッキー + CSRF | `url` は許可ホストのみ可。短縮トークンはUpstashに保存。|
-| `/api/receive/resolve` | GET | 共有リンク（短縮トークン or 暗号化トークン）を解決し、ダウンロード先を返す。 | クエリ: `t`（必須）, `redirect=1`（任意） | `200 OK` `{ ok:true, url, name, exp, purpose }` / `redirect=1` の場合は `302` | 不要（公開） | 期限切れ時は `410 Gone`。ホスト制限あり。|
+| `/api/receive/token` | POST | Vercel BlobのダウンロードURLを暗号化し、共有リンクを生成する。 | JSON: `{ url, name, purpose, validUntil?, csrf }` | `200 OK` `{ ok:true, token, shortToken, shareUrl, exp }` | `sid` クッキー + CSRF | `url` は許可ホストのみ可。Upstashに短縮トークンを保存。フロント・バック双方でOrigin検証あり。|
+| `/api/receive/resolve` | GET | 共有リンク（短縮トークン or 暗号化トークン）を解決し、ダウンロード先を返す。 | クエリ: `t`（必須）, `redirect=1`（任意） | `200 OK` `{ ok:true, url, name, exp, purpose }` / `redirect=1` の場合は `302` | 不要（公開） | 期限切れ時は `410 Gone`。ダウンロードURLは許可ホストに限定。|
+| `/api/receive/delete` | POST | 受け取りリンクが指す元のBlobファイルを削除する。 | JSON: `{ token }` またはクエリ `t` | `200 OK` `{ ok:true }` | 同一オリジン必須 | 共有リンクの検証に成功した場合のみ削除。Vercel Blobが404の場合は成功扱いで終了。|
 
 ---
 
