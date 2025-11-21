@@ -13,6 +13,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState
 } from 'react';
 
@@ -60,6 +61,7 @@ function useMediaQuery(query: string): boolean | undefined {
 interface ModalViewportMetrics {
   maxHeight?: number;
   viewportHeight?: number;
+  keyboardInset?: number;
 }
 
 const KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD = 160;
@@ -76,6 +78,7 @@ function isKeyboardVisible(viewport: VisualViewport | null, layoutViewportHeight
 
 function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
   const [metrics, setMetrics] = useState<ModalViewportMetrics>({});
+  const stableViewportHeightRef = useRef<number>();
 
   useIsomorphicLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -85,31 +88,41 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
     const computeViewportMetrics = () => {
       const layoutViewportHeight = window.innerHeight;
       const viewport = window.visualViewport;
+      const viewportHeight = viewport?.height ?? layoutViewportHeight;
+      const keyboardVisible = isKeyboardVisible(viewport, layoutViewportHeight);
+      const keyboardInset = keyboardVisible
+        ? Math.max(layoutViewportHeight - viewportHeight, 0)
+        : 0;
+      const stableViewportHeight = stableViewportHeightRef.current;
 
-      if (isKeyboardVisible(viewport, layoutViewportHeight)) {
-        return;
+      if (!keyboardVisible) {
+        stableViewportHeightRef.current = viewportHeight;
       }
 
-      const viewportHeight = viewport?.height ?? layoutViewportHeight;
       const rootFontSize = Number.parseFloat(
         window.getComputedStyle(window.document.documentElement).fontSize
       );
       const remInPx = Number.isFinite(rootFontSize) ? rootFontSize : 16;
       const offsetPx = offsetRem * remInPx;
-      const nextHeight = Math.max(viewportHeight - offsetPx, 0);
+      const heightForMax = keyboardVisible
+        ? stableViewportHeight ?? layoutViewportHeight
+        : viewportHeight;
+      const nextHeight = Math.max((heightForMax ?? layoutViewportHeight) - offsetPx, 0);
 
       setMetrics((previous) => {
         const hasViewportHeightChanged = previous.viewportHeight !== viewportHeight;
         const hasMaxHeightChanged =
           previous.maxHeight === undefined || Math.abs(previous.maxHeight - nextHeight) > 0.5;
+        const hasKeyboardInsetChanged = previous.keyboardInset !== keyboardInset;
 
-        if (!hasViewportHeightChanged && !hasMaxHeightChanged) {
+        if (!hasViewportHeightChanged && !hasMaxHeightChanged && !hasKeyboardInsetChanged) {
           return previous;
         }
 
         return {
           maxHeight: nextHeight,
-          viewportHeight
+          viewportHeight,
+          keyboardInset
         };
       });
     };
@@ -161,7 +174,7 @@ export const ModalPanel = forwardRef<
   ModalPanelProps
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
-  const { maxHeight: viewportMaxHeight, viewportHeight } = useModalViewportMetrics();
+  const { maxHeight: viewportMaxHeight, viewportHeight, keyboardInset } = useModalViewportMetrics();
   const isBelowMdViewport = useMediaQuery('(max-width: 767px)');
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
@@ -179,16 +192,28 @@ export const ModalPanel = forwardRef<
   }, [viewportMaxHeight, isBelowMdViewport, viewportHeight]);
 
   const mergedStyle = useMemo(() => {
+    const nextStyle = { ...style };
+
     if (
-      style?.maxHeight != null ||
-      viewportMaxHeight === undefined ||
-      !shouldApplyInlineMaxHeight
+      style?.maxHeight == null &&
+      viewportMaxHeight !== undefined &&
+      shouldApplyInlineMaxHeight
     ) {
-      return style;
+      nextStyle.maxHeight = viewportMaxHeight;
     }
 
-    return { ...style, maxHeight: viewportMaxHeight };
-  }, [style, viewportMaxHeight, shouldApplyInlineMaxHeight]);
+    if (keyboardInset && keyboardInset > 0) {
+      const existingPaddingBottom =
+        typeof nextStyle.paddingBottom === 'number' ? nextStyle.paddingBottom : 0;
+      const existingScrollPaddingBottom =
+        typeof nextStyle.scrollPaddingBottom === 'number' ? nextStyle.scrollPaddingBottom : 0;
+
+      nextStyle.paddingBottom = existingPaddingBottom + keyboardInset;
+      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
+    }
+
+    return nextStyle;
+  }, [keyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
 
   return (
     <DialogPanel
