@@ -1,0 +1,185 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>AppStateService Smoke Test (step-by-step)</title>
+
+<!-- Import Map: appStateService.js が参照する ./core/base.js をテスト用モックへ差し替え -->
+<script type="importmap">
+{
+  "imports": {
+    "./core/base.js": "./core_base_mock.js"
+  }
+}
+</script>
+
+<style>
+  body { font-family: system-ui, sans-serif; line-height: 1.6; padding: 16px; }
+  button { padding: 8px 12px; margin: 6px 8px 6px 0; }
+  .row { margin: 10px 0; }
+  pre { background: #f6f8fa; border: 1px solid #e5e7eb; padding: 10px; overflow: auto; }
+  .ok { color: #0a7; }
+  .ng { color: #c00; }
+  .tag { display:inline-block; padding:2px 6px; font-size:12px; border-radius:4px; background:#eef; margin-right:6px; }
+</style>
+
+<h1>AppStateService スモークテスト（段階実行）</h1>
+<p>各ボタンで 1 ステップずつ実行します。実行ログと <code>gacha_app_state_v1</code>（初期/最終）が下に表示されます。</p>
+
+<div class="row">
+  <button id="btnStep1">① 初期化: Service生成 & load → save(空)</button>
+  <button id="btnStep2">② Seed: 状態を書き込み (data/catalogs/counts)</button>
+  <button id="btnStep3">③ renameItemCode: (Yami, R) R1 → R2</button>
+  <button id="btnStep4">④ moveItemRarity: (Yami) UR:A1 → SR:A1</button>
+  <button id="btnStep5">⑤ save → 新インスタンスで load して一致確認</button>
+</div>
+
+<div class="row">
+  <button id="btnShowInitial">初期状態を表示</button>
+  <button id="btnShowFinal">最終状態を表示</button>
+  <button id="btnResetLS">localStorage をクリア</button>
+</div>
+
+<h2>実行ログ</h2>
+<pre id="log"></pre>
+
+<h2>gacha_app_state_v1（初期）</h2>
+<pre id="initial"></pre>
+
+<h2>gacha_app_state_v1（最終）</h2>
+<pre id="final"></pre>
+
+<script type="module">
+  import { AppStateService } from '../src/services/appStateService.js';
+
+  const SKEY = 'gacha_app_state_v1';
+  const $ = (s)=>document.querySelector(s);
+  const logEl = $('#log');
+  const initialEl = $('#initial');
+  const finalEl = $('#final');
+
+  function log(msg, ok=true){
+    const line = (ok? '✔ ' : '✖ ') + msg + '\n';
+    logEl.textContent += line;
+  }
+  function pretty(obj){
+    try { return JSON.stringify(obj, null, 2); }
+    catch { return String(obj); }
+  }
+  function getLS(){
+    const raw = localStorage.getItem(SKEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return raw; }
+  }
+  function showInitial(){ initialEl.textContent = pretty(getLS()); }
+  function showFinal(){ finalEl.textContent = pretty(getLS()); }
+
+  // ===== ステップ状態 =====
+  let svc = null;
+  let didStep1 = false, didStep2 = false, didStep3 = false, didStep4 = false, didStep5 = false;
+
+  // ① 初期化
+  $('#btnStep1').addEventListener('click', ()=>{
+    try{
+      svc = new AppStateService(SKEY);
+      // いったん空保存して load しておく
+      svc.save();
+      const loaded = svc.load(); // 既存があれば true、初回は false でもOK
+      log(`Step1: new AppStateService('${SKEY}') / save() / load() → ${loaded}`, true);
+      didStep1 = true;
+    }catch(e){
+      console.error(e);
+      log(`Step1: 例外 ${e}`, false);
+    }
+  });
+
+  // ② Seed
+  $('#btnStep2').addEventListener('click', ()=>{
+    if(!didStep1){ log('Step2: Step1 を先に実行してください', false); return; }
+    try{
+      svc.set({
+        data: {
+          Alice: { Yami: { items: { UR:['A1'], R:['R1'] }, pulls: 10 } },
+          Bob:   { Yami: { items: { R:['R1'] }, pulls: 5 } }
+        },
+        catalogs: {
+          Yami: { pulls: 15, items: { UR:['A1'], R:['R1'] } }
+        },
+        counts: {
+          Alice: { Yami: { UR:{ A1:2 }, R:{ R1:3 } } },
+          Bob:   { Yami: { R:{ R1:1 } } }
+        },
+        selected: 'Yami'
+      });
+      log('Step2: set(seed) 完了', true);
+      didStep2 = true;
+    }catch(e){
+      console.error(e);
+      log(`Step2: 例外 ${e}`, false);
+    }
+  });
+
+  // ③ renameItemCode
+  $('#btnStep3').addEventListener('click', ()=>{
+    if(!didStep2){ log('Step3: Step2 を先に実行してください', false); return; }
+    try{
+      const ok = svc.renameItemCode('Yami','R','R1','R2');
+      const st = svc.get();
+      const catalogsOK = st?.catalogs?.Yami?.items?.R?.includes('R2') && !st?.catalogs?.Yami?.items?.R?.includes('R1');
+      const dataOK = st?.data?.Alice?.Yami?.items?.R?.includes('R2') && !st?.data?.Alice?.Yami?.items?.R?.includes('R1');
+      const countsOK = st?.counts?.Alice?.Yami?.R?.R2 === 3 && !('R1' in (st?.counts?.Alice?.Yami?.R || {}));
+      const all = ok && catalogsOK && dataOK && countsOK;
+      log(`Step3: renameItemCode('Yami','R','R1','R2') → ${ok} / catalogsOK=${catalogsOK} / dataOK=${dataOK} / countsOK=${countsOK}`, all);
+      didStep3 = all;
+    }catch(e){
+      console.error(e);
+      log(`Step3: 例外 ${e}`, false);
+    }
+  });
+
+  // ④ moveItemRarity
+  $('#btnStep4').addEventListener('click', ()=>{
+    if(!didStep3){ log('Step4: Step3 を先に実行してください', false); return; }
+    try{
+      const ok = svc.moveItemRarity('Yami','UR','A1','SR');
+      const st = svc.get();
+      const catalogsMoved = !st?.catalogs?.Yami?.items?.UR?.includes('A1') && st?.catalogs?.Yami?.items?.SR?.includes('A1');
+      const dataMoved = !st?.data?.Alice?.Yami?.items?.UR?.includes('A1') && st?.data?.Alice?.Yami?.items?.SR?.includes('A1');
+      const countsMoved = !('A1' in (st?.counts?.Alice?.Yami?.UR || {})) && st?.counts?.Alice?.Yami?.SR?.A1 === 2;
+      const all = ok && catalogsMoved && dataMoved && countsMoved;
+      log(`Step4: moveItemRarity('Yami','UR','A1','SR') → ${ok} / catalogsMoved=${catalogsMoved} / dataMoved=${dataMoved} / countsMoved=${countsMoved}`, all);
+      didStep4 = all;
+    }catch(e){
+      console.error(e);
+      log(`Step4: 例外 ${e}`, false);
+    }
+  });
+
+  // ⑤ save → 新インスタンスで load 一致確認
+  $('#btnStep5').addEventListener('click', ()=>{
+    if(!didStep4){ log('Step5: Step4 を先に実行してください', false); return; }
+    try{
+      svc.save();
+      const before = svc.get();
+      const svc2 = new AppStateService(SKEY);
+      svc2.load();
+      const eq = JSON.stringify(svc2.get()) === JSON.stringify(before);
+      log(`Step5: save → new AppStateService('${SKEY}').load() → 状態一致=${eq}`, eq);
+      didStep5 = eq;
+    }catch(e){
+      console.error(e);
+      log(`Step5: 例外 ${e}`, false);
+    }
+  });
+
+  // 表示系
+  $('#btnShowInitial').addEventListener('click', showInitial);
+  $('#btnShowFinal').addEventListener('click', showFinal);
+  $('#btnResetLS').addEventListener('click', ()=>{
+    localStorage.removeItem(SKEY);
+    log('localStorage[gacha_app_state_v1] を削除しました', true);
+    showInitial();
+    showFinal();
+  });
+
+  // 初回：初期状態を表示
+  showInitial();
+</script>

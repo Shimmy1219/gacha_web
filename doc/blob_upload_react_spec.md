@@ -22,6 +22,7 @@ app/
 
 ### エクスポート
 - `useZipBuilder()` … `buildUserZip(userId, options)` を返す。Promise で `{ blob, fileName, fileCount, totalBytes }` を解決。
+  - `archiveStore` から `users`, `UserBundle`, `gachaById`, `pullsById`, `assetsById` を読み込み、レア度や演出（`effects`）の定義は `gachaById[gachaId].effects` と `UserBundle.itemSummary` を組み合わせて決定する。
 - `useBlobUpload()` … `uploadZip({ file, fileName, userId })` を返す。内部で CSRF 取得と `/api/blob/upload` 呼び出しを隠蔽。
 - `useSaveOptionsActions()` … モーダル内のボタンが呼び出すハンドラを提供。`doc/modals/save_options_modal_spec.md` に準拠。
 
@@ -116,6 +117,14 @@ interface AssetEntity {
      }
      ```
    - メタの JSON は `compression: 'DEFLATE', level: 6`。
+   - 受け取りページ向けの `meta/metadata.json` を書き出す。
+     - フォーマットは `doc/receive/receive_page_react_plan.md` が定義する **レア度演出用メタデータ仕様** を厳守する。
+     - 必須フィールド: `version`, `items[]`（各 `filename`, `rarity`, `effects`、可能であれば `displayName`, `description`, `order`）、`defaultMessage`。
+     - `rarity` と `effects` は React 化後の正規化ストアから構築する。
+       - `rarity`: `pullsById[pullId].items` と `assetsById[assetId]` を突き合わせ、`itemSummary`（`UserBundle.itemSummary`）を優先して決定。
+       - `effects`: ガチャ側の演出設定テーブル（`gachaById[gachaId].effects` 仮称）と `UserBundle` のレア度マッピングを組み合わせ、`type`／`animationPreset`／`palette`／`audio` を解決する。未定義時は `type: 'standard'`。
+     - JSON の格納パスとファイル名は常に `meta/metadata.json` とし、ZIP 内で一意にする（既存ファイルがあれば上書き）。
+     - 欠落した optional フィールド（`displayName`, `description`, `effects.palette` など）は省略するが、空文字列は出力しない。
 
 5. **結果**
    - ZIP blob を `await zip.generateAsync({ type: 'blob', compression: 'STORE' })` で生成。
@@ -134,10 +143,11 @@ interface UploadZipArgs {
   ownerDiscordId: string;       // サービス利用者の Discord ユニークID
 }
 interface UploadZipResult {
-  downloadUrl: string;   // Blob から返却される
-  url: string;           // 同上
-  pathname: string;
-  expiresAt: number;     // /api/receive/token の exp
+  key: string;                  // Edge Function で払い出される 10 桁 ID
+  shareUrl: string;             // `https://<host>/receive?key=XXXXXXXXXX`
+  pathname: string;             // Blob 側の保存パス（重複検知用）
+  downloadUrl: string;          // Blob から返却される署名付き URL
+  expiresAt: string;            // Edge Function が返す ISO-8601
 }
 ```
 1. `ensureCsrf()` … `/api/blob/csrf` を一度だけ叩き、Cookie (`csrf`) を確保。
@@ -149,14 +159,36 @@ interface UploadZipResult {
      - `sanitizePath` は `/[0-9A-Za-z._-]/` 以外の文字を `-` に置換し、先頭/末尾の `-` は削る。結果が空なら `'unknown'`。
    - `clientPayload` に `{ purpose: 'zips', userId, ownerDiscordId, receiverName }` を含める。
    - `pathname` を戻り値から受け取り、`localStorage` 等に控える（重複解析に利用）。
-3. `issueReceiveShareUrl(downloadUrl, fileName)` … `/api/receive/token` に POST。
-   - 期限はデフォルト 7 日。UI で変更しない限り同値。
-4. 共有 URL を `localStorage.setItem('last-upload:' + userId, JSON.stringify({ url, exp }))` に保存。
+3. `resolveEdgeReceive({ pathname, downloadUrl })` … Edge Function `POST /api/receive/edge-resolve` を呼び出す。
+   - リクエストボディ例: `{ pathname, downloadUrl, ownerDiscordId, userId, receiverName }`。
+   - レスポンス: `{ key: 'XXXXXXXXXX', shareUrl: 'https://.../receive?key=XXXXXXXXXX', expiresAt: 'ISO-8601' }`。
+   - `key` は受け取りページ用の 10 桁 ID（後続の `GET /api/receive/edge-resolve?key=` で利用）。
+4. `localStorage.setItem('last-upload:' + userId, JSON.stringify({ key, shareUrl, expiresAt }))` に保存。
+   - 保存データは `{ key: string; shareUrl: string; expiresAt: string; pathname: string }` を想定。`pathname` は重複アップロードの検出用に同時保存。
 
 ### エラーハンドリング
-- `upload` / `issueReceiveShareUrl` どちらか失敗時に `BlobUploadError` を投げる。
+- `upload` / `resolveEdgeReceive` どちらか失敗時に `BlobUploadError` を投げる。
 - ネットワークキャンセル（`AbortError` 等）はモーダルが握りつぶす。
-- 成功時は `SaveOptionsModalStore.setResult({ kind: 'upload', url: shareUrl, expiresAt: exp })`。
+- 成功時は `SaveOptionsModalStore.setResult({ kind: 'upload', key, shareUrl, expiresAt, pathname, downloadUrl })`。
+
+#### 処理シーケンス
+
+```mermaid
+sequenceDiagram
+  participant SaveOptionsModal
+  participant useBlobUpload
+  participant BlobAPI as Vercel Blob API
+  participant EdgeResolve as POST /api/receive/edge-resolve
+
+  SaveOptionsModal->>useBlobUpload: uploadZip(args)
+  useBlobUpload->>BlobAPI: upload(file, clientPayload)
+  BlobAPI-->>useBlobUpload: { downloadUrl, pathname }
+  useBlobUpload->>EdgeResolve: POST { pathname, downloadUrl, ... }
+  EdgeResolve-->>useBlobUpload: { key, shareUrl, expiresAt }
+  useBlobUpload-->>SaveOptionsModal: { key, shareUrl, downloadUrl, expiresAt }
+```
+
+> Edge Function から返却される `key` および `expiresAt` の型・意味は、受け取り側 React ページ計画書（`doc/receive/receive_page_react_plan.md` §6.1）で定義される `GET /api/receive/edge-resolve` のレスポンスと揃えておく。双方で 10 桁キーと ISO-8601 形式の期限を共通認識とすることで API 契約の齟齬を防ぐ。
 
 ## 6. モーダル連携フロー
 1. `SaveOptionsModal` が開くと `useZipBuilder` を準備。

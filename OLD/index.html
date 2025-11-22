@@ -1,0 +1,2167 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+<link rel="stylesheet" href="./index.css">
+<link rel="stylesheet" href="./index_mobile.css">
+<!-- 画面幅固定＋ユーザズーム禁止） -->
+<meta name="viewport"
+  content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- 電話番号の自動リンク無効化 -->
+<meta name="format-detection" content="telephone=no">
+<script src="/src/ui-toolbar.js" defer></script>
+<title>四遊楽ガチャツール v21.3.2</title>
+
+<!-- 先にライブラリ（ローカル） -->
+<script src="/lib/jszip.min.js"></script>
+<script src="/lib/pako.min.js"></script>
+<script>
+  window.LS_KEY_APP  = 'gacha_app_state_v2';
+  window.LS_KEY_IMG  = 'gacha_item_image_map_v2';
+  window.LS_KEY_ORIG = 'gacha_item_original_v2';
+  window.LS_KEY_SKIP = 'gacha_item_image_skip_v2';
+  window.LS_KEY_RIAGU_META = 'gacha_riagu_meta_v2';
+  window.LS_KEY_RARITY = 'gacha_rarity_config_v2';
+</script>
+<script type="module">
+  import { createServices } from "/src/services/indexService.js";
+  // レジストリキーは head 先出しの値をそのまま使用（乖離をゼロに）
+  window.Services ||= createServices({
+    app:    window.LS_KEY_APP,
+    rarity: window.LS_KEY_RARITY,
+    imgMap: window.LS_KEY_IMG,
+    origMap:window.LS_KEY_ORIG,
+    skipSet:window.LS_KEY_SKIP,
+    riagu:  window.LS_KEY_RIAGU_META
+  });
+  
+</script>
+<script type="module">
+  import { rarityNameSpanHTML, applyRarityColor } from "/src/rarity_style.js";
+  Object.assign(window, { rarityNameSpanHTML, applyRarityColor });
+</script>
+<script type="module">
+  import { renderDiscordLoginButton } from "./src/discord-login-button.js";
+
+  async function refreshDiscordLoginUI() {
+    const slot = document.getElementById("discordLoginSlot");
+    try {
+      const res = await fetch('/api/discord/me?soft=1', { credentials: "include", cache: "no-store" });
+      const data = await res.json();
+
+      if (res.ok && data?.ok && data.user?.id) {
+        // DiscordのアバターURLを生成（無ければ空）
+        const avatarUrl = data.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${data.user.id}/${data.user.avatar}.png?size=64`
+          : "";
+        renderDiscordLoginButton({
+          mount: slot,
+          loggedIn: true,
+          username: data.user.name || "",
+          avatarUrl
+        });
+        console.info("[discord-login] logged in:", data.user);
+      } else {
+        renderDiscordLoginButton({
+          mount: slot,
+          loggedIn: false,
+          username: "",
+          avatarUrl: ""
+        });
+        console.info("[discord-login] not logged in:", data);
+      }
+    } catch (e) {
+      // 失敗時は未ログインとして描画し、デバッグ出力
+      renderDiscordLoginButton({ mount: slot, loggedIn: false, username: "", avatarUrl: "" });
+      console.error("[discord-login] /api/discord/me failed:", e);
+    }
+  }
+
+  // 初回描画
+  window.addEventListener("DOMContentLoaded", refreshDiscordLoginUI);
+</script>
+
+<script src="./src/pt-controls.js"></script>
+<!-- もしローカルに無ければ CDN で補う（任意） -->
+<script>
+(function ensureLibs(){
+  function need(src){ return !document.querySelector(`script[src="${src}"]`); }
+  function inject(src){ return new Promise((ok,ng)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>ng(new Error('load '+src)); document.head.appendChild(s); });}
+  (async()=>{
+    if (typeof JSZip==='undefined') await inject('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+    if (typeof pako==='undefined')  await inject('https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js');
+  })();
+})();
+</script>
+
+<script src="imp_exp_file.js"></script>
+<script>
+  (function(){
+    try{
+      var raw = localStorage.getItem(window.LS_KEY_APP || 'gacha_app_state_v1');
+      // 何かしら保存されていれば「ある」とみなす（細かい中身は問わない）
+      var has = !!raw && raw !== 'null' && raw !== '""';
+      window.__HAS_APP = !!has;
+      if (window.__HAS_APP) {
+        // 初回ペイント前に強制で切り替え（ちらつきを防ぐ）
+        var st = document.createElement('style');
+        st.textContent = '#splash{display:none!important} #mainUI{display:block!important}';
+        document.head.appendChild(st);
+      }
+    }catch(e){ window.__HAS_APP = false; }
+  })();
+</script>
+</head>
+<body>
+  <div class="container">
+  <header>
+    <!-- ▼ ハンバーガー（モバイルのみ表示） -->
+    <button id="menuBtn" class="menu-btn" aria-label="メニュー" aria-controls="mobileDrawer" aria-expanded="false">
+      <span class="menu-icon" aria-hidden="true">
+        <span></span><span></span><span></span>
+      </span>
+    </button>
+
+    <h1>四遊楽ガチャツール</h1>
+    <p class="muted">設定・ガチャ・アップロード・配布まで全て完結</p>
+  </header>
+
+  <!-- ▼ ドロワー本体（モバイル時のみオーバーレイ） -->
+  <aside id="mobileDrawer" class="drawer" aria-hidden="true">
+    <div id="drawerOverlay" class="drawer-overlay" tabindex="-1"></div>
+    <div class="drawer-panel" role="dialog" aria-label="ツールバー">
+      <div class="drawer-head">
+        <strong>ツール</strong>
+        <button id="drawerClose" class="btn ghost small" aria-label="閉じる">×</button>
+      </div>
+      <!-- ここに #controlsPage を動的に移設 -->
+      <div id="drawerContent"></div>
+    </div>
+  </aside>
+
+    <!-- Splash -->
+    <section id="splash" class="splash">
+      <div class="muted" style="max-width:760px; margin:0 auto 12px">
+        <p>このサイトは、他サービスで引いたガチャ結果を<strong>見やすく集計・共有</strong>するビューアです。</p>
+        <ul style="margin:.3rem 0 .6rem 1.2rem;line-height:1.5">
+          <li>まずは <strong>設定データ</strong>（アイテム一覧）か <strong>最終履歴</strong> を読み込みます。</li>
+          <li>外部サイトのエクスポート <code>.txt</code>（base64）や本ツールの <code>.json</code> をそのまま取り込めます。</li>
+          <li>途中経過は「手動入力」からどんどん貼り付け可能。</li>
+        </ul>
+        <p>迷ったら <strong>「TXTを読み込む」</strong>から始めるのが簡単です。</p>
+      </div>
+      <button class="btn" id="openStart">開始する</button>
+      <!-- Discordでログイン（見た目のみ／イベント未登録） -->
+      <button class="btn discord" id="loginDiscord" aria-label="Discordでログイン" style="margin-top:.5rem">
+        <!-- Discord icon (Bootstrap Icons / MIT) -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+            viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"
+            class="bi bi-discord" style="margin-right:.4rem">
+          <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
+        </svg>
+        Discordでログイン
+      </button>
+      <div class="hint" style="margin-top:.5rem">※ 後からでもJSON読込は可能です</div>
+    </section>
+
+    <!-- Main UI (hidden until start/loaded) -->
+    <section id="mainUI" style="display:none">
+      <section class="toolbar" id="controlsPage" data-page="controls">
+        <div class="row file-drop" id="dropzone mainControls">
+          <div class="tag" id="summaryTag">未読込</div>
+          <div style="flex:1"></div>
+
+          <button class="btn" id="openLivePaste" title="手動入力パネルを開く">手動入力</button>
+          
+          <!-- 追加: アプリ状態の完全エクスポート / インポート -->
+          <button class="btn subtle" id="exportAllBtn" title="画像・動画・音声・履歴・設定を丸ごと書き出し">
+            全体エクスポート
+          </button>
+          <label class="btn ghost" for="importAllInput" title="エクスポートしたZIPから丸ごと復元">
+            全体インポート
+          </label>
+          <input type="file" id="importAllInput" accept=".shimmy,application/x-shimmy" style="display:none" />
+          <div id="discordLoginSlot" class="login-area"></div>
+        </div>
+      </section>
+
+      <div class="grid two-col" style="margin-top:16px">
+        <section class="panel" id="rarityPanel" data-page="rarity">
+          <!-- 内容は rarity.js の initRarityUI() が描画します -->
+        </section>
+        <section class="panel" id="itemsPanel" data-page="items">
+          <h2 style="margin-bottom:.25rem">アイテム設定</h2>
+          <div class="muted" style="margin-bottom:8px">タブでガチャを切替。<span class="kbd">レア度:種類</span>ごとに設定。</div>
+          <div class="tabs" id="gachaTabs"></div>
+          <div id="itemGrid" class="item-grid"></div>
+        </section>
+
+        <section class="panel" id="usersPanel" data-page="users">
+          <h2 style="display:flex;align-items:center;gap:8px">
+            ユーザーごとの獲得内訳
+            <button type="button" class="icon-btn collapse-btn" id="subcontrolsToggle" aria-expanded="false" title="フィルタを折りたたむ/開く"></button>
+          </h2>
+          <div class="muted">各ユーザーの右上の<b>保存</b>でZIPを無圧縮出力（品質そのまま）。</div>
+          <div class="sep"></div>
+
+          <!-- 折りたたみ対象のコンテナ -->
+          <div id="subcontrolsBody" class="subcontrols-body">
+            <div class="row user-subcontrols usc-grid">
+              <!-- ① ガチャ絞り込み -->
+              <div class="usc-label"><label for="gachaFilterBtn">ガチャ絞り込み：</label></div>
+              <div class="usc-ctrl">
+                <div class="gacha-filter" id="gachaFilterWrap">
+                  <button type="button" id="gachaFilterBtn" class="btn subtle gf-btn"
+                          aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                  <div id="gachaPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+                </div>
+              </div>
+
+              <!-- ② レア度 -->
+              <div class="usc-label"><label for="rarityFilterBtn">レア度</label></div>
+              <div class="usc-ctrl">
+                <div class="rarity-filter" id="rarityFilterWrap">
+                  <button type="button" id="rarityFilterBtn" class="btn subtle gf-btn"
+                          aria-haspopup="listbox" aria-expanded="false">すべて</button>
+                  <div id="rarityPopover" class="gf-popover" role="listbox" aria-multiselectable="true" tabindex="-1"></div>
+                </div>
+              </div>
+
+              <!-- ③ はずれを隠す -->
+              <div class="usc-label"><label for="hideMiss">はずれを隠す</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="hideMiss" class="switch">
+                </div>
+              </div>
+
+              <!-- ④ 獲得数を表示 -->
+              <div class="usc-label"><label for="showCounts">獲得数を表示</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="showCounts" class="switch">
+                </div>
+              </div>
+
+              <!-- ⑤ リアグのみを表示 -->
+              <div class="usc-label"><label for="showSkipOnly">リアグのみを表示</label></div>
+              <div class="usc-ctrl">
+                <div class="toggle">
+                  <input type="checkbox" id="showSkipOnly" class="switch">
+                </div>
+              </div>
+
+              <!-- ⑥ ユーザー検索 -->
+              <div class="usc-label"><label for="userSearch">ユーザー検索：</label></div>
+              <div class="usc-ctrl">
+                <input id="userSearch" type="text" placeholder="名前で検索..." />
+              </div>
+            </div>
+          </div>
+
+          <div id="usersList"></div>
+        </section>
+
+        <section class="panel" id="skipPanel" data-page="riagu">
+          <h2>リアグ</h2>
+          <div class="tabs" id="riaguTabs"></div>
+          <div id="riaguSummary"></div>
+        </section>
+      </div>
+      
+      <!-- モバイル用ボトムナビ -->
+      <nav id="mobileTabs" class="mobile-tabs" aria-label="画面切り替え">
+        <button type="button" data-view="rarity" class="active">レアリティ</button>
+        <button type="button" data-view="items">景品</button>
+        <button type="button" data-view="gacha">ガチャ</button>
+        <button type="button" data-view="users">ユーザー</button>
+        <button type="button" data-view="riagu">リアグ</button>
+      </nav>
+    </section>
+
+    <section id="gachaPanel" class="gacha-panel" data-page="gacha"></section>
+  </div>
+
+  <!-- Start Modal -->
+  <div class="modal" id="startModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+      <h3 id="startTitle">はじめる</h3>
+
+      <!-- 四角いタイル群 -->
+      <div class="start-grid">
+        <button class="start-tile" id="tileTxt">
+          <span class="title">外部ガチャサイトと連携</span>
+          <span class="sub">外部ガチャサイトで<br>保存したファイルを<br>インポート</span>
+          <span class="info" title="他サイトでエクスポートした .txtを選ぶと、設定と履歴をまとめて読み込みます。">i</span>
+        </button>
+
+        <button class="start-tile" id="tileJson">
+          <span class="title">JSONを読み込む</span>
+          <span class="sub">このツール形式</span>
+          <span class="info" title="本ツールが出力する gacha_summary.json などを読み込みます。">i</span>
+        </button>
+
+        <button class="start-tile" id="tileNew">
+          <span class="title">新しくガチャを始める</span>
+          <span class="sub">新たにガチャ企画をするかたはこちらから</span>
+          <span class="info" title="本ツールで排出率やレアリティの設定、景品の設定などを行います">i</span>
+        </button>
+      </div>
+
+      <!-- 隠しファイル入力（JSON / TXT） -->
+      <input type="file" id="jsonFile2" accept="application/json,.json" class="visually-hidden" />
+      <input type="file" id="txtFileInput" accept=".txt,text/plain" class="visually-hidden" /> 
+
+      <!-- 閉じるボタン -->
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:12px">
+        <button class="btn ghost" id="closeStart">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Catalog Paste Modal（リアルタイムの最初のフェーズ） -->
+  <div class="modal" id="catalogModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="catTitle">
+      <h3 id="catTitle">出現アイテム一覧の貼り付け</h3>
+      <div class="muted">形式例：<span class="kbd">No./レアリティ/出現率/景品名</span>（縦並び or タブ区切り）</div>
+      <div class="sep"></div>
+      <label>ガチャ名</label>
+      <input id="catGachaName" type="text" placeholder="例：やみぃガチャ" />
+      <div style="height:.5rem"></div>
+      <label>テキスト</label>
+      <textarea id="catText" placeholder="ここに一覧を貼り付け"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="catParse">解析して反映</button>
+        <button class="btn ghost" id="catClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: 案内モーダル（手動入力は上部ボタンから） -->
+  <div class="modal" id="guideModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+      <h3 id="guideTitle">次のステップ</h3>
+      <div class="muted">
+        ガチャ結果は画面上部の<strong>「手動入力」</strong>ボタンを押してペーストしてください。
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end">
+        <button class="btn" id="guideOk">分かった</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Paste Panel（随時） -->
+  <div class="modal" id="liveModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="liveTitle">
+      <h3 id="liveTitle">手動入力を貼り付け</h3>
+      <div class="muted">形式例：<span class="kbd">ガチャ名</span> → <span class="kbd">名前100連</span> → <span class="kbd">【R】C　4個</span>… → <span class="kbd">#なまずつーるず</span></div>
+      <div class="sep"></div>
+      <textarea id="liveText" placeholder="ここに結果テキストを貼り付け（複数ブロック可）"></textarea>
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="liveApply">反映</button>
+        <button class="btn ghost" id="liveClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image modal（既存） -->
+  <div class="modal" id="imageModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">画像を設定</h3>
+      <div class="muted modal-subtitle-row" id="modalSubtitle">
+        <label class="inline-label" for="modalTarget">対象:</label>
+        <input id="modalTarget" type="text" class="inline-input" placeholder="アイテム名（コード）" />
+
+        <div class="inline-right">
+          <label class="inline-label" for="modalRarity">レアリティ:</label>
+          <select id="modalRarity" class="inline-select">
+            <option value="" disabled selected>選択...</option>
+            <!-- ※ この options は次フェーズでJSから埋め込みます -->
+          </select>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="grid-2">
+        <div class="preview-box" style="background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:10px;display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center">
+          <div class="thumb" style="width:120px;aspect-ratio:1/1;background:#0e0f14;border:1px dashed var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center">
+            <img id="modalPreview" alt="プレビュー" />
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:.25rem">現在の画像</div>
+            <div class="tag" id="modalStatus">未設定</div>
+          </div>
+        </div>
+        <div>
+          <label for="fileInput">ファイルから選択</label>
+          <input id="fileInput" type="file" accept="image/*,video/*,audio/*,.mp4,.mp3" />
+          <div style="height:.5rem"></div>
+          <label for="urlInput">画像URL（画像/動画/音声）</label>
+          <input id="urlInput" type="text" placeholder="https://example.com/image.png" />
+          <div style="height:.5rem"></div>
+          <div class="image-actions" style="display:flex; gap:8px; margin-top:.25rem">
+            <button class="btn" id="applyBtn" style="flex:1 1 0">保存</button>
+            <button class="btn ghost" id="closeBtn" style="flex:1 1 0">閉じる</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- リアルグッズ設定モーダル -->
+  <div class="modal" id="riaguModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="riaguTitle">
+      <h3 id="riaguTitle">リアルグッズ設定</h3>
+      <div class="muted">対象: <span class="tag" id="riaguTarget"></span></div>
+      <div class="sep"></div>
+
+      <label for="riaguCost">原価（円）</label>
+      <input id="riaguCost" type="number" inputmode="numeric" pattern="\d*" min="0" step="1" placeholder="例: 300" />
+
+      <div style="height:.5rem"></div>
+      <label for="riaguType">リアルグッズタイプ</label>
+      <input id="riaguType" type="text" placeholder="例: アクリルスタンド / 缶バッジ など" />
+
+      <div class="row" style="justify-content:flex-end;gap:8px;margin-top:8px">
+        <button class="btn subtle" id="riaguSave">保存</button>
+        <button class="btn ghost" id="riaguUnset">リアグ解除</button>
+        <button class="btn ghost" id="riaguClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: ガチャ削除の確認モーダル -->
+  <div class="modal" id="deleteModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+      <h3 id="delTitle">ガチャを削除</h3>
+      <div class="muted">以下のガチャを削除します： <span class="tag" id="delTarget"></span><br>このガチャのユーザー集計も削除されます。</div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn ghost" id="delCancel">キャンセル</button>
+        <button class="btn" id="delConfirm">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW: アイテム削除の確認モーダル -->
+  <div class="modal" id="itemDeleteModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="idelTitle">
+      <h3 id="idelTitle">アイテムを削除</h3>
+      <div class="muted">
+        以下のアイテムを削除します： <span class="tag" id="idelTarget"></span>
+        <div id="idelWarn" style="margin-top:.5rem; display:none; color:#fca5a5;">
+          このアイテムを獲得したユーザーがいますが、本当に削除しますか？<br>
+          ユーザーの獲得一覧からもこのアイテムは削除されます。
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn ghost" id="idelCancel">キャンセル</button>
+        <button class="btn" id="idelConfirm">削除</button>
+      </div>
+    </div>
+  </div>
+
+
+<!-- 保存モーダル用モジュール（アップロード関数 + 各ボタンの制御を1か所に集約） -->
+  <!-- 保存オプションモーダル：デバイス保存 / Vercel Blob 直送 -->
+  <div class="modal" id="saveOptionModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="saveOptTitle">
+      <h3 id="saveOptTitle">保存オプション</h3>
+      <div class="sep"></div>
+      <!-- 選択肢をカード化（説明つき） -->
+      <div class="row" style="gap:12px;flex-wrap:wrap">
+        <div style="flex:1 1 320px;min-width:280px;background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px">
+          <div style="font-weight:800;margin-bottom:6px">自分で保存して共有する</div>
+          <div class="muted" style="font-size:.95rem;margin-bottom:10px">
+            端末にZIPを保存し、後で <b>ギガファイル便</b> などお好みのサービスへアップロードする方法です。
+            ストレージや保持期間を自分で管理したい方向け。
+          </div>
+          <button class="btn" id="saveDeviceBtn">デバイスに保存</button>
+        </div>
+
+        <div style="flex:1 1 320px;min-width:280px;background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:12px">
+          <div style="font-weight:800;margin-bottom:6px">shimmy3.com のアップロード（無料）</div>
+          <div class="muted" style="font-size:.95rem;margin-bottom:10px">
+            画質・音質の劣化なしでZIPをアップロードし、<b>受け取り専用リンク</b>を発行します。
+            すぐに共有したい・手早く渡したい方向け。
+          </div>
+          <button class="btn subtle" id="uploadBlobBtn">ZIP をアップロード</button>
+        </div>
+      </div>
+
+      <!-- 長いURLでもはみ出さない表示 -->
+      <div id="uploadResult" class="muted" style="margin-top:12px;display:none">
+        <div class="row" style="gap:10px;align-items:center">
+          <div style="min-width:110px">受け取り用URL</div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;flex:1">
+            <a id="uploadUrlLink" href="#" target="_blank" rel="noopener"
+              style="display:block;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+                      font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+              title="">
+              <span id="uploadUrlText"></span>
+            </a>
+            <button class="btn small ghost" id="copyUploadUrlBtn" style="white-space:nowrap">URLをコピー</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:12px">
+        <button class="btn ghost" id="saveOptClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+<script type="module">
+  import { initSaveModal } from "/src/blob-upload.js";
+  initSaveModal();
+</script>
+<script type="module">
+  import {
+    parseCatalogText,
+    splitLiveBlocks,
+    parseLiveBlock,
+    b64ToBytes
+  } from "/src/parsers.js";
+
+  // 互換維持：既存の index.html 内の関数呼び出しをそのまま動かす
+  Object.assign(window, {
+    parseCatalogText,
+    splitLiveBlocks,
+    parseLiveBlock,
+    b64ToBytes
+  });
+</script>
+<script>
+/* ====== 小ユーティリティ ====== */
+const $ = (sel, el=document) => el.querySelector(sel);
+const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+const baseRarityOrder = ["UR","SSR","SR","R","N","はずれ"];
+let gRarityOrder = [...baseRarityOrder];
+const keyOf = (gacha, rarity, code) => `${gacha}::${rarity}::${code}`;
+const legacyKey = (rarity, code) => `${rarity}::${code}`;
+const stripGacha = (key) => { const p = String(key).split("::"); return p.length===3 ? `${p[1]}::${p[2]}` : key; };
+const byRarityThenCode = (a,b)=>{const ra = gRarityOrder.indexOf(a.rarity);const rb = gRarityOrder.indexOf(b.rarity);if(ra !== rb) return ra - rb;return (a.code||'').localeCompare(b.code||'ja');};
+const escapeHtml = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const sanitize = s => String(s).replace(/[\\/:*?"<>|]+/g, "_").replace(/\s+/g, "_");
+const uniqPush = (arr, v) => { if(!arr.includes(v)) arr.push(v); };
+
+/* === 追加: レアリティ設定のLS I/Fと補助 === */
+const DEFAULT_RARITY_COLORS = {
+  "UR": "#f59e0b",
+  "SSR": "#fde68a",
+  "SR": "#a78bfa",
+  "R": "#93c5fd",
+  "N": "#a7f3d0",
+  "はずれ": "#fca5a5"
+};
+// --- Service ショートカット＆AppStateブリッジ ---
+function S(){ return window.Services}
+
+// Service → ローカル変数へ反映（起動時/読込時）
+function applyAppStateFromService(){
+  const app = S().app || S().appStateService;
+  if (!app) return false;
+  const ok = app.load?.() ?? true;        // load() は保存済みを読み込む実装
+  const st = app.get?.() || {};           // { data, catalogs, counts, selected }
+  gData             = st.data     || {};
+  gCatalogByGacha   = st.catalogs || {};
+  gHitCounts        = st.counts   || {};
+  selectedGacha     = st.selected || null;
+  return ok;
+}
+
+// ローカル変数のスナップショットを Service 側へ保存（debounce は Service 内）
+function commitAppStateSnapshot(){
+  const app = S().app || S().appStateService;
+  if (!app) return;
+  app.patch(s=>{
+    s.data     = gData || {};
+    s.catalogs = gCatalogByGacha || {};
+    s.counts   = gHitCounts || {};
+    s.selected = selectedGacha || null;
+  });
+}
+
+
+/* ====== 画像保存系（既存） ====== */
+let gData = {};                     // { user: { gacha: { pulls:int, items:{rarity:[code...]}}}}
+let gCatalogByGacha = {};           // { gacha: [{gacha,rarity,code}, ...]} ← 追加：カタログ定義
+let gAllGachas=[], gItemsByGacha={}, selectedGacha=null, currentModalTarget=null;
+let gHitCounts = {};
+
+const LS_KEY_IMG="gacha_item_image_map_v2";
+const LS_KEY_SKIP="gacha_item_image_skip_v2";
+const LS_KEY_ORIG="gacha_item_original_v2";
+const LS_KEY_RIAGU_META = "gacha_riagu_meta_v2";
+const LS_KEY_RARITY = "gacha_rarity_config_v2";
+window.LS_KEY_RARITY = LS_KEY_RARITY;
+let riaguMeta = loadLocalJSON(LS_KEY_RIAGU_META, {});
+function loadLocalJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }catch(e){ return fallback; } }
+function saveLocalJSON(key, value){ try{ localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e){ if(e && (e.name==="QuotaExceededError"||e.code===22)){ console.warn("quota",key); return false; } throw e; } }
+let imgMap=loadLocalJSON(LS_KEY_IMG,{}), origMap=loadLocalJSON(LS_KEY_ORIG,{}), skipSet=new Set(loadLocalJSON(LS_KEY_SKIP,[]));
+function skipHas(itemKey){
+  const { riagu, images } = S();
+  // 1) リアグ（正）を優先
+  if (riagu?.listKeys) {
+    const set = riagu.listKeys();                 // Set<string>
+    if (set.has(itemKey)) return true;
+    const leg = stripGacha(itemKey);              // "rarity::code" 旧形式
+    if (set.has(leg)) return true;
+  }
+  // 2) 互換：images の skip にも残っていれば true
+  return !!(images?.hasSkip?.(itemKey) || images?.hasSkip?.(stripGacha(itemKey)));
+}
+
+function skipAdd(itemKey){
+  const { riagu, images } = S();
+  riagu?.addKey?.(itemKey);   // 正（riagu）
+  images?.addSkip?.(itemKey); // 互換ミラー
+}
+
+function skipDel(itemKey){
+  const { riagu, images } = S();
+  riagu?.delKey?.(itemKey);   // 正（riagu）
+  images?.delSkip?.(itemKey); // 互換ミラー
+}
+
+const DB_NAME="gachaImagesDB", STORE="images";
+function idbOpen(){ return new Promise((res,rej)=>{ const r=indexedDB.open(DB_NAME,1); r.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)}; r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });}
+async function idbPut(key,blob){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+async function idbGet(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readonly"); const rq=tx.objectStore(STORE).get(key); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error); });}
+async function idbDelete(key){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+async function idbClear(){ const db=await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(STORE,"readwrite"); tx.objectStore(STORE).clear(); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); });}
+const urlCache=new Map(); async function urlForKey(key){ if(urlCache.has(key)) return urlCache.get(key); const blob=await idbGet(key); if(!blob) return ""; const url=URL.createObjectURL(blob); urlCache.set(key,url); return url; }
+
+function lookupVal(map,key){ if(map[key]) return map[key]; const leg=stripGacha(key); return map[leg]||""; }
+function immediateSrcFor(key){ const v=lookupVal(imgMap,key); if(!v) return ""; if(v.startsWith("idb:")) return ""; return v; }
+function thumbInnerHTML(it){
+  // 実画像は resolveThumbs() 側で非同期に埋める
+  return `<span class="muted">No Image</span>`;
+}
+// スプラッシュ中はスクロール不可
+if (!window.__HAS_APP) document.body.classList.add('splash-locked');
+
+// 折りたたみ状態の保存用キーを追加
+const LS_KEY_COLLAPSE = "user_card_collapsed_v1";
+let gUserCollapsed = loadLocalJSON(LS_KEY_COLLAPSE, {});
+function setUserCollapsed(user, val){gUserCollapsed[user] = !!val; saveLocalJSON(LS_KEY_COLLAPSE, gUserCollapsed);}
+
+// ---- mobile 判定 & 切替（mainUI を安全に取得してから動かす） ----
+let __mainUI = null;
+function getMainUI(){ return __mainUI || (__mainUI = document.getElementById('mainUI')); }
+
+// “モバイル相当”を環境と幅の両面で判定
+function isMobileLike(){
+  return window.matchMedia('(max-width: 900px), (hover: none) and (pointer: coarse)').matches;
+}
+
+function syncMobileTabs(){
+  const main = getMainUI(); if(!main) return;
+  const view = main.getAttribute('data-view') || 'controls';
+  document.querySelectorAll('#mobileTabs button').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-view') === view);
+  });
+}
+
+// 自動保存関係
+const LS_KEY_APP = "gacha_app_state_v2";
+function saveAppState(){
+  // Service 側に委譲（内部でdebounce保存される）
+  commitAppStateSnapshot();
+}
+
+function saveAppStateDebounced(){
+  // ここでは区別をつけず、常に patch を投げる（Service側が debounce 済み）
+  commitAppStateSnapshot();
+}
+
+function loadAppState(){
+  // Service 側から読み込んでローカル変数へ反映
+  return applyAppStateFromService();
+}
+
+function updateMobileViewMode(){
+  const main = getMainUI();
+  if (!main) return;
+  const mobile = isMobileLike();
+
+  // ← 追加：body にもモバイル判定のクラスを付与（CSS が header に届くように）
+  document.body.classList.toggle('mobile-views', !!mobile);
+
+  if (mobile) {
+    main.classList.add('mobile-views');
+    // 既定ビューを「レアリティ」に変更（設定タブは廃止）
+    if (!main.getAttribute('data-view')) main.setAttribute('data-view','rarity');
+    ensureControlsLocation(true);   // controlsPage をドロワーへ
+  } else {
+    main.classList.remove('mobile-views');
+    main.removeAttribute('data-view');
+    ensureControlsLocation(false);  // controlsPage を元位置へ戻す
+    if (typeof window.closeDrawer === 'function') window.closeDrawer(true);             // 念のため閉じる
+  }
+
+  syncMobileTabs();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (loadAppState() && Object.keys(gData || {}).length > 0) {
+    if (window.attachAppStateFilters) {
+      console.log('Attaching app state filters...');
+      window.attachAppStateFilters(window.Services || {});}
+    //rebuildGachaCaches();
+    renderTabs();
+    renderItemGrid();
+    renderRiaguPanel();
+    renderUsersList();
+    startDone();
+    saveAppStateDebounced();             // スプラッシュを閉じて通常画面へ
+    }
+    wireRarityColorLiveSync();
+});
+
+function wireRarityColorLiveSync(){
+  console.log('wireRarityColorLiveSync called');
+  const services = window.Services || {};
+  const raritySvc = services.rarity || services.rarityService || null;
+  if (!raritySvc || typeof raritySvc.onChange !== 'function') return;
+  if (wireRarityColorLiveSync._installed) return; // 二重購読防止
+  wireRarityColorLiveSync._installed = true;
+
+  raritySvc.onChange(() => {
+    console.log('rarity config changed, live sync triggered');
+    try {
+      // レアリティ設定テーブルは rarity.js 内で行内更新済み。
+      // 他セクションだけ再描画して色を即時反映。
+      renderItemGrid();
+      renderUsersList();
+    } catch (e) {
+      console.warn('rarity color live sync skipped:', e);
+    }
+  });
+}
+
+// DOM 構築後に初回実行（早すぎる呼び出しを防止）
+document.addEventListener('DOMContentLoaded', updateMobileViewMode);
+window.addEventListener('resize', updateMobileViewMode);
+window.addEventListener('orientationchange', updateMobileViewMode);
+
+// 画面が開かれた際、閉じられた際にも保存
+window.addEventListener('beforeunload', saveAppState);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveAppState(); });
+
+$$(".modal").forEach(m=>{
+  m.addEventListener("touchmove", e=>{ if(e.target === m) e.preventDefault(); }, {passive:false});
+});
+
+$("#mobileTabs")?.addEventListener("click", (e)=>{
+  const b = e.target.closest('button[data-view]'); if(!b) return;
+  const view = b.getAttribute('data-view');
+  mainUI.setAttribute('data-view', view);
+
+  // ★ ガチャタブ = スライドインを有効化 / 他タブ = 無効化
+  if (view === 'gacha') mainUI.setAttribute('data-gacha-open','1');
+  else mainUI.removeAttribute('data-gacha-open');
+
+  $$("#mobileTabs button").forEach(x=>x.classList.toggle('active', x===b));
+  syncMobileTabs();
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+function incCount(user, gacha, rarity, code, by=1){
+  if(!user || !gacha || !rarity || !code) return;
+  gHitCounts[user] = gHitCounts[user] || {};
+  gHitCounts[user][gacha] = gHitCounts[user][gacha] || {};
+  gHitCounts[user][gacha][rarity] = gHitCounts[user][gacha][rarity] || {};
+  gHitCounts[user][gacha][rarity][code] = (gHitCounts[user][gacha][rarity][code] || 0) + (by||0);
+}
+
+function renderTabs(){
+  const tabs = $("#gachaTabs"); if (!tabs) return;
+  tabs.innerHTML = "";
+
+  const services = window.Services || {};
+  const app      = services.app || services.appStateService || null;
+
+  // ID 一覧（ソート済）
+  const ids = app?.listGachas ? app.listGachas({ sort: true }) : [];
+  let selectedId = app?.getSelectedGacha ? app.getSelectedGacha()
+                  : (app?.get ? (app.get()?.selected ?? null) : null);
+
+  if (!selectedId && ids.length){
+    selectedId = ids[0];
+    app?.selectGacha?.(selectedId);
+  }
+
+  ids.forEach((gachaId, idx) => {
+    const label = app?.getDisplayName?.(gachaId) || gachaId;
+
+    const el = document.createElement("div");
+    el.className = "tab" + ((selectedId ? selectedId === gachaId : idx === 0) ? " active" : "");
+    el.textContent = label;
+    el.dataset.gachaId = gachaId; // ★ ここ重要：ガチャIDを埋め込む
+
+    el.addEventListener("click", () => {
+      app?.selectGacha?.(gachaId);
+      window.selectedGacha = gachaId; // 既存コード互換のため残す（ID を入れる）
+
+      $$(".tab", tabs).forEach(t => t.classList.toggle("active", t.dataset.gachaId === gachaId));
+      renderItemGrid();
+    });
+
+    // 右上 × ボタン（削除）
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "close";
+    x.textContent = "×";
+    x.title = "このガチャを削除";
+    x.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openDeleteConfirm(gachaId); // ★ ID 渡しに変更
+    });
+    el.appendChild(x);
+
+    tabs.appendChild(el);
+  });
+
+  // ＋ボタン：新しいガチャを追加（開始モーダルへ）
+  const add = document.createElement("div");
+  add.className = "tab add";
+  add.title = "ガチャの種類を追加";
+  add.textContent = "＋";
+  add.style.fontWeight = "800";
+  add.style.borderStyle = "solid";
+  add.addEventListener("click", ()=> open(startModal));
+  tabs.appendChild(add);
+}
+
+
+function renderItemGrid(){
+  const grid=$("#itemGrid"); if(!grid){ return; }
+  grid.innerHTML="";
+
+  const services   = window.Services || {};
+  const app        = services.app || services.appStateService || null;
+  const raritySvc  = services.rarity || services.rarityService || null;
+  if (!app) { grid.textContent = "サービス未初期化です。"; return; }
+
+  const selectedId = app.getSelectedGacha?.() ?? (app.get?.()?.selected ?? null);
+  if(!selectedId){
+    grid.textContent="ガチャがありません。開始メニューから定義またはJSONを読み込んでください。";
+    return;
+  }
+
+  // UI 表示用の名前
+  const displayName = app.getDisplayName?.(selectedId) || selectedId;
+
+  const baseOrder = (window.baseRarityOrder || ["UR","SSR","SR","R","N","はずれ"]);
+  const all = app.listItemsFromCatalog
+    ? app.listItemsFromCatalog(selectedId, { rarityService: raritySvc, baseOrder })
+    : [];
+
+  // レア度フィルタ
+  const rSel = getSelectedRarities();
+  const list = all.filter(it => (rSel === "*" || rSel.has(it.rarity)));
+
+  if (list.length === 0) {
+    grid.innerHTML = `<div class="muted">アイテムがありません。</div>`;
+    return;
+  }
+
+  for(const it of list){
+    // it = { gachaId, rarity, code }
+    const gachaId = it.gachaId || it.gacha;
+    const key = `${gachaId}::${it.rarity}::${it.code}`;
+
+    const skipped = skipHas(key);
+    const hasImage = !!lookupVal(imgMap, key);
+
+    const card = document.createElement("div"); 
+    card.className = "item-card";
+    card.innerHTML = `
+      <div class="item-thumb" data-thumb-key="${key}">${thumbInnerHTML(it)}</div>
+      <div class="item-code">${escapeHtml(it.code)}</div>
+      <div class="muted"><span class="rarity ${it.rarity}">${it.rarity}</span></div>
+      <div class="card-actions">
+        <button class="btn" data-action="primary"${skipped?' disabled':''}>${hasImage?'解除':'画像設定'}</button>
+        <button class="btn ghost" data-action="skip">${skipped?"リアグ解除":"リアグ"}</button>
+      </div>
+      <div class="flag">
+        <span class="badge">${escapeHtml(displayName)} / ${it.rarity}:${escapeHtml(it.code)}</span>
+        ${skipped?'<span class="badge skip">リアグ</span>':""}
+      </div>`;
+
+    // レアリティ色（rarityService の color を適用）
+    {
+      const color = raritySvc?.getMeta?.(gachaId, it.rarity)?.color ?? null;
+      const spanHtml = window.rarityNameSpanHTML
+        ? window.rarityNameSpanHTML(it.rarity, color, { extraClasses: String(it.rarity) })
+        : `<span class="rarity ${escapeHtml(String(it.rarity))}">${escapeHtml(String(it.rarity))}</span>`;
+      const el = card.querySelector('.muted .rarity');
+      if (el) el.outerHTML = spanHtml;
+    }
+
+    // 画像設定 / 解除
+    card.querySelector('[data-action="primary"]').addEventListener("click", () => {
+      const nowHas = !!lookupVal(imgMap, key);
+      const itCompat = { gacha: gachaId, rarity: it.rarity, code: it.code }; // 既存モーダルの引数に合わせる
+      if (nowHas) { clearImage(itCompat); } else { openImageModal(itCompat); }
+    });
+
+    // リアグ切替（既存モーダルそのまま利用）
+    card.querySelector('[data-action="skip"]').addEventListener("click",()=>{
+      openRiaguModal({ gacha: gachaId, rarity: it.rarity, code: it.code });
+    });
+
+    // 右上 ×（アイテム削除）
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "close";
+    closeBtn.textContent = "×";
+    closeBtn.title = "このアイテムを削除";
+    closeBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openItemDeleteConfirm({ gacha: gachaId, rarity: it.rarity, code: it.code });
+    });
+    card.appendChild(closeBtn);
+
+    grid.appendChild(card);
+  }
+
+  resolveThumbs(grid);
+}
+
+// 目的: ユーザー一覧の描画。保存ボタンは保存オプションモーダルを開く。既存のURLがあれば「URLをコピー」を出す。
+// 目的: ユーザー一覧の描画。保存ボタンは保存オプションモーダルを開く。既存のURLがあれば「URLをコピー」を出す。
+// gachaIdベースに全面変更（表示は displayName を使用）
+function renderUsersList(){
+  const wrap=$("#usersList"); if(!wrap) return;
+  wrap.innerHTML="";
+
+  const services = (window.Services || {});
+  const app      = services.app || services.appStateService || null;
+  const rarity   = services.rarity || services.rarityService || null;
+
+  const data     = app?.getData?.()   || {};
+  const counts   = app?.getCounts?.() || {};
+  const catalogs = app?.get?.()?.catalogs || {};
+
+  const empty = Object.keys(data).length===0;
+  if(empty){
+    wrap.innerHTML='<div class="muted">まだユーザー履歴がありません。開始メニューまたは手動入力から反映してください。</div>';
+    return;
+  }
+
+  const selectedGachas = getSelectedGachas(); // "*" または Set<gachaId>
+  const rSel = getSelectedRarities();
+  const hideMiss = $("#hideMiss").checked;
+  const q = ($("#userSearch").value || "").trim();
+  const showCounts = $("#showCounts")?.checked;
+  const showSkipOnly = $("#showSkipOnly")?.checked;
+
+  Object.entries(data).forEach(([user, gOwned])=>{
+    if(q && !user.includes(q)) return;
+
+    const card=document.createElement("div"); card.className="user-card panel";
+    const header=document.createElement("div"); header.className="user-header";
+
+    const lastUrl = (typeof gLastUploadUrls!=="undefined") ? gLastUploadUrls[user] : "";
+    header.innerHTML = `<h2>${escapeHtml(user)}</h2>
+      <div class="user-actions">
+        <button class="btn small" data-zip-save>保存</button>
+        ${lastUrl ? `<button class="btn small ghost" data-copy-url>URLをコピー</button>` : ``}
+        <button class="icon-btn collapse-btn" data-collapse aria-expanded="true" title="折りたたむ/開く"></button>
+      </div>`;
+    card.appendChild(header);
+    header.classList.add('clickable');
+    header.setAttribute('role','button');
+    header.setAttribute('tabindex','0');
+
+    const bodyId = 'userBody_' + Math.random().toString(36).slice(2,8);
+    header.setAttribute('aria-controls', bodyId);
+
+    const body = document.createElement("div");
+    body.className = "user-body";
+    card.appendChild(body);
+    body.id = bodyId;
+
+    const bodyInner = document.createElement("div");
+    bodyInner.className = "user-body-inner";
+    body.appendChild(bodyInner);
+
+    if (gUserCollapsed[user]) {
+      card.classList.add("collapsed");
+      body.style.height = "0px";
+      body.style.opacity = "0";
+    } else {
+      body.style.height = "auto";
+      body.style.opacity = "1";
+    }
+    header.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
+    const collapseBtn = header.querySelector('[data-collapse]');
+    collapseBtn?.setAttribute('aria-expanded', String(!gUserCollapsed[user]));
+
+    header.querySelector('[data-zip-save]')?.addEventListener('click', ()=>{
+      window.__saveTargetUser = user;
+      window.__saveTargetGobj = gOwned;
+      const ur   = document.getElementById('uploadResult');
+      const link = document.getElementById('uploadUrlLink');
+      const text = document.getElementById('uploadUrlText');
+      if (ur) ur.style.display = 'none';
+      if (link){ link.href = '#'; link.title = ''; }
+      if (text) text.textContent = '';
+      open(document.getElementById('saveOptionModal'));
+    });
+
+    collapseBtn?.addEventListener('click', (e) => { e.stopPropagation();
+      const isOpen = !card.classList.contains('collapsed');
+      if (isOpen){
+        const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1"; void body.offsetHeight;
+        body.style.height = "0px"; body.style.opacity = "0";
+        const onEnd = (e)=>{
+          if (e.propertyName !== "height") return;
+          body.removeEventListener("transitionend", onEnd);
+          card.classList.add("collapsed");
+          collapseBtn?.setAttribute("aria-expanded","false");
+          header.setAttribute('aria-expanded','false');
+          setUserCollapsed(user, true);
+        };
+        body.addEventListener("transitionend", onEnd);
+      } else {
+        card.classList.remove("collapsed");
+        collapseBtn?.setAttribute("aria-expanded","true");
+        header.setAttribute('aria-expanded','true');
+        body.style.height = "0px"; body.style.opacity = "0"; void body.offsetHeight;
+        const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1";
+        const onEnd = (e)=>{
+          if (e.propertyName !== "height") return;
+          body.removeEventListener("transitionend", onEnd);
+          body.style.height = "auto";
+          setUserCollapsed(user, false);
+        };
+        body.addEventListener("transitionend", onEnd);
+      }
+    });
+
+    header.addEventListener('click', (e)=>{
+      if (e.target.closest('.user-actions')) return;
+      collapseBtn?.dispatchEvent(new Event('click', { bubbles:false }));
+      if(!collapseBtn){
+        const isOpen = !card.classList.contains('collapsed');
+        if (isOpen){
+          const h = body.scrollHeight; body.style.height = h + "px"; body.style.opacity = "1"; void body.offsetHeight;
+          body.style.height = "0px"; body.style.opacity = "0";
+          const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd);
+            card.classList.add('collapsed'); header.setAttribute('aria-expanded','false'); setUserCollapsed(user,true); };
+          body.addEventListener('transitionend', onEnd);
+        }else{
+          card.classList.remove('collapsed'); header.setAttribute('aria-expanded','true');
+          body.style.height = '0px'; body.style.opacity = '0'; void body.offsetHeight;
+          const h = body.scrollHeight; body.style.height = h + 'px'; body.style.opacity = '1';
+          const onEnd = (e)=>{ if (e.propertyName!=='height') return; body.removeEventListener('transitionend', onEnd); body.style.height = 'auto'; setUserCollapsed(user,false); };
+          body.addEventListener('transitionend', onEnd);
+        }
+      }
+    });
+
+    header.addEventListener('keydown', (e)=>{
+      if (e.target.closest('.user-actions')) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.click(); }
+    });
+
+    const copyBtn = header.querySelector('[data-copy-url]');
+    if (copyBtn){
+      copyBtn.addEventListener('click', async ()=>{
+        const u = gLastUploadUrls[user]; if(!u) return;
+        try{ await navigator.clipboard.writeText(u); copyBtn.textContent='コピー済み'; setTimeout(()=>copyBtn.textContent='URLをコピー',1200); }
+        catch{ prompt('URL をコピーしてください', u); }
+      });
+    }
+
+    let hasAnyBox = false;
+
+    // gOwned は { [gachaId]: { pulls, items } }
+    Object.entries(gOwned).forEach(([gachaId, info])=>{
+      if (selectedGachas !== "*" && !selectedGachas.has(gachaId)) return;
+
+      const box=document.createElement("div");
+      box.className="gacha-box";
+      box.setAttribute('data-gacha-id', gachaId);
+
+      const pulls = info.pulls ?? 0;
+      const disp  = app?.getDisplayName?.(gachaId) || gachaId;
+      box.innerHTML=`<div><strong>${escapeHtml(disp)}</strong> <span class="tag">${pulls}連</span></div>`;
+
+      const items = info.items || {};
+      let boxHasAny = false;
+
+      // レア度の並び
+      const baseOrder = window.baseRarityOrder || ['UR','SSR','SR','R','N','はずれ'];
+      const rarityOrder = (() => {
+        const s = new Set(baseOrder);
+        const cat = catalogs[gachaId];
+        if (cat?.items) for (const r of Object.keys(cat.items)) s.add(r);
+        const arr = [...s];
+        arr.sort((a,b)=>{
+          const ma = rarity?.getMeta?.(gachaId, a) || {};
+          const mb = rarity?.getMeta?.(gachaId, b) || {};
+          const na = Number.isFinite(ma.rarityNum) ? ma.rarityNum : -1;
+          const nb = Number.isFinite(mb.rarityNum) ? mb.rarityNum : -1;
+          if (na !== nb) return nb - na;
+          const ia = baseOrder.indexOf(a), ib = baseOrder.indexOf(b);
+          if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+          return a.localeCompare(b,'ja');
+        });
+        return arr;
+      })();
+
+      for (const rarityName of rarityOrder){
+        let list = (items[rarityName] || []);
+        if (showSkipOnly){
+          list = list.filter(code => skipHas(keyOf(gachaId, rarityName, code)));
+        }
+        if(!list.length) continue;
+        if (hideMiss && rarityName === "はずれ") continue;
+        if (rSel !== "*" && !rSel.has(rarityName)) continue;
+
+        const row=document.createElement("div"); row.className="rarity-row";
+
+        // レアリティ色
+        const color = rarity?.getMeta?.(gachaId, rarityName)?.color ?? null;
+        const label=document.createElement("span");
+        label.className="rarity-label";
+        label.innerHTML = (window.rarityNameSpanHTML
+          ? window.rarityNameSpanHTML(rarityName, color, { extraClasses: String(rarityName) })
+          : `<span class="rarity ${escapeHtml(String(rarityName))}">${escapeHtml(String(rarityName))}</span>`);
+        row.appendChild(label);
+
+        const itemsWrap=document.createElement("div"); itemsWrap.className="rarity-items";
+
+        // counts から“確定数”を優先して表示
+        const cntRow = ((counts[user] || {})[gachaId] || {})[rarityName] || {};
+        const byCode = {};
+        for (const c of list) byCode[c] = (byCode[c]||0) + 1;
+
+        const codesSorted = Object.keys(byCode).sort((a,b)=>a.localeCompare(b,'ja'));
+        for (const code of codesSorted){
+          const n = showCounts ? (cntRow[code] || byCode[code] || 1) : null;
+          const key = keyOf(gachaId, rarityName, code);
+          const v = lookupVal(imgMap, key);
+          const immediate = v && !v.startsWith("idb:") ? v : "";
+
+          const pill=document.createElement("span");
+          pill.className="item-pill"+(immediate?"":" no-img");
+          pill.dataset.imgKey = key;
+          pill.dataset.user  = user;
+          pill.dataset.gachaId = gachaId;
+          pill.dataset.rarity= rarityName;
+          pill.dataset.code  = code;
+
+          const labelHtml = `<span>${escapeHtml(code)}</span>${(n!=null)?`<span class="count">×${n}</span>`:""}`;
+          if(immediate){
+            pill.innerHTML=`<img alt="${escapeHtml(code)}" src="${immediate}"/>${labelHtml}`;
+          }else{
+            pill.innerHTML=labelHtml;
+          }
+
+          // 画像モーダル起動（ID渡し）
+          pill.addEventListener('click', ()=>{
+            openImageModal({ gachaId, rarity: rarityName, code });
+          });
+
+          itemsWrap.appendChild(pill);
+        }
+
+        if(itemsWrap.children.length){
+          row.appendChild(itemsWrap);
+          box.appendChild(row);
+          boxHasAny = true;
+        }
+      }
+
+      if (boxHasAny) {
+        body.appendChild(box);
+        hasAnyBox = true;
+      }
+    });
+
+    if(hasAnyBox){ wrap.appendChild(card); } // 対象がないユーザーは出さない
+  });
+
+  resolvePills(wrap);
+}
+
+  
+// 目的: アップロードURLの保持/復元（ユーザー単位）
+const LS_KEY_UPLOAD_URLS = "last_upload_urls_v1";
+let gLastUploadUrls = loadLocalJSON(LS_KEY_UPLOAD_URLS, {});
+function setLastUploadUrl(user, url){
+  gLastUploadUrls[user] = url;
+  saveLocalJSON(LS_KEY_UPLOAD_URLS, gLastUploadUrls);
+}
+
+/* ====== ガチャタブ削除確認モーダル ====== */
+const deleteModal = $("#deleteModal");
+let pendingDeleteGacha = null;
+
+function openDeleteConfirm(gachaId){
+  pendingDeleteGacha = gachaId;
+  const app = (window.Services?.app || window.Services?.appStateService);
+  const label = app?.getDisplayName?.(gachaId) || gachaId;
+  $("#delTarget").textContent = label;
+  open(deleteModal);
+}
+
+$("#delCancel").addEventListener("click", ()=>{ pendingDeleteGacha=null; close(deleteModal); });
+
+$("#delConfirm").addEventListener("click", async ()=>{
+  const gachaId = pendingDeleteGacha; 
+  pendingDeleteGacha = null; 
+  close(deleteModal);
+  if (!gachaId) return;
+
+  const { app, images, riagu, rarity } = (window.Services || {});
+
+  try {
+    // 1) AppState から削除（data / counts / catalogs 含む）
+    app?.deleteGacha?.(gachaId);
+
+    // 2) 画像・リアグの掃除（ID プレフィックスで一括）
+    await images?.clearByPrefix?.(`${gachaId}::`);
+    images?.save?.(); images?._emit?.();
+
+    // 3) リアグのメタ/skip と 画像側 skip の整合クリーニング
+    const catalogs = app?.get?.()?.catalogs || {};
+    images?.pruneByCatalog?.(catalogs);
+    riagu?.pruneByCatalog?.(catalogs);
+
+    // 4) レアリティ設定の削除
+    rarity?.deleteGacha?.(gachaId);
+
+  } catch (e) {
+    console.warn("delete gacha failed:", e);
+  }
+
+  // 5) 再描画
+  renderTabs(); 
+  renderItemGrid(); 
+  renderUsersList(); 
+  renderRiaguPanel(); 
+});
+
+
+
+
+/* ====== アイテム削除確認モーダル ====== */
+const itemDeleteModal = $("#itemDeleteModal");
+let pendingDeleteItem = null;
+
+function countUsersWithItem(gacha, rarity, code){
+  let n = 0;
+  for (const [user, gobj] of Object.entries(gData || {})){
+    const list = (((gobj||{})[gacha]||{}).items||{})[rarity] || [];
+    if (Array.isArray(list) && list.includes(code)) n++;
+  }
+  return n;
+}
+
+function openItemDeleteConfirm(it){
+  // gachaId / gacha の両対応を吸収（移行期の安全網）
+  const gid = it.gachaId || it.gacha; if (!gid) return;
+  it.gachaId = gid; it.gacha = gid;
+
+  pendingDeleteItem = it;
+  $("#idelTarget").textContent = `${it.gacha} / ${it.rarity}:${it.code}`;
+  const warn = $("#idelWarn");
+  const usedBy = countUsersWithItem(it.gacha, it.rarity, it.code);
+  if (warn) warn.style.display = usedBy > 0 ? "block" : "none";
+  open(itemDeleteModal);
+}
+
+$("#idelCancel").addEventListener("click", () => {
+  pendingDeleteItem = null;
+  close(itemDeleteModal);
+});
+
+$("#idelConfirm").addEventListener("click", async () => {
+  const it = pendingDeleteItem;
+  pendingDeleteItem = null;
+  close(itemDeleteModal);
+  if (!it) return;
+
+  // 画像/リアグの掃除
+  try { await clearImage(it); } catch(e) { /* ignore */ }
+  skipDel(keyOf(it.gacha, it.rarity, it.code));
+
+  // カタログから削除
+  const cat = gCatalogByGacha[it.gacha] || [];
+  gCatalogByGacha[it.gacha] = cat.filter(x => !(x.rarity === it.rarity && x.code === it.code));
+
+  // 各ユーザーの集計から削除
+  for (const [user, gobj] of Object.entries(gData || {})){
+    const gi = gobj[it.gacha];
+    if (gi && gi.items && Array.isArray(gi.items[it.rarity])) {
+      gi.items[it.rarity] = gi.items[it.rarity].filter(c => c !== it.code);
+      if (gi.items[it.rarity].length === 0) delete gi.items[it.rarity];
+    }
+    // 獲得数（gHitCounts）からも削除
+    if (gHitCounts[user] && gHitCounts[user][it.gacha] && gHitCounts[user][it.gacha][it.rarity]) {
+      delete gHitCounts[user][it.gacha][it.rarity][it.code];
+      if (Object.keys(gHitCounts[user][it.gacha][it.rarity]).length === 0) delete gHitCounts[user][it.gacha][it.rarity];
+      if (Object.keys(gHitCounts[user][it.gacha]).length === 0) delete gHitCounts[user][it.gacha];
+    }
+    // （任意）ユーザー側のガチャが空になったら掃除
+    if (gData[user] && gData[user][it.gacha] && Object.keys(gData[user][it.gacha].items||{}).length === 0 && (gData[user][it.gacha].pulls||0) === 0) {
+      delete gData[user][it.gacha];
+    }
+    if (gData[user] && Object.keys(gData[user]).length === 0) delete gData[user];
+  }
+
+  // 再構築・描画・保存
+  //rebuildGachaCaches();
+  renderTabs();
+  renderItemGrid();
+  renderUsersList();
+  renderRiaguPanel();
+  saveAppStateDebounced();
+});
+
+
+/* ====== 画像モーダル（Service クラス対応版） ====== */
+const imageModal = $("#imageModal");
+let tempPreviewURL = "";
+
+// Services ショートカット（存在しなければ空オブジェクト）
+function _S(){ return window.Services || {}; }
+
+function openImageModal(it){
+  // ★ 呼び出しの揺れを吸収：{ gachaId, ... } / { gacha, ... } の両方に対応
+  const gachaId = it.gachaId || it.gacha;
+  if (!gachaId) return;
+
+  const k = keyOf(gachaId, it.rarity, it.code);
+  if (skipHas(k)) return;
+
+  // ★ currentModalTarget を正規化して保持（以降の処理は gachaId を前提）
+  currentModalTarget = {
+    gachaId,                // 正
+    gacha: gachaId,         // 既存コード互換
+    rarity: it.rarity,
+    code: it.code
+  };
+
+  // 1) 見出し（補助）とプレビュー
+  const cur = immediateSrcFor(k);
+  $("#modalPreview").src = cur || "";
+  $("#modalStatus").textContent = (lookupVal(imgMap, k) ? "設定済み" : "未設定");
+
+  // 2) アイテム名 input の初期値を現在コードで埋める
+  const nameIn = $("#modalTarget");
+  if (nameIn) nameIn.value = String(it.code || "");
+
+  // 3) レアリティ select の生成（rarityService を優先）
+  (function buildRaritySelect(){
+    const sel = $("#modalRarity");
+    if (!sel) return;
+    const services  = (window.Services || {});
+    const raritySvc = services.rarity || services.rarityService || null;
+
+    let rarities = [];
+    if (raritySvc && typeof raritySvc.listRarities === "function") {
+      rarities = raritySvc.listRarities(gachaId) || [];
+    } else {
+      // フォールバック：AppState のカタログから
+      const catalogs = services.app?.get?.()?.catalogs || {};
+      rarities = Object.keys(((catalogs[gachaId] || {}).items) || {});
+    }
+    // ★ 何も取れなかった場合でも現在レアリティだけは候補に出す
+    if (!Array.isArray(rarities) || rarities.length === 0) {
+      rarities = it.rarity ? [it.rarity] : [];
+    }
+
+    sel.innerHTML = rarities.map(r => 
+      `<option value="${escapeHtml(r)}"${r===it.rarity ? ' selected' : ''}>${escapeHtml(r)}</option>`
+    ).join("");
+  })();
+
+  // 4) ファイル/URL 入力の初期化
+  $("#fileInput").value = "";
+  $("#urlInput").value = (cur && !cur.startsWith("data:")) ? cur : "";
+
+  open(imageModal);
+}
+
+
+function closeImageModal(){
+  // 共通 close()
+  close(imageModal);
+  if (tempPreviewURL) {
+    URL.revokeObjectURL(tempPreviewURL);
+    tempPreviewURL = "";
+  }
+}
+
+$("#closeBtn").addEventListener("click", closeImageModal);
+imageModal.addEventListener("click", (e) => {
+  if (e.target === imageModal) closeImageModal();
+});
+
+$("#fileInput").addEventListener("change", async ()=>{
+  if (tempPreviewURL) { URL.revokeObjectURL(tempPreviewURL); tempPreviewURL = ""; }
+  const file = $("#fileInput").files[0];
+  if (!file) { $("#modalPreview").src = ""; return; }
+
+  const kind = getFileKind(file);
+  try{
+    if (kind === "image"){
+      tempPreviewURL = URL.createObjectURL(file);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（画像）";
+      return;
+    }
+    if (kind === "audio"){
+      const blob = await makeNotePlaceholder(256);
+      tempPreviewURL = URL.createObjectURL(blob);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（音声:♫）";
+      return;
+    }
+    if (kind === "video"){
+      const thumb = await extractVideoThumbnail(file, { time:0.1, maxSize:256 });
+      tempPreviewURL = URL.createObjectURL(thumb);
+      $("#modalPreview").src = tempPreviewURL;
+      $("#modalStatus").textContent = "未保存のプレビュー（動画サムネ）";
+      return;
+    }
+  }catch(e){
+    const ph = await makeFilmPlaceholder(256);
+    tempPreviewURL = URL.createObjectURL(ph);
+    $("#modalPreview").src = tempPreviewURL;
+    $("#modalStatus").textContent = "プレビュー生成に失敗（プレースホルダ）";
+  }
+});
+
+$("#urlInput").addEventListener("input", ()=>{
+  const url = ($("#urlInput").value || "").trim();
+  if (url){
+    $("#modalPreview").src = url;
+    $("#modalStatus").textContent = "未保存のプレビュー（URL）";
+  }
+});
+
+$("#applyBtn").addEventListener("click", async ()=>{
+  if (!currentModalTarget) return;
+
+  const { app, images, riagu } = S();          // ← _S() でもOK。S()で統一
+  if (!images){ alert("画像サービスが初期化されていません。"); return; }
+
+  // 1) 入力値（名前＝code、レアリティ）
+  const nameInput = $("#modalTarget");          // <input type="text">
+  const selRarity = $("#modalRarity");          // <select>
+  const nextCode   = (nameInput?.value || "").trim();
+  const nextRarity = (selRarity?.value || "").trim();
+
+  // 2) 現在の参照
+  let { gacha } = currentModalTarget;
+  let curRarity = currentModalTarget.rarity;
+  let curCode   = currentModalTarget.code;
+
+  // 3) 名前変更（Service → images/riagu へキー追随）
+  if (app && nextCode && nextCode !== curCode && typeof app.renameItemCode === 'function'){
+    app.renameItemCode(gacha, curRarity, curCode, nextCode);
+    const oldK = keyOf(gacha, curRarity, curCode);
+    const newK = keyOf(gacha, curRarity, nextCode);
+    images?.renameKey?.(oldK, newK);
+    riagu?.renameKey?.(oldK, newK);
+    curCode = nextCode;
+  }
+
+  // 4) レアリティ変更（Service → images/riagu へキー追随）
+  if (app && nextRarity && nextRarity !== curRarity && typeof app.moveItemRarity === 'function'){
+    app.moveItemRarity(gacha, curRarity, curCode, nextRarity);
+    const oldK = keyOf(gacha, curRarity, curCode);
+    const newK = keyOf(gacha, nextRarity, curCode);
+    images?.renameKey?.(oldK, newK);
+    riagu?.renameKey?.(oldK, newK);
+    curRarity = nextRarity;
+  }
+
+  // 5) Serviceの最新状態を「グローバル変数」へ引き戻す（★重要）
+  syncGlobalsFromServiceLive();                 // ← 追記関数。load()は呼ばない
+
+  // 6) 画像/URL 保存（元ロジックを新キーで踏襲）
+  const k    = keyOf(gacha, curRarity, curCode);
+  const file = $("#fileInput").files[0];
+  const url  = ($("#urlInput").value || "").trim();
+
+  try{
+    if (file){
+      const kind = getFileKind(file);
+      if (kind === "image"){
+        await images.putBlob(k, file);
+      } else if (kind === "audio"){
+        const ph = await makeNotePlaceholder(256);
+        await images.putBlob(k, ph);
+      } else if (kind === "video"){
+        const thumb = await extractVideoThumbnail(file, { time:0.1, maxSize:256 });
+        await images.putBlob(k, thumb);
+      } else {
+        alert("未対応のファイル形式です。");
+        return;
+      }
+    } else if (url){
+      let ok = false;
+      try{
+        const resp = await fetch(url, { mode: "cors" });
+        const blob = await resp.blob();
+        const mime = blob.type || "";
+        if (mime.startsWith("image/")){
+          await images.putBlob(k, blob);
+          ok = true;
+        } else if (mime.startsWith("audio/")){
+          const ph = await makeNotePlaceholder(256);
+          await images.putBlob(k, ph);
+          ok = true;
+        } else if (mime.startsWith("video/")){
+          const thumb = await extractVideoThumbnail(blob, { time:0.1, maxSize:256 });
+          await images.putBlob(k, thumb);
+          ok = true;
+        }
+      } catch(_e){}
+      if (!ok) {
+        images.map[k] = url;
+        images.save?.();
+        images._emit?.();
+      }
+    } else {
+      // 画像指定が無くても、名前/レアリティ更新だけで進める
+    }
+
+    // 7) currentModalTarget も更新（次回オープン時の初期表示用）
+    currentModalTarget.rarity = curRarity;
+    currentModalTarget.code   = curCode;
+
+    // 8) 再描画
+    closeImageModal?.();
+    renderItemGrid?.();
+    renderUsersList?.();
+    renderRiaguPanel?.();
+
+    // 9) Service 側の保存（debounce）
+    app?.saveDebounced?.();                   // ← ★ここで Service を保存
+    //   ↑ ここで saveAppStateDebounced() を呼ぶと commitAppStateSnapshot() が走り、
+    //     古い gData を Service に上書きしてしまうため呼ばない。
+
+  } catch(err){
+    console.error(err);
+    alert("保存に失敗: " + (err?.message || err));
+  }
+});
+
+function syncGlobalsFromServiceLive(){
+  const app = S().app || S().appStateService;
+  if (!app) return false;
+  const st = app.get?.() || {};
+  gData           = st.data     || {};
+  gCatalogByGacha = st.catalogs || {};
+  gHitCounts      = st.counts   || {};
+  selectedGacha   = st.selected || null;
+  return true;
+}
+
+
+/* ====== 解除／リアグ ====== */
+async function clearImage(it){
+  const { images } = _S();
+  if (!images || typeof images.clear !== 'function') return;
+
+  await images.clear({ gacha: it.gacha, rarity: it.rarity, code: it.code });
+
+  renderItemGrid();
+  renderUsersList();
+  renderRiaguPanel();
+  saveAppStateDebounced();
+}
+
+async function toggleSkip(it){
+  const k = keyOf(it.gacha, it.rarity, it.code);
+  const { images } = _S();
+  if (!images) return;
+
+  if (images.hasSkip?.(k)){
+    images.delSkip?.(k);
+  }else{
+    await clearImage(it); // 画像を外してからスキップへ
+    images.addSkip?.(k);
+  }
+  renderItemGrid();
+}
+
+/* ====== 画像のプレビュー解決（Service で透過解決） ====== */
+async function resolveThumbs(root = document){
+  const { images } = _S();
+  if (!images || typeof images.getBlobUrl !== 'function') return;
+
+  const nodes = $$('[data-thumb-key]', root);
+  await Promise.all(nodes.map(async el=>{
+    const key = el.getAttribute('data-thumb-key'); if (!key) return;
+    try{
+      const url = await images.getBlobUrl(key);
+      if (url){
+        const alt = escapeHtml(key.split('::')[2] || 'item');
+        el.innerHTML = `<img src="${url}" alt="${alt}" />`;
+      }
+    }catch{}
+  }));
+}
+
+async function resolvePills(root=document){
+  const nodes=$$('[data-img-key]',root);
+  const showCounts = $("#showCounts")?.checked;
+
+  await Promise.all(nodes.map(async el=>{
+    const key=el.dataset.imgKey;
+    const v=lookupVal(imgMap,key);
+    if(!v) return;
+
+    const user  = el.dataset.user;
+    const gacha = el.dataset.gacha;
+    const rarity= el.dataset.rarity;
+    const code  = el.dataset.code;
+    const countVal = showCounts ? (((gHitCounts[user]||{})[gacha]||{})[rarity]||{})[code] : null;
+    const labelHtml = `<span>${escapeHtml(code)}</span>${(countVal!=null)?`<span class="count">×${countVal}</span>`:""}`;
+
+    if(v.startsWith("idb:")){
+      const url=await urlForKey(v.slice(4));
+      if(url){ el.classList.remove("no-img"); el.innerHTML=`<img alt="${escapeHtml(code)}" src="${url}"/>${labelHtml}`; }
+    }else{
+      el.classList.remove("no-img");
+      el.innerHTML=`<img alt="${escapeHtml(code)}" src="${v}"/>${labelHtml}`;
+    }
+  }));
+}
+
+/* ====== ZIP作成（保存用） ====== */
+async function buildZipForUser(user, gobj){
+  const zip = new JSZip(); const usedNames = new Set(); let count = 0;
+  for(const [gacha,info] of Object.entries(gobj)){
+    const itemObj = info.items || {};
+  for(const rarity of Object.keys(itemObj)){
+      for(const code of (itemObj[rarity] || [])){
+        const key = keyOf(gacha, rarity, code);
+        if(skipHas(key)) continue;
+        const blob = await getOriginalBlobForKey(key);
+        if(!blob) continue;
+        const ext = guessExt(blob.type) || "bin";
+        const base = `${sanitize(gacha)}/${rarity}_${sanitize(code)}.${ext}`;
+        let name = base, i=2; while(usedNames.has(name)){ name = base.replace(`.${ext}`, `(${i++}).${ext}`); }
+        usedNames.add(name);
+        zip.file(name, blob, {binary:true, compression:"STORE"});
+        count++;
+      }
+    }
+  }
+  if(count === 0) throw new Error("出力対象がありません（画像未設定 or すべてリアグ）");
+  const blob = await zip.generateAsync({type:"blob", compression:"STORE"});
+  return {blob, count, size: blob.size};
+}
+
+async function getOriginalBlobForKey(key){
+  const orig = origMap[key];
+  if(orig && orig.startsWith("idb:")){ const b = await idbGet(orig.slice(4)); if(b) return b; }
+  const v = lookupVal(imgMap, key);
+  if(v && v.startsWith("idb:")){ const b = await idbGet(v.slice(4)); if(b) return b; }
+  if(v && /^https?:|^data:/.test(v)){ try{ const res = await fetch(v,{mode:"cors"}); const b = await res.blob(); return b; }catch(_e){ return null; } }
+  return null;
+}
+
+const guessExt = (mime) => {
+  if(!mime) return "";
+  if(mime==="image/jpeg") return "jpg";
+  const map = { "image/png":"png","image/webp":"webp","image/gif":"gif","image/svg+xml":"svg",
+                "video/mp4":"mp4","video/webm":"webm","audio/mpeg":"mp3","audio/wav":"wav","audio/mp4":"m4a","audio/ogg":"ogg" };
+  return map[mime] || (mime.split("/")[1]||"");
+};
+
+/* ====== 画像処理補助 ====== */
+function getFileKind(file){ const t=(file.type||"").toLowerCase(); const n=(file.name||"").toLowerCase();
+  if(t.startsWith("image/")) return "image";
+  if(t.startsWith("video/")||n.endsWith(".mp4")||n.endsWith(".webm")||n.endsWith(".mov")) return "video";
+  if(t.startsWith("audio/")||n.endsWith(".mp3")||n.endsWith(".wav")||n.endsWith(".m4a")) return "audio";
+  return "unknown"; }
+async function makeNotePlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
+  x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.fillStyle="#1f2937"; x.beginPath(); x.arc(size*.5,size*.5,size*.42,0,Math.PI*2); x.fill();
+  x.fillStyle="#e11d48"; x.font=`${Math.round(size*.5)}px system-ui,-apple-system,"Segoe UI",Roboto,"Noto Color Emoji"`; x.textAlign="center"; x.textBaseline="middle"; x.fillText("♫", size*.5, size*.5);
+  return await new Promise(r=>c.toBlob(r,"image/png")); }
+async function makeFilmPlaceholder(size=256){ const c=document.createElement("canvas"); c.width=c.height=size; const x=c.getContext("2d");
+  x.fillStyle="#0e0f14"; x.fillRect(0,0,size,size); x.strokeStyle="#e11d48"; x.lineWidth=Math.max(2,size*.04); x.strokeRect(size*.15,size*.25,size*.7,size*.5);
+  for(let i=0;i<4;i++){ x.fillStyle="#1f2937"; x.fillRect(size*(0.18+i*0.18), size*0.18, size*0.08, size*0.05); x.fillRect(size*(0.18+i*0.18), size*0.77, size*0.08, size*0.05); }
+  return await new Promise(r=>c.toBlob(r,"image/png")); }
+async function extractVideoThumbnail(fileOrBlob,{time=0.1,maxSize=256}={}){ const url=URL.createObjectURL(fileOrBlob);
+  try{ const v=document.createElement("video"); v.preload="metadata"; v.src=url; v.muted=true;
+    await new Promise((ok,ng)=>{ v.onloadedmetadata=()=>ok(); v.onerror=()=>ng(new Error("metadata load failed")); });
+    v.currentTime=Math.min(Math.max(time,0.01),(v.duration||1)-0.01); await new Promise(ok=>{ v.onseeked=()=>ok(); });
+    const w=v.videoWidth,h=v.videoHeight,s=Math.min(1,maxSize/Math.max(w,h)); const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
+    const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(v,0,0,tw,th); URL.revokeObjectURL(url);
+    return await new Promise(r=>c.toBlob(r,"image/webp",0.85));
+  }catch(e){ URL.revokeObjectURL(url); return await makeFilmPlaceholder(maxSize); } }
+async function compressImage(fileOrBlob,{maxSize=256,typePrefer=["image/webp","image/jpeg"],quality=0.85}={}){
+  const img=await createImageBitmap(fileOrBlob).catch(()=>null); const tag=img?null:await fileToImage(fileOrBlob);
+  const w=img?img.width:tag.naturalWidth, h=img?img.height:tag.naturalHeight, s=Math.min(1,maxSize/Math.max(w,h));
+  const tw=Math.max(1,Math.round(w*s)), th=Math.max(1,Math.round(h*s));
+  const c=document.createElement("canvas"); c.width=tw; c.height=th; c.getContext("2d").drawImage(img||tag,0,0,tw,th);
+  for(const mime of typePrefer){ const b=await new Promise(r=>c.toBlob(r,mime,quality)); if(b) return b; } return await new Promise(r=>c.toBlob(r,"image/png"));
+}
+function fileToImage(file){ return new Promise((ok,ng)=>{ const fr=new FileReader(); fr.onload=()=>{ const img=new Image(); img.onload=()=>ok(img); img.onerror=ng; img.src=fr.result; }; fr.onerror=ng; fr.readAsDataURL(file); }); }
+
+/* ====== 開始フロー UI（堅牢版） ====== */
+const splash = $("#splash"), mainUI = $("#mainUI");
+const startModal = $("#startModal"), catalogModal = $("#catalogModal"),
+      liveModal = $("#liveModal"),
+      guideModal = $("#guideModal");
+
+let modalCount = 0;
+function open(modal){
+  if (!modal) return;
+  modal.classList.add("show");
+  modal.setAttribute("aria-hidden","false");
+  if (++modalCount === 1) document.body.classList.add("modal-open");
+  hideFab?.();
+}
+function close(modal){
+  if (!modal || !modal.classList.contains("show")) return;
+  modal.classList.remove("show");
+  modal.setAttribute("aria-hidden","true");
+  if (--modalCount <= 0){ modalCount = 0; document.body.classList.remove("modal-open"); }
+  bumpFab?.(); // モーダルが閉じたら再表示を許可
+}
+function startDone(){
+  if (splash) splash.style.display = "none";
+  if (mainUI) mainUI.style.display = "block";
+  document.body.classList.remove('splash-locked');
+  close(startModal);
+  setTimeout(()=>bumpFab?.(), 200); // 起動後に“ふわっ”開始
+}
+
+/* ▼ DOM構築後に安全にバインド */
+document.addEventListener('DOMContentLoaded', () => {
+  $("#openStart")?.addEventListener("click", ()=> open(startModal));
+  $("#closeStart")?.addEventListener("click", ()=> close(startModal));
+
+  $("#catClose").addEventListener("click", ()=>close(catalogModal));
+  $("#openLivePaste").addEventListener("click", ()=>open(liveModal));
+  $("#liveClose").addEventListener("click", ()=>close(liveModal));
+
+  RarityFilter.onChange = () => { renderItemGrid(); renderUsersList(); };
+  GachaFilter.onChange = () => { renderUsersList(); };
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tabsWrap = document.getElementById('gachaTabs');
+  if (tabsWrap && !tabsWrap.__boundPointer) {
+    tabsWrap.addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('.tab');
+      if (!t || t.classList.contains('add')) return;
+      const gachaId = t.dataset.gachaId; // ★ 変更
+      if (!gachaId) return;
+
+      const app = (window.Services?.app || window.Services?.appStateService);
+      app?.selectGacha?.(gachaId);
+      window.selectedGacha = gachaId;
+
+      $$(".tab", tabsWrap).forEach(x => x.classList.toggle('active', x.dataset.gachaId === gachaId));
+      renderItemGrid();
+      e.preventDefault();
+    }, { passive:false });
+    tabsWrap.__boundPointer = true;
+  }
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const panel = document.getElementById('skipPanel');
+  if (!panel) return;
+
+  let sx = 0, sy = 0;
+  panel.addEventListener('touchstart', (e) => {
+    if (!isMobileLike()) return;
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY;
+  }, { passive:true });
+
+  panel.addEventListener('touchend', (e) => {
+    if (!isMobileLike()) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      // 左右スワイプでタブ移動
+      const tabs = Array.from(document.querySelectorAll('#riaguTabs .tab'));
+      if (!tabs.length) return;
+      const idx = Math.max(0, tabs.findIndex(el => el.classList.contains('active')));
+      const next = (dx < 0) ? Math.min(idx + 1, tabs.length - 1) : Math.max(idx - 1, 0);
+      if (next !== idx) tabs[next].click();
+    }
+  }, { passive:true });
+});
+/* ====== 1) リアルタイム：カタログ解析 → 反映 ====== */
+$("#catParse").addEventListener("click", ()=>{
+  const gacha = ($("#catGachaName").value||"").trim() || "ガチャ";
+  const text  = ($("#catText").value||"").trim();
+  if(!text){ alert("テキストを貼り付けてください。"); return; }
+  const items = parseCatalogText(text);
+  if(items.length===0){ alert("アイテムを検出できませんでした。入力形式をご確認ください。"); return; }
+  // 反映：カタログとして登録
+  const arr = [];
+  items.forEach(({rarity, code})=>{
+    arr.push({gacha, rarity, code});
+  });
+  gCatalogByGacha[gacha] = arr;
+  selectedGacha = gacha;
+  //rebuildGachaCaches(); 
+  renderTabs(); renderItemGrid(); // ユーザーは空でもOK
+  startDone(); close(catalogModal);
+  // 次：ライブ貼り付けを促す
+  open(guideModal);
+});
+
+/* ====== 1.5) ガイドモーダルを閉じる ====== */
+$("#guideOk").addEventListener("click", ()=>close(guideModal));
+
+/* ====== 2) リアルタイム：結果貼り付け（繰り返し可） ====== */
+$("#liveApply").addEventListener("click", () => {
+  const text = ($("#liveText").value || "").trim();
+  if (!text) { alert("テキストを貼り付けてください。"); return; }
+
+  const blocks = splitLiveBlocks(text);
+  if (blocks.length === 0) { alert("解析できるブロックが見つかりませんでした。"); return; }
+
+  const delta = {};
+  let lastGacha = null;
+  let added = 0;
+
+  for (const block of blocks) {
+    const parsed = parseLiveBlock(block);
+    if (!parsed) continue;
+
+    const { gacha, user, pulls, items } = parsed;
+    lastGacha = gacha;
+
+    // deltaに積む
+    delta[user] = delta[user] || {};
+    delta[user][gacha] = delta[user][gacha] || { pulls: 0, items: {} };
+    delta[user][gacha].pulls += pulls;
+
+    // 獲得数（counts）を加算
+    if (parsed.counts) {
+      for (const [rarity, byCode] of Object.entries(parsed.counts)) {
+        for (const [code, num] of Object.entries(byCode)) {
+          incCount(user, gacha, rarity, code, num);
+        }
+      }
+    }
+
+    for (const [rarity, codes] of Object.entries(items)) {
+      delta[user][gacha].items[rarity] = delta[user][gacha].items[rarity] || [];
+      codes.forEach(c => { if (!delta[user][gacha].items[rarity].includes(c)) delta[user][gacha].items[rarity].push(c); });
+    }
+
+    // カタログも更新（未登録アイテムの補完）
+    const cat = gCatalogByGacha[gacha] || [];
+    const map = new Map(cat.map(it => [ `${it.gacha}::${it.rarity}::${it.code}`, it ]));
+    Object.entries(items).forEach(([rarity, codes]) => {
+      codes.forEach(code => {
+        const k = `${gacha}::${rarity}::${code}`;
+        if (!map.has(k)) map.set(k, { gacha, rarity, code });
+      });
+    });
+    gCatalogByGacha[gacha] = Array.from(map.values()).sort(byRarityThenCode);
+
+    added++;
+  }
+
+  if (!added) { alert("ブロックは見つかりましたが、解析に失敗しました。形式をご確認ください。"); return; }
+
+  // gDataへマージ → 再描画
+  mergeIntoGData(delta);
+  if (lastGacha) selectedGacha = lastGacha;
+
+  $("#liveText").value = "";
+  close(liveModal);          // ← 反映後にモーダルを閉じる
+  startDone();               // ← まだスプラッシュ表示なら通常画面へ
+  //rebuildGachaCaches();
+  renderTabs();
+  renderItemGrid();
+  renderUsersList();
+  renderRiaguPanel();
+  saveAppStateDebounced();
+});
+
+/* ====== マージ/ユーティリティ ====== */
+function mergeIntoGData(delta){
+  for(const [user,gobj] of Object.entries(delta)){
+    gData[user] = gData[user] || {};
+    for(const [gacha,info] of Object.entries(gobj)){
+      gData[user][gacha] = gData[user][gacha] || {pulls:0, items:{}};
+      gData[user][gacha].pulls += (info.pulls||0);
+      for(const [rarity,codes] of Object.entries(info.items||{})){
+        gData[user][gacha].items[rarity] = gData[user][gacha].items[rarity] || [];
+        codes.forEach(c=>uniqPush(gData[user][gacha].items[rarity], c));
+      }
+    }
+  }
+  saveAppStateDebounced();
+}
+</script>
+<script type="module">
+  import { initPWA } from "/src/pwa.js";
+  initPWA();
+</script>
+<script>
+
+</script>
+<script>
+/* App⇔モジュールのブリッジ（let 変数を window へ安全に受け渡す） */
+window.AppStateBridge = {
+  getState(){
+    return {
+      gData, gCatalogByGacha, gHitCounts, selectedGacha,
+      imgMap, origMap, skipArray: Array.from(skipSet || []),
+      riaguMeta
+    };
+  },
+  setState(st){
+    gData = st.gData || {};
+    gCatalogByGacha = st.gCatalogByGacha || {};
+    gHitCounts = st.gHitCounts || {};
+    selectedGacha = st.selectedGacha || null;
+    imgMap = st.imgMap || {};
+    origMap = st.origMap || {};
+    skipSet = new Set(st.skipArray || []);
+    riaguMeta = st.riaguMeta || {};
+  },
+  afterRestore(){
+    // 既存の保存キーと整合
+    const K_IMG  = window.LS_KEY_IMG  || 'gacha_item_image_map_v1';
+    const K_ORIG = window.LS_KEY_ORIG || 'gacha_item_original_v1';
+    const K_SKIP = window.LS_KEY_SKIP || 'gacha_item_image_skip_v1';
+    try{
+      localStorage.setItem(K_IMG,  JSON.stringify(imgMap));
+      localStorage.setItem(K_ORIG, JSON.stringify(origMap));
+      localStorage.setItem(K_SKIP, JSON.stringify(Array.from(skipSet)));
+      localStorage.setItem(LS_KEY_RIAGU_META, JSON.stringify(riaguMeta));
+    }catch(e){}
+
+    //if (typeof rebuildGachaCaches === 'function') rebuildGachaCaches();
+    if (typeof renderTabs        === 'function') renderTabs();
+    if (typeof renderItemGrid    === 'function') renderItemGrid();
+    if (typeof renderUsersList   === 'function') renderUsersList();
+    if (typeof renderRiaguPanel  === 'function') renderRiaguPanel();
+    if (typeof startDone         === 'function') startDone();
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const exBtn = document.getElementById('exportAllBtn');
+  const imp   = document.getElementById('importAllInput');
+
+  exBtn?.addEventListener('click', async (e) => {
+    await window.ImpExp?.exportAllZip(e.currentTarget).catch(err => alert("エクスポート失敗: " + (err?.message || err))); // 第二引数はボタン（任意）
+  });
+
+  imp?.addEventListener('change', (e) => {
+  const f = e.target.files?.[0]; if (!f) return;
+  importAllZip(f).catch(err => alert("インポート失敗: " + (err?.message || err)))
+    .finally(()=>{ e.target.value = ""; });
+  });
+});
+
+/* === PC用 ガチャFAB（中央下）。非表示条件：スクロール中＋モーダル中のみ === */
+let gachaFab = null;
+
+function canShowFab(){
+  const main = window.mainUI || getMainUI();
+  if (!main || main.style.display === 'none') return false;
+  if (main.classList.contains('mobile-views')) return false; // モバイル時は出さない
+  if (document.body.classList.contains('modal-open')) return false;
+  return true;
+}
+function _$fab(){ return gachaFab || (gachaFab = document.getElementById('gachaFab')); }
+function hideFab(){ _$fab()?.classList.remove('visible'); }
+function showFab(){ if (canShowFab()) _$fab()?.classList.add('visible'); }
+
+let _fabScrollTimer = null;
+function bumpFab(){
+  hideFab();
+  clearTimeout(_fabScrollTimer);
+  _fabScrollTimer = setTimeout(showFab, 1000); // スクロール停止後に“ふわっ”
+}
+
+window.addEventListener('scroll', bumpFab, { passive:true });
+window.addEventListener('wheel',  bumpFab, { passive:true });
+
+document.addEventListener('DOMContentLoaded', () => {
+  gachaFab = document.getElementById('gachaFab');
+  if (!gachaFab) return;
+
+  // 初期表示（起動完了後）
+  setTimeout(showFab, 800);
+
+  // FABクリック → ガチャパネルをスライドイン
+  gachaFab.addEventListener('click', () => {
+    const main = window.mainUI || getMainUI(); if(!main) return;
+    main.setAttribute('data-gacha-open', '1');
+    hideFab();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+});
+
+// Escで閉じる（戻れる導線）
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const main = window.mainUI || getMainUI();
+  if (main?.getAttribute('data-gacha-open') === '1') {
+    main.removeAttribute('data-gacha-open');
+    bumpFab();
+  }
+});
+
+// controlsPage をモバイル時はドロワーへ、PC時は元位置へ
+function ensureControlsLocation(toDrawer){
+  const controls = document.getElementById('controlsPage');
+  if (!controls) return;
+
+  // 退避用にプレースホルダ（コメントノード）を用意
+  if (!controls._placeholder){
+    controls._placeholder = document.createComment('controls-placeholder');
+  }
+
+  if (toDrawer){
+    if (!controls._inDrawer){
+      // 現在位置にプレースホルダを差し込み → ドロワーへ移設
+      controls.parentNode.insertBefore(controls._placeholder, controls);
+      const mount = document.getElementById('drawerContent');
+      if (mount) mount.appendChild(controls);
+      controls._inDrawer = true;
+    }
+  } else {
+    // 元の位置（プレースホルダ箇所）へ戻す
+    if (controls._inDrawer && controls._placeholder?.parentNode){
+      controls._placeholder.parentNode.replaceChild(controls, controls._placeholder);
+      controls._inDrawer = false;
+    }
+  }
+}
+
+// ハンバーガー & ドロワーの初期化
+function setupHamburger(){
+  const btn     = document.getElementById('menuBtn');
+  const drawer  = document.getElementById('mobileDrawer');
+  const overlay = document.getElementById('drawerOverlay');
+  const closeBt = document.getElementById('drawerClose');
+  
+  if (typeof window.closeDrawer !== 'function') {
+    window.closeDrawer = function(){ /* no-op */ };
+  }
+
+  if (!btn || !drawer) return;
+
+  function openDrawer(){
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden','false');
+    btn.setAttribute('aria-expanded','true');
+    document.body.classList.add('drawer-open');
+  }
+  function _close(){
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden','true');
+    btn.setAttribute('aria-expanded','false');
+    document.body.classList.remove('drawer-open');
+  }
+
+  // 他所からも閉じられるようにエクスポート
+  window.closeDrawer = function(force){ _close(); };
+
+  btn.addEventListener('click', ()=>{
+    if (drawer.classList.contains('open')) _close();
+    else openDrawer();
+  });
+  overlay?.addEventListener('click', _close);
+  closeBt?.addEventListener('click', _close);
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape' && drawer.classList.contains('open')) _close();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', setupHamburger);
+
+</script>
+<script type="module">
+  import { wireJsonInputs } from "/src/imp_json.js";
+  import { wireTxtInputs }  from "/src/imp_txt.js";
+  window.addEventListener("DOMContentLoaded", () => {
+    wireJsonInputs();
+    wireTxtInputs();
+  });
+</script>
+<script type="module">
+  import { initFilters } from "/src/filters.js";
+  initFilters();
+</script>
+<script type="module">
+  import { initRarityUI, getRarityMeta, listRaritiesForGacha, isMiss} from "/src/rarity.js";
+  initRarityUI();
+  // 段階移行用に window へも露出（後工程で byRarityThenCode などに置換利用）
+  Object.assign(window, { getRarityMeta, listRaritiesForGacha, isMiss, LS_KEY_RARITY });
+</script>
+<script type="module" src="/src/ui-riagu.js"></script>
+<script type="module">
+  import { initRiaguUI } from '/src/ui-riagu.js';
+
+  // 任意：ログレベル（'debug'|'info'|'warn'|'error'）。無指定なら 'warn'
+  window.RIAGU_LOG_LEVEL = window.RIAGU_LOG_LEVEL ?? 'warn';
+
+  // index 側から依存を明示的に橋渡し（将来の変名にも強い）
+  initRiaguUI({
+    LS_KEY_RIAGU_META,
+    riaguMeta,
+    skipSet,
+    skipAdd,
+    skipDel,
+    saveLocalJSON,
+    loadLocalJSON,
+    renderItemGrid,
+    renderUsersList,
+    saveAppStateDebounced,
+    gData,
+    gHitCounts,
+    keyOf,
+    escapeHtml,
+    clearImage,
+    gCatalogByGacha,
+    // モーダル操作（index.html の open/close を明示注入）
+    openModal: open,
+    closeModal: close
+  });
+</script>
+<!-- 追加: 排出率ユーティリティ（UIに依存しない純関数）を window にブリッジ -->
+<script type="module">
+  import {
+    ensureAutoEmitRatesForGacha,
+    normalizeEmitRatesForGacha,
+    PRECISION_DECIMALS
+  } from "/src/rarity_emit_calc.js";
+  Object.assign(window, {
+    ensureAutoEmitRatesForGacha,
+    normalizeEmitRatesForGacha,
+    PRECISION_DECIMALS
+  });
+</script>
+
+<button id="gachaFab" type="button" class="btn gacha-fab">ガチャを引く</button>
+</body>
+</html>
