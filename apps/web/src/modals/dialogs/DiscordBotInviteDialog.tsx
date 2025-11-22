@@ -19,6 +19,7 @@ import {
   normalizeDiscordMemberGiftChannels,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { getDiscordBotInviteUrl } from '../../features/discord/discordBotInvite';
 
 interface DiscordBotInviteDialogPayload {
   userId: string;
@@ -28,7 +29,7 @@ interface DiscordBotInviteDialogPayload {
 }
 
 const DEFAULT_INVITE_URL =
-  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
+  getDiscordBotInviteUrl();
 
 interface DiscordMembersResponse {
   ok: boolean;
