@@ -6,13 +6,16 @@ import {
 } from '@headlessui/react';
 import { clsx } from 'clsx';
 import {
+  createContext,
   forwardRef,
   type ComponentPropsWithoutRef,
   type ElementRef,
   type ReactNode,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState
 } from 'react';
 
@@ -23,47 +26,34 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
   md: 'max-w-xl',
   lg: 'max-w-[55rem]',
   xl: 'max-w-[64rem]',
-  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)] md:max-h-[96vh]'
+  full: 'max-w-[min(96vw,110rem)] w-[min(96vw,110rem)]'
 };
 
-const DESKTOP_INLINE_MAX_HEIGHT_THRESHOLD = 900;
-
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
-
-function useMediaQuery(query: string): boolean | undefined {
-  const [matches, setMatches] = useState<boolean | undefined>(undefined);
-
-  useIsomorphicLayoutEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const updateMatchState = (event?: MediaQueryListEvent) => {
-      setMatches(event?.matches ?? mediaQuery.matches);
-    };
-
-    updateMatchState();
-
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', updateMatchState);
-      return () => mediaQuery.removeEventListener('change', updateMatchState);
-    }
-
-    mediaQuery.addListener(updateMatchState);
-    return () => mediaQuery.removeListener(updateMatchState);
-  }, [query]);
-
-  return matches;
-}
 
 interface ModalViewportMetrics {
   maxHeight?: number;
   viewportHeight?: number;
+  keyboardInset?: number;
+}
+
+const ModalKeyboardInsetContext = createContext<number>(0);
+
+const KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD = 160;
+
+function isKeyboardVisible(viewport: VisualViewport | null, layoutViewportHeight: number): boolean {
+  if (!viewport) {
+    return false;
+  }
+
+  const heightDelta = layoutViewportHeight - viewport.height;
+
+  return heightDelta > KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD && viewport.height < layoutViewportHeight;
 }
 
 function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
   const [metrics, setMetrics] = useState<ModalViewportMetrics>({});
+  const stableViewportHeightRef = useRef<number>();
 
   useIsomorphicLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -71,26 +61,42 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
     }
 
     const computeViewportMetrics = () => {
-      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const layoutViewportHeight = window.innerHeight;
+      const viewport = window.visualViewport;
+      const keyboardVisible = isKeyboardVisible(viewport, layoutViewportHeight);
+      const keyboardInset = keyboardVisible
+        ? Math.max(layoutViewportHeight - (viewport?.height ?? layoutViewportHeight), 0)
+        : 0;
+      const stableViewportHeight = stableViewportHeightRef.current ?? layoutViewportHeight;
+
+      if (!keyboardVisible) {
+        stableViewportHeightRef.current = layoutViewportHeight;
+      }
+
       const rootFontSize = Number.parseFloat(
         window.getComputedStyle(window.document.documentElement).fontSize
       );
       const remInPx = Number.isFinite(rootFontSize) ? rootFontSize : 16;
       const offsetPx = offsetRem * remInPx;
-      const nextHeight = Math.max(viewportHeight - offsetPx, 0);
+      const heightForMax = keyboardVisible
+        ? stableViewportHeight
+        : layoutViewportHeight;
+      const nextHeight = Math.max(heightForMax - offsetPx, 0);
 
       setMetrics((previous) => {
-        const hasViewportHeightChanged = previous.viewportHeight !== viewportHeight;
+        const hasViewportHeightChanged = previous.viewportHeight !== layoutViewportHeight;
         const hasMaxHeightChanged =
           previous.maxHeight === undefined || Math.abs(previous.maxHeight - nextHeight) > 0.5;
+        const hasKeyboardInsetChanged = previous.keyboardInset !== keyboardInset;
 
-        if (!hasViewportHeightChanged && !hasMaxHeightChanged) {
+        if (!hasViewportHeightChanged && !hasMaxHeightChanged && !hasKeyboardInsetChanged) {
           return previous;
         }
 
         return {
           maxHeight: nextHeight,
-          viewportHeight
+          viewportHeight: layoutViewportHeight,
+          keyboardInset
         };
       });
     };
@@ -142,49 +148,48 @@ export const ModalPanel = forwardRef<
   ModalPanelProps
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
-  const { maxHeight: viewportMaxHeight, viewportHeight } = useModalViewportMetrics();
-  const isBelowMdViewport = useMediaQuery('(max-width: 767px)');
+  const { maxHeight: viewportMaxHeight, keyboardInset } = useModalViewportMetrics();
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
-    if (viewportMaxHeight === undefined) {
-      return false;
-    }
-
-    if (isBelowMdViewport !== false) {
-      return true;
-    }
-
-    return (
-      viewportHeight !== undefined && viewportHeight < DESKTOP_INLINE_MAX_HEIGHT_THRESHOLD
-    );
-  }, [viewportMaxHeight, isBelowMdViewport, viewportHeight]);
+    return viewportMaxHeight !== undefined;
+  }, [viewportMaxHeight]);
 
   const mergedStyle = useMemo(() => {
+    const nextStyle = { ...style };
+
     if (
-      style?.maxHeight != null ||
-      viewportMaxHeight === undefined ||
-      !shouldApplyInlineMaxHeight
+      style?.maxHeight == null &&
+      viewportMaxHeight !== undefined &&
+      shouldApplyInlineMaxHeight
     ) {
-      return style;
+      nextStyle.maxHeight = viewportMaxHeight;
     }
 
-    return { ...style, maxHeight: viewportMaxHeight };
-  }, [style, viewportMaxHeight, shouldApplyInlineMaxHeight]);
+    if (keyboardInset && keyboardInset > 0) {
+      const existingScrollPaddingBottom =
+        typeof nextStyle.scrollPaddingBottom === 'number' ? nextStyle.scrollPaddingBottom : 0;
+
+      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
+    }
+
+    return nextStyle;
+  }, [keyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
 
   return (
-    <DialogPanel
-      {...restProps}
-      ref={ref}
-      className={clsx(
-        'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
-        !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
-        'max-h-[calc(100vh-4rem)]',
-        SIZE_CLASS_MAP[size],
-        paddingClassName,
-        className
-      )}
-      style={mergedStyle}
-    />
+    <ModalKeyboardInsetContext.Provider value={keyboardInset ?? 0}>
+      <DialogPanel
+        {...restProps}
+        ref={ref}
+        className={clsx(
+          'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
+          !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
+          SIZE_CLASS_MAP[size],
+          paddingClassName,
+          className
+        )}
+        style={{ ...mergedStyle, ['--modal-keyboard-inset' as const]: `${keyboardInset ?? 0}px` }}
+      />
+    </ModalKeyboardInsetContext.Provider>
   );
 });
 
@@ -222,6 +227,26 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
   { className, ...props },
   ref
 ) {
+  const keyboardInset = useContext(ModalKeyboardInsetContext);
+
+  const mergedStyle = useMemo(() => {
+    const nextStyle = { ...props.style };
+
+    if (keyboardInset > 0) {
+      const existingPaddingBottom =
+        typeof nextStyle?.paddingBottom === 'number' ? nextStyle.paddingBottom : 0;
+      const existingScrollPaddingBottom =
+        typeof nextStyle?.scrollPaddingBottom === 'number'
+          ? nextStyle.scrollPaddingBottom
+          : 0;
+
+      nextStyle.paddingBottom = existingPaddingBottom + keyboardInset;
+      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
+    }
+
+    return nextStyle;
+  }, [keyboardInset, props.style]);
+
   return (
     <div
       {...props}
@@ -230,6 +255,7 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
         'modal-body mt-2 space-y-2 text-sm flex-1 overflow-y-auto overscroll-contain md:pr-1',
         className
       )}
+      style={mergedStyle}
     />
   );
 });
