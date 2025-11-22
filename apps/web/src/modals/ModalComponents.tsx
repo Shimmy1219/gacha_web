@@ -54,7 +54,6 @@ function isKeyboardVisible(viewport: VisualViewport | null, layoutViewportHeight
 function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
   const [metrics, setMetrics] = useState<ModalViewportMetrics>({});
   const stableViewportHeightRef = useRef<number>();
-  const baselineLayoutViewportHeightRef = useRef<number>();
 
   useIsomorphicLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -62,33 +61,16 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
     }
 
     const computeViewportMetrics = () => {
-      const viewport = window.visualViewport;
       const layoutViewportHeight = window.innerHeight;
-      const documentClientHeight = window.document.documentElement.clientHeight;
-      const screenHeight = window.screen?.height ?? 0;
-      const inferredLayoutViewportHeight = Math.max(
-        layoutViewportHeight,
-        documentClientHeight,
-        screenHeight
-      );
-
-      if (
-        baselineLayoutViewportHeightRef.current === undefined ||
-        inferredLayoutViewportHeight > baselineLayoutViewportHeightRef.current
-      ) {
-        baselineLayoutViewportHeightRef.current = inferredLayoutViewportHeight;
-      }
-
-      const baselineLayoutViewportHeight =
-        baselineLayoutViewportHeightRef.current ?? inferredLayoutViewportHeight;
-      const keyboardVisible = isKeyboardVisible(viewport, baselineLayoutViewportHeight);
+      const viewport = window.visualViewport;
+      const keyboardVisible = isKeyboardVisible(viewport, layoutViewportHeight);
       const keyboardInset = keyboardVisible
-        ? Math.max(baselineLayoutViewportHeight - (viewport?.height ?? layoutViewportHeight), 0)
+        ? Math.max(layoutViewportHeight - (viewport?.height ?? layoutViewportHeight), 0)
         : 0;
-      const stableViewportHeight = stableViewportHeightRef.current ?? baselineLayoutViewportHeight;
+      const stableViewportHeight = stableViewportHeightRef.current ?? layoutViewportHeight;
 
       if (!keyboardVisible) {
-        stableViewportHeightRef.current = baselineLayoutViewportHeight;
+        stableViewportHeightRef.current = layoutViewportHeight;
       }
 
       const rootFontSize = Number.parseFloat(
@@ -102,7 +84,7 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
       const nextHeight = Math.max(heightForMax - offsetPx, 0);
 
       setMetrics((previous) => {
-        const hasViewportHeightChanged = previous.viewportHeight !== baselineLayoutViewportHeight;
+        const hasViewportHeightChanged = previous.viewportHeight !== layoutViewportHeight;
         const hasMaxHeightChanged =
           previous.maxHeight === undefined || Math.abs(previous.maxHeight - nextHeight) > 0.5;
         const hasKeyboardInsetChanged = previous.keyboardInset !== keyboardInset;
@@ -113,7 +95,7 @@ function useModalViewportMetrics(offsetRem = 4): ModalViewportMetrics {
 
         return {
           maxHeight: nextHeight,
-          viewportHeight: baselineLayoutViewportHeight,
+          viewportHeight: layoutViewportHeight,
           keyboardInset
         };
       });
