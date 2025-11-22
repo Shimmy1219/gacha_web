@@ -141,7 +141,7 @@ export function DiscordPrivateChannelCategoryDialog({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitError(null);
     if (!guildId) {
       setSubmitError('Discordギルド情報を取得できませんでした。');
