@@ -64,6 +64,16 @@ const INITIAL_RARITY_PRESETS = [
   { label: 'UR', emitRate: 0.01 }
 ] as const;
 
+type InitialRarityLabel = (typeof INITIAL_RARITY_PRESETS)[number]['label'];
+
+const INITIAL_RARITY_COLORS: Record<InitialRarityLabel, string> = {
+  UR: '#ef4444',
+  SR: '#ec4899',
+  R: '#f97316',
+  N: '#14b8a6',
+  はずれ: '#3b82f6'
+};
+
 const ITEM_NAME_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 function createDraftItemId(): string {
@@ -100,8 +110,9 @@ function getSequentialItemName(index: number): string {
 function createInitialRarities(): DraftRarity[] {
   const usedColors = new Set<string>();
   return INITIAL_RARITY_PRESETS.map((preset, index) => {
+    const presetColor = INITIAL_RARITY_COLORS[preset.label];
     const paletteColor = DEFAULT_PALETTE[index]?.value;
-    const color = paletteColor ?? generateRandomRarityColor(usedColors);
+    const color = presetColor ?? paletteColor ?? generateRandomRarityColor(usedColors);
     usedColors.add(color);
     return {
       id: generateRarityId(),
