@@ -83,10 +83,14 @@ export function DiscordPrivateChannelCategoryDialog({
     payload?.initialCategory?.id ?? null
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStage, setSubmitStage] = useState<
+    'idle' | 'creating-channel' | 'sending-message' | 'saving-selection'
+  >('idle');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  const isSubmitting = submitStage !== 'idle';
 
   const categoriesQuery = useDiscordGuildCategories(guildId);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
@@ -137,7 +141,7 @@ export function DiscordPrivateChannelCategoryDialog({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitError(null);
     if (!guildId) {
       setSubmitError('Discordギルド情報を取得できませんでした。');
@@ -161,8 +165,78 @@ export function DiscordPrivateChannelCategoryDialog({
       setSubmitError('Discordギルドの選択情報を再取得してください。');
       return;
     }
-    setIsSubmitting(true);
+    setSubmitStage('creating-channel');
+    let createdChannelId: string | null = null;
     try {
+      const params = new URLSearchParams({
+        guild_id: guildId,
+        member_id: discordUserId,
+        create: '1'
+      });
+      params.set('category_id', category.id);
+      params.set('display_name', 'カテゴリ確認用チャンネル');
+
+      const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
+        headers: {
+          Accept: 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      const findPayload = (await findResponse.json().catch(() => null)) as {
+        ok: boolean;
+        channel_id?: string | null;
+        channel_name?: string | null;
+        parent_id?: string | null;
+        created?: boolean;
+        error?: string;
+      } | null;
+
+      if (!findResponse.ok || !findPayload) {
+        const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
+        throw new Error(message);
+      }
+
+      if (!findPayload.ok) {
+        throw new Error(findPayload.error || 'テスト用チャンネルの作成に失敗しました');
+      }
+
+      createdChannelId = findPayload.channel_id ?? null;
+      if (!createdChannelId) {
+        throw new Error('テスト用のプライベートチャンネルを作成できませんでした。');
+      }
+
+      setSubmitStage('sending-message');
+
+      const sendResponse = await fetch('/api/discord/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          channel_id: createdChannelId,
+          share_url: 'https://discord.com',
+          title: 'カテゴリの権限確認テスト',
+          comment: 'このメッセージが届いていれば、カテゴリの権限設定が正しく機能しています。',
+          mode: 'bot'
+        })
+      });
+
+      const sendPayload = (await sendResponse
+        .json()
+        .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
+        ok?: boolean;
+        error?: string;
+      };
+
+      if (!sendResponse.ok || !sendPayload.ok) {
+        throw new Error(sendPayload.error || 'テストメッセージの送信に失敗しました');
+      }
+
+      setSubmitStage('saving-selection');
+
       const categorySelection: DiscordGuildCategorySelection = {
         id: category.id,
         name: category.name,
@@ -174,8 +248,11 @@ export function DiscordPrivateChannelCategoryDialog({
       });
       payload?.onCategorySelected?.(categorySelection);
       close();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSubmitError(message);
     } finally {
-      setIsSubmitting(false);
+      setSubmitStage('idle');
     }
   };
 
@@ -320,7 +397,15 @@ export function DiscordPrivateChannelCategoryDialog({
         >
           <span className="flex items-center gap-2">
             {isSubmitting ? <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            <span>このカテゴリを使用</span>
+            <span>
+              {submitStage === 'creating-channel'
+                ? 'チャンネル作成中…'
+                : submitStage === 'sending-message'
+                  ? 'メッセージ送信中…'
+                  : submitStage === 'saving-selection'
+                    ? '設定を保存しています…'
+                    : 'このカテゴリを使用'}
+            </span>
           </span>
         </button>
       </ModalFooter>
