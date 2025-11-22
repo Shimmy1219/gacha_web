@@ -17,7 +17,6 @@ import {
   type DiscordGuildSelection
 } from '../../../../features/discord/discordGuildSelectionStorage';
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
-import { getDiscordBotInviteUrl } from '../../../../features/discord/discordBotInvite';
 
 function getAvatarUrl(id: string, avatar?: string): string | undefined {
   if (!avatar) {
@@ -32,7 +31,8 @@ interface DiscordLoginButtonProps {
   className?: string;
 }
 
-const BOT_INVITE_URL = getDiscordBotInviteUrl();
+const BOT_INVITE_URL =
+  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 export function DiscordLoginButton({
   placement = 'toolbar',
