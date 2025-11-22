@@ -28,7 +28,7 @@ interface DiscordBotInviteDialogPayload {
 }
 
 const DEFAULT_INVITE_URL =
-  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
+  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fshimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 interface DiscordMembersResponse {
   ok: boolean;
