@@ -116,7 +116,7 @@ interface RiaguCardProps {
 ## 5. データ同期フロー
 1. Item 編集で名称を変更 → `ItemCardStore.updateItemCard` → 参照している `RiaguCard` が `item.name` を再描画。
 2. UserCard でユーザー名変更 → `UserStore.updateUser` → `UserChip` が再計算され `RiaguCard` の獲得者表示が更新。
-3. ガチャ結果の追加やリアルタイム入力で `UserInventoryStore.incrementCount` 等が発火 → `[userId][gachaId][rarityId][itemId]` のカウントが更新され、次フレームで `RiaguAssignment` が再評価され `winners` / `totalCount` / `effectiveOrderQty` / `totalCost` が最新化される。
+3. ガチャ結果の追加や手動入力で `UserInventoryStore.incrementCount` 等が発火 → `[userId][gachaId][rarityId][itemId]` のカウントが更新され、次フレームで `RiaguAssignment` が再評価され `winners` / `totalCount` / `effectiveOrderQty` / `totalCost` が最新化される。
 4. 抽選結果のインポートで `HitCountStore` 更新 → `RiaguAssignment` セレクタが `totalCount` を再計算し、発注数と合計金額が自動更新。
 5. レアリティ設定変更 → `RarityStore` の `label`/`color` が更新 → `RiaguCard` のバッジ色が即時変更。
 

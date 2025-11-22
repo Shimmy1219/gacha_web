@@ -1,0 +1,7 @@
+.marketing-layout {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.4));
+}
+
+.marketing-layout h1 {
+  font-family: 'Noto Sans JP', system-ui, sans-serif;
+}

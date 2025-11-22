@@ -9,7 +9,7 @@
 | セクション | 現状 DOM / スタイルの特徴 |
 | --- | --- |
 | レアリティ設定 | `#rarityPanel` 内でタブ・サブコントロール・テーブルを `initRarityUI()` が描画し、レアリティサービスを直接操作。【F:index.html†L195-L205】【F:src/rarity.js†L143-L200】 |
-| アイテム画像の設定 | ガチャ切替タブと `renderItemGrid()` で生成するカードリストにより、画像設定/解除・リアグ指定・アイテム削除を行う。【F:index.html†L198-L203】【F:index.html†L843-L933】 |
+| アイテム設定 | ガチャ切替タブと `renderItemGrid()` で生成するカードリストにより、画像設定/解除・リアグ指定・アイテム削除を行う。【F:index.html†L198-L203】【F:index.html†L843-L933】 |
 | ユーザーごとの獲得内訳 | 絞り込みフィルタ群と折りたたみ式ユーザーカードで構成。ZIP 保存や URL コピーなどの操作を持つ。【F:index.html†L205-L269】【F:index.html†L941-L1019】 |
 | リアグ | `renderRiaguPanel()` がタブとカードを生成し、リアルグッズのメタ情報と獲得者一覧を表示する。【F:index.html†L271-L275】【F:src/ui-riagu.js†L114-L224】 |
 
@@ -46,7 +46,7 @@
 - テーブルは `grid` ベースに再設計し、モバイル時は縦カード表示（`grid-cols-1 gap-3`）へレスポンシブ切替。
 - カラーピッカーは Headless UI + Tailwind でモーダル化し、`applyRarityColor` のスタイル適用を `style` ではなくクラスで行う。
 
-### 4.2 アイテム画像の設定
+### 4.2 アイテム設定
 #### 現状の挙動
 - `#itemsPanel` でガチャタブ (`#gachaTabs`) と `renderItemGrid()` によりカードグリッドを描画。各カードは画像設定/解除・リアグ切替・削除のボタンを持つ。【F:index.html†L198-L203】【F:index.html†L843-L933】
 - カードレイアウトは `.item-grid`, `.item-card`, `.item-thumb`, `.card-actions` 等で定義。【F:index.css†L73-L89】

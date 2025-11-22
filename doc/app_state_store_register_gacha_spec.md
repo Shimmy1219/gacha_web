@@ -20,7 +20,6 @@ interface AppState {
 interface GachaMeta {
   id: GachaId;
   displayName: string;
-  iconAssetId: string | null;
   createdAt: number;
   updatedAt: number;
   lastImportedAt: number | null;
@@ -39,7 +38,6 @@ interface RegisterGachaPayload {
   source: 'manual' | 'import-txt' | 'import-json' | 'import-zip';
   importedAt?: number;              // 取り込み時刻。未指定は Date.now()
   legacyKey?: string | null;        // TXT の番号や旧 JS の ID（例: "1", "yami"）
-  iconAssetId?: string | null;      // 既存アイコンがあれば指定。null なら既定アイコン。
   summaryTag?: string | null;       // AppHeader のバッジ文言初期値。
 }
 ```
@@ -53,7 +51,7 @@ interface RegisterGachaPayload {
      - `aliasByName[displayName] = gachaId` を再設定。
      - `legacyKey` が指定されていれば `aliasByLegacyKey[legacyKey] = gachaId`。
      - `meta.updatedAt = now`、`meta.lastImportedAt = importedAt ?? now` を更新。
-     - `summaryTag`・`iconAssetId` が明示されていれば上書き。未指定は現状維持。
+    - `summaryTag` が明示されていれば上書き。未指定は現状維持。
      - 既存の場合は `order` の位置を維持し、戻り値 `isNew: false`。
 2. **新規登録**
    - `state.meta[gachaId]` が未登録の場合:
@@ -61,7 +59,7 @@ interface RegisterGachaPayload {
      - `order.push(gachaId)` で末尾に追加（取り込み順で表示）。JSON/TXT でソート情報がある場合は呼び出し側で `order.splice` を指定する。
      - `aliasByName[displayName] = gachaId`、`aliasByLegacyKey[legacyKey] = gachaId`（`legacyKey` があれば）。
      - `meta.createdAt = now`、`meta.updatedAt = now`、`meta.lastImportedAt = importedAt ?? now`。
-     - `summaryTag` が未指定の場合は `null`、`iconAssetId` も `null` をセット。
+    - `summaryTag` が未指定の場合は `null` をセット。
      - 戻り値 `isNew: true` を返し、呼び出し側が `RarityStore.ensureMany` や `UserInventoryStore.syncInventory` を新規ガチャとして扱えるようにする。
 3. **永続化・イベント**
    - いずれの場合も `AppStateStore.saveDebounced()` をスケジュールし、`AppHeaderShell`・`UserPanelFilter` 等の購読コンポーネントへ `state` 更新を通知する。
@@ -100,7 +98,7 @@ interface RegisterGachaResult {
 - **TXT/JSON インポート**: `useImporters()` から生成される `ImporterJob` が `applyImportSnapshot` を通じて `AppStateStore.importSnapshot` を呼び出し、`registerGacha` が新規 ID 採番と既存メタ更新を担う。Start モーダル／ツールバー双方で同一フローを共有する計画。インポート完了後は `selectCurrentGacha` で UI のアクティブガチャを合わせる。【F:doc/import_txt_json_plan.md†L128-L221】
 - **React 全体アーキテクチャ**: `react_migration_plan.md` では `AppStateStore` をアプリ共通 reducer として `AppProviders` に組み込み、ガチャ CRUD や完了フラグトグルなど各セクションの状態管理を担当する旨を定義している。【F:doc/react_migration_plan.md†L129-L161】
 - **ヘッダー／ツールバー**: `AppHeaderShell` のサマリバッジ表示を `AppStateStore.meta[gachaId].summaryTag` から取得するよう計画しており、`registerGacha` による `summaryTag` 更新が直接 UI へ反映される。【F:doc/header_component_plan.md†L102-L125】
-- **モーダル基盤**: Onboarding・インポート・リアルタイム貼り付けなどのモーダル完了時に `AppStateStore` のアクションが実行される前提で、`registerGacha` の結果を他ストアと同期するフローが `Modal` 設計書に記載されている。【F:doc/modal_component_plan.md†L100-L138】
+- **モーダル基盤**: Onboarding・インポート・手動入力貼り付けなどのモーダル完了時に `AppStateStore` のアクションが実行される前提で、`registerGacha` の結果を他ストアと同期するフローが `Modal` 設計書に記載されている。【F:doc/modal_component_plan.md†L100-L138】
 - **ユーザー内訳フィルタ**: `UserPanelFilter` は `AppState` に登録されたガチャ一覧を元にフィルタ候補を構築するため、`registerGacha` が `order` と `aliasByName` を更新することで React 化されたフィルタへ即時反映させる。【F:doc/user_panel_filter_component_plan.md†L60-L103】
 - **リアグ／セクション更新**: `section_component_plan.md` ではガチャ単位のタブや保存処理で `AppStateStore.saveDebounced()` を利用することが示されており、新規ガチャ登録後のレイアウト更新や永続化に `registerGacha` が組み込まれる。【F:doc/section_component_plan.md†L100-L163】
 

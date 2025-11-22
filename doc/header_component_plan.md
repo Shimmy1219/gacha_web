@@ -8,7 +8,7 @@
 ## 2. 現状整理
 ### 2.1 レイアウト
 - `<header>` にタイトル・説明・モバイル用メニューボタンが置かれ、ログインスロットやツールボタン群は離れた `.toolbar` セクションに存在するため、視覚的に分断されている。【F:index.html†L123-L190】
-- `.toolbar` 内にはサマリタグ、リアルタイム入力ボタン、全体エクスポート/インポート、Discord ログインエリアが横並びで配置されている。【F:index.html†L175-L191】
+- `.toolbar` 内にはサマリタグ、手動入力ボタン、全体エクスポート/インポート、Discord ログインエリアが横並びで配置されている。【F:index.html†L175-L191】
 - CSS 側では `.toolbar` が独立したカード状コンポーネントとしてスタイルされており、ヘッダーの余白・グリッドとの整合が取れていない。【F:index.css†L47-L68】
 - モバイル時は `.menu-btn` と `.drawer` でツールバーをドロワーに移し替える仕組みが実装されている。【F:index.css†L219-L240】
 
@@ -55,7 +55,7 @@
 - **Props**: `label: string`, `variant: "default" | "warning" | "success"`。Tailwind の `data-variant` で色切替。
 
 ### 4.4 `ToolbarActions`
-- **表示要素**: リアルタイム入力 (`openLivePaste`), 全体エクスポート (`exportAll`), 全体インポート (`importAllInput`) をボタン群として提供する。【F:index.html†L180-L189】
+- **表示要素**: 手動入力 (`openLivePaste`), 全体エクスポート (`exportAll`), 全体インポート (`importAllInput`) をボタン群として提供する。【F:index.html†L180-L189】
 - **構成**: `ActionButton` コンポーネント（Tailwind `btn-primary`）、`GhostButton`、`FileInputTrigger` などで再利用性を確保。
 - **Props**:
   ```ts
@@ -128,12 +128,12 @@
 5. Tailwind ユーティリティに合わせて CSS を整理し、`index.css` のヘッダー/ツールバー関連ルールを削除。
 6. モバイルドロワーの動作を React で再実装し、`menuBtn` / `drawerOverlay` への手動イベントバインドを廃止。
 7. 旧 `ui-toolbar.js` ファイルを削除し、`index.html` からのスクリプト読み込みを除去。
-8. 統合後、E2E/回帰テストでフィルタ反映・リアルタイム入力・エクスポート/インポートが従来どおり動作するかを確認。
+8. 統合後、E2E/回帰テストでフィルタ反映・手動入力・エクスポート/インポートが従来どおり動作するかを確認。
 
 ## 9. テスト計画
 - **単体テスト**: `ToolbarStateProvider` の reducer が各アクションで正しい状態遷移を行うことを Vitest で検証。
 - **コンポーネントテスト**: `AppHeaderShell` のモバイル・デスクトップスナップショット、ハンバーガー開閉操作を React Testing Library で確認。
-- **E2E テスト**: Playwright で「ハンバーガー → リアルタイム入力ボタン押下 → モーダル表示」のフローを自動化し、デスクトップでは同ボタンがヘッダー右側で押せることを保証。
+- **E2E テスト**: Playwright で「ハンバーガー → 手動入力ボタン押下 → モーダル表示」のフローを自動化し、デスクトップでは同ボタンがヘッダー右側で押せることを保証。
 - **アクセシビリティ**: axe でヘッダー領域のコントラストとランドマーク（`<header>` / `nav`）が適正であるか検証。
 
 ## 10. リスクと対策
