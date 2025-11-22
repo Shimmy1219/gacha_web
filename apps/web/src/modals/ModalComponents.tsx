@@ -6,10 +6,12 @@ import {
 } from '@headlessui/react';
 import { clsx } from 'clsx';
 import {
+  createContext,
   forwardRef,
   type ComponentPropsWithoutRef,
   type ElementRef,
   type ReactNode,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -34,6 +36,8 @@ interface ModalViewportMetrics {
   viewportHeight?: number;
   keyboardInset?: number;
 }
+
+const ModalKeyboardInsetContext = createContext<number>(0);
 
 const KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD = 160;
 
@@ -162,12 +166,9 @@ export const ModalPanel = forwardRef<
     }
 
     if (keyboardInset && keyboardInset > 0) {
-      const existingPaddingBottom =
-        typeof nextStyle.paddingBottom === 'number' ? nextStyle.paddingBottom : 0;
       const existingScrollPaddingBottom =
         typeof nextStyle.scrollPaddingBottom === 'number' ? nextStyle.scrollPaddingBottom : 0;
 
-      nextStyle.paddingBottom = existingPaddingBottom + keyboardInset;
       nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
     }
 
@@ -175,18 +176,20 @@ export const ModalPanel = forwardRef<
   }, [keyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
 
   return (
-    <DialogPanel
-      {...restProps}
-      ref={ref}
-      className={clsx(
-        'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
-        !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
-        SIZE_CLASS_MAP[size],
-        paddingClassName,
-        className
-      )}
-      style={mergedStyle}
-    />
+    <ModalKeyboardInsetContext.Provider value={keyboardInset ?? 0}>
+      <DialogPanel
+        {...restProps}
+        ref={ref}
+        className={clsx(
+          'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
+          !shouldApplyInlineMaxHeight && 'md:overflow-hidden',
+          SIZE_CLASS_MAP[size],
+          paddingClassName,
+          className
+        )}
+        style={{ ...mergedStyle, ['--modal-keyboard-inset' as const]: `${keyboardInset ?? 0}px` }}
+      />
+    </ModalKeyboardInsetContext.Provider>
   );
 });
 
@@ -224,6 +227,26 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
   { className, ...props },
   ref
 ) {
+  const keyboardInset = useContext(ModalKeyboardInsetContext);
+
+  const mergedStyle = useMemo(() => {
+    const nextStyle = { ...props.style };
+
+    if (keyboardInset > 0) {
+      const existingPaddingBottom =
+        typeof nextStyle?.paddingBottom === 'number' ? nextStyle.paddingBottom : 0;
+      const existingScrollPaddingBottom =
+        typeof nextStyle?.scrollPaddingBottom === 'number'
+          ? nextStyle.scrollPaddingBottom
+          : 0;
+
+      nextStyle.paddingBottom = existingPaddingBottom + keyboardInset;
+      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
+    }
+
+    return nextStyle;
+  }, [keyboardInset, props.style]);
+
   return (
     <div
       {...props}
@@ -232,6 +255,7 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
         'modal-body mt-2 space-y-2 text-sm flex-1 overflow-y-auto overscroll-contain md:pr-1',
         className
       )}
+      style={mergedStyle}
     />
   );
 });
