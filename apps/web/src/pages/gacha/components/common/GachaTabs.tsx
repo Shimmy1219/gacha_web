@@ -1,6 +1,6 @@
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
@@ -19,6 +19,35 @@ interface GachaTabsProps {
 
 export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: GachaTabsProps): JSX.Element {
   const { triggerSelection } = useHaptics();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasScrollbar, setHasScrollbar] = useState(false);
+
+  const updateScrollbarState = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    setHasScrollbar(element.scrollWidth > element.clientWidth);
+  }, []);
+
+  useEffect(() => {
+    updateScrollbarState();
+  }, [tabs, updateScrollbarState]);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+
+    const resizeObserver = new ResizeObserver(() => updateScrollbarState());
+    resizeObserver.observe(element);
+
+    return () => resizeObserver.disconnect();
+  }, [updateScrollbarState]);
+
+  const containerClassName = clsx(
+    'gacha-tabs tab-scroll-area px-4',
+    hasScrollbar && 'tab-scroll-area--scrollable',
+    className
+  );
 
   const handleSelect = useCallback(
     (gachaId: string) => {
@@ -29,11 +58,11 @@ export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: Gac
   );
 
   if (!tabs.length) {
-    return <div className={clsx('gacha-tabs tab-scroll-area px-4', className)} />;
+    return <div ref={scrollRef} className={containerClassName} />;
   }
 
   return (
-    <div className={clsx('gacha-tabs tab-scroll-area px-4', className)}>
+    <div ref={scrollRef} className={containerClassName}>
       {tabs.map((tab) => {
         const isActive = activeId === tab.id;
         return (

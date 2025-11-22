@@ -371,6 +371,10 @@
     box-shadow: inset 0 -10px 12px -12px rgba(0, 0, 0, 0.45);
   }
 
+  .tab-scroll-area--scrollable {
+    box-shadow: none;
+  }
+
   .gacha-tab {
     position: relative;
     display: inline-flex;
