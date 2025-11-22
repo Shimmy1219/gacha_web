@@ -1,22 +1,26 @@
+const env = (import.meta as any).env ?? {};
+
+const getEnv = (name: string): string | undefined => {
+  return env[name] ?? process.env?.[name];
+};
+
 function buildRedirectUri(): string {
-  const explicitRedirect =
-    process.env.NEXT_PUBLIC_DISCORD_REDIRECT_URI || process.env.DISCORD_REDIRECT_URI;
+  const explicitRedirect = getEnv('NEXT_PUBLIC_DISCORD_REDIRECT_URI') || getEnv('DISCORD_REDIRECT_URI');
   if (explicitRedirect) return explicitRedirect;
 
-  const origin = process.env.NEXT_PUBLIC_SITE_ORIGIN || process.env.SITE_ORIGIN;
+  const origin = getEnv('NEXT_PUBLIC_SITE_ORIGIN') || getEnv('SITE_ORIGIN');
   if (origin) return `${origin.replace(/\/$/, '')}/api/auth/discord/callback`;
 
   throw new Error('Discord redirect URI is not configured.');
 }
 
 export function getDiscordBotInviteUrl(): string {
-  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+  const clientId = getEnv('NEXT_PUBLIC_DISCORD_CLIENT_ID') || getEnv('DISCORD_CLIENT_ID');
   if (!clientId) {
     throw new Error('Discord client ID is not configured.');
   }
 
-  const permissions =
-    process.env.NEXT_PUBLIC_DISCORD_BOT_PERMISSIONS || process.env.DISCORD_BOT_PERMISSIONS;
+  const permissions = getEnv('NEXT_PUBLIC_DISCORD_BOT_PERMISSIONS') || getEnv('DISCORD_BOT_PERMISSIONS');
   if (!permissions) {
     throw new Error('Discord bot permissions are not configured.');
   }

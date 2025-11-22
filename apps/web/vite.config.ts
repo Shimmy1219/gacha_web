@@ -81,6 +81,7 @@ const copyRootIconsPlugin = (): PluginOption => {
 };
 
 export default defineConfig({
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'DISCORD_', 'SITE_'],
   plugins: [react(), copyRootIconsPlugin()],
   base: '/',            // ← 重要: 直リンク時のアセット参照ずれ防止
   server: {
