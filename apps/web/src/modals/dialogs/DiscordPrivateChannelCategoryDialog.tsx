@@ -11,6 +11,7 @@ import {
   saveDiscordGuildSelection,
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { notifyDiscordStorageError } from '../../features/discord/discordStorageErrorHandler';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 interface DiscordCategorySummary {
@@ -137,7 +138,7 @@ export function DiscordPrivateChannelCategoryDialog({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setSubmitError(null);
     if (!guildId) {
       setSubmitError('Discordギルド情報を取得できませんでした。');
@@ -156,24 +157,28 @@ export function DiscordPrivateChannelCategoryDialog({
       setSubmitError('選択されたカテゴリが見つかりませんでした。最新の情報を再取得してください。');
       return;
     }
-    const selection = loadDiscordGuildSelection(discordUserId);
-    if (!selection || selection.guildId !== guildId) {
-      setSubmitError('Discordギルドの選択情報を再取得してください。');
-      return;
-    }
     setIsSubmitting(true);
     try {
+      const selection = await loadDiscordGuildSelection(discordUserId);
+      if (!selection || selection.guildId !== guildId) {
+        setSubmitError('Discordギルドの選択情報を再取得してください。');
+        return;
+      }
+
       const categorySelection: DiscordGuildCategorySelection = {
         id: category.id,
         name: category.name,
         selectedAt: new Date().toISOString()
       };
-      saveDiscordGuildSelection(discordUserId, {
+      await saveDiscordGuildSelection(discordUserId, {
         ...selection,
         privateChannelCategory: categorySelection
       });
       payload?.onCategorySelected?.(categorySelection);
       close();
+    } catch (error) {
+      notifyDiscordStorageError(error);
+      setSubmitError('保存に失敗しました。再度お試しください。');
     } finally {
       setIsSubmitting(false);
     }

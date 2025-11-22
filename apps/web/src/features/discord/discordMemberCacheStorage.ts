@@ -299,16 +299,16 @@ function sanitizeGiftChannelInfo(candidate: unknown): DiscordMemberGiftChannelIn
   };
 }
 
-export function mergeDiscordMemberGiftChannels(
+export async function mergeDiscordMemberGiftChannels(
   discordUserId: string | undefined | null,
   guildId: string | undefined | null,
   channels: DiscordMemberGiftChannelInfo[]
-): DiscordMemberCacheEntry | null {
+): Promise<DiscordMemberCacheEntry | null> {
   if (
     !discordUserId ||
     !guildId ||
     typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window.sessionStorage === 'undefined'
   ) {
     return null;
   }
@@ -321,7 +321,7 @@ export function mergeDiscordMemberGiftChannels(
 
   const channelMap = new Map(sanitizedChannels.map((entry) => [entry.memberId, entry]));
 
-  updateDiscordUserState(discordUserId, (state) => {
+  await updateDiscordUserState(discordUserId, (state) => {
     if (!state.memberCache || !isRecord(state.memberCache)) {
       return state;
     }
@@ -400,11 +400,11 @@ function loadLegacyDiscordMemberCache(
   }
 }
 
-function migrateLegacyMemberCache(
+async function migrateLegacyMemberCache(
   discordUserId: string,
   entry: DiscordMemberCacheEntry
-): DiscordMemberCacheEntry | null {
-  const result = updateDiscordUserState(discordUserId, (state) => {
+): Promise<DiscordMemberCacheEntry | null> {
+  const result = await updateDiscordUserState(discordUserId, (state) => {
     const memberCache = state.memberCache ? { ...state.memberCache } : {};
     memberCache[entry.guildId] = entry;
     state.memberCache = memberCache;
@@ -423,20 +423,20 @@ function migrateLegacyMemberCache(
   return null;
 }
 
-export function loadDiscordMemberCache(
+export async function loadDiscordMemberCache(
   discordUserId: string | undefined | null,
   guildId: string | undefined | null
-): DiscordMemberCacheEntry | null {
+): Promise<DiscordMemberCacheEntry | null> {
   if (
     !discordUserId ||
     !guildId ||
     typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window.sessionStorage === 'undefined'
   ) {
     return null;
   }
 
-  const state = loadDiscordUserState(discordUserId);
+  const state = await loadDiscordUserState(discordUserId);
   const candidate = state?.memberCache && isRecord(state.memberCache) ? state.memberCache[guildId] : undefined;
   if (candidate && isRecord(candidate) && Array.isArray(candidate.members)) {
     const members = normalizeDiscordGuildMembers(candidate.members);
@@ -455,19 +455,20 @@ export function loadDiscordMemberCache(
     return null;
   }
 
-  return migrateLegacyMemberCache(discordUserId, legacyEntry) ?? legacyEntry;
+  const migrated = await migrateLegacyMemberCache(discordUserId, legacyEntry);
+  return migrated ?? legacyEntry;
 }
 
-export function saveDiscordMemberCache(
+export async function saveDiscordMemberCache(
   discordUserId: string | undefined | null,
   guildId: string | undefined | null,
   members: DiscordGuildMemberSummary[]
-): DiscordMemberCacheEntry | null {
+): Promise<DiscordMemberCacheEntry | null> {
   if (
     !discordUserId ||
     !guildId ||
     typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window.sessionStorage === 'undefined'
   ) {
     return null;
   }
@@ -483,14 +484,14 @@ export function saveDiscordMemberCache(
     updatedAt: new Date().toISOString()
   };
 
-  updateDiscordUserState(discordUserId, (state) => {
+  await updateDiscordUserState(discordUserId, (state) => {
     const memberCache = state.memberCache ? { ...state.memberCache } : {};
     memberCache[guildId] = entry;
     state.memberCache = memberCache;
     return state;
   });
 
-  const persistedEntry = loadDiscordMemberCache(discordUserId, guildId);
+  const persistedEntry = await loadDiscordMemberCache(discordUserId, guildId);
   if (persistedEntry && persistedEntry.updatedAt === entry.updatedAt) {
     return persistedEntry;
   }
@@ -499,11 +500,11 @@ export function saveDiscordMemberCache(
   return null;
 }
 
-export function clearDiscordMemberCache(
+export async function clearDiscordMemberCache(
   discordUserId: string | undefined | null,
   guildId?: string
-): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+): Promise<void> {
+  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
     return;
   }
 
@@ -511,7 +512,7 @@ export function clearDiscordMemberCache(
     return;
   }
 
-  updateDiscordUserState(discordUserId, (state) => {
+  await updateDiscordUserState(discordUserId, (state) => {
     if (!state.memberCache) {
       return state;
     }

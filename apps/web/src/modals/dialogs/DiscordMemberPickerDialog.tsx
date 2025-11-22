@@ -22,6 +22,7 @@ import {
   type DiscordGuildCategorySelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
+import { notifyDiscordStorageError } from '../../features/discord/discordStorageErrorHandler';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 
 export interface DiscordMemberShareResult {
@@ -121,11 +122,36 @@ function useDiscordGuildMembers(
   query: string
 ) {
   const trimmedQuery = query.trim();
-  const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
+  const [cacheEntry, setCacheEntry] = useState<DiscordMemberCacheEntry | null>(null);
+  const [cacheLoaded, setCacheLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCacheLoaded(false);
+    setCacheEntry(null);
+    (async () => {
+      try {
+        const entry = await loadDiscordMemberCache(discordUserId, guildId);
+        if (!cancelled) {
+          setCacheEntry(entry);
+        }
+      } catch (error) {
+        notifyDiscordStorageError(error);
+      } finally {
+        if (!cancelled) {
+          setCacheLoaded(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [discordUserId, guildId]);
 
   const initialData = useMemo(() => {
     if (!cacheEntry) {
-      return undefined;
+      return cacheLoaded ? [] : undefined;
     }
 
     if (!trimmedQuery) {
@@ -144,7 +170,7 @@ function useDiscordGuildMembers(
         .map((field) => field.toLowerCase());
       return fields.some((field) => field.includes(lowered));
     });
-  }, [cacheEntry, trimmedQuery]);
+  }, [cacheEntry, cacheLoaded, trimmedQuery]);
 
   const initialDataUpdatedAt = useMemo(() => {
     if (!cacheEntry) {
@@ -191,12 +217,16 @@ function useDiscordGuildMembers(
       let normalizedMembers = normalizeDiscordGuildMembers(payload.members);
       let channelCacheEntry: DiscordMemberCacheEntry | null = null;
       if (!trimmedQuery) {
-        const savedEntry = saveDiscordMemberCache(discordUserId, guildId, normalizedMembers);
-        const persistedMembers = savedEntry?.members ?? normalizedMembers;
-        normalizedMembers = persistedMembers;
-        updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry?.updatedAt ?? null);
-        if (!savedEntry) {
-          console.warn('Discord member cache could not be persisted. Continuing with API response only.');
+        try {
+          const savedEntry = await saveDiscordMemberCache(discordUserId, guildId, normalizedMembers);
+          const persistedMembers = savedEntry?.members ?? normalizedMembers;
+          normalizedMembers = persistedMembers;
+          await updateDiscordGuildSelectionMemberCacheTimestamp(discordUserId, guildId, savedEntry?.updatedAt ?? null);
+          if (!savedEntry) {
+            console.warn('Discord member cache could not be persisted. Continuing with API response only.');
+          }
+        } catch (error) {
+          notifyDiscordStorageError(error);
         }
       }
 
@@ -228,9 +258,13 @@ function useDiscordGuildMembers(
             }
           } else if (discordUserId) {
             const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
-            const mergedEntry = mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
-            if (mergedEntry) {
-              channelCacheEntry = mergedEntry;
+            try {
+              const mergedEntry = await mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+              if (mergedEntry) {
+                channelCacheEntry = mergedEntry;
+              }
+            } catch (error) {
+              notifyDiscordStorageError(error);
             }
           }
         } catch (error) {
@@ -239,7 +273,11 @@ function useDiscordGuildMembers(
       }
 
       if (!channelCacheEntry && discordUserId && guildId) {
-        channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
+        try {
+          channelCacheEntry = await loadDiscordMemberCache(discordUserId, guildId);
+        } catch (error) {
+          notifyDiscordStorageError(error);
+        }
       }
 
       if (channelCacheEntry) {

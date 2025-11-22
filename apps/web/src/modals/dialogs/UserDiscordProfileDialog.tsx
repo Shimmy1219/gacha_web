@@ -8,6 +8,7 @@ import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { loadDiscordGuildSelection } from '../../features/discord/discordGuildSelectionStorage';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
+import { notifyDiscordStorageError } from '../../features/discord/discordStorageErrorHandler';
 
 interface UserDiscordProfileDialogPayload {
   userId: string;
@@ -119,47 +120,53 @@ export function UserDiscordProfileDialog({
       return;
     }
 
-    const selection = discordUserId ? loadDiscordGuildSelection(discordUserId) : null;
+    (async () => {
+      try {
+        const selection = discordUserId ? await loadDiscordGuildSelection(discordUserId) : null;
 
-    push(DiscordMemberPickerDialog, {
-      title: 'Discord情報を追加',
-      size: 'lg',
-      payload: {
-        mode: 'link',
-        guildId: selection?.guildId ?? '',
-        discordUserId: discordUserId ?? '',
-        submitLabel: '追加',
-        refreshLabel: 'メンバー情報の更新',
-        onMemberPicked: async (member) => {
-          const normalizedDisplayName =
-            (member.displayName && member.displayName.trim().length > 0 ? member.displayName : undefined) ??
-            member.globalName ??
-            member.username ??
-            member.id;
+        push(DiscordMemberPickerDialog, {
+          title: 'Discord情報を追加',
+          size: 'lg',
+          payload: {
+            mode: 'link',
+            guildId: selection?.guildId ?? '',
+            discordUserId: discordUserId ?? '',
+            submitLabel: '追加',
+            refreshLabel: 'メンバー情報の更新',
+            onMemberPicked: async (member) => {
+              const normalizedDisplayName =
+                (member.displayName && member.displayName.trim().length > 0 ? member.displayName : undefined) ??
+                member.globalName ??
+                member.username ??
+                member.id;
 
-          const shareInfo = member.giftChannelId
-            ? {
-                channelId: member.giftChannelId,
-                channelName: member.giftChannelName ?? null,
-                channelParentId: member.giftChannelParentId ?? null
-              }
-            : undefined;
+              const shareInfo = member.giftChannelId
+                ? {
+                    channelId: member.giftChannelId,
+                    channelName: member.giftChannelName ?? null,
+                    channelParentId: member.giftChannelParentId ?? null
+                  }
+                : undefined;
 
-          await linkDiscordProfileToStore({
-            store: userProfilesStore,
-            profileId: userId,
-            discordUserId: member.id,
-            discordDisplayName: normalizedDisplayName,
-            discordUserName: member.username || member.globalName || null,
-            avatarUrl: member.avatarUrl ?? null,
-            share: shareInfo
-          });
-        },
-        onMemberPickFailed: (message) => {
-          console.warn('Failed to link Discord profile from member picker dialog', message);
-        }
+              await linkDiscordProfileToStore({
+                store: userProfilesStore,
+                profileId: userId,
+                discordUserId: member.id,
+                discordDisplayName: normalizedDisplayName,
+                discordUserName: member.username || member.globalName || null,
+                avatarUrl: member.avatarUrl ?? null,
+                share: shareInfo
+              });
+            },
+            onMemberPickFailed: (message) => {
+              console.warn('Failed to link Discord profile from member picker dialog', message);
+            }
+          }
+        });
+      } catch (error) {
+        notifyDiscordStorageError(error);
       }
-    });
+    })();
   }, [discordUserId, push, userId, userProfilesStore]);
 
   const handleUnlink = useCallback(() => {

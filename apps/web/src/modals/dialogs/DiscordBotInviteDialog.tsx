@@ -19,6 +19,7 @@ import {
   normalizeDiscordMemberGiftChannels,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { notifyDiscordStorageError } from '../../features/discord/discordStorageErrorHandler';
 
 interface DiscordBotInviteDialogPayload {
   userId: string;
@@ -65,11 +66,22 @@ export function DiscordBotInviteDialog({
   const guilds = useMemo(() => data ?? [], [data]);
 
   useEffect(() => {
-    const stored = loadDiscordGuildSelection(userId);
-    if (stored?.guildId) {
-      setSelectedGuildId(stored.guildId);
-      setStoredSelection(stored);
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await loadDiscordGuildSelection(userId);
+        if (!cancelled && stored?.guildId) {
+          setSelectedGuildId(stored.guildId);
+          setStoredSelection(stored);
+        }
+      } catch (error) {
+        notifyDiscordStorageError(error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   useEffect(() => {
@@ -125,7 +137,7 @@ export function DiscordBotInviteDialog({
     setSubmitStage('members');
 
     try {
-      const storedSelection = loadDiscordGuildSelection(userId);
+      const storedSelection = await loadDiscordGuildSelection(userId);
       const preservedCategory =
         storedSelection && storedSelection.guildId === guild.id
           ? storedSelection.privateChannelCategory ?? null
@@ -147,7 +159,7 @@ export function DiscordBotInviteDialog({
         const payload = (await response.json().catch(() => null)) as DiscordMembersResponse | null;
 
         if (response.ok && payload?.ok && Array.isArray(payload.members)) {
-          const savedEntry = saveDiscordMemberCache(userId, guild.id, payload.members);
+          const savedEntry = await saveDiscordMemberCache(userId, guild.id, payload.members);
           if (savedEntry) {
             memberCacheUpdatedAt = savedEntry.updatedAt;
           } else {
@@ -176,7 +188,7 @@ export function DiscordBotInviteDialog({
 
         if (response.ok && payload?.ok) {
           const normalizedChannels = normalizeDiscordMemberGiftChannels(payload.channels);
-          mergeDiscordMemberGiftChannels(userId, guild.id, normalizedChannels);
+          await mergeDiscordMemberGiftChannels(userId, guild.id, normalizedChannels);
         } else {
           const message = payload?.error || `お渡しチャンネル一覧の取得に失敗しました (${response.status})`;
           console.warn('Failed to refresh Discord gift channel cache after guild selection:', message);
@@ -194,11 +206,13 @@ export function DiscordBotInviteDialog({
         memberCacheUpdatedAt
       };
 
-      saveDiscordGuildSelection(userId, selection);
+      await saveDiscordGuildSelection(userId, selection);
       setStoredSelection(selection);
       payload?.onGuildSelected?.(selection);
       openCategorySetupDialog(selection);
       close();
+    } catch (error) {
+      notifyDiscordStorageError(error);
     } finally {
       setSubmitStage('idle');
     }

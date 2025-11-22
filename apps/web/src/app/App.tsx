@@ -20,6 +20,7 @@ import {
 import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
+import { DiscordUserStateInitializer } from '../features/discord/DiscordUserStateInitializer';
 import { useHaptics } from '../features/haptics/HapticsProvider';
 
 export function App(): JSX.Element {
@@ -285,6 +286,7 @@ export function App(): JSX.Element {
 
   return (
     <>
+      <DiscordUserStateInitializer />
       <AppRoutes gachaLayoutProps={gachaLayoutProps} />
       {showDiscordAuthLogs ? <DiscordAuthDebugOverlay /> : null}
     </>

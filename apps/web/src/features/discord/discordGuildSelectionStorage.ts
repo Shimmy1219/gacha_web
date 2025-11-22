@@ -102,11 +102,11 @@ function loadLegacyDiscordGuildSelection(discordUserId: string): DiscordGuildSel
   }
 }
 
-function migrateLegacyDiscordGuildSelection(
+async function migrateLegacyDiscordGuildSelection(
   discordUserId: string,
   selection: DiscordGuildSelection
-): DiscordGuildSelection | null {
-  const result = updateDiscordUserState(discordUserId, (state) => {
+): Promise<DiscordGuildSelection | null> {
+  const result = await updateDiscordUserState(discordUserId, (state) => {
     state.selection = selection;
     return state;
   });
@@ -130,14 +130,14 @@ export class DiscordGuildSelectionMissingError extends Error {
   }
 }
 
-export function loadDiscordGuildSelection(
+export async function loadDiscordGuildSelection(
   discordUserId: string | undefined | null
-): DiscordGuildSelection | null {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+): Promise<DiscordGuildSelection | null> {
+  if (!discordUserId || typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
     return null;
   }
 
-  const state = loadDiscordUserState(discordUserId);
+  const state = await loadDiscordUserState(discordUserId);
   const selection = sanitizeGuildSelection(state?.selection);
   if (selection) {
     return selection;
@@ -148,26 +148,27 @@ export function loadDiscordGuildSelection(
     return null;
   }
 
-  return migrateLegacyDiscordGuildSelection(discordUserId, legacySelection) ?? legacySelection;
+  const migrated = await migrateLegacyDiscordGuildSelection(discordUserId, legacySelection);
+  return migrated ?? legacySelection;
 }
 
-export function saveDiscordGuildSelection(
+export async function saveDiscordGuildSelection(
   discordUserId: string | undefined | null,
   selection: DiscordGuildSelection
-): void {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+): Promise<void> {
+  if (!discordUserId || typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
     return;
   }
 
-  const previousSelection = loadDiscordGuildSelection(discordUserId);
+  const previousSelection = await loadDiscordGuildSelection(discordUserId);
   if (previousSelection?.guildId && previousSelection.guildId !== selection.guildId) {
-    clearDiscordMemberCache(discordUserId, previousSelection.guildId);
+    await clearDiscordMemberCache(discordUserId, previousSelection.guildId);
   }
 
   const cacheEntry =
     selection.memberCacheUpdatedAt !== undefined
       ? null
-      : loadDiscordMemberCache(discordUserId, selection.guildId);
+      : await loadDiscordMemberCache(discordUserId, selection.guildId);
 
   const normalizedSelection: DiscordGuildSelection = {
     guildId: selection.guildId,
@@ -181,12 +182,12 @@ export function saveDiscordGuildSelection(
         : cacheEntry?.updatedAt ?? null
   };
 
-  updateDiscordUserState(discordUserId, (state) => {
+  await updateDiscordUserState(discordUserId, (state) => {
     state.selection = normalizedSelection;
     return state;
   });
 
-  const persistedSelection = loadDiscordGuildSelection(discordUserId);
+  const persistedSelection = await loadDiscordGuildSelection(discordUserId);
   if (persistedSelection?.guildId === normalizedSelection.guildId) {
     try {
       window.localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
@@ -196,16 +197,16 @@ export function saveDiscordGuildSelection(
   }
 }
 
-export function updateDiscordGuildSelectionMemberCacheTimestamp(
+export async function updateDiscordGuildSelectionMemberCacheTimestamp(
   discordUserId: string | undefined | null,
   guildId: string | undefined | null,
   updatedAt: string | null | undefined
-): void {
-  if (!discordUserId || !guildId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+): Promise<void> {
+  if (!discordUserId || !guildId || typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
     return;
   }
 
-  updateDiscordUserState(discordUserId, (state) => {
+  await updateDiscordUserState(discordUserId, (state) => {
     const currentSelection = sanitizeGuildSelection(state.selection);
     if (!currentSelection || currentSelection.guildId !== guildId) {
       return state;
@@ -224,16 +225,16 @@ export function updateDiscordGuildSelectionMemberCacheTimestamp(
   });
 }
 
-export function getStoredDiscordGuildId(discordUserId: string | undefined | null): string | null {
-  const selection = loadDiscordGuildSelection(discordUserId);
+export async function getStoredDiscordGuildId(discordUserId: string | undefined | null): Promise<string | null> {
+  const selection = await loadDiscordGuildSelection(discordUserId);
   return selection?.guildId ?? null;
 }
 
-export function requireDiscordGuildSelection(
+export async function requireDiscordGuildSelection(
   discordUserId: string | undefined | null,
   errorMessage = 'Discordギルドが選択されていません。Discordギルドを選択してから再度お試しください。'
-): DiscordGuildSelection {
-  const selection = loadDiscordGuildSelection(discordUserId);
+): Promise<DiscordGuildSelection> {
+  const selection = await loadDiscordGuildSelection(discordUserId);
   if (!selection?.guildId) {
     throw new DiscordGuildSelectionMissingError(errorMessage);
   }
@@ -241,18 +242,18 @@ export function requireDiscordGuildSelection(
 }
 
 export function clearAllDiscordGuildSelections(): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
     return;
   }
 
   try {
-    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-      const key = window.localStorage.key(index);
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
       if (!key) {
         continue;
       }
       if (key.startsWith(`${DISCORD_USER_STATE_STORAGE_PREFIX}::`)) {
-        window.localStorage.removeItem(key);
+        window.sessionStorage.removeItem(key);
         continue;
       }
       if (key.startsWith(`${LEGACY_STORAGE_PREFIX}::`)) {

@@ -16,6 +16,7 @@ import {
   loadDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../../../features/discord/discordGuildSelectionStorage';
+import { notifyDiscordStorageError } from '../../../../features/discord/discordStorageErrorHandler';
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 
 function getAvatarUrl(id: string, avatar?: string): string | undefined {
@@ -61,14 +62,34 @@ export function DiscordLoginButton({
   }, [triggerConfirmation, userId, userName]);
 
   useEffect(() => {
+    let cancelled = false;
     if (!userId) {
       setGuildSelection(null);
       setHasLoadedGuildSelection(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    const stored = loadDiscordGuildSelection(userId);
-    setGuildSelection(stored);
-    setHasLoadedGuildSelection(true);
+
+    (async () => {
+      try {
+        const stored = await loadDiscordGuildSelection(userId);
+        if (!cancelled) {
+          setGuildSelection(stored);
+          setHasLoadedGuildSelection(true);
+        }
+      } catch (error) {
+        notifyDiscordStorageError(error);
+        if (!cancelled) {
+          setGuildSelection(null);
+          setHasLoadedGuildSelection(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const openBotInviteModal = useCallback(() => {
