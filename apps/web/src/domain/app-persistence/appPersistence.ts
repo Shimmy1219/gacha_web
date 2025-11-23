@@ -136,6 +136,8 @@ export class AppPersistence {
       return;
     }
 
+    this.syncPendingUserInventories(partial);
+
     let touched = false;
 
     if (Object.prototype.hasOwnProperty.call(partial, 'appState')) {
@@ -614,6 +616,31 @@ export class AppPersistence {
         this.savePartial(payload);
       }
     }, this.debounceMs);
+  }
+
+  private syncPendingUserInventories(partial: PersistPartialSnapshot): void {
+    if (!this.pending) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(partial, 'userInventories')) {
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(this.pending, 'userInventories')) {
+      return;
+    }
+
+    if (Object.is(this.pending.userInventories, partial.userInventories)) {
+      return;
+    }
+
+    const nextPending: PersistPartialSnapshot = {
+      ...this.pending,
+      userInventories: partial.userInventories
+    };
+
+    this.pending = nextPending;
   }
 
   private mergePending(
