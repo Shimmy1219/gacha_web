@@ -441,7 +441,34 @@ export class AppPersistence {
     if (!hasValue) {
       storage.removeItem(storageKey);
     } else {
-      storage.setItem(storageKey, JSON.stringify(value));
+      let serialized: string;
+      try {
+        serialized = JSON.stringify(value);
+      } catch (error) {
+        if (this.isInvalidStringLengthError(error)) {
+          const label = STORAGE_KEY_LABELS[key];
+          const description = label ? `${storageKey}（${label}）` : storageKey;
+          throw new Error(
+            `保存対象データが大きすぎるため ${description} を文字列化できませんでした。データ量を減らしてから再度お試しください。`
+          );
+        }
+        throw error;
+      }
+
+      try {
+        storage.setItem(storageKey, serialized);
+      } catch (error) {
+        if (this.isQuotaExceededError(error)) {
+          const label = STORAGE_KEY_LABELS[key];
+          const sizeKb = Math.round(serialized.length / 1024);
+          const description = label ? `${storageKey}（${label}）` : storageKey;
+          throw new Error(
+            `ローカルストレージの容量を超えたため ${description} を保存できませんでした。` +
+              ` 保存対象データの概算サイズは約${sizeKb}KBです。不要なデータを削除してから再度お試しください。`
+          );
+        }
+        throw error;
+      }
     }
 
     const label = STORAGE_KEY_LABELS[key];
@@ -590,6 +617,26 @@ export class AppPersistence {
     }
 
     return this.eventTarget;
+  }
+
+  private isQuotaExceededError(error: unknown): boolean {
+    if (error instanceof DOMException) {
+      return error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014;
+    }
+
+    if (error && typeof error === 'object' && 'name' in error && typeof error.name === 'string') {
+      return error.name === 'QuotaExceededError';
+    }
+
+    return false;
+  }
+
+  private isInvalidStringLengthError(error: unknown): boolean {
+    if (!(error instanceof RangeError)) {
+      return false;
+    }
+
+    return typeof error.message === 'string' && error.message.includes('Invalid string length');
   }
 
   private scheduleRetry(): void {
