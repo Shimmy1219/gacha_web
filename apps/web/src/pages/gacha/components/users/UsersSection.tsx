@@ -2,11 +2,7 @@ import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { useCallback, useMemo, useState } from 'react';
 
-import {
-  UserCard,
-  type InventoryCatalogItemOption,
-  type InventoryRarityOption
-} from '../cards/UserCard';
+import { UserCard, type InventoryRarityOption } from '../cards/UserCard';
 import { SectionContainer } from '../layout/SectionContainer';
 import { useModal } from '../../../../modals';
 import { SaveTargetDialog } from '../../../../modals/dialogs/SaveTargetDialog';
@@ -19,33 +15,6 @@ export function UsersSection(): JSX.Element {
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
-
-  const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
-    const catalogState = data?.catalogState;
-    if (!catalogState?.byGacha) {
-      return {};
-    }
-
-    return Object.entries(catalogState.byGacha).reduce<Record<string, InventoryCatalogItemOption[]>>(
-      (acc, [gachaId, snapshot]) => {
-        const entries: InventoryCatalogItemOption[] = [];
-        snapshot.order.forEach((itemId) => {
-          const item = snapshot.items[itemId];
-          if (!item) {
-            return;
-          }
-          entries.push({
-            itemId: item.itemId,
-            name: item.name,
-            rarityId: item.rarityId
-          });
-        });
-        acc[gachaId] = entries;
-        return acc;
-      },
-      {}
-    );
-  }, [data?.catalogState]);
 
   const rarityOptionsByGacha = useMemo<Record<string, InventoryRarityOption[]>>(() => {
     const rarityState = data?.rarityState;
@@ -146,7 +115,6 @@ export function UsersSection(): JSX.Element {
               {...user}
               onExport={handleOpenSaveOptions}
               showCounts={showCounts}
-              catalogItemsByGacha={catalogItemsByGacha}
               rarityOptionsByGacha={rarityOptionsByGacha}
             />
           ))}
