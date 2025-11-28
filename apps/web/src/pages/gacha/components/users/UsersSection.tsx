@@ -215,6 +215,7 @@ interface VirtualizedUserRowProps {
 }
 
 function VirtualizedUserRow({
+  ariaAttributes,
   index,
   style,
   users,
@@ -238,8 +239,14 @@ function VirtualizedUserRow({
     return () => observer.disconnect();
   }, [index, rowHeight]);
 
+  useEffect(() => {
+    if (!cardRef.current) return;
+    const disconnect = rowHeight.observeRowElements([cardRef.current]);
+    return disconnect;
+  }, [rowHeight]);
+
   return (
-    <div style={{ ...style, left: 0, right: 0, width: '100%' }}>
+    <div {...ariaAttributes} style={{ ...style, left: 0, right: 0, width: '100%' }}>
       <div ref={cardRef} className="pb-3">
         <UserCard
           {...user}
