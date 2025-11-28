@@ -439,29 +439,30 @@ export function UserCard({
               'data-[state=closed]:grid-rows-[0fr]'
             )}
           >
-            <Disclosure.Panel
-              static
-              id={panelId}
-              className={clsx(
-                'overflow-hidden transition-opacity duration-300 ease-linear',
-                'group-data-[state=open]:opacity-100',
-                'group-data-[state=closed]:opacity-0'
-              )}
-            >
-              <div className="user-card__inventories space-y-4">
-                {inventories.map((inventory) => (
-                  <GachaInventoryCard
-                    key={inventory.inventoryId}
-                    inventory={inventory}
-                    showCounts={showCounts}
-                    userId={userId}
-                    userName={userName}
-                    catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
-                    rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
-                  />
-                ))}
-              </div>
-            </Disclosure.Panel>
+            {open ? (
+              <Disclosure.Panel
+                id={panelId}
+                className={clsx(
+                  'overflow-hidden transition-opacity duration-300 ease-linear',
+                  'group-data-[state=open]:opacity-100',
+                  'group-data-[state=closed]:opacity-0'
+                )}
+              >
+                <div className="user-card__inventories space-y-4">
+                  {inventories.map((inventory) => (
+                    <GachaInventoryCard
+                      key={inventory.inventoryId}
+                      inventory={inventory}
+                      showCounts={showCounts}
+                      userId={userId}
+                      userName={userName}
+                      catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
+                      rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
+                    />
+                  ))}
+                </div>
+              </Disclosure.Panel>
+            ) : null}
           </div>
         </article>
       )}
