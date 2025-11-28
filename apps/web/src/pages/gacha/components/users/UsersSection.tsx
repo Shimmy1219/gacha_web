@@ -79,16 +79,23 @@ export function UsersSection(): JSX.Element {
   }, [MAX_VISIBLE_USERS, WINDOW_STEP, users.length]);
 
   const handleMeasureItem = useCallback((node: HTMLDivElement | null) => {
-    if (node && itemHeight === null) {
-      const rect = node.getBoundingClientRect();
-      if (rect.height > 0) {
-        const styles = window.getComputedStyle(node);
-        const marginTop = parseFloat(styles.marginTop) || 0;
-        const marginBottom = parseFloat(styles.marginBottom) || 0;
-        setItemHeight(rect.height + marginTop + marginBottom);
+    if (!node) return;
+
+    const rect = node.getBoundingClientRect();
+    if (rect.height === 0) return;
+
+    const styles = window.getComputedStyle(node);
+    const marginTop = parseFloat(styles.marginTop) || 0;
+    const marginBottom = parseFloat(styles.marginBottom) || 0;
+    const totalHeight = rect.height + marginTop + marginBottom;
+
+    setItemHeight((current) => {
+      if (current === null || totalHeight > current) {
+        return totalHeight;
       }
-    }
-  }, [itemHeight]);
+      return current;
+    });
+  }, []);
 
   const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
     const catalogState = data?.catalogState;
@@ -212,7 +219,7 @@ export function UsersSection(): JSX.Element {
         <div className="users-section__list space-y-3" style={{ paddingTop, paddingBottom }}>
           <div ref={topSentinelRef} aria-hidden />
           {visibleUsers.map((user, index) => (
-            <div key={user.userId} ref={index === 0 ? handleMeasureItem : undefined}>
+            <div key={user.userId} ref={index <= 1 ? handleMeasureItem : undefined}>
               <UserCard
                 {...user}
                 onExport={handleOpenSaveOptions}
