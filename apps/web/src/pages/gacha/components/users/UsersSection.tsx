@@ -1,6 +1,6 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   UserCard,
@@ -15,10 +15,77 @@ import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
 
 export function UsersSection(): JSX.Element {
+  const MAX_VISIBLE_USERS = 20;
+  const WINDOW_STEP = 10;
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [windowStart, setWindowStart] = useState(0);
+  const [itemHeight, setItemHeight] = useState<number | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
+
+  const visibleUsers = useMemo(
+    () => users.slice(windowStart, windowStart + MAX_VISIBLE_USERS),
+    [users, windowStart]
+  );
+
+  const paddingTop = useMemo(() => {
+    if (itemHeight === null) return 0;
+    return windowStart * itemHeight;
+  }, [itemHeight, windowStart]);
+
+  const paddingBottom = useMemo(() => {
+    if (itemHeight === null) return 0;
+    const remaining = Math.max(users.length - (windowStart + visibleUsers.length), 0);
+    return remaining * itemHeight;
+  }, [itemHeight, users.length, visibleUsers.length, windowStart]);
+
+  useEffect(() => {
+    setWindowStart(0);
+  }, [users.length]);
+
+  useEffect(() => {
+    const topSentinel = topSentinelRef.current;
+    const bottomSentinel = bottomSentinelRef.current;
+    if (!topSentinel || !bottomSentinel) return undefined;
+
+    const maxStart = Math.max(0, users.length - MAX_VISIBLE_USERS);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          if (entry.target === bottomSentinel) {
+            setWindowStart((current) => Math.min(current + WINDOW_STEP, maxStart));
+          } else if (entry.target === topSentinel) {
+            setWindowStart((current) => Math.max(current - WINDOW_STEP, 0));
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '200px 0px'
+      }
+    );
+
+    observer.observe(bottomSentinel);
+    observer.observe(topSentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [MAX_VISIBLE_USERS, WINDOW_STEP, users.length]);
+
+  const handleMeasureItem = useCallback((node: HTMLDivElement | null) => {
+    if (node && itemHeight === null) {
+      const rect = node.getBoundingClientRect();
+      if (rect.height > 0) {
+        setItemHeight(rect.height);
+      }
+    }
+  }, [itemHeight]);
 
   const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
     const catalogState = data?.catalogState;
@@ -139,17 +206,20 @@ export function UsersSection(): JSX.Element {
       ) : null}
 
       {users.length > 0 ? (
-        <div className="users-section__list space-y-3">
-          {users.map((user) => (
-            <UserCard
-              key={user.userId}
-              {...user}
-              onExport={handleOpenSaveOptions}
-              showCounts={showCounts}
-              catalogItemsByGacha={catalogItemsByGacha}
-              rarityOptionsByGacha={rarityOptionsByGacha}
-            />
+        <div className="users-section__list space-y-3" style={{ paddingTop, paddingBottom }}>
+          <div ref={topSentinelRef} aria-hidden />
+          {visibleUsers.map((user, index) => (
+            <div key={user.userId} ref={index === 0 ? handleMeasureItem : undefined}>
+              <UserCard
+                {...user}
+                onExport={handleOpenSaveOptions}
+                showCounts={showCounts}
+                catalogItemsByGacha={catalogItemsByGacha}
+                rarityOptionsByGacha={rarityOptionsByGacha}
+              />
+            </div>
           ))}
+          <div ref={bottomSentinelRef} aria-hidden />
         </div>
       ) : null}
     </SectionContainer>
