@@ -486,6 +486,13 @@ export class AppPersistence {
     });
 
     if (Object.keys(inventories).length === 0 && Object.keys(byItemId).length === 0) {
+      console.info(
+        '【デバッグ】分割保存されたユーザー在庫が空のため、旧フォーマットの一括保存キーから読み込みます',
+        {
+          インデックスキー: USER_INVENTORY_INDEX_KEY,
+          一括保存キー: STORAGE_KEYS.userInventories
+        }
+      );
       return this.readJson<UserInventoriesStateV3>('userInventories');
     }
 
