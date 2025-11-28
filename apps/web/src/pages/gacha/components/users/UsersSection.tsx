@@ -82,7 +82,10 @@ export function UsersSection(): JSX.Element {
     if (node && itemHeight === null) {
       const rect = node.getBoundingClientRect();
       if (rect.height > 0) {
-        setItemHeight(rect.height);
+        const styles = window.getComputedStyle(node);
+        const marginTop = parseFloat(styles.marginTop) || 0;
+        const marginBottom = parseFloat(styles.marginBottom) || 0;
+        setItemHeight(rect.height + marginTop + marginBottom);
       }
     }
   }, [itemHeight]);
