@@ -1,6 +1,8 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import AutoSizer from 'react-virtualized-auto-sizer';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { VariableSizeList, type VariableSizeList as VariableSizeListType } from 'react-window';
 
 import {
   UserCard,
@@ -14,11 +16,36 @@ import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocal
 import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
 
+const ITEM_GAP_PX = 12;
+const LIST_MIN_HEIGHT = 480;
+const USER_CARD_BASE_HEIGHT = 320;
+type FilteredUser = ReturnType<typeof useFilteredUsers>['users'][number];
+
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
+  const listRef = useRef<VariableSizeListType | null>(null);
+  const usersDigest = useMemo(() => users.map((user) => user.userId).join(','), [users]);
+  const sizeMap = useRef<Record<number, number>>({});
+
+  const setRowHeight = useCallback((index: number, size: number) => {
+    if (sizeMap.current[index] === size) return;
+    sizeMap.current[index] = size;
+    listRef.current?.resetAfterIndex(index, false);
+  }, []);
+
+  const getRowHeight = useCallback(
+    (index: number) => sizeMap.current[index] ?? USER_CARD_BASE_HEIGHT + ITEM_GAP_PX,
+    []
+  );
+
+  useEffect(() => {
+    sizeMap.current = {};
+    listRef.current?.resetAfterIndex(0, true);
+    listRef.current?.scrollToItem(0, 'start');
+  }, [listRef, usersDigest]);
 
   const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
     const catalogState = data?.catalogState;
@@ -85,6 +112,25 @@ export function UsersSection(): JSX.Element {
     [data?.userProfiles?.users, push]
   );
 
+  const rowProps = useMemo(
+    () => ({
+      users,
+      onExport: handleOpenSaveOptions,
+      showCounts,
+      catalogItemsByGacha,
+      rarityOptionsByGacha,
+      setRowHeight
+    }),
+    [
+      catalogItemsByGacha,
+      handleOpenSaveOptions,
+      rarityOptionsByGacha,
+      setRowHeight,
+      showCounts,
+      users
+    ]
+  );
+
   return (
     <SectionContainer
       id="users"
@@ -139,19 +185,75 @@ export function UsersSection(): JSX.Element {
       ) : null}
 
       {users.length > 0 ? (
-        <div className="users-section__list space-y-3">
-          {users.map((user) => (
-            <UserCard
-              key={user.userId}
-              {...user}
-              onExport={handleOpenSaveOptions}
-              showCounts={showCounts}
-              catalogItemsByGacha={catalogItemsByGacha}
-              rarityOptionsByGacha={rarityOptionsByGacha}
-            />
-          ))}
+        <div
+          className="users-section__list relative"
+          style={{ height: '70vh', minHeight: LIST_MIN_HEIGHT }}
+        >
+          <AutoSizer>
+            {({ height, width }) => (
+              <VariableSizeList<VirtualizedUserRowData>
+                className="users-section__virtual-list"
+                style={{ height: Math.max(height, LIST_MIN_HEIGHT), width }}
+                itemCount={users.length}
+                itemSize={getRowHeight}
+                overscanCount={6}
+                itemData={rowProps}
+                ref={listRef}
+              >
+                {VirtualizedUserRow}
+              </VariableSizeList>
+            )}
+          </AutoSizer>
         </div>
       ) : null}
     </SectionContainer>
+  );
+}
+
+interface VirtualizedUserRowData {
+  users: FilteredUser[];
+  onExport: (userId: string) => void;
+  showCounts: boolean | undefined;
+  catalogItemsByGacha: Record<string, InventoryCatalogItemOption[]>;
+  rarityOptionsByGacha: Record<string, InventoryRarityOption[]>;
+  setRowHeight: (index: number, size: number) => void;
+}
+
+function VirtualizedUserRow({
+  index,
+  style,
+  data
+}: {
+  index: number;
+  style: CSSProperties;
+  data: VirtualizedUserRowData;
+}): JSX.Element {
+  const { users, onExport, showCounts, catalogItemsByGacha, rarityOptionsByGacha, setRowHeight } = data;
+  const user = users[index];
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!cardRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setRowHeight(index, entry.contentRect.height + ITEM_GAP_PX);
+    });
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, [setRowHeight, index]);
+
+  return (
+    <div style={{ ...style, left: 0, right: 0, width: '100%' }}>
+      <div ref={cardRef} className="pb-3">
+        <UserCard
+          {...user}
+          onExport={onExport}
+          showCounts={showCounts}
+          catalogItemsByGacha={catalogItemsByGacha}
+          rarityOptionsByGacha={rarityOptionsByGacha}
+        />
+      </div>
+    </div>
   );
 }
