@@ -33,6 +33,18 @@ export const STORAGE_KEYS = {
   pullHistory: 'gacha:pull-history:v1'
 } as const;
 
+const INDEXED_DB_CONFIG = {
+  name: 'gacha-app-state',
+  version: 1,
+  storeName: 'snapshots'
+} as const;
+
+const OFFLOADED_STORAGE_KEYS = new Set<string>([
+  STORAGE_KEYS.userInventories,
+  STORAGE_KEYS.userProfiles,
+  STORAGE_KEYS.pullHistory
+]);
+
 type StorageKey = keyof typeof STORAGE_KEYS;
 
 const STORAGE_KEY_LABELS: Partial<Record<StorageKey, string>> = {
@@ -51,6 +63,293 @@ export interface StorageLike {
   removeItem(key: string): void;
 }
 
+interface IndexedDbSnapshotRecord {
+  key: string;
+  value: string;
+}
+
+let indexedDbOpenRequest: Promise<IDBDatabase> | null = null;
+
+function isIndexedDbAvailable(): boolean {
+  return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
+}
+
+function getWindowLocalStorage(): StorageLike | null {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return null;
+  }
+
+  return window.localStorage;
+}
+
+function wrapIndexedDbRequest<T>(request: IDBRequest<T>, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result as T);
+    request.onerror = () => reject(request.error ?? new Error(errorMessage));
+  });
+}
+
+async function openIndexedDb(): Promise<IDBDatabase> {
+  if (!isIndexedDbAvailable()) {
+    throw new Error('IndexedDB is not available in the current environment');
+  }
+
+  if (indexedDbOpenRequest) {
+    return indexedDbOpenRequest;
+  }
+
+  indexedDbOpenRequest = new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(INDEXED_DB_CONFIG.name, INDEXED_DB_CONFIG.version);
+
+    request.onerror = () => {
+      reject(request.error ?? new Error('Failed to open app persistence database'));
+    };
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const transaction = request.transaction;
+
+      if (!transaction) {
+        return;
+      }
+
+      if (!db.objectStoreNames.contains(INDEXED_DB_CONFIG.storeName)) {
+        db.createObjectStore(INDEXED_DB_CONFIG.storeName, { keyPath: 'key' });
+      }
+    };
+
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        indexedDbOpenRequest = null;
+      };
+      resolve(db);
+    };
+  });
+
+  return indexedDbOpenRequest;
+}
+
+async function readIndexedDbValue(key: string): Promise<string | null> {
+  const db = await openIndexedDb();
+  const transaction = db.transaction(INDEXED_DB_CONFIG.storeName, 'readonly');
+  const store = transaction.objectStore(INDEXED_DB_CONFIG.storeName);
+  const result = await wrapIndexedDbRequest<IndexedDbSnapshotRecord | undefined | null>(
+    store.get(key),
+    'Failed to read snapshot from IndexedDB'
+  );
+
+  if (result && typeof result.value === 'string') {
+    return result.value;
+  }
+
+  return null;
+}
+
+async function writeIndexedDbValue(key: string, value: string | null): Promise<void> {
+  const db = await openIndexedDb();
+  const transaction = db.transaction(INDEXED_DB_CONFIG.storeName, 'readwrite');
+  const store = transaction.objectStore(INDEXED_DB_CONFIG.storeName);
+
+  if (value === null) {
+    await wrapIndexedDbRequest(store.delete(key), 'Failed to delete snapshot from IndexedDB');
+    return;
+  }
+
+  await wrapIndexedDbRequest(store.put({ key, value }), 'Failed to write snapshot to IndexedDB');
+}
+
+class IndexedDbBackedStorage implements StorageLike {
+  private readonly cache = new Map<string, string>();
+
+  private indexedDbAvailable = false;
+
+  private readonly initialization: Promise<void>;
+
+  constructor(private readonly baseStorage: StorageLike | null) {
+    this.primeCacheFromBaseStorage();
+    this.initialization = this.initialize().catch((error) => {
+      this.indexedDbAvailable = false;
+      console.warn('Failed to initialize IndexedDB-backed storage; falling back to base storage', error);
+    });
+  }
+
+  get length(): number {
+    return this.listKeys().length;
+  }
+
+  key(index: number): string | null {
+    const keys = this.listKeys();
+    return keys[index] ?? null;
+  }
+
+  getItem(key: string): string | null {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      if (this.cache.has(key)) {
+        return this.cache.get(key) ?? null;
+      }
+
+      const fallback = this.baseStorage?.getItem(key) ?? null;
+      if (fallback !== null) {
+        this.cache.set(key, fallback);
+        return fallback;
+      }
+
+      return null;
+    }
+
+    return this.baseStorage?.getItem(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      this.cache.set(key, value);
+      if (this.indexedDbAvailable) {
+        void this.persistToIndexedDb(key, value);
+        try {
+          this.baseStorage?.removeItem(key);
+        } catch (error) {
+          console.warn('Failed to remove migrated key from localStorage', error);
+        }
+      } else {
+        this.baseStorage?.setItem(key, value);
+      }
+      return;
+    }
+
+    this.baseStorage?.setItem(key, value);
+  }
+
+  removeItem(key: string): void {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      this.cache.delete(key);
+      if (this.indexedDbAvailable) {
+        void this.persistToIndexedDb(key, null);
+        try {
+          this.baseStorage?.removeItem(key);
+        } catch (error) {
+          console.warn('Failed to remove migrated key from localStorage', error);
+        }
+      } else {
+        this.baseStorage?.removeItem(key);
+      }
+      return;
+    }
+
+    this.baseStorage?.removeItem(key);
+  }
+
+  ready(): Promise<void> {
+    return this.initialization;
+  }
+
+  private primeCacheFromBaseStorage(): void {
+    if (!this.baseStorage) {
+      return;
+    }
+
+    OFFLOADED_STORAGE_KEYS.forEach((key) => {
+      const value = this.baseStorage?.getItem(key);
+      if (typeof value === 'string') {
+        this.cache.set(key, value);
+      }
+    });
+  }
+
+  private async initialize(): Promise<void> {
+    if (!isIndexedDbAvailable()) {
+      return;
+    }
+
+    try {
+      await openIndexedDb();
+      this.indexedDbAvailable = true;
+    } catch (error) {
+      this.indexedDbAvailable = false;
+      throw error;
+    }
+
+    for (const key of OFFLOADED_STORAGE_KEYS) {
+      try {
+        const indexedDbValue = await readIndexedDbValue(key);
+
+        if (indexedDbValue !== null) {
+          this.cache.set(key, indexedDbValue);
+          this.baseStorage?.removeItem(key);
+          continue;
+        }
+
+        const fallback = this.baseStorage?.getItem(key);
+        if (fallback !== null && typeof fallback !== 'undefined') {
+          this.cache.set(key, fallback);
+          await writeIndexedDbValue(key, fallback);
+          this.baseStorage?.removeItem(key);
+        }
+      } catch (error) {
+        console.warn(`Failed to migrate key ${key} to IndexedDB`, error);
+      }
+    }
+
+    await this.migrateLegacyLocalStorageSnapshots();
+  }
+
+  private async persistToIndexedDb(key: string, value: string | null): Promise<void> {
+    try {
+      await writeIndexedDbValue(key, value);
+    } catch (error) {
+      console.error('Failed to persist snapshot to IndexedDB', error);
+    }
+  }
+
+  private listKeys(): string[] {
+    const keys = new Set<string>();
+
+    if (this.baseStorage) {
+      for (let index = 0; index < this.baseStorage.length; index += 1) {
+        const key = this.baseStorage.key(index);
+        if (key && !OFFLOADED_STORAGE_KEYS.has(key)) {
+          keys.add(key);
+        }
+      }
+    }
+
+    OFFLOADED_STORAGE_KEYS.forEach((key) => {
+      if (this.cache.has(key)) {
+        keys.add(key);
+      }
+    });
+
+    return Array.from(keys);
+  }
+
+  private async migrateLegacyLocalStorageSnapshots(): Promise<void> {
+    const windowLocalStorage = getWindowLocalStorage();
+    if (!windowLocalStorage || windowLocalStorage === this.baseStorage) {
+      return;
+    }
+
+    for (const key of OFFLOADED_STORAGE_KEYS) {
+      const legacyValue = windowLocalStorage.getItem(key);
+      if (legacyValue === null) {
+        continue;
+      }
+
+      try {
+        const indexedDbValue = await readIndexedDbValue(key);
+        if (indexedDbValue === null) {
+          await writeIndexedDbValue(key, legacyValue);
+          this.cache.set(key, legacyValue);
+        }
+
+        windowLocalStorage.removeItem(key);
+      } catch (error) {
+        console.warn(`Failed to migrate legacy localStorage value for ${key} to IndexedDB`, error);
+      }
+    }
+  }
+}
+
 export interface AppPersistenceOptions {
   storage?: StorageLike | null;
   eventTarget?: EventTarget | null;
@@ -67,6 +366,8 @@ export interface PersistPartialSnapshot
 export class AppPersistence {
   private storage: StorageLike | null;
 
+  private storageReady: Promise<void>;
+
   private eventTarget: EventTarget | null;
 
   private readonly debounceMs: number;
@@ -76,16 +377,23 @@ export class AppPersistence {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AppPersistenceOptions = {}) {
-    const fallbackStorage =
+    const baseStorage =
       typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
         ? window.localStorage
         : null;
+    const fallbackStorage = baseStorage ? new IndexedDbBackedStorage(baseStorage) : null;
     this.storage = options.storage ?? fallbackStorage;
+    this.storageReady =
+      this.storage instanceof IndexedDbBackedStorage ? this.storage.ready() : Promise.resolve();
 
     const fallbackEventTarget = typeof window !== 'undefined' ? window : null;
     this.eventTarget = options.eventTarget ?? fallbackEventTarget;
 
     this.debounceMs = typeof options.debounceMs === 'number' ? options.debounceMs : 250;
+  }
+
+  whenReady(): Promise<void> {
+    return this.storageReady;
   }
 
   loadSnapshot(): GachaLocalStorageSnapshot {
@@ -574,7 +882,9 @@ export class AppPersistence {
     }
 
     if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      this.storage = window.localStorage;
+      const nextStorage = new IndexedDbBackedStorage(window.localStorage);
+      this.storage = nextStorage;
+      this.storageReady = nextStorage.ready();
     }
 
     return this.storage;

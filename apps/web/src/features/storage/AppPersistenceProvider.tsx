@@ -28,19 +28,44 @@ const AppPersistenceContext =
   globalObject[APP_PERSISTENCE_CONTEXT_KEY] ??
   (globalObject[APP_PERSISTENCE_CONTEXT_KEY] = createContext<AppPersistenceContextValue | null>(null));
 
-export function AppPersistenceProvider({ children }: PropsWithChildren): JSX.Element {
-  const [value] = useState<AppPersistenceContextValue>(() => {
-    const persistence = new AppPersistence();
-    const stores = createDomainStores(persistence);
-    return { persistence, stores };
-  });
+export function AppPersistenceProvider({ children }: PropsWithChildren): JSX.Element | null {
+  const [value, setValue] = useState<AppPersistenceContextValue | null>(null);
 
   useEffect(() => {
+    let active = true;
+    const persistence = new AppPersistence();
+
+    void persistence
+      .whenReady()
+      .catch((error) => {
+        console.warn('Failed to prepare app persistence; continuing with fallback storage', error);
+      })
+      .then(() => {
+        if (!active) {
+          return;
+        }
+        const stores = createDomainStores(persistence);
+        setValue({ persistence, stores });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!value) {
+      return;
+    }
     value.stores.activate();
     return () => {
       value.stores.dispose();
     };
   }, [value]);
+
+  if (!value) {
+    return null;
+  }
 
   return <AppPersistenceContext.Provider value={value}>{children}</AppPersistenceContext.Provider>;
 }
