@@ -8,6 +8,7 @@ import {
   type RiaguStateV3,
   type SaveOptionsSnapshotV3,
   type UiPreferencesStateV3,
+  type UserInventorySnapshotV3,
   type UserInventoriesStateV3,
   type UserProfilesStateV3,
   type GachaAppStateV3,
@@ -32,6 +33,9 @@ export const STORAGE_KEYS = {
   receivePrefs: 'gacha:receive:prefs:v3',
   pullHistory: 'gacha:pull-history:v1'
 } as const;
+
+const USER_INVENTORY_INDEX_KEY = 'gacha:user-inventories:index:v3';
+const USER_INVENTORY_USER_KEY_PREFIX = 'gacha:user-inventories:user:v3:';
 
 type StorageKey = keyof typeof STORAGE_KEYS;
 
@@ -93,7 +97,7 @@ export class AppPersistence {
       appState: this.readJson<GachaAppStateV3>('appState'),
       catalogState: this.readJson<GachaCatalogStateV3>('catalogState'),
       rarityState: this.readJson<GachaRarityStateV3>('rarityState'),
-      userInventories: this.readJson<UserInventoriesStateV3>('userInventories'),
+      userInventories: this.loadUserInventories(),
       userProfiles: this.readJson<UserProfilesStateV3>('userProfiles'),
       hitCounts: this.readJson<HitCountsStateV3>('hitCounts'),
       riaguState: this.readJson<RiaguStateV3>('riaguState'),
@@ -305,6 +309,7 @@ export class AppPersistence {
     }
 
     try {
+      this.clearUserInventoryEntries(storage);
       Object.values(STORAGE_KEYS).forEach((key) => {
         storage.removeItem(key);
       });
@@ -430,9 +435,83 @@ export class AppPersistence {
     }
   }
 
+  private loadUserInventories(): UserInventoriesStateV3 | undefined {
+    const storage = this.ensureStorage();
+    if (!storage) {
+      return undefined;
+    }
+
+    const index = this.readUserInventoryIndex(storage);
+    if (!index) {
+      return this.readJson<UserInventoriesStateV3>('userInventories');
+    }
+
+    const inventories: UserInventoriesStateV3['inventories'] = {};
+    const byItemId: UserInventoriesStateV3['byItemId'] = {};
+
+    index.users.forEach((userId) => {
+      const raw = storage.getItem(this.userInventoryStorageKey(userId));
+      if (!raw) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as {
+          version?: number;
+          updatedAt?: string;
+          inventories?: Record<string, UserInventorySnapshotV3>;
+          byItemId?: Record<
+            string,
+            Array<{
+              gachaId: string;
+              rarityId: string;
+              count: number;
+            }>
+          >;
+        };
+
+        if (parsed.inventories && Object.keys(parsed.inventories).length > 0) {
+          inventories[userId] = parsed.inventories;
+        }
+
+        if (parsed.byItemId) {
+          this.mergeUserByItemEntries(byItemId, parsed.byItemId, userId);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to parse segmented user inventory for ${this.userInventoryStorageKey(userId)}`,
+          error
+        );
+      }
+    });
+
+    if (Object.keys(inventories).length === 0 && Object.keys(byItemId).length === 0) {
+      console.info(
+        '【デバッグ】分割保存されたユーザー在庫が空のため、旧フォーマットの一括保存キーから読み込みます',
+        {
+          インデックスキー: USER_INVENTORY_INDEX_KEY,
+          一括保存キー: STORAGE_KEYS.userInventories
+        }
+      );
+      return this.readJson<UserInventoriesStateV3>('userInventories');
+    }
+
+    return {
+      version: typeof index.version === 'number' ? index.version : 3,
+      updatedAt: typeof index.updatedAt === 'string' ? index.updatedAt : new Date().toISOString(),
+      inventories,
+      byItemId
+    } satisfies UserInventoriesStateV3;
+  }
+
   private persistValue(key: StorageKey, value: unknown): void {
     const storage = this.ensureStorage();
     if (!storage) {
+      return;
+    }
+
+    if (key === 'userInventories') {
+      this.persistUserInventories(value as UserInventoriesStateV3 | undefined);
       return;
     }
 
@@ -441,7 +520,9 @@ export class AppPersistence {
     if (!hasValue) {
       storage.removeItem(storageKey);
     } else {
-      storage.setItem(storageKey, JSON.stringify(value));
+      const description = this.describeStorageKey(key);
+      const serialized = this.serializeForPersistence(value, description);
+      this.writeToStorage(storage, storageKey, serialized, description);
     }
 
     const label = STORAGE_KEY_LABELS[key];
@@ -450,6 +531,197 @@ export class AppPersistence {
         ストレージキー: storageKey,
         永続化状態: hasValue ? '保存済み' : '未保存'
       });
+    }
+  }
+
+  private persistUserInventories(state: UserInventoriesStateV3 | undefined): void {
+    const storage = this.ensureStorage();
+    if (!storage) {
+      return;
+    }
+
+    const description = this.describeStorageKey('userInventories');
+    const previousIndex = this.readUserInventoryIndex(storage);
+    const existingUsers = previousIndex?.users ?? [];
+
+    if (!state || !state.inventories || Object.keys(state.inventories).length === 0) {
+      this.clearUserInventoryEntries(storage, existingUsers);
+      console.info(`【デバッグ】ユーザー在庫をローカルストレージから削除しました`, {
+        インデックスキー: USER_INVENTORY_INDEX_KEY,
+        削除対象ユーザー数: existingUsers.length
+      });
+      return;
+    }
+
+    const userIds = Object.keys(state.inventories).filter(Boolean);
+    const serializedIndex = this.serializeForPersistence(
+      {
+        version: typeof state.version === 'number' ? state.version : 3,
+        updatedAt: state.updatedAt,
+        users: userIds
+      },
+      `${description}のインデックス`
+    );
+
+    this.writeToStorage(storage, USER_INVENTORY_INDEX_KEY, serializedIndex, `${description}のインデックス`);
+
+    const staleUsers = existingUsers.filter((userId) => !userIds.includes(userId));
+    this.clearUserInventoryEntries(storage, staleUsers, false);
+
+    userIds.forEach((userId) => {
+      const perUserPayload = {
+        version: typeof state.version === 'number' ? state.version : 3,
+        updatedAt: state.updatedAt,
+        inventories: state.inventories?.[userId] ?? {},
+        byItemId: this.extractUserByItemEntries(state.byItemId, userId)
+      };
+
+      const serialized = this.serializeForPersistence(
+        perUserPayload,
+        `${description}:${userId}`
+      );
+      this.writeToStorage(
+        storage,
+        this.userInventoryStorageKey(userId),
+        serialized,
+        `${description}:${userId}`
+      );
+    });
+
+    storage.removeItem(STORAGE_KEYS.userInventories);
+
+    console.info(`【デバッグ】ユーザー在庫をローカルストレージに保存しました`, {
+      インデックスキー: USER_INVENTORY_INDEX_KEY,
+      ユーザー数: userIds.length
+    });
+  }
+
+  private describeStorageKey(key: StorageKey): string {
+    const label = STORAGE_KEY_LABELS[key];
+    const storageKey = STORAGE_KEYS[key];
+    return label ? `${storageKey}（${label}）` : storageKey;
+  }
+
+  private serializeForPersistence(value: unknown, description: string): string {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      if (this.isInvalidStringLengthError(error)) {
+        throw new Error(
+          `保存対象データが大きすぎるため ${description} を文字列化できませんでした。データ量を減らしてから再度お試しください。`
+        );
+      }
+      throw error;
+    }
+  }
+
+  private writeToStorage(storage: StorageLike, storageKey: string, serialized: string, description: string): void {
+    try {
+      storage.setItem(storageKey, serialized);
+    } catch (error) {
+      if (this.isQuotaExceededError(error)) {
+        const sizeKb = Math.round(serialized.length / 1024);
+        throw new Error(
+          `ローカルストレージの容量を超えたため ${description} を保存できませんでした。` +
+            ` 保存対象データの概算サイズは約${sizeKb}KBです。不要なデータを削除してから再度お試しください。`
+        );
+      }
+      throw error;
+    }
+  }
+
+  private readUserInventoryIndex(storage: StorageLike): { version?: number; updatedAt?: string; users: string[] } | null {
+    const raw = storage.getItem(USER_INVENTORY_INDEX_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray((parsed as Record<string, unknown>).users)
+      ) {
+        const users = (parsed as { users?: unknown }).users as string[];
+        return { ...parsed, users: users.filter(Boolean) };
+      }
+    } catch (error) {
+      console.warn(`Failed to parse user inventory index for key ${USER_INVENTORY_INDEX_KEY}`, error);
+    }
+
+    return null;
+  }
+
+  private userInventoryStorageKey(userId: string): string {
+    return `${USER_INVENTORY_USER_KEY_PREFIX}${encodeURIComponent(userId)}`;
+  }
+
+  private extractUserByItemEntries(
+    byItemId: UserInventoriesStateV3['byItemId'] | undefined,
+    userId: string
+  ): Record<string, Array<{ gachaId: string; rarityId: string; count: number }>> {
+    if (!byItemId) {
+      return {};
+    }
+
+    const result: Record<string, Array<{ gachaId: string; rarityId: string; count: number }>> = {};
+
+    Object.entries(byItemId).forEach(([itemId, entries]) => {
+      if (!entries) {
+        return;
+      }
+
+      const userEntries = entries
+        .filter((entry) => entry?.userId === userId)
+        .map((entry) => ({ gachaId: entry.gachaId, rarityId: entry.rarityId, count: entry.count }));
+
+      if (userEntries.length > 0) {
+        result[itemId] = userEntries;
+      }
+    });
+
+    return result;
+  }
+
+  private mergeUserByItemEntries(
+    target: UserInventoriesStateV3['byItemId'],
+    source: Record<string, Array<{ gachaId: string; rarityId: string; count: number }>>,
+    userId: string
+  ): void {
+    Object.entries(source).forEach(([itemId, entries]) => {
+      if (!entries) {
+        return;
+      }
+
+      const nextEntries = target[itemId] ?? [];
+      entries.forEach((entry) => {
+        if (entry) {
+          nextEntries.push({ ...entry, userId });
+        }
+      });
+
+      if (nextEntries.length > 0) {
+        target[itemId] = nextEntries;
+      }
+    });
+  }
+
+  private clearUserInventoryEntries(
+    storage: StorageLike,
+    userIds: string[] = [],
+    removeIndex = true
+  ): void {
+    const index = userIds.length > 0 ? { users: userIds } : this.readUserInventoryIndex(storage);
+    const users = index?.users ?? [];
+
+    users.forEach((userId) => {
+      storage.removeItem(this.userInventoryStorageKey(userId));
+    });
+
+    if (removeIndex) {
+      storage.removeItem(USER_INVENTORY_INDEX_KEY);
+      storage.removeItem(STORAGE_KEYS.userInventories);
     }
   }
 
@@ -590,6 +862,26 @@ export class AppPersistence {
     }
 
     return this.eventTarget;
+  }
+
+  private isQuotaExceededError(error: unknown): boolean {
+    if (error instanceof DOMException) {
+      return error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014;
+    }
+
+    if (error && typeof error === 'object' && 'name' in error && typeof error.name === 'string') {
+      return error.name === 'QuotaExceededError';
+    }
+
+    return false;
+  }
+
+  private isInvalidStringLengthError(error: unknown): boolean {
+    if (!(error instanceof RangeError)) {
+      return false;
+    }
+
+    return typeof error.message === 'string' && error.message.includes('Invalid string length');
   }
 
   private scheduleRetry(): void {
