@@ -24,6 +24,9 @@ export function QuickSendConfirmDialog({
           <p className="text-sm leading-relaxed text-muted-foreground">
             Newタグが付いたものだけを送りますか？
           </p>
+          <p className="text-xs text-muted-foreground">
+            ※過去に引いた未送信分は今回の送信対象に含まれません。
+          </p>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"

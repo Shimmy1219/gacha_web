@@ -711,6 +711,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         id: 'quick-send-confirm',
         title: '送信対象の確認',
         size: 'sm',
+        panelClassName: 'overflow-hidden',
         payload: {
           onConfirm: (result) => finalize(result)
         },
@@ -986,6 +987,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         if (!sendResponse.ok || !sendPayload.ok) {
           throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
+        }
+
+        if (zip.pullIds.length > 0) {
+          pullHistory.markPullStatus(zip.pullIds, 'discord_shared');
         }
 
         const sharedAt = new Date().toISOString();
