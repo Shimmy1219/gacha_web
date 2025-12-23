@@ -102,12 +102,19 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [currentThumbnailAssetId, setCurrentThumbnailAssetId] = useState<string | null>(
     initialState.thumbnailAssetId
   );
+  const [isImageCleared, setIsImageCleared] = useState(false);
   const [unsavedAssetId, setUnsavedAssetId] = useState<string | null>(null);
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
   const assetRequestIdRef = useRef(0);
+  const selectionBaseRef = useRef<{
+    assetId: string | null;
+    thumbnailAssetId: string | null;
+    isCleared: boolean;
+  } | null>(null);
   const unsavedAssetIdRef = useRef<string | null>(null);
-  const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null, {
-    previewAssetId: payload?.thumbnailAssetId ?? null
+  const shouldLoadStoredAsset = !selectedFile;
+  const storedAssetPreview = useAssetPreview(shouldLoadStoredAsset ? currentAssetId : null, {
+    previewAssetId: shouldLoadStoredAsset ? currentThumbnailAssetId : null
   });
 
   const rarityOptionMap = useMemo(() => {
@@ -193,11 +200,15 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     };
   }, []);
 
-  const currentPreview = previewUrl ?? existingAssetPreview.url ?? payload?.thumbnailUrl ?? null;
-  const previewType = selectedFile?.type ?? existingAssetPreview.type ?? (currentPreview ? 'image/*' : null);
+  const currentPreview =
+    previewUrl ?? (isImageCleared ? null : storedAssetPreview.url ?? payload?.thumbnailUrl ?? null);
+  const previewType = selectedFile?.type ?? storedAssetPreview.type ?? (currentPreview ? 'image/*' : null);
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
   const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
   const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
+  const canRemoveImage = Boolean(
+    currentAssetId || currentThumbnailAssetId || currentPreview || (!isImageCleared && payload?.thumbnailUrl)
+  );
 
   const handleFileChange = async (file: File | null) => {
     revokePreview();
@@ -206,17 +217,32 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       const requestId = assetRequestIdRef.current + 1;
       assetRequestIdRef.current = requestId;
       setSelectedFile(null);
+      const baseState = selectionBaseRef.current ?? {
+        assetId: initialState.assetId ?? null,
+        thumbnailAssetId: initialState.thumbnailAssetId ?? null,
+        isCleared: false
+      };
+      selectionBaseRef.current = null;
       if (unsavedAssetId) {
         await deleteAsset(unsavedAssetId);
         setUnsavedAssetId(null);
         unsavedAssetIdRef.current = null;
       }
-      setCurrentAssetId(initialState.assetId ?? null);
-      setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
+      setCurrentAssetId(baseState.assetId);
+      setCurrentThumbnailAssetId(baseState.thumbnailAssetId);
+      setIsImageCleared(baseState.isCleared);
       setIsProcessingAsset(false);
       return;
     }
 
+    if (!selectionBaseRef.current) {
+      selectionBaseRef.current = {
+        assetId: currentAssetId ?? null,
+        thumbnailAssetId: currentThumbnailAssetId ?? null,
+        isCleared: isImageCleared
+      };
+    }
+    setIsImageCleared(false);
     const requestId = assetRequestIdRef.current + 1;
     assetRequestIdRef.current = requestId;
     setIsProcessingAsset(true);
@@ -242,9 +268,15 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     } catch (error) {
       console.error('ファイルの保存に失敗しました', error);
       if (assetRequestIdRef.current === requestId) {
+        const baseState = selectionBaseRef.current ?? {
+          assetId: initialState.assetId ?? null,
+          thumbnailAssetId: initialState.thumbnailAssetId ?? null,
+          isCleared: false
+        };
         setSelectedFile(null);
-        setCurrentAssetId(initialState.assetId ?? null);
-        setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
+        setCurrentAssetId(baseState.assetId);
+        setCurrentThumbnailAssetId(baseState.thumbnailAssetId);
+        setIsImageCleared(baseState.isCleared);
         revokePreview();
       }
     } finally {
@@ -262,6 +294,25 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
   const handleClearImage = () => {
     void handleFileChange(null);
+  };
+
+  const handleRemoveImage = async () => {
+    assetRequestIdRef.current += 1;
+    selectionBaseRef.current = null;
+
+    revokePreview();
+    setSelectedFile(null);
+    setIsImageCleared(true);
+
+    if (unsavedAssetId) {
+      await deleteAsset(unsavedAssetId);
+      setUnsavedAssetId(null);
+      unsavedAssetIdRef.current = null;
+    }
+
+    setCurrentAssetId(null);
+    setCurrentThumbnailAssetId(null);
+    setIsProcessingAsset(false);
   };
 
   const hasChanges =
@@ -410,11 +461,21 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             取り消す
           </button>
         ) : null}
+        {canRemoveImage ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+            onClick={() => void handleRemoveImage()}
+          >
+            <XMarkIcon className="h-4 w-4" />
+            画像を削除
+          </button>
+        ) : null}
       </div>
       {selectedFile ? (
         <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
-      ) : existingAssetPreview.name ? (
-        <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {existingAssetPreview.name}</p>
+      ) : storedAssetPreview.name ? (
+        <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {storedAssetPreview.name}</p>
       ) : null}
       {isProcessingAsset ? (
         <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
