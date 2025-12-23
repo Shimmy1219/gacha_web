@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent
+  type PointerEvent as ReactPointerEvent
 } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -13,15 +13,113 @@ import { type ItemId } from '../../pages/gacha/components/cards/ItemCard';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 
+interface ItemAssetPreviewEntry {
+  assetId: string;
+  thumbnailAssetId?: string | null;
+}
+
 export interface ItemAssetPreviewDialogPayload {
   itemId: ItemId;
   itemName: string;
   gachaName: string;
   rarityLabel: string;
   rarityColor: string;
+  assets?: ItemAssetPreviewEntry[];
   assetHash: string | null;
   thumbnailAssetId: string | null;
   thumbnailUrl: string | null;
+}
+
+function normalizeAssets(entries: ItemAssetPreviewEntry[] | null | undefined): ItemAssetPreviewEntry[] {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: ItemAssetPreviewEntry[] = [];
+
+  entries.forEach((entry) => {
+    if (!entry?.assetId) {
+      return;
+    }
+    if (seen.has(entry.assetId)) {
+      return;
+    }
+    seen.add(entry.assetId);
+    normalized.push({
+      assetId: entry.assetId,
+      thumbnailAssetId: entry.thumbnailAssetId ?? null
+    });
+  });
+
+  return normalized;
+}
+
+function clampIndex(index: number, length: number): number {
+  if (length <= 0) {
+    return 0;
+  }
+  if (index < 0) {
+    return 0;
+  }
+  if (index >= length) {
+    return length - 1;
+  }
+  return index;
+}
+
+interface AssetSlideProps {
+  asset: ItemAssetPreviewEntry;
+  itemName: string;
+  isActive: boolean;
+}
+
+function AssetSlide({ asset, itemName, isActive }: AssetSlideProps): JSX.Element {
+  const preview = useAssetPreview(asset.assetId, {
+    loadOriginal: isActive,
+    previewAssetId: asset.thumbnailAssetId ?? null
+  });
+  const previewUrl = preview.url ?? null;
+  const previewType = preview.type ?? (previewUrl ? 'image/*' : null);
+  const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
+  const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
+  const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
+
+  if (isImagePreview && previewUrl) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center transition-transform duration-200 ease-out will-change-transform"
+      >
+        <img
+          src={previewUrl}
+          alt={itemName}
+          draggable={false}
+          className="max-h-full w-auto max-w-full object-contain"
+          style={{ transform: 'translateZ(0)' }}
+        />
+      </div>
+    );
+  }
+
+  if (isVideoPreview && previewUrl) {
+    return <video controls src={previewUrl} className="max-h-full w-full max-w-full rounded-xl bg-black" />;
+  }
+
+  if (isAudioPreview && previewUrl) {
+    return (
+      <div className="flex w-full max-w-2xl flex-col items-center gap-4">
+        <MusicalNoteIcon className="h-16 w-16 text-muted-foreground" />
+        <audio controls src={previewUrl} className="w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+      <PhotoIcon className="h-16 w-16" />
+      <p className="text-sm">プレビューを表示できません。</p>
+    </div>
+  );
 }
 
 export function ItemAssetPreviewDialog({
@@ -43,147 +141,132 @@ export function ItemAssetPreviewDialog({
     );
   }
 
-  const { assetHash, thumbnailAssetId, thumbnailUrl, itemName, rarityColor, rarityLabel } = payload;
-  const preview = useAssetPreview(assetHash, {
+  const { assetHash, thumbnailAssetId, itemName, rarityColor, rarityLabel } = payload;
+  const normalizedAssets = normalizeAssets(payload.assets);
+  const assets =
+    normalizedAssets.length > 0
+      ? normalizedAssets
+      : assetHash
+        ? [{ assetId: assetHash, thumbnailAssetId: thumbnailAssetId ?? null }]
+        : [];
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartXRef = useRef<number | null>(null);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setActiveIndex((current) => clampIndex(current, assets.length));
+  }, [assets.length]);
+
+  const activeAsset = assets[activeIndex] ?? null;
+  const preview = useAssetPreview(activeAsset?.assetId ?? null, {
     loadOriginal: true,
-    previewAssetId: thumbnailAssetId ?? null
+    previewAssetId: activeAsset?.thumbnailAssetId ?? null
   });
-  const previewUrl = preview.url ?? thumbnailUrl ?? null;
+  const previewUrl = preview.url ?? null;
   const previewType = preview.type ?? (previewUrl ? 'image/*' : null);
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
   const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
   const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
   const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明な形式';
   const assetName = preview.name ?? itemName;
+  const assetIndexLabel = assets.length > 1 ? `${activeIndex + 1} / ${assets.length}` : null;
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarityColor);
-  const tiltElementRef = useRef<HTMLDivElement | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const [isTiltEnabled, setIsTiltEnabled] = useState(false);
 
-  const applyTilt = useCallback((rotateX: number, rotateY: number, scale: number) => {
-    const element = tiltElementRef.current;
-    if (!element) {
-      return;
-    }
-
-    element.style.transform = `perspective(1200px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(${scale}, ${scale}, ${scale})`;
-  }, []);
-
-  const scheduleTilt = useCallback(
-    (rotateX: number, rotateY: number, scale: number) => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-      }
-
-      animationFrameRef.current = window.requestAnimationFrame(() => {
-        applyTilt(rotateX, rotateY, scale);
-        animationFrameRef.current = null;
-      });
+  const handleSelectIndex = useCallback(
+    (index: number) => {
+      setActiveIndex(clampIndex(index, assets.length));
+      setDragOffset(0);
+      setIsDragging(false);
+      dragStartXRef.current = null;
     },
-    [applyTilt]
+    [assets.length]
   );
 
-  const handleMouseMove = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!isTiltEnabled || !isImagePreview) {
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (assets.length <= 1) {
         return;
       }
-
-      const bounds = event.currentTarget.getBoundingClientRect();
-      const offsetX = event.clientX - bounds.left;
-      const offsetY = event.clientY - bounds.top;
-      const centerX = bounds.width / 2;
-      const centerY = bounds.height / 2;
-      const rotateX = ((centerY - offsetY) / centerY) * 10;
-      const rotateY = ((offsetX - centerX) / centerX) * 16;
-
-      scheduleTilt(rotateX, rotateY, 1.04);
+      dragStartXRef.current = event.clientX;
+      setIsDragging(true);
+      setDragOffset(0);
+      event.currentTarget.setPointerCapture(event.pointerId);
     },
-    [isImagePreview, isTiltEnabled, scheduleTilt]
+    [assets.length]
   );
 
-  const handleMouseLeave = useCallback(() => {
-    if (!isTiltEnabled || !isImagePreview) {
-      return;
-    }
-
-    scheduleTilt(0, 0, 1);
-  }, [isImagePreview, isTiltEnabled, scheduleTilt]);
-
-  const handleMouseEnter = useCallback(() => {
-    if (!isTiltEnabled || !isImagePreview) {
-      return;
-    }
-
-    scheduleTilt(0, 0, 1.02);
-  }, [isImagePreview, isTiltEnabled, scheduleTilt]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const pointerFineQuery = window.matchMedia('(pointer: fine)');
-    const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-
-    const computeEnabled = () => pointerFineQuery.matches && !reducedMotionQuery.matches;
-
-    const updateEnabled = () => {
-      setIsTiltEnabled(computeEnabled());
-    };
-
-    updateEnabled();
-
-    const attachListener = (query: MediaQueryList, listener: () => void) => {
-      if (typeof query.addEventListener === 'function') {
-        query.addEventListener('change', listener);
-        return () => {
-          query.removeEventListener('change', listener);
-        };
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isDragging) {
+        return;
       }
-
-      query.addListener(listener);
-      return () => {
-        query.removeListener(listener);
-      };
-    };
-
-    const detachPointerListener = attachListener(pointerFineQuery, updateEnabled);
-    const detachMotionListener = attachListener(reducedMotionQuery, updateEnabled);
-
-    return () => {
-      detachPointerListener();
-      detachMotionListener();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (animationFrameRef.current !== null) {
-      window.cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-
-    if (isImagePreview) {
-      scheduleTilt(0, 0, 1);
-    }
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
+      const startX = dragStartXRef.current;
+      if (startX == null) {
+        return;
       }
-    };
-  }, [isImagePreview, previewUrl, scheduleTilt]);
+      setDragOffset(event.clientX - startX);
+    },
+    [isDragging]
+  );
+
+  const finalizeSwipe = useCallback(
+    (delta: number) => {
+      if (assets.length <= 1) {
+        return;
+      }
+      const width = carouselRef.current?.clientWidth ?? 280;
+      const threshold = Math.max(40, Math.min(120, width * 0.2));
+      if (Math.abs(delta) < threshold) {
+        return;
+      }
+      handleSelectIndex(delta < 0 ? activeIndex + 1 : activeIndex - 1);
+    },
+    [activeIndex, assets.length, handleSelectIndex]
+  );
+
+  const handlePointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isDragging) {
+        return;
+      }
+      const delta = dragOffset;
+      setIsDragging(false);
+      setDragOffset(0);
+      dragStartXRef.current = null;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      finalizeSwipe(delta);
+    },
+    [dragOffset, finalizeSwipe, isDragging]
+  );
+
+  const handlePointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isDragging) {
+        return;
+      }
+      setIsDragging(false);
+      setDragOffset(0);
+      dragStartXRef.current = null;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    },
+    [isDragging]
+  );
+
+  const trackStyle = {
+    transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))`,
+    transition: isDragging ? 'none' : 'transform 320ms ease'
+  } as const;
 
   return (
     <>
       <ModalBody className="flex flex-1 flex-col gap-6 space-y-0 overflow-y-auto">
         <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">{typeLabel}</span>
+          {assetIndexLabel ? (
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">{assetIndexLabel}</span>
+          ) : null}
           <span
             className={clsx('rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold', rarityClassName)}
             style={rarityStyle}
@@ -195,31 +278,33 @@ export function ItemAssetPreviewDialog({
           <p className="text-sm text-muted-foreground">{assetName}</p>
         ) : null}
         <div
-          className="relative flex h-[min(70vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-surface-deep p-4"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onMouseEnter={handleMouseEnter}
-          style={isTiltEnabled ? { perspective: '1200px' } : undefined}
+          ref={carouselRef}
+          className={clsx(
+            'relative flex h-[min(70vh,720px)] w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-surface-deep p-4',
+            assets.length > 1 && 'cursor-grab active:cursor-grabbing'
+          )}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          style={{
+            ...(assets.length > 1 ? { touchAction: 'pan-y' } : {})
+          }}
         >
-          {isImagePreview && previewUrl ? (
+          {assets.length > 0 ? (
             <div
-              ref={tiltElementRef}
-              className="flex h-full w-full items-center justify-center transition-transform duration-200 ease-out will-change-transform"
-              style={{ transformStyle: 'preserve-3d' }}
+              className="flex h-full w-full"
+              style={trackStyle}
             >
-              <img
-                src={previewUrl}
-                alt={itemName}
-                className="max-h-full w-auto max-w-full object-contain"
-                style={{ transform: 'translateZ(0)' }}
-              />
-            </div>
-          ) : isVideoPreview && previewUrl ? (
-            <video controls src={previewUrl} className="max-h-full w-full max-w-full rounded-xl bg-black" />
-          ) : isAudioPreview && previewUrl ? (
-            <div className="flex w-full max-w-2xl flex-col items-center gap-4">
-              <MusicalNoteIcon className="h-16 w-16 text-muted-foreground" />
-              <audio controls src={previewUrl} className="w-full" />
+              {assets.map((asset, index) => (
+                <div key={asset.assetId} className="flex h-full w-full flex-shrink-0 items-center justify-center">
+                  <AssetSlide
+                    asset={asset}
+                    itemName={itemName}
+                    isActive={index === activeIndex}
+                  />
+                </div>
+              ))}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-4 text-muted-foreground">
@@ -228,6 +313,24 @@ export function ItemAssetPreviewDialog({
             </div>
           )}
         </div>
+        {assets.length > 1 ? (
+          <div className="flex items-center justify-center gap-2">
+            {assets.map((asset, index) => (
+              <button
+                key={asset.assetId}
+                type="button"
+                className={clsx(
+                  'h-2.5 w-2.5 rounded-full border border-surface-foreground/30 transition',
+                  index === activeIndex
+                    ? 'bg-surface-foreground/80'
+                    : 'bg-surface-foreground/20 hover:bg-surface-foreground/40'
+                )}
+                aria-label={`${index + 1}枚目を表示`}
+                onClick={() => handleSelectIndex(index)}
+              />
+            ))}
+          </div>
+        ) : null}
       </ModalBody>
       <ModalFooter>
         <button type="button" className="btn btn-primary" onClick={close}>

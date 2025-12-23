@@ -3,8 +3,8 @@ import { inflate, inflateRaw } from 'pako';
 import type {
   AppPersistence,
   GachaAppStateV3,
-  GachaCatalogItemV3,
-  GachaCatalogStateV3,
+  GachaCatalogItemV4,
+  GachaCatalogStateV4,
   GachaLocalStorageSnapshot,
   GachaRarityEntityV3,
   GachaRarityStateV3,
@@ -551,25 +551,25 @@ function buildNextRarityState(
 }
 
 function buildNextCatalogState(
-  previous: GachaCatalogStateV3 | undefined,
+  previous: GachaCatalogStateV4 | undefined,
   gachaId: string,
   items: ParsedItem[],
   rarityIdByLabel: Map<string, string>,
   nowIso: string
-): { state: GachaCatalogStateV3; itemIdByCode: Map<string, string> } {
-  const base: GachaCatalogStateV3 = previous
+): { state: GachaCatalogStateV4; itemIdByCode: Map<string, string> } {
+  const base: GachaCatalogStateV4 = previous
     ? {
         ...previous,
         byGacha: { ...(previous.byGacha ?? {}) }
       }
     : {
-        version: 3,
+        version: 4,
         updatedAt: nowIso,
         byGacha: {}
       };
 
   const itemIdByCode = new Map<string, string>();
-  const catalogItems: Record<string, GachaCatalogItemV3> = {};
+  const catalogItems: Record<string, GachaCatalogItemV4> = {};
   const order: string[] = [];
 
   items.forEach((item, index) => {
@@ -584,6 +584,7 @@ function buildNextCatalogState(
       order: index + 1,
       pickupTarget: false,
       completeTarget: false,
+      assets: [],
       updatedAt: nowIso
     };
     order.push(itemId);

@@ -27,7 +27,7 @@ function buildTestStates({
   const pickupSet = new Set(pickupTargets);
 
   const catalogState = {
-    version: 3,
+    version: 4,
     updatedAt: baseTimestamp,
     byGacha: {
       [gachaId]: {
@@ -37,7 +37,7 @@ function buildTestStates({
         )
       }
     }
-  } satisfies import('@domain/app-persistence').GachaCatalogStateV3;
+  } satisfies import('@domain/app-persistence').GachaCatalogStateV4;
 
   const rarityState = {
     version: 3,

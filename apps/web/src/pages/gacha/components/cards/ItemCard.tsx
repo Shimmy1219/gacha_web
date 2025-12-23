@@ -33,6 +33,7 @@ export interface ItemCardModel {
   rarityId: RarityId;
   name: string;
   imageAsset: ItemCardImageAsset;
+  additionalAssetCount: number;
   isRiagu: boolean;
   completeTarget: boolean;
   pickupTarget: boolean;
@@ -82,6 +83,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const previewAssetId = imageAsset?.thumbnailAssetId ?? null;
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
   const canPreviewAsset = Boolean(onPreviewAsset && (assetId || previewAssetId || fallbackUrl));
+  const additionalAssetCount = Math.max(0, model.additionalAssetCount ?? 0);
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
   const rarityTextStyle: CSSProperties = {
     display: 'inline-block',
@@ -147,18 +149,28 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           isMobile ? 'flex-row items-start' : 'flex-col'
         )}
       >
-        <ItemPreviewButton
-          onClick={handlePreviewClick}
-          canPreview={canPreviewAsset}
-          assetId={assetId}
-          previewAssetId={previewAssetId}
-          fallbackUrl={fallbackUrl}
-          alt={model.name}
-          emptyLabel="noImage"
-          aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
-          title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
-          className={clsx(isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}
-        />
+        <div className={clsx('relative', isMobile ? 'h-24 w-24 flex-shrink-0' : 'w-full')}>
+          <ItemPreviewButton
+            onClick={handlePreviewClick}
+            canPreview={canPreviewAsset}
+            assetId={assetId}
+            previewAssetId={previewAssetId}
+            fallbackUrl={fallbackUrl}
+            alt={model.name}
+            emptyLabel="noImage"
+            aria-label={canPreviewAsset ? `${model.name}のプレビューを開く` : undefined}
+            title={canPreviewAsset ? 'クリックしてプレビューを拡大' : undefined}
+            className="h-full w-full"
+          />
+          {additionalAssetCount > 0 ? (
+            <span
+              className="pointer-events-none absolute bottom-1 right-1 rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-900 shadow-sm dark:border-white/10 dark:bg-black/70 dark:text-white"
+              aria-hidden="true"
+            >
+              他{additionalAssetCount}枚
+            </span>
+          ) : null}
+        </div>
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>

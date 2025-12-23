@@ -30,7 +30,7 @@ import {
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import type {
   GachaAppStateV3,
-  GachaCatalogStateV3,
+  GachaCatalogStateV4,
   GachaRarityStateV3,
   UserProfileCardV3
 } from '@domain/app-persistence';
@@ -90,7 +90,7 @@ function formatNumber(value: number | null | undefined): string {
 
 function buildGachaDefinitions(
   appState: GachaAppStateV3 | undefined,
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   rarityState: GachaRarityStateV3 | undefined
 ): { options: Array<SingleSelectOption<string>>; map: Map<string, GachaDefinition> } {
   const options: Array<SingleSelectOption<string>> = [];
