@@ -488,13 +488,18 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         };
       });
 
+      const newItemIds = Array.from(
+        new Set(aggregatedItems.filter((item) => item.isNew).map((item) => item.itemId))
+      );
+
       const payload: GachaResultPayload = {
         gachaId: selectedGacha.id,
         userId,
         executedAt,
         pullCount: executionResult.totalPulls,
         currencyUsed: executionResult.pointsSpent,
-        items: itemsForStore
+        items: itemsForStore,
+        newItems: newItemIds.length > 0 ? newItemIds : undefined
       };
 
       console.info('【デバッグ】ガチャを引きました', {

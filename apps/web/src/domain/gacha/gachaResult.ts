@@ -11,4 +11,5 @@ export interface GachaResultPayload {
   pullCount: number;
   currencyUsed?: number;
   items: GachaResultItem[];
+  newItems?: string[];
 }

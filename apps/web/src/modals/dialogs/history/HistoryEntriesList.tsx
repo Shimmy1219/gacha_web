@@ -51,6 +51,7 @@ interface ItemEntryViewModel {
   rarityTextClassName?: string;
   rarityTextStyle?: CSSProperties;
   raritySortOrder: number;
+  isNew: boolean;
 }
 
 export interface HistoryEntriesListProps {
@@ -90,6 +91,8 @@ export function HistoryEntriesList({
             ? numberFormatter.format(entry.currencyUsed)
             : null;
 
+        const newItemSet = new Set(entry.newItems ?? []);
+
         const itemEntries = Object.entries(entry.itemCounts ?? {})
           .map(([itemId, rawCount]) => {
             const count = Number(rawCount);
@@ -111,7 +114,8 @@ export function HistoryEntriesList({
               rarityLabel,
               rarityTextClassName,
               rarityTextStyle,
-              raritySortOrder
+              raritySortOrder,
+              isNew: count > 0 && newItemSet.has(itemId)
             } satisfies ItemEntryViewModel;
           })
           .filter((value): value is ItemEntryViewModel => value !== null)
@@ -183,7 +187,16 @@ export function HistoryEntriesList({
                         </span>
                       </span>
                     ) : null}
-                    <span className="flex-1 font-medium">{item.itemLabel}</span>
+                    <span className="flex-1 font-medium">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span>{item.itemLabel}</span>
+                        {item.isNew ? (
+                          <span className="inline-flex h-5 items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-semibold leading-none text-emerald-700">
+                            new
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
                     <span className={clsx('font-mono text-sm', item.count < 0 ? 'text-red-500' : 'text-surface-foreground')}>
                       {formatCount(numberFormatter, item.count)}
                     </span>

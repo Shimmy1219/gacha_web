@@ -295,7 +295,8 @@ function aggregateHistoryItems(
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
   warnings: Set<string>,
   normalizedTargetUserId: string,
-  itemIdFilter?: Set<string> | null
+  itemIdFilter?: Set<string> | null,
+  newItemsOnlyPullIds?: Set<string> | null
 ): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
@@ -324,6 +325,9 @@ function aggregateHistoryItems(
       return;
     }
 
+    const newItemsOnly = Boolean(newItemsOnlyPullIds && newItemsOnlyPullIds.has(entryId));
+    const newItemsSet = newItemsOnly ? new Set(entry.newItems ?? []) : null;
+
     const normalizedPullCount = Number.isFinite(entry.pullCount)
       ? Math.max(0, Math.floor(entry.pullCount))
       : 0;
@@ -342,6 +346,9 @@ function aggregateHistoryItems(
         return;
       }
       if (itemIdFilter && !itemIdFilter.has(itemId)) {
+        return;
+      }
+      if (newItemsSet && !newItemsSet.has(itemId)) {
         return;
       }
 
@@ -523,12 +530,17 @@ export async function buildUserZipFromSelection({
   let historySelectionDetails: HistorySelectionMetadata[] = [];
   let includedPullIds: Set<string> = new Set();
   if (selection.mode === 'history') {
+    const newItemsOnlyPullIds =
+      selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
+        ? new Set(selection.newItemsOnlyPullIds)
+        : null;
     const historyAggregation = aggregateHistoryItems(
       snapshot,
       selection,
       warnings,
       normalizedUserId,
-      normalizedItemFilter
+      normalizedItemFilter,
+      newItemsOnlyPullIds
     );
     collected = historyAggregation.assets;
     historySelectionDetails = historyAggregation.pulls;
