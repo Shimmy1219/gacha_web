@@ -265,6 +265,7 @@ export interface PullHistoryEntryV1 {
   rarityCounts?: Record<string, number>;
   source: PullHistoryEntrySourceV1;
   status?: PullHistoryEntryStatus;
+  newItems?: string[];
 }
 
 export interface PullHistoryStateV1 {

@@ -19,6 +19,7 @@ interface AppendPullParams {
   rarityCounts?: Record<string, number>;
   source?: PullHistoryEntrySourceV1;
   id?: string;
+  newItems?: string[];
 }
 
 interface ReplacePullParams {
@@ -73,6 +74,19 @@ function normalizeUserIdValue(userId: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function normalizeNewItems(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const normalized = value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0);
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  return Array.from(new Set(normalized));
+}
+
 const PULL_HISTORY_STATUS_VALUES: readonly PullHistoryEntryStatus[] = ['new', 'ziped', 'uploaded', 'discord_shared'];
 
 function normalizeStatusValue(value: string | undefined): PullHistoryEntryStatus | undefined {
@@ -88,7 +102,8 @@ function normalizeEntry(entry: PullHistoryEntryV1 | undefined): PullHistoryEntry
   }
 
   const normalizedStatus = normalizeStatusValue(entry.status);
-  const { status: _ignoredStatus, ...rest } = entry;
+  const normalizedNewItems = normalizeNewItems(entry.newItems);
+  const { status: _ignoredStatus, newItems: _ignoredNewItems, ...rest } = entry;
   const normalizedEntry: PullHistoryEntryV1 = {
     ...rest,
     source: entry.source ?? 'insiteResult'
@@ -96,6 +111,9 @@ function normalizeEntry(entry: PullHistoryEntryV1 | undefined): PullHistoryEntry
 
   if (normalizedStatus) {
     normalizedEntry.status = normalizedStatus;
+  }
+  if (normalizedNewItems) {
+    normalizedEntry.newItems = normalizedNewItems;
   }
 
   return normalizedEntry;
@@ -166,7 +184,18 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
   }
 
   appendPull(params: AppendPullParams, options: UpdateOptions = { persist: 'immediate' }): string {
-    const { gachaId, userId, executedAt, pullCount, currencyUsed, itemCounts, rarityCounts, source, id } = params;
+    const {
+      gachaId,
+      userId,
+      executedAt,
+      pullCount,
+      currencyUsed,
+      itemCounts,
+      rarityCounts,
+      source,
+      id,
+      newItems
+    } = params;
 
     if (!gachaId) {
       console.warn('PullHistoryStore.appendPull called without gachaId', params);
@@ -184,6 +213,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     const sanitizedRarityCounts = sanitizeCounts(rarityCounts);
     const executedAtIso = ensureTimestamp(executedAt);
     const normalizedSource: PullHistoryEntrySourceV1 = source ?? 'insiteResult';
+    const normalizedNewItems = normalizeNewItems(newItems);
 
     this.update((previous) => {
       const base = normalizeState(previous ?? this.loadLatestState());
@@ -200,7 +230,8 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         itemCounts: sanitizedItemCounts,
         rarityCounts: Object.keys(sanitizedRarityCounts).length > 0 ? sanitizedRarityCounts : undefined,
         source: normalizedSource,
-        status: 'new'
+        status: 'new',
+        newItems: normalizedNewItems
       };
       nextPulls[entryId] = entry;
 
@@ -226,7 +257,7 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
   }
 
   recordGachaResult(result: GachaResultPayload, options: UpdateOptions = { persist: 'immediate' }): string {
-    const { gachaId, userId, executedAt, pullCount, currencyUsed, items } = result;
+    const { gachaId, userId, executedAt, pullCount, currencyUsed, items, newItems } = result;
 
     const normalizedGachaId = gachaId?.trim() ?? '';
     if (!normalizedGachaId) {
@@ -272,6 +303,9 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
     }, {});
 
     const normalizedUserId = normalizeUserIdValue(userId);
+    const normalizedNewItems = normalizeNewItems(newItems)?.filter((itemId) =>
+      Object.prototype.hasOwnProperty.call(itemCounts, itemId)
+    );
 
     const totalItemCount = Object.values(itemCounts).reduce((total, value) => total + value, 0);
     if (totalItemCount !== normalizedPullCount) {
@@ -290,7 +324,8 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
         pullCount: normalizedPullCount,
         currencyUsed,
         itemCounts,
-        rarityCounts
+        rarityCounts,
+        newItems: normalizedNewItems
       },
       options
     );
@@ -317,9 +352,11 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
 
       const nextPulls = { ...base.pulls };
       const previousEntry = base.pulls[entry.id];
-      const { status: incomingStatus, ...restEntry } = entry;
+      const { status: incomingStatus, newItems: incomingNewItems, ...restEntry } = entry;
       const normalizedStatus =
         normalizeStatusValue(incomingStatus) ?? normalizeStatusValue(previousEntry?.status);
+      const normalizedNewItems =
+        normalizeNewItems(incomingNewItems) ?? normalizeNewItems(previousEntry?.newItems);
       const nextEntry: PullHistoryEntryV1 = {
         ...restEntry,
         executedAt: ensureTimestamp(executedAtOverride ?? entry.executedAt),
@@ -329,6 +366,9 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
       };
       if (normalizedStatus) {
         nextEntry.status = normalizedStatus;
+      }
+      if (normalizedNewItems) {
+        nextEntry.newItems = normalizedNewItems;
       }
       nextPulls[entry.id] = nextEntry;
 
