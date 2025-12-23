@@ -605,6 +605,8 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                 {historyEntries.map((entry) => {
                   const statusLabel = getPullHistoryStatusLabel(entry.status);
+                  const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
+                  const newItemsSet = new Set(entry.newItems);
                   return (
                     <div
                       key={entry.id}
@@ -688,7 +690,12 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                                     {group.items.map((item) => (
                                       <span
                                         key={`${entry.id}-${groupKey}-${item.itemId}`}
-                                        className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px] text-surface-foreground/90"
+                                        className={clsx(
+                                          'inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px]',
+                                          newItemsOnlyActive && !newItemsSet.has(item.itemId)
+                                            ? 'text-muted-foreground opacity-40'
+                                            : 'text-surface-foreground/90'
+                                        )}
                                       >
                                         <span className="max-w-[10rem] truncate">{item.itemName}</span>
                                         {item.count > 1 ? (
