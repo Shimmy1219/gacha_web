@@ -73,7 +73,7 @@ function normalizeUserIdValue(userId: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-const PULL_HISTORY_STATUS_VALUES: readonly PullHistoryEntryStatus[] = ['new', 'ziped', 'uploaded'];
+const PULL_HISTORY_STATUS_VALUES: readonly PullHistoryEntryStatus[] = ['new', 'ziped', 'uploaded', 'discord_shared'];
 
 function normalizeStatusValue(value: string | undefined): PullHistoryEntryStatus | undefined {
   if (!value) {

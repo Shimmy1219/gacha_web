@@ -357,7 +357,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
     setUploadResult(result);
 
-    return { uploadResponse, result };
+    return { uploadResponse, result, zip };
   }, [
     discordSession?.user?.id,
     discordSession?.user?.name,
@@ -477,10 +477,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
 
     let uploadData: SaveOptionsUploadResult | null = null;
+    let pullIdsForStatus: string[] = [];
 
     try {
-      const { result } = await runZipUpload();
+      const { result, zip } = await runZipUpload();
       uploadData = result;
+      pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('Discord共有用ZIPアップロードがキャンセルされました');
@@ -687,6 +689,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           avatarUrl: profile?.discordAvatarUrl ?? undefined,
           share: shareInfo
         });
+        if (pullIdsForStatus.length > 0) {
+          pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
+        }
 
         setErrorBanner(null);
         setUploadNotice({
@@ -763,6 +768,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             avatarUrl: resolvedAvatarUrl,
             share: shareInfo
           });
+          if (pullIdsForStatus.length > 0) {
+            pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
+          }
           setUploadNotice({
             id: Date.now(),
             message: `${memberName}さんにDiscordで共有しました`

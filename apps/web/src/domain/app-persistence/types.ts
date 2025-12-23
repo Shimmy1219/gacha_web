@@ -251,7 +251,7 @@ export interface ReceivePrefsStateV3 {
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';
 
-export type PullHistoryEntryStatus = 'new' | 'ziped' | 'uploaded';
+export type PullHistoryEntryStatus = 'new' | 'ziped' | 'uploaded' | 'discord_shared';
 
 export interface PullHistoryEntryV1 {
   id: string;
