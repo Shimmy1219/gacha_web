@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   type GachaAppStateV3,
-  type GachaCatalogItemV3,
-  type GachaCatalogStateV3,
+  type GachaCatalogItemV4,
+  type GachaCatalogStateV4,
   type GachaRarityEntityV3,
   type GachaRarityStateV3,
   type PtSettingV3
@@ -44,17 +44,24 @@ interface DraftRarity extends RarityRateRow {
   color: string;
 }
 
+interface DraftItemAsset {
+  assetId: string;
+  thumbnailAssetId: string | null;
+  previewUrl: string;
+  originalFilename: string | null;
+}
+
 interface DraftItem {
   id: string;
-  assetId: string | null;
+  assets: DraftItemAsset[];
   name: string;
   originalFilename: string | null;
-  previewUrl: string;
-  thumbnailAssetId: string | null;
   isRiagu: boolean;
   isCompleteTarget: boolean;
   rarityId: string | null;
 }
+
+type SavedAsset = Awaited<ReturnType<typeof saveAsset>>;
 
 const INITIAL_RARITY_PRESETS = [
   { label: 'はずれ', emitRate: 0.8 },
@@ -87,6 +94,19 @@ function safeRevokeObjectURL(url: string): void {
   if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
     URL.revokeObjectURL(url);
   }
+}
+
+async function readFileAsDataUrl(file: File): Promise<string | null> {
+  if (typeof FileReader === 'undefined') {
+    return null;
+  }
+
+  return await new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
 }
 
 function getSequentialItemName(index: number): string {
@@ -164,6 +184,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNameError, setShowNameError] = useState(false);
   const [useFilenameAsItemName, setUseFilenameAsItemName] = useState(false);
+  const itemsRef = useRef<DraftItem[]>([]);
 
   const sortedRarities = useMemo(() => sortRarityRows(rarities), [rarities]);
   const autoAdjustRarityId = useMemo(
@@ -187,9 +208,56 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, [items]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const subAssetInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingSubAssetItemIdRef = useRef<string | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
   const previewUrlMapRef = useRef<Map<string, string>>(new Map());
   const committedRef = useRef(false);
+
+  const createDraftAssetEntry = useCallback(
+    async (record: SavedAsset, file?: File | null): Promise<DraftItemAsset> => {
+      let previewUrl = '';
+
+      if (file && file.type.startsWith('image/')) {
+        previewUrl = (await readFileAsDataUrl(file)) ?? '';
+      }
+
+      if (!previewUrl) {
+        const previewSource = record.previewBlob ?? record.blob;
+        if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && previewSource) {
+          previewUrl = URL.createObjectURL(previewSource);
+          if (previewUrl.startsWith('blob:')) {
+            previewUrlMapRef.current.set(record.id, previewUrl);
+          }
+        }
+      }
+
+      return {
+        assetId: record.id,
+        thumbnailAssetId: record.previewId ?? null,
+        previewUrl,
+        originalFilename: file?.name ?? null
+      };
+    },
+    [previewUrlMapRef]
+  );
+
+  const disposeDraftAsset = useCallback(
+    (asset?: DraftItemAsset | null) => {
+      if (!asset) {
+        return;
+      }
+      if (asset.previewUrl && asset.previewUrl.startsWith('blob:')) {
+        safeRevokeObjectURL(asset.previewUrl);
+      }
+      previewUrlMapRef.current.delete(asset.assetId);
+      if (createdAssetIdsRef.current.has(asset.assetId)) {
+        createdAssetIdsRef.current.delete(asset.assetId);
+        void deleteAsset(asset.assetId);
+      }
+    },
+    [createdAssetIdsRef, previewUrlMapRef]
+  );
 
   const computeItemName = useCallback(
     (item: DraftItem, index: number) => {
@@ -213,6 +281,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       })),
     [computeItemName]
   );
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   useEffect(() => {
     return () => {
@@ -449,24 +521,23 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       const defaultRarityId =
         sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
 
+      const draftAssets = await Promise.all(
+        assetEntries.map(async ({ record, file }) => {
+          createdAssetIdsRef.current.add(record.id);
+          return await createDraftAssetEntry(record, file);
+        })
+      );
+
       setItems((previous) => {
         const nextItems = [...previous];
 
-        assetEntries.forEach(({ record, file }) => {
-          let previewUrl = '';
-          const previewSource = record.previewBlob ?? record.blob;
-          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' && previewSource) {
-            previewUrl = URL.createObjectURL(previewSource);
-            previewUrlMapRef.current.set(record.id, previewUrl);
-          }
-
+        draftAssets.forEach((assetEntry, index) => {
+          const file = assetEntries[index]?.file;
           nextItems.push({
             id: createDraftItemId(),
-            assetId: record.id,
+            assets: [assetEntry],
             name: '',
-            originalFilename: file.name ?? null,
-            previewUrl,
-            thumbnailAssetId: record.previewId ?? null,
+            originalFilename: file?.name ?? null,
             isRiagu: false,
             isCompleteTarget: true,
             rarityId: defaultRarityId
@@ -475,39 +546,29 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
         return applyItemNamingStrategy(nextItems);
       });
-
-      assetEntries.forEach(({ record }) => {
-        createdAssetIdsRef.current.add(record.id);
-      });
     } catch (error) {
       console.error('画像の保存に失敗しました', error);
       setAssetError('画像の保存に失敗しました。もう一度お試しください。');
     } finally {
       setIsProcessingAssets(false);
     }
-  }, [sortedRarities, applyItemNamingStrategy]);
+  }, [applyItemNamingStrategy, createDraftAssetEntry, createdAssetIdsRef, sortedRarities]);
 
   const handleRemoveItem = useCallback(
     (draftItemId: string) => {
       setItems((previous) => {
         const removedItem = previous.find((item) => item.id === draftItemId);
-        if (removedItem?.previewUrl) {
-          safeRevokeObjectURL(removedItem.previewUrl);
-          if (removedItem.assetId) {
-            previewUrlMapRef.current.delete(removedItem.assetId);
-          }
-        }
-
-        if (removedItem?.assetId && createdAssetIdsRef.current.has(removedItem.assetId)) {
-          createdAssetIdsRef.current.delete(removedItem.assetId);
-          void deleteAsset(removedItem.assetId);
+        if (removedItem?.assets?.length) {
+          removedItem.assets.forEach((asset) => {
+            disposeDraftAsset(asset);
+          });
         }
 
         const filteredItems = previous.filter((item) => item.id !== draftItemId);
         return applyItemNamingStrategy(filteredItems);
       });
     },
-    [applyItemNamingStrategy]
+    [applyItemNamingStrategy, disposeDraftAsset]
   );
 
   type ItemFlagKey = 'isRiagu' | 'isCompleteTarget';
@@ -524,6 +585,101 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     );
   }, []);
 
+  const handleRequestSubAsset = useCallback((draftItemId: string) => {
+    pendingSubAssetItemIdRef.current = draftItemId;
+    subAssetInputRef.current?.click();
+  }, [pendingSubAssetItemIdRef, subAssetInputRef]);
+
+  const handleRemoveAdditionalAssets = useCallback((draftItemId: string) => {
+    setItems((previous) =>
+      previous.map((item) => {
+        if (item.id !== draftItemId) {
+          return item;
+        }
+        if (item.assets.length <= 1) {
+          return item;
+        }
+        const removedAssets = item.assets.slice(1);
+        removedAssets.forEach((asset) => disposeDraftAsset(asset));
+        return { ...item, assets: [item.assets[0]] };
+      })
+    );
+  }, [disposeDraftAsset]);
+
+  const handleRemoveAdditionalAsset = useCallback(
+    (draftItemId: string, assetId: string) => {
+      setItems((previous) =>
+        previous.map((item) => {
+          if (item.id !== draftItemId) {
+            return item;
+          }
+          const assetIndex = item.assets.findIndex((asset, index) => index > 0 && asset.assetId === assetId);
+          if (assetIndex === -1) {
+            return item;
+          }
+          const removedAsset = item.assets[assetIndex];
+          disposeDraftAsset(removedAsset);
+          const nextAssets = [...item.assets];
+          nextAssets.splice(assetIndex, 1);
+          return { ...item, assets: nextAssets };
+        })
+      );
+    },
+    [disposeDraftAsset]
+  );
+
+  const handleSelectSubAsset = useCallback(
+    async (fileList: FileList | null) => {
+      const targetItemId = pendingSubAssetItemIdRef.current;
+      pendingSubAssetItemIdRef.current = null;
+
+      if (!targetItemId || !fileList || fileList.length === 0) {
+        return;
+      }
+
+      if (typeof window === 'undefined' || typeof window.indexedDB === 'undefined') {
+        setAssetError('この環境では画像を保存できません。');
+        return;
+      }
+
+      setIsProcessingAssets(true);
+      setAssetError(null);
+
+      try {
+        const targetExists = itemsRef.current.some((item) => item.id === targetItemId);
+        const assetEntries = await Promise.all(
+          Array.from(fileList, async (file) => ({
+            record: await saveAsset(file),
+            file
+          }))
+        );
+        const draftAssets = await Promise.all(
+          assetEntries.map(async ({ record, file }) => {
+            createdAssetIdsRef.current.add(record.id);
+            return await createDraftAssetEntry(record, file);
+          })
+        );
+
+        if (!targetExists) {
+          draftAssets.forEach((asset) => disposeDraftAsset(asset));
+          return;
+        }
+
+        setItems((previous) =>
+          previous.map((item) =>
+            item.id === targetItemId ? { ...item, assets: [...item.assets, ...draftAssets] } : item
+          )
+        );
+      } catch (error) {
+        console.error('画像の保存に失敗しました', error);
+        setAssetError('画像の保存に失敗しました。もう一度お試しください。');
+      } finally {
+        setIsProcessingAssets(false);
+      }
+    },
+    [createDraftAssetEntry, createdAssetIdsRef, disposeDraftAsset, pendingSubAssetItemIdRef]
+  );
+
   const handleAddEmptyItem = useCallback(() => {
     const defaultRarityId =
       sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
@@ -532,11 +688,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         ...previous,
         {
           id: createDraftItemId(),
-          assetId: null,
+          assets: [],
           name: '',
           originalFilename: null,
-          previewUrl: '',
-          thumbnailAssetId: null,
           isRiagu: false,
           isCompleteTarget: true,
           rarityId: defaultRarityId
@@ -680,12 +834,12 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       rarityStore.setState(nextRarityState, { persist: 'immediate' });
 
       const catalogState = catalogStore.getState();
-      const nextCatalogByGacha: GachaCatalogStateV3['byGacha'] = {
+      const nextCatalogByGacha: GachaCatalogStateV4['byGacha'] = {
         ...(catalogState?.byGacha ?? {})
       };
 
       const highestRarityId = rarityOrder[rarityOrder.length - 1] ?? rarityOrder[0] ?? null;
-      const catalogItems: Record<string, GachaCatalogItemV3> = {};
+      const catalogItems: Record<string, GachaCatalogItemV4> = {};
       const catalogOrder: string[] = [];
       const fallbackRarityId = highestRarityId ?? null;
       const availableRarityIds = new Set(rarityOrder);
@@ -701,17 +855,23 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         const resolvedRarityId = item.rarityId && availableRarityIds.has(item.rarityId) ? item.rarityId : fallbackRarityId;
         const itemId = generateItemId();
         catalogOrder.push(itemId);
+        const assets = item.assets
+          .filter((asset) => Boolean(asset?.assetId))
+          .map((asset) => ({
+            assetId: asset.assetId,
+            thumbnailAssetId: asset.thumbnailAssetId ?? null
+          }));
+
         catalogItems[itemId] = {
           itemId,
           name: item.name || `景品${index + 1}`,
           rarityId: resolvedRarityId,
           order: index,
-          imageAssetId: item.assetId ?? undefined,
-          thumbnailAssetId: item.thumbnailAssetId ?? null,
+          ...(assets.length > 0 ? { assets } : {}),
           ...(item.isRiagu ? { riagu: true } : {}),
           ...(item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
-        } satisfies GachaCatalogItemV3;
+        } satisfies GachaCatalogItemV4;
 
         draftIdToItemId.set(item.id, itemId);
 
@@ -725,8 +885,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         items: catalogItems
       };
 
-      const nextCatalogState: GachaCatalogStateV3 = {
-        version: typeof catalogState?.version === 'number' ? catalogState.version : 3,
+      const nextCatalogState: GachaCatalogStateV4 = {
+        version: typeof catalogState?.version === 'number' ? catalogState.version : 4,
         updatedAt: timestamp,
         byGacha: nextCatalogByGacha
       };
@@ -886,106 +1046,161 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               <p className="text-sm text-muted-foreground">まだ画像が登録されていません。</p>
             ) : (
               <ul className="space-y-2 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
-                {items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3 sm:flex-row sm:items-center"
-                  >
-                    <div className="flex w-full items-start gap-3 sm:w-auto">
-                      <ItemPreview
-                        assetId={item.assetId}
-                        previewAssetId={item.thumbnailAssetId}
-                        previewUrl={item.previewUrl || undefined}
-                        alt={`${item.name}のプレビュー`}
-                        emptyLabel="noImage"
-                        kindHint="image"
-                        className="h-16 w-16 shrink-0 bg-surface-deep"
-                      />
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
-                        <div className="w-full max-w-full sm:max-w-[12rem]">
-                          <SingleSelectDropdown
-                            value={item.rarityId ?? undefined}
-                            options={rarityOptions}
-                            onChange={(value) => handleChangeItemRarity(item.id, value)}
-                            placeholder="レアリティ未設定"
-                            fallbackToFirstOption={false}
-                            classNames={{
-                              root: 'pt-controls-panel__select-wrapper relative inline-block w-full',
-                              button:
-                                'pt-controls-panel__select-button inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-1.5 text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
-                              buttonOpen: 'border-accent text-accent',
-                              buttonClosed: 'hover:border-accent/70',
-                              icon: 'pt-controls-panel__select-icon h-3.5 w-3.5 text-muted-foreground transition-transform',
-                              iconOpen: 'rotate-180 text-accent',
-                              menu:
-                                'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
-                              option:
-                                'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition',
-                              optionActive: 'bg-accent/10 text-surface-foreground',
-                              optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
-                              optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left',
-                              checkIcon: 'pt-controls-panel__select-check h-3.5 w-3.5 text-accent transition'
-                            }}
-                            renderButtonLabel={({ selectedOption }) => {
-                              const option = selectedOption as RaritySelectOption | undefined;
-                              const label = option?.label ?? 'レアリティ未設定';
-                              const color = option?.color;
-                              return (
-                                <span className="flex w-full items-center truncate">
-                                  <span className="truncate" style={color ? { color } : undefined}>
-                                    {label}
-                                  </span>
-                                </span>
-                              );
-                            }}
-                            renderOptionContent={(option) => {
-                              const rarityOption = option as RaritySelectOption;
-                              return (
-                                <span className="flex w-full items-center truncate">
-                                  <span className="flex-1 truncate" style={rarityOption.color ? { color: rarityOption.color } : undefined}>
-                                    {rarityOption.label}
-                                  </span>
-                                </span>
-                              );
-                            }}
+                {items.map((item) => {
+                  const primaryAsset = item.assets[0];
+                  const hasPrimaryAsset = Boolean(primaryAsset);
+                  const additionalAssets = item.assets.slice(1);
+                  const hasSecondaryAsset = additionalAssets.length > 0;
+
+                  return (
+                    <li
+                      key={item.id}
+                      className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-panel px-4 py-3"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="flex w-full items-start gap-3 sm:w-auto">
+                          <ItemPreview
+                            assetId={primaryAsset?.assetId}
+                            previewAssetId={primaryAsset?.thumbnailAssetId ?? null}
+                            previewUrl={primaryAsset?.previewUrl || undefined}
+                            alt={`${item.name}のプレビュー`}
+                            emptyLabel="noImage"
+                            kindHint="image"
+                            className="h-16 w-16 shrink-0 bg-surface-deep"
                           />
+                          <div className="flex min-w-0 flex-1 flex-col gap-1">
+                            <p className="truncate text-sm font-semibold text-surface-foreground">{item.name}</p>
+                            <div className="w-full max-w-full sm:max-w-[12rem]">
+                              <SingleSelectDropdown
+                                value={item.rarityId ?? undefined}
+                                options={rarityOptions}
+                                onChange={(value) => handleChangeItemRarity(item.id, value)}
+                                placeholder="レアリティ未設定"
+                                fallbackToFirstOption={false}
+                                classNames={{
+                                  root: 'pt-controls-panel__select-wrapper relative inline-block w-full',
+                                  button:
+                                    'pt-controls-panel__select-button inline-flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-1.5 text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                                  buttonOpen: 'border-accent text-accent',
+                                  buttonClosed: 'hover:border-accent/70',
+                                  icon: 'pt-controls-panel__select-icon h-3.5 w-3.5 text-muted-foreground transition-transform',
+                                  iconOpen: 'rotate-180 text-accent',
+                                  menu:
+                                    'pt-controls-panel__select-options absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+                                  option:
+                                    'pt-controls-panel__select-option flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left transition',
+                                  optionActive: 'bg-accent/10 text-surface-foreground',
+                                  optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
+                                  optionLabel: 'pt-controls-panel__select-option-label flex-1 text-left',
+                                  checkIcon: 'pt-controls-panel__select-check h-3.5 w-3.5 text-accent transition'
+                                }}
+                                renderButtonLabel={({ selectedOption }) => {
+                                  const option = selectedOption as RaritySelectOption | undefined;
+                                  const label = option?.label ?? 'レアリティ未設定';
+                                  const color = option?.color;
+                                  return (
+                                    <span className="flex w-full items-center truncate">
+                                      <span className="truncate" style={color ? { color } : undefined}>
+                                        {label}
+                                      </span>
+                                    </span>
+                                  );
+                                }}
+                                renderOptionContent={(option) => {
+                                  const rarityOption = option as RaritySelectOption;
+                                  return (
+                                    <span className="flex w-full items-center truncate">
+                                      <span className="flex-1 truncate" style={rarityOption.color ? { color: rarityOption.color } : undefined}>
+                                        {rarityOption.label}
+                                      </span>
+                                    </span>
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex w-full shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                              checked={item.isRiagu}
+                              onChange={(event) => handleToggleItemFlag(item.id, 'isRiagu', event.target.checked)}
+                            />
+                            <span>リアグとして登録</span>
+                          </label>
+                          <label className="inline-flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                              checked={item.isCompleteTarget}
+                              onChange={(event) =>
+                                handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
+                              }
+                            />
+                            <span>コンプ対象</span>
+                          </label>
+                        </div>
+                        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                          <button
+                            type="button"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                            onClick={() => handleRequestSubAsset(item.id)}
+                            disabled={!hasPrimaryAsset || isProcessingAssets}
+                          >
+                            {hasSecondaryAsset ? '追加画像を追加' : '2枚目を追加'}
+                          </button>
+                          {hasSecondaryAsset ? (
+                            <button
+                              type="button"
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
+                              onClick={() => handleRemoveAdditionalAssets(item.id)}
+                              disabled={isProcessingAssets}
+                            >
+                              追加画像を削除
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
+                            onClick={() => handleRemoveItem(item.id)}
+                          >
+                            削除
+                          </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex w-full shrink-0 flex-col gap-2 text-xs text-muted-foreground sm:w-auto sm:flex-row sm:items-center sm:gap-4">
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
-                          checked={item.isRiagu}
-                          onChange={(event) => handleToggleItemFlag(item.id, 'isRiagu', event.target.checked)}
-                        />
-                        <span>リアグとして登録</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
-                          checked={item.isCompleteTarget}
-                          onChange={(event) =>
-                            handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
-                          }
-                        />
-                        <span>コンプ対象</span>
-                      </label>
-                    </div>
-                    <div className="flex shrink-0 w-full sm:w-auto">
-                      <button
-                        type="button"
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-red-500/60 hover:text-red-200 sm:w-auto"
-                        onClick={() => handleRemoveItem(item.id)}
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                      {additionalAssets.length > 0 ? (
+                        <div className="flex items-start gap-3 text-muted-foreground">
+                          <span className="text-3xl leading-none">└</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {additionalAssets.map((asset, index) => (
+                              <div key={asset.assetId} className="relative shrink-0">
+                                <ItemPreview
+                                  assetId={asset.assetId}
+                                  previewAssetId={asset.thumbnailAssetId ?? null}
+                                  previewUrl={asset.previewUrl || undefined}
+                                  alt={`${item.name}の追加画像${index + 2}`}
+                                  kindHint="image"
+                                  className="h-10 w-10 bg-surface-deep"
+                                />
+                                <button
+                                  type="button"
+                                  className="absolute -right-2 -top-2 z-10 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border/60 bg-surface text-[11px] font-semibold text-muted-foreground shadow-sm transition hover:border-red-500/60 hover:text-red-200"
+                                  aria-label={`${item.name}の追加画像${index + 2}を削除`}
+                                  onClick={() => handleRemoveAdditionalAsset(item.id, asset.assetId)}
+                                  disabled={isProcessingAssets}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -1071,6 +1286,17 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         className="sr-only"
         onChange={(event) => {
           void handleSelectFiles(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
+      <input
+        ref={subAssetInputRef}
+        type="file"
+        accept="image/*,video/*,audio/*,.m4a,audio/mp4"
+        multiple
+        className="sr-only"
+        onChange={(event) => {
+          void handleSelectSubAsset(event.currentTarget.files);
           event.currentTarget.value = '';
         }}
       />

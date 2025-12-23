@@ -78,8 +78,10 @@ export function RiaguSection(): JSX.Element {
       const rarityLabel = rarityEntity?.label ?? '未分類';
       const rarityColor = rarityEntity?.color ?? '#a855f7';
       const typeLabel = card.typeLabel ?? undefined;
-      const assetId = catalogItem?.imageAssetId ?? null;
-      const thumbnailAssetId = catalogItem?.thumbnailAssetId ?? null;
+      const assetEntries = Array.isArray(catalogItem?.assets) ? catalogItem.assets : [];
+      const primaryAsset = assetEntries[0] ?? null;
+      const assetId = primaryAsset?.assetId ?? null;
+      const thumbnailAssetId = primaryAsset?.thumbnailAssetId ?? null;
 
       const reverseEntries = userInventoriesByItemId[card.itemId] ?? [];
       const sanitizedUnitCost =

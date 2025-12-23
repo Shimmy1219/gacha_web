@@ -1,6 +1,9 @@
 import {
   type GachaCatalogItemV3,
   type GachaCatalogStateV3,
+  type GachaCatalogItemV4,
+  type GachaCatalogItemAssetV4,
+  type GachaCatalogStateV4,
   type GachaLocalStorageSnapshot,
   type PtSettingsStateV3,
   type ReceiveHistoryStateV3,
@@ -20,7 +23,7 @@ export const GACHA_STORAGE_UPDATED_EVENT = 'gacha-storage:updated' as const;
 
 export const STORAGE_KEYS = {
   appState: 'gacha:app-state:v3',
-  catalogState: 'gacha:catalog-state:v3',
+  catalogState: 'gacha:catalog-state:v4',
   rarityState: 'gacha:rarity-state:v3',
   userInventories: 'gacha:user-inventories:v3',
   userProfiles: 'gacha:user-profiles:v3',
@@ -31,6 +34,10 @@ export const STORAGE_KEYS = {
   receiveHistory: 'gacha:receive:history:v3',
   receivePrefs: 'gacha:receive:prefs:v3',
   pullHistory: 'gacha:pull-history:v1'
+} as const;
+
+const LEGACY_STORAGE_KEYS = {
+  catalogStateV3: 'gacha:catalog-state:v3'
 } as const;
 
 const INDEXED_DB_CONFIG = {
@@ -54,6 +61,52 @@ const STORAGE_KEY_LABELS: Partial<Record<StorageKey, string>> = {
 };
 
 const SAVE_OPTIONS_STORAGE_KEY = 'gacha:save-options:last-upload:v3';
+
+function migrateCatalogItemV3ToV4(item: GachaCatalogItemV3): GachaCatalogItemV4 {
+  const assets: GachaCatalogItemAssetV4[] = [];
+  if (item.imageAssetId) {
+    assets.push({
+      assetId: item.imageAssetId,
+      thumbnailAssetId: item.thumbnailAssetId ?? null
+    });
+  }
+
+  const { imageAssetId: _imageAssetId, thumbnailAssetId: _thumbnailAssetId, ...rest } = item;
+
+  return {
+    ...rest,
+    ...(assets.length > 0 ? { assets } : {})
+  };
+}
+
+function migrateCatalogStateV3ToV4(state: GachaCatalogStateV3): GachaCatalogStateV4 {
+  const nextByGacha: GachaCatalogStateV4['byGacha'] = {};
+
+  Object.entries(state.byGacha ?? {}).forEach(([gachaId, snapshot]) => {
+    if (!gachaId || !snapshot) {
+      return;
+    }
+
+    const nextItems: Record<string, GachaCatalogItemV4> = {};
+    Object.entries(snapshot.items ?? {}).forEach(([itemId, item]) => {
+      if (!itemId || !item) {
+        return;
+      }
+      nextItems[itemId] = migrateCatalogItemV3ToV4(item);
+    });
+
+    nextByGacha[gachaId] = {
+      order: Array.isArray(snapshot.order) ? snapshot.order : Object.keys(nextItems),
+      items: nextItems
+    };
+  });
+
+  return {
+    version: 4,
+    updatedAt: state.updatedAt ?? new Date().toISOString(),
+    byGacha: nextByGacha
+  };
+}
 
 export interface StorageLike {
   readonly length: number;
@@ -399,7 +452,7 @@ export class AppPersistence {
   loadSnapshot(): GachaLocalStorageSnapshot {
     return {
       appState: this.readJson<GachaAppStateV3>('appState'),
-      catalogState: this.readJson<GachaCatalogStateV3>('catalogState'),
+      catalogState: this.loadCatalogState(),
       rarityState: this.readJson<GachaRarityStateV3>('rarityState'),
       userInventories: this.readJson<UserInventoriesStateV3>('userInventories'),
       userProfiles: this.readJson<UserProfilesStateV3>('userProfiles'),
@@ -451,7 +504,7 @@ export class AppPersistence {
       touched = true;
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'catalogState')) {
-      this.persistValue('catalogState', partial.catalogState as GachaCatalogStateV3 | undefined);
+      this.persistValue('catalogState', partial.catalogState as GachaCatalogStateV4 | undefined);
       touched = true;
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'rarityState')) {
@@ -512,11 +565,11 @@ export class AppPersistence {
     this.saveDebounced({ appState: state });
   }
 
-  saveCatalogState(state: GachaCatalogStateV3 | undefined): void {
+  saveCatalogState(state: GachaCatalogStateV4 | undefined): void {
     this.savePartial({ catalogState: state });
   }
 
-  saveCatalogStateDebounced(state: GachaCatalogStateV3 | undefined): void {
+  saveCatalogStateDebounced(state: GachaCatalogStateV4 | undefined): void {
     this.saveDebounced({ catalogState: state });
   }
 
@@ -616,6 +669,7 @@ export class AppPersistence {
       Object.values(STORAGE_KEYS).forEach((key) => {
         storage.removeItem(key);
       });
+      storage.removeItem(LEGACY_STORAGE_KEYS.catalogStateV3);
       storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
     } catch (error) {
       console.error('Failed to clear application storage', error);
@@ -661,7 +715,7 @@ export class AppPersistence {
   updateCatalogItem(params: {
     gachaId: string;
     itemId: string;
-    patch: Partial<GachaCatalogItemV3>;
+    patch: Partial<GachaCatalogItemV4>;
     updatedAt?: string;
   }): void {
     if (!this.ensureStorage()) {
@@ -691,7 +745,7 @@ export class AppPersistence {
 
     const timestamp = updatedAt ?? new Date().toISOString();
 
-    const nextItem: GachaCatalogItemV3 = {
+    const nextItem: GachaCatalogItemV4 = {
       ...currentItem,
       ...patch,
       itemId: currentItem.itemId,
@@ -700,7 +754,7 @@ export class AppPersistence {
       updatedAt: timestamp
     };
 
-    const nextCatalogState: GachaCatalogStateV3 = {
+    const nextCatalogState: GachaCatalogStateV4 = {
       ...catalogState,
       updatedAt: timestamp,
       byGacha: {
@@ -718,6 +772,30 @@ export class AppPersistence {
     this.savePartial({ catalogState: nextCatalogState });
   }
 
+  private loadCatalogState(): GachaCatalogStateV4 | undefined {
+    const current = this.readJson<GachaCatalogStateV4>('catalogState');
+    if (current) {
+      return current;
+    }
+
+    const legacy = this.readRawJson<GachaCatalogStateV3>(LEGACY_STORAGE_KEYS.catalogStateV3);
+    if (!legacy) {
+      return undefined;
+    }
+
+    const migrated = migrateCatalogStateV3ToV4(legacy);
+    this.persistValue('catalogState', migrated);
+
+    const storage = this.ensureStorage();
+    try {
+      storage?.removeItem(LEGACY_STORAGE_KEYS.catalogStateV3);
+    } catch (error) {
+      console.warn('Failed to remove legacy catalog state after migration', error);
+    }
+
+    return migrated;
+  }
+
   private readJson<T>(key: StorageKey): T | undefined {
     const storage = this.ensureStorage();
     if (!storage) {
@@ -725,6 +803,25 @@ export class AppPersistence {
     }
 
     const storageKey = STORAGE_KEYS[key];
+    const raw = storage.getItem(storageKey);
+    if (!raw) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      console.warn(`Failed to parse localStorage value for ${storageKey}`, error);
+      return undefined;
+    }
+  }
+
+  private readRawJson<T>(storageKey: string): T | undefined {
+    const storage = this.ensureStorage();
+    if (!storage) {
+      return undefined;
+    }
+
     const raw = storage.getItem(storageKey);
     if (!raw) {
       return undefined;

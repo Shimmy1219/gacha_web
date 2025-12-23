@@ -4,7 +4,7 @@ import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 import type {
   GachaAppStateV3,
-  GachaCatalogStateV3,
+  GachaCatalogStateV4,
   PullHistoryEntryStatus,
   PullHistoryEntryV1,
   PullHistoryStateV1,
@@ -149,7 +149,7 @@ function buildHistoryEntries(
   history: PullHistoryStateV1 | undefined,
   userId: string,
   appMeta: AppMetaMap,
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   rarityState: GachaRarityStateV3 | undefined
 ): HistorySelectionEntry[] {
   if (!history?.order || !history.pulls) {

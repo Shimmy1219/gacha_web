@@ -23,7 +23,7 @@ apps/web/src/domain/stores 配下のストア群は、ローカルストレー�
 | ストア | 型パラメータ | 保存メソッド | 主な責務 |
 | --- | --- | --- | --- |
 | `AppStateStore` | `GachaAppStateV3 | undefined` | `saveAppState`, `saveAppStateDebounced` | 選択中ガチャなどアプリ全体の状態を保持し、`setSelectedGacha` で UI 選択を更新する。【F:apps/web/src/domain/stores/appStateStore.ts†L1-L34】 |
-| `CatalogStore` | `GachaCatalogStateV3 | undefined` | `saveCatalogState`, `saveCatalogStateDebounced` | ガチャカタログ（景品一覧）を保持する。【F:apps/web/src/domain/stores/catalogStore.ts†L1-L15】 |
+| `CatalogStore` | `GachaCatalogStateV4 | undefined` | `saveCatalogState`, `saveCatalogStateDebounced` | ガチャカタログ（景品一覧）を保持する。【F:apps/web/src/domain/stores/catalogStore.ts†L1-L15】 |
 | `RarityStore` | `GachaRarityStateV3 | undefined` | `saveRarityState`, `saveRarityStateDebounced` | レアリティ定義を管理する。【F:apps/web/src/domain/stores/rarityStore.ts†L1-L15】 |
 | `UserInventoryStore` | `UserInventoriesStateV3 | undefined` | `saveUserInventories`, `saveUserInventoriesDebounced` | ユーザー別所持情報を扱う。【F:apps/web/src/domain/stores/userInventoryStore.ts†L1-L15】 |
 | `RiaguStore` | `RiaguStateV3 | undefined` | `saveRiaguState`, `saveRiaguStateDebounced` | りあぐデータ同期を担当する。【F:apps/web/src/domain/stores/riaguStore.ts†L1-L15】 |

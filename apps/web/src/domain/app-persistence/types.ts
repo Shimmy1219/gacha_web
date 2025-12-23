@@ -39,6 +39,34 @@ export interface GachaCatalogStateV3 {
   byGacha: Record<string, GachaCatalogGachaSnapshotV3>;
 }
 
+export interface GachaCatalogItemAssetV4 {
+  assetId: string;
+  thumbnailAssetId?: string | null;
+}
+
+export interface GachaCatalogItemV4 {
+  itemId: string;
+  rarityId: string;
+  name: string;
+  order?: number;
+  pickupTarget?: boolean;
+  completeTarget?: boolean;
+  assets?: GachaCatalogItemAssetV4[];
+  riagu?: boolean;
+  updatedAt?: string;
+}
+
+export interface GachaCatalogGachaSnapshotV4 {
+  order: string[];
+  items: Record<string, GachaCatalogItemV4>;
+}
+
+export interface GachaCatalogStateV4 {
+  version: number;
+  updatedAt: string;
+  byGacha: Record<string, GachaCatalogGachaSnapshotV4>;
+}
+
 export interface GachaRarityEntityV3 {
   id: string;
   gachaId: string;
@@ -247,7 +275,7 @@ export interface PullHistoryStateV1 {
 
 export interface GachaLocalStorageSnapshot {
   appState?: GachaAppStateV3;
-  catalogState?: GachaCatalogStateV3;
+  catalogState?: GachaCatalogStateV4;
   rarityState?: GachaRarityStateV3;
   userProfiles?: UserProfilesStateV3;
   userInventories?: UserInventoriesStateV3;

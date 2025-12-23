@@ -1,11 +1,11 @@
 import {
   AppPersistence,
-  type GachaCatalogItemV3,
-  type GachaCatalogStateV3
+  type GachaCatalogItemV4,
+  type GachaCatalogStateV4
 } from '../app-persistence';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
 
-export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined> {
+export class CatalogStore extends PersistedStore<GachaCatalogStateV4 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
   }
@@ -13,7 +13,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
   updateItem(params: {
     gachaId: string;
     itemId: string;
-    patch: Partial<GachaCatalogItemV3>;
+    patch: Partial<GachaCatalogItemV4>;
     updatedAt?: string;
   }): void {
     const { gachaId, itemId, patch, updatedAt } = params;
@@ -44,7 +44,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
           return previous;
         }
 
-        const nextItem: GachaCatalogItemV3 = {
+        const nextItem: GachaCatalogItemV4 = {
           ...currentItem,
           ...patch,
           itemId: currentItem.itemId,
@@ -53,7 +53,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
           updatedAt: timestamp
         };
 
-        const nextState: GachaCatalogStateV3 = {
+        const nextState: GachaCatalogStateV4 = {
           ...previous,
           updatedAt: timestamp,
           byGacha: {
@@ -104,7 +104,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
         const { [itemId]: _removed, ...restItems } = gachaCatalog.items;
         const nextOrder = (gachaCatalog.order ?? []).filter((value) => value !== itemId);
 
-        const nextState: GachaCatalogStateV3 = {
+        const nextState: GachaCatalogStateV4 = {
           ...previous,
           updatedAt: timestamp,
           byGacha: {
@@ -123,7 +123,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
     );
   }
 
-  addItems(params: { gachaId: string; items: GachaCatalogItemV3[]; updatedAt?: string }): void {
+  addItems(params: { gachaId: string; items: GachaCatalogItemV4[]; updatedAt?: string }): void {
     const { gachaId, items, updatedAt } = params;
 
     if (!gachaId || !items?.length) {
@@ -154,7 +154,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
             return;
           }
 
-          const nextItem: GachaCatalogItemV3 = {
+          const nextItem: GachaCatalogItemV4 = {
             ...item,
             itemId: item.itemId,
             rarityId: item.rarityId,
@@ -173,7 +173,7 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
           return previous;
         }
 
-        const nextState: GachaCatalogStateV3 = {
+        const nextState: GachaCatalogStateV4 = {
           ...previous,
           updatedAt: timestamp,
           byGacha: {
@@ -211,20 +211,20 @@ export class CatalogStore extends PersistedStore<GachaCatalogStateV3 | undefined
         }
 
         return {
-          version: typeof previous.version === 'number' ? previous.version : 3,
+          version: typeof previous.version === 'number' ? previous.version : 4,
           updatedAt: timestamp,
           byGacha: rest
-        } satisfies GachaCatalogStateV3;
+        } satisfies GachaCatalogStateV4;
       },
       options
     );
   }
 
-  protected persistImmediate(state: GachaCatalogStateV3 | undefined): void {
+  protected persistImmediate(state: GachaCatalogStateV4 | undefined): void {
     this.persistence.saveCatalogState(state);
   }
 
-  protected persistDebounced(state: GachaCatalogStateV3 | undefined): void {
+  protected persistDebounced(state: GachaCatalogStateV4 | undefined): void {
     this.persistence.saveCatalogStateDebounced(state);
   }
 }

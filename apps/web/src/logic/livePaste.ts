@@ -1,8 +1,8 @@
 import type {
   AppPersistence,
   GachaAppStateV3,
-  GachaCatalogItemV3,
-  GachaCatalogStateV3,
+  GachaCatalogItemV4,
+  GachaCatalogStateV4,
   GachaLocalStorageSnapshot,
   GachaRarityEntityV3,
   GachaRarityStateV3,
@@ -461,9 +461,9 @@ function prepareRarityState(
 }
 
 function prepareCatalogState(
-  previous: GachaCatalogStateV3 | undefined,
+  previous: GachaCatalogStateV4 | undefined,
   nowIso: string
-): GachaCatalogStateV3 {
+): GachaCatalogStateV4 {
   if (previous) {
     return {
       ...previous,
@@ -473,10 +473,10 @@ function prepareCatalogState(
   }
 
   return {
-    version: 3,
+    version: 4,
     updatedAt: nowIso,
     byGacha: {}
-  } satisfies GachaCatalogStateV3;
+  } satisfies GachaCatalogStateV4;
 }
 
 function prepareUserProfiles(
@@ -646,7 +646,7 @@ function ensureRarities(
 }
 
 function ensureCatalogItems(
-  catalogState: GachaCatalogStateV3,
+  catalogState: GachaCatalogStateV4,
   gachaId: string,
   gachaName: string,
   codesByRarity: Map<string, Set<string>>,
@@ -698,7 +698,7 @@ function ensureCatalogItems(
       gachaCatalog.items[itemId] = {
         ...item,
         updatedAt: nowIso
-      } satisfies GachaCatalogItemV3;
+      } satisfies GachaCatalogItemV4;
 
       itemIdMap.set(code, itemId);
     });
@@ -927,7 +927,7 @@ function buildItemsFromCounts(
 }
 
 function findItemIdByName(
-  items: Record<string, GachaCatalogItemV3>,
+  items: Record<string, GachaCatalogItemV4>,
   name: string
 ): string | undefined {
   for (const [itemId, item] of Object.entries(items)) {
@@ -941,4 +941,3 @@ function findItemIdByName(
 function normalizeDigits(value: string): string {
   return value.replace(/[０-９]/gu, (digit) => String(digit.charCodeAt(0) - 0xff10));
 }
-

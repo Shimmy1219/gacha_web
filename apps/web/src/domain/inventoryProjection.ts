@@ -1,5 +1,5 @@
 import {
-  type GachaCatalogStateV3,
+  type GachaCatalogStateV4,
   type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1,
@@ -21,7 +21,7 @@ interface AggregatedSnapshot {
 
 export interface InventoryProjectionParams {
   pullHistory: PullHistoryStateV1 | undefined;
-  catalogState?: GachaCatalogStateV3 | undefined;
+  catalogState?: GachaCatalogStateV4 | undefined;
   now?: string;
 }
 
@@ -81,7 +81,7 @@ function normalizeEntryItemCount(
 
 type ItemRarityIndex = Map<string, Map<string, string>>;
 
-function buildItemRarityIndex(catalogState: GachaCatalogStateV3 | undefined): ItemRarityIndex {
+function buildItemRarityIndex(catalogState: GachaCatalogStateV4 | undefined): ItemRarityIndex {
   const index: ItemRarityIndex = new Map();
 
   if (!catalogState?.byGacha) {

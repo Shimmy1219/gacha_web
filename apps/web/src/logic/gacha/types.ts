@@ -141,7 +141,7 @@ export interface ExecuteGachaResult {
 }
 
 export interface BuildGachaPoolsArgs {
-  catalogState: import('@domain/app-persistence').GachaCatalogStateV3 | undefined;
+  catalogState: import('@domain/app-persistence').GachaCatalogStateV4 | undefined;
   rarityState: import('@domain/app-persistence').GachaRarityStateV3 | undefined;
   rarityFractionDigits?: Map<string, number>;
 }

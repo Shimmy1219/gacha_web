@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 
 import type {
-  GachaCatalogStateV3,
+  GachaCatalogStateV4,
   GachaLocalStorageSnapshot,
   GachaRarityStateV3,
   PullHistoryStateV1,
@@ -49,7 +49,7 @@ interface BuildParams {
   includeMetadata?: boolean;
 }
 
-type CatalogGacha = GachaCatalogStateV3['byGacha'][string] | undefined;
+type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
 
 type WarningBuilder = (
   type: 'missingItem' | 'missingAsset',
@@ -156,7 +156,7 @@ function sanitizeFileName(displayName: string, timestamp: string): string {
 }
 
 function resolveCatalogContext(
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   appState: GachaLocalStorageSnapshot['appState'] | undefined,
   gachaId: string | undefined
 ): { gachaId: string | undefined; gachaName: string; catalogGacha: CatalogGacha } {
@@ -166,7 +166,7 @@ function resolveCatalogContext(
   return { gachaId, gachaName, catalogGacha };
 }
 
-function createSelectedAsset(
+function createSelectedAssets(
   context: { gachaId: string | undefined; gachaName: string; catalogGacha: CatalogGacha },
   itemId: string,
   fallbackRarityId: string,
@@ -174,9 +174,9 @@ function createSelectedAsset(
   warnings: Set<string>,
   seenAssets: Set<string>,
   buildWarning: WarningBuilder
-): SelectedAsset | null {
+): SelectedAsset[] {
   if (!itemId) {
-    return null;
+    return [];
   }
 
   const catalogItem = context.catalogGacha?.items?.[itemId];
@@ -187,11 +187,15 @@ function createSelectedAsset(
         itemId
       })
     );
-    return null;
+    return [];
   }
 
-  const assetId = catalogItem.imageAssetId;
-  if (!assetId) {
+  const assetEntries = Array.isArray(catalogItem.assets) ? catalogItem.assets : [];
+  const assetIds = assetEntries
+    .map((asset) => asset?.assetId)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  if (assetIds.length === 0) {
     warnings.add(
       buildWarning('missingAsset', {
         gachaId: context.gachaId,
@@ -199,32 +203,35 @@ function createSelectedAsset(
         itemName: catalogItem.name ?? itemId
       })
     );
-    return null;
+    return [];
   }
 
-  if (seenAssets.has(assetId)) {
-    return null;
-  }
-
-  seenAssets.add(assetId);
   const normalizedCount =
     typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0 ? rawCount : 1;
 
-  return {
-    assetId,
-    gachaId: context.gachaId,
-    gachaName: context.gachaName,
-    itemId,
-    itemName: catalogItem.name ?? itemId,
-    rarityId: catalogItem.rarityId ?? fallbackRarityId,
-    count: normalizedCount,
-    isRiagu: Boolean(catalogItem.riagu)
-  };
+  return assetIds.reduce<SelectedAsset[]>((acc, assetId) => {
+    if (seenAssets.has(assetId)) {
+      return acc;
+    }
+
+    seenAssets.add(assetId);
+    acc.push({
+      assetId,
+      gachaId: context.gachaId,
+      gachaName: context.gachaName,
+      itemId,
+      itemName: catalogItem.name ?? itemId,
+      rarityId: catalogItem.rarityId ?? fallbackRarityId,
+      count: normalizedCount,
+      isRiagu: Boolean(catalogItem.riagu)
+    });
+    return acc;
+  }, []);
 }
 
 function aggregateInventoryItems(
   inventories: Record<string, UserInventorySnapshotV3 | undefined> | undefined,
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   appState: GachaLocalStorageSnapshot['appState'] | undefined,
   selection: SaveTargetSelection,
   warnings: Set<string>
@@ -253,7 +260,7 @@ function aggregateInventoryItems(
       }
 
       itemIds.forEach((itemId) => {
-        const asset = createSelectedAsset(
+        const assets = createSelectedAssets(
           context,
           itemId,
           rarityId,
@@ -264,12 +271,12 @@ function aggregateInventoryItems(
             const id = gachaId ?? 'unknown';
             return type === 'missingItem'
               ? `カタログ情報が見つかりません: ${id} / ${warningItemId}`
-              : `画像アセットが未設定: ${id} / ${itemName ?? warningItemId}`;
+              : `ファイルが未設定: ${id} / ${itemName ?? warningItemId}`;
           }
         );
 
-        if (asset) {
-          selected.push(asset);
+        if (assets.length > 0) {
+          selected.push(...assets);
         }
       });
     });
@@ -329,7 +336,7 @@ function aggregateHistoryItems(
         return;
       }
 
-      const asset = createSelectedAsset(
+      const assets = createSelectedAssets(
         context,
         itemId,
         'unknown',
@@ -340,12 +347,12 @@ function aggregateHistoryItems(
           const id = warningGachaId ?? 'unknown';
           return type === 'missingItem'
             ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
-            : `履歴の景品に画像が設定されていません: ${id} / ${itemName ?? warningItemId}`;
+            : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
         }
       );
 
-      if (asset) {
-        selected.push(asset);
+      if (assets.length > 0) {
+        selected.push(...assets);
         entryContributed = true;
       }
     });
@@ -529,7 +536,7 @@ export async function buildUserZipFromSelection({
     collected.map(async (item) => {
       const asset = await loadAsset(item.assetId);
       if (!asset) {
-        warnings.add(`画像を読み込めませんでした: ${item.gachaName} / ${item.itemName}`);
+        warnings.add(`ファイルを読み込めませんでした: ${item.gachaName} / ${item.itemName}`);
         return null;
       }
       return { item, asset };
@@ -541,7 +548,7 @@ export async function buildUserZipFromSelection({
   });
 
   if (availableRecords.length === 0) {
-    throw new Error('画像データを読み込めませんでした');
+    throw new Error('ファイルデータを読み込めませんでした');
   }
 
   const zip = new JSZip();

@@ -3,7 +3,7 @@ import JSZip from 'jszip';
 import {
   type AppPersistence,
   type GachaAppStateV3,
-  type GachaCatalogStateV3,
+  type GachaCatalogStateV4,
   type GachaLocalStorageSnapshot,
   type GachaRarityStateV3,
   type HitCountsStateV3,
@@ -309,9 +309,6 @@ function determineImportContext(
         if (item?.rarityId) {
           rarityIds.add(item.rarityId);
         }
-        if (item?.imageAssetId) {
-          // Track via item map; actual asset import is resolved separately
-        }
       });
     }
 
@@ -352,6 +349,73 @@ function determineImportContext(
       userIds
     },
     skipped
+  };
+}
+
+function normalizeCatalogStateSnapshot(
+  state: GachaLocalStorageSnapshot['catalogState']
+): GachaCatalogStateV4 | undefined {
+  if (!state?.byGacha) {
+    return state;
+  }
+
+  let touched = false;
+  const nextByGacha = { ...state.byGacha };
+
+  Object.entries(state.byGacha).forEach(([gachaId, snapshot]) => {
+    if (!snapshot?.items) {
+      return;
+    }
+
+    let itemsTouched = false;
+    const nextItems = { ...snapshot.items };
+
+    Object.entries(snapshot.items).forEach(([itemId, item]) => {
+      if (!itemId || !item) {
+        return;
+      }
+
+      if (Array.isArray(item.assets) && item.assets.length > 0) {
+        return;
+      }
+
+      const legacyAssetId = (item as { imageAssetId?: unknown }).imageAssetId;
+      if (typeof legacyAssetId !== 'string' || legacyAssetId.length === 0) {
+        return;
+      }
+
+      const legacyThumbnailId = (item as { thumbnailAssetId?: unknown }).thumbnailAssetId;
+      const thumbnailAssetId = typeof legacyThumbnailId === 'string' ? legacyThumbnailId : null;
+
+      const { imageAssetId: _imageAssetId, thumbnailAssetId: _thumbnailAssetId, ...rest } = item as GachaCatalogStateV4['byGacha'][string]['items'][string] & {
+        imageAssetId?: unknown;
+        thumbnailAssetId?: unknown;
+      };
+
+      nextItems[itemId] = {
+        ...rest,
+        assets: [{ assetId: legacyAssetId, thumbnailAssetId }]
+      };
+      itemsTouched = true;
+    });
+
+    if (itemsTouched) {
+      nextByGacha[gachaId] = {
+        ...snapshot,
+        items: nextItems
+      };
+      touched = true;
+    }
+  });
+
+  if (!touched) {
+    return state;
+  }
+
+  return {
+    ...state,
+    version: typeof state.version === 'number' ? Math.max(state.version, 4) : 4,
+    byGacha: nextByGacha
   };
 }
 
@@ -404,11 +468,11 @@ function mergeAppState(
 }
 
 function mergeCatalogState(
-  base: GachaCatalogStateV3 | undefined,
-  addition: GachaCatalogStateV3 | undefined,
+  base: GachaCatalogStateV4 | undefined,
+  addition: GachaCatalogStateV4 | undefined,
   gachaIds: Set<string>,
   now: string
-): GachaCatalogStateV3 | undefined {
+): GachaCatalogStateV4 | undefined {
   if (!addition || gachaIds.size === 0) {
     return base;
   }
@@ -430,7 +494,7 @@ function mergeCatalogState(
   }
 
   return {
-    version: resolveVersion(base?.version, addition.version, 3),
+    version: resolveVersion(base?.version, addition.version, 4),
     updatedAt: now,
     byGacha: nextByGacha
   };
@@ -856,8 +920,19 @@ function collectAssetIdsToImport(
       return;
     }
     Object.values(catalogSnapshot.items).forEach((item) => {
-      if (item?.imageAssetId) {
-        assetIds.add(item.imageAssetId);
+      const assets = Array.isArray(item?.assets) ? item.assets : [];
+      if (assets.length > 0) {
+        assets.forEach((asset) => {
+          if (asset?.assetId) {
+            assetIds.add(asset.assetId);
+          }
+        });
+        return;
+      }
+
+      const legacyAssetId = (item as { imageAssetId?: unknown }).imageAssetId;
+      if (typeof legacyAssetId === 'string' && legacyAssetId.length > 0) {
+        assetIds.add(legacyAssetId);
       }
     });
   });
@@ -966,9 +1041,13 @@ export async function importBackupFromFile(
   }
 
   const baseSnapshot = persistence.loadSnapshot();
+  const normalizedSnapshot: GachaLocalStorageSnapshot = {
+    ...metadata.snapshot,
+    catalogState: normalizeCatalogStateSnapshot(metadata.snapshot.catalogState)
+  };
 
   const existingMeta = baseSnapshot.appState?.meta ?? {};
-  const importMeta = metadata.snapshot.appState?.meta ?? {};
+  const importMeta = normalizedSnapshot.appState?.meta ?? {};
   const duplicateEntries: BackupDuplicateEntry[] = [];
 
   Object.entries(importMeta).forEach(([gachaId, meta]) => {
@@ -1010,7 +1089,7 @@ export async function importBackupFromFile(
   const sanitizedBaseSnapshot =
     overwriteGachaIds.size > 0 ? pruneSnapshotForOverwrite(baseSnapshot, overwriteGachaIds) : baseSnapshot;
 
-  const { snapshot: mergedSnapshot, context, skipped } = mergeSnapshots(sanitizedBaseSnapshot, metadata.snapshot);
+  const { snapshot: mergedSnapshot, context, skipped } = mergeSnapshots(sanitizedBaseSnapshot, normalizedSnapshot);
 
   const importedGachaIds = Array.from(context.gachaIds);
   if (importedGachaIds.length === 0) {
@@ -1022,7 +1101,7 @@ export async function importBackupFromFile(
     };
   }
 
-  const assetIdsToImport = collectAssetIdsToImport(metadata.snapshot, context.gachaIds);
+  const assetIdsToImport = collectAssetIdsToImport(normalizedSnapshot, context.gachaIds);
   const assetRecords: StoredAssetRecord[] = [];
 
   const assetEntries = metadata.assets ?? [];

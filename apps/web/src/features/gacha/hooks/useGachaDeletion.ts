@@ -37,9 +37,21 @@ export function useGachaDeletion(options: UseGachaDeletionOptions = {}): (target
       const assetIds = snapshot
         ? Array.from(
             new Set(
-              Object.values(snapshot.items ?? {})
-                .map((item) => item?.imageAssetId)
-                .filter((value): value is string => typeof value === 'string' && value.length > 0)
+              Object.values(snapshot.items ?? {}).flatMap((item) => {
+                const assets = Array.isArray(item?.assets) ? item.assets : [];
+                if (assets.length > 0) {
+                  return assets
+                    .map((asset) => asset?.assetId)
+                    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+                }
+
+                const legacyAssetId = (item as { imageAssetId?: unknown }).imageAssetId;
+                if (typeof legacyAssetId === 'string' && legacyAssetId.length > 0) {
+                  return [legacyAssetId];
+                }
+
+                return [];
+              })
             )
           )
         : [];
