@@ -13,6 +13,7 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useNavigate } from 'react-router-dom';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
+import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
@@ -59,6 +60,7 @@ interface DrawGachaDialogResultItem {
   rarityColor?: string;
   count: number;
   guaranteedCount?: number;
+  isNew?: boolean;
 }
 
 interface GachaDefinition {
@@ -78,6 +80,7 @@ interface QueuedDiscordDeliveryRequest {
   userId: string;
   selection: DiscordGuildSelection;
   requestedAt: number;
+  itemIdFilter?: string[];
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -172,6 +175,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     rarities: rarityStore,
     ptControls,
     userProfiles,
+    userInventories,
     pullHistory,
     uiPreferences: uiPreferencesStore
   } = useDomainStores();
@@ -180,6 +184,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const rarityState = useStoreValue(rarityStore);
   const ptSettingsState = useStoreValue(ptControls);
   const userProfilesState = useStoreValue(userProfiles);
+  const userInventoriesState = useStoreValue(userInventories);
   const pullHistoryState = useStoreValue(pullHistory);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const navigate = useNavigate();
@@ -193,6 +198,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   const lastPreferredGachaId = useMemo(
     () => uiPreferencesStore.getLastSelectedDrawGachaId() ?? undefined,
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const quickSendNewOnlyPreference = useMemo(
+    () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
   const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
@@ -393,6 +402,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return;
       }
 
+      if (!normalizedUserName) {
+        setErrorMessage('ユーザー名を入力してください。');
+        setResultItems(null);
+        setLastTotalPulls(null);
+        setLastUserName('');
+        triggerError();
+        return;
+      }
+
       if (!drawPlan || drawPlan.errors.length > 0) {
         setErrorMessage(drawPlan?.errors?.[0] ?? 'ポイント設定を確認してください。');
         setResultItems(null);
@@ -437,16 +455,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return;
       }
 
-      const aggregatedItems: DrawGachaDialogResultItem[] = executionResult.items.map((item) => ({
-        itemId: item.itemId,
-        name: item.name,
-        rarityId: item.rarityId,
-        rarityLabel: item.rarityLabel,
-        rarityColor: item.rarityColor,
-        count: item.count,
-        guaranteedCount: item.guaranteedCount > 0 ? item.guaranteedCount : undefined
-      }));
-
       const itemsForStore: GachaResultPayload['items'] = executionResult.items.map((item) => ({
         itemId: item.itemId,
         rarityId: item.rarityId,
@@ -455,6 +463,34 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
       const executedAt = new Date().toISOString();
       const userId = normalizedUserName ? userProfiles.ensureProfile(normalizedUserName) : undefined;
+      const inventoryByItemId = userId ? (userInventoriesState?.byItemId ?? {}) : null;
+
+      const aggregatedItems: DrawGachaDialogResultItem[] = executionResult.items.map((item) => {
+        const existingEntries = inventoryByItemId?.[item.itemId] ?? [];
+        const alreadyOwned = userId
+          ? existingEntries.some(
+              (entry) =>
+                entry.userId === userId &&
+                entry.gachaId === selectedGacha.id &&
+                entry.count > 0
+            )
+          : false;
+
+        return {
+          itemId: item.itemId,
+          name: item.name,
+          rarityId: item.rarityId,
+          rarityLabel: item.rarityLabel,
+          rarityColor: item.rarityColor,
+          count: item.count,
+          guaranteedCount: item.guaranteedCount > 0 ? item.guaranteedCount : undefined,
+          isNew: userId ? !alreadyOwned : false
+        };
+      });
+
+      const newItemIds = Array.from(
+        new Set(aggregatedItems.filter((item) => item.isNew).map((item) => item.itemId))
+      );
 
       const payload: GachaResultPayload = {
         gachaId: selectedGacha.id,
@@ -462,7 +498,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         executedAt,
         pullCount: executionResult.totalPulls,
         currencyUsed: executionResult.pointsSpent,
-        items: itemsForStore
+        items: itemsForStore,
+        newItems: newItemIds.length > 0 ? newItemIds : undefined
       };
 
       console.info('【デバッグ】ガチャを引きました', {
@@ -515,6 +552,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
   const integerFormatter = useMemo(() => new Intl.NumberFormat('ja-JP'), []);
   const totalCount = resultItems?.reduce((total, item) => total + item.count, 0) ?? 0;
+  const newResultItemIds = useMemo(() => {
+    if (!resultItems) {
+      return [];
+    }
+    const ids = resultItems.filter((item) => item.isNew).map((item) => item.itemId);
+    return Array.from(new Set(ids));
+  }, [resultItems]);
   const planWarnings = drawPlan?.warnings ?? [];
   const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
@@ -657,6 +701,44 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }, 4000);
   }, [discordDeliveryNotice]);
 
+  const requestQuickSendPreference = useCallback(() => {
+    return new Promise<{ sendNewOnly: boolean; rememberChoice: boolean } | null>((resolve) => {
+      let settled = false;
+      const finalize = (value: { sendNewOnly: boolean; rememberChoice: boolean } | null) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(value);
+      };
+
+      push(QuickSendConfirmDialog, {
+        id: 'quick-send-confirm',
+        title: '送信対象の確認',
+        size: 'sm',
+        panelClassName: 'overflow-hidden',
+        payload: {
+          onConfirm: (result) => finalize(result)
+        },
+        onClose: () => finalize(null)
+      });
+    });
+  }, [push]);
+
+  const resolveQuickSendNewOnly = useCallback(async () => {
+    if (quickSendNewOnlyPreference !== null) {
+      return quickSendNewOnlyPreference;
+    }
+    const decision = await requestQuickSendPreference();
+    if (!decision) {
+      return null;
+    }
+    if (decision.rememberChoice) {
+      uiPreferencesStore.setQuickSendNewOnlyPreference(decision.sendNewOnly, { persist: 'immediate' });
+    }
+    return decision.sendNewOnly;
+  }, [quickSendNewOnlyPreference, requestQuickSendPreference, uiPreferencesStore]);
+
   const handleShareResult = useCallback(() => {
     if (!shareContent) {
       return;
@@ -670,11 +752,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     async ({
       profile,
       targetUserId,
-      guildSelection: selectionOverride
+      guildSelection: selectionOverride,
+      itemIdFilter
     }: {
       profile: UserProfileCardV3;
       targetUserId: string;
       guildSelection?: DiscordGuildSelection;
+      itemIdFilter?: string[];
     }) => {
       setDiscordDeliveryCompleted(false);
       if (!resultItems || resultItems.length === 0) {
@@ -737,11 +821,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         const selection = { mode: 'history', pullIds: [lastPullId] } as const;
 
+        const filteredItemIds =
+          itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
         const zip = await buildUserZipFromSelection({
           snapshot,
           selection,
           userId: targetUserId,
-          userName: receiverDisplayName
+          userName: receiverDisplayName,
+          itemIdFilter: filteredItemIds
         });
 
         setDiscordDeliveryStage('uploading');
@@ -907,6 +994,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
         }
 
+        if (zip.pullIds.length > 0) {
+          pullHistory.markPullStatus(zip.pullIds, 'discord_shared');
+        }
+
         const sharedAt = new Date().toISOString();
         const rawShareUrl = shareUrl || '';
         const resolvedShareUrl = rawShareUrl.trim();
@@ -977,7 +1068,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       queuedDeliveryProcessingRef.current = null;
       return;
     }
-    const { userId, selection, requestedAt } = queuedDiscordDelivery;
+    const { userId, selection, requestedAt, itemIdFilter } = queuedDiscordDelivery;
     const processingKey = `${userId}:${requestedAt}`;
 
     if (queuedDeliveryProcessingRef.current === processingKey) {
@@ -1000,7 +1091,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         await performDiscordDelivery({
           profile,
           targetUserId: userId,
-          guildSelection: selection
+          guildSelection: selection,
+          itemIdFilter
         });
       } catch (error) {
         console.error('Failed to deliver prize after linking Discord profile', error);
@@ -1037,6 +1129,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setDiscordDeliveryNotice(null);
     setDiscordDeliveryCompleted(false);
 
+    const quickSendNewOnly = await resolveQuickSendNewOnly();
+    if (quickSendNewOnly === null) {
+      return;
+    }
+    if (quickSendNewOnly && newResultItemIds.length === 0) {
+      setDiscordDeliveryError('新規取得した景品がありません。');
+      return;
+    }
+    const itemIdFilter = quickSendNewOnly ? newResultItemIds : undefined;
+
     let guildSelection: DiscordGuildSelection;
     try {
       guildSelection = requireDiscordGuildSelection(staffDiscordId);
@@ -1057,7 +1159,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         await performDiscordDelivery({
           profile,
           targetUserId,
-          guildSelection
+          guildSelection,
+          itemIdFilter
         });
       } catch (error) {
         console.error('Failed to deliver prize to Discord', error);
@@ -1104,7 +1207,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           setQueuedDiscordDelivery({
             userId: targetUserId,
             selection: guildSelection,
-            requestedAt: Date.now()
+            requestedAt: Date.now(),
+            itemIdFilter
           });
         },
         onMemberPickFailed: (message) => {
@@ -1123,6 +1227,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     staffDiscordId,
     lastUserProfile,
     performDiscordDelivery,
+    resolveQuickSendNewOnly,
+    newResultItemIds,
     push,
     userProfiles
   ]);
@@ -1215,7 +1321,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             </label>
             <div className="space-y-2">
               <label className="space-y-2">
-                <span className="block text-sm font-semibold text-muted-foreground">名前</span>
+                <span className="block text-sm font-semibold text-muted-foreground">名前（必須）</span>
                 <input
                   type="text"
                   value={userName}
@@ -1224,7 +1330,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     setSelectedUserId(null);
                   }}
                   className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
-                  placeholder="ユーザー名（任意）"
+                  placeholder="ユーザー名"
                 />
               </label>
               {userSuggestions.length > 0 ? (
@@ -1383,7 +1489,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                         {item.rarityLabel}
                       </span>
                     </span>
-                    <span className="flex-1 font-medium">{item.name}</span>
+                    <span className="flex-1 font-medium">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span>{item.name}</span>
+                        {item.isNew ? (
+                          <span className="inline-flex h-5 items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-semibold leading-none text-emerald-700">
+                            new
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
                     <span className="flex items-center gap-2 font-mono">
                       ×{item.count}
                       {item.guaranteedCount ? (
@@ -1524,7 +1639,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             type="button"
             className="btn btn-primary"
             onClick={handleExecute}
-            disabled={isExecuting || !gachaOptions.length || Boolean(planErrorMessage)}
+            disabled={
+              isExecuting || !gachaOptions.length || !normalizedUserName || Boolean(planErrorMessage)
+            }
           >
             <SparklesIcon className="h-5 w-5" />
             ガチャを実行

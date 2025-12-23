@@ -213,6 +213,7 @@ export interface UiPreferencesStateV3 {
   gacha?: {
     drawDialog?: {
       lastSelectedGachaId?: string;
+      quickSendNewOnly?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -264,6 +265,7 @@ export interface PullHistoryEntryV1 {
   rarityCounts?: Record<string, number>;
   source: PullHistoryEntrySourceV1;
   status?: PullHistoryEntryStatus;
+  newItems?: string[];
 }
 
 export interface PullHistoryStateV1 {

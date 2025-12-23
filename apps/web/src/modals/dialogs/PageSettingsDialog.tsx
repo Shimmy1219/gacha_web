@@ -172,6 +172,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const ptSettingsState = useStoreValue(ptControlsStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const completeMode = resolveCompleteModePreference(ptSettingsState);
+  const quickSendNewOnlyPreference = useMemo(
+    () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -207,6 +212,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       ptControlsStore.setCompleteMode(mode, { persist: 'immediate' });
     },
     [ptControlsStore]
+  );
+
+  const handleQuickSendNewOnlyChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
   );
 
   const handleDesktopLayoutChange = useCallback(
@@ -555,6 +567,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 description="過去に終了したガチャも一覧から確認できるようにします。"
                 checked={showArchived}
                 onChange={setShowArchived}
+              />
+              <SwitchField
+                label="クイック送信時に新規取得したアイテムのみを送る"
+                description="お渡し部屋に景品を送信する際、Newタグの付いた景品だけを対象にします。"
+                checked={quickSendNewOnly}
+                onChange={handleQuickSendNewOnlyChange}
               />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
