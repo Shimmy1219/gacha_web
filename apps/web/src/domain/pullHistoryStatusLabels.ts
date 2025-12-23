@@ -3,7 +3,8 @@ import type { PullHistoryEntryStatus } from './app-persistence';
 export const PULL_HISTORY_STATUS_LABELS: Record<PullHistoryEntryStatus, string> = {
   new: 'new',
   ziped: 'zip出力済み',
-  uploaded: 'URL発行済み'
+  uploaded: 'URL発行済み',
+  discord_shared: 'Discord共有済み'
 };
 
 export function getPullHistoryStatusLabel(
