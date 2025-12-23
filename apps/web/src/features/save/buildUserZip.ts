@@ -47,6 +47,7 @@ interface BuildParams {
   userId: string;
   userName: string;
   includeMetadata?: boolean;
+  itemIdFilter?: Set<string>;
 }
 
 type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
@@ -234,7 +235,8 @@ function aggregateInventoryItems(
   catalogState: GachaCatalogStateV4 | undefined,
   appState: GachaLocalStorageSnapshot['appState'] | undefined,
   selection: SaveTargetSelection,
-  warnings: Set<string>
+  warnings: Set<string>,
+  itemIdFilter?: Set<string> | null
 ): SelectedAsset[] {
   if (!inventories) {
     return [];
@@ -260,6 +262,9 @@ function aggregateInventoryItems(
       }
 
       itemIds.forEach((itemId) => {
+        if (itemIdFilter && !itemIdFilter.has(itemId)) {
+          return;
+        }
         const assets = createSelectedAssets(
           context,
           itemId,
@@ -289,7 +294,8 @@ function aggregateHistoryItems(
   snapshot: GachaLocalStorageSnapshot,
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
   warnings: Set<string>,
-  normalizedTargetUserId: string
+  normalizedTargetUserId: string,
+  itemIdFilter?: Set<string> | null
 ): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
@@ -333,6 +339,9 @@ function aggregateHistoryItems(
 
     Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
       if (!itemId || !Number.isFinite(count) || count <= 0) {
+        return;
+      }
+      if (itemIdFilter && !itemIdFilter.has(itemId)) {
         return;
       }
 
@@ -497,7 +506,8 @@ export async function buildUserZipFromSelection({
   selection,
   userId,
   userName,
-  includeMetadata = true
+  includeMetadata = true,
+  itemIdFilter
 }: BuildParams): Promise<ZipBuildResult> {
   ensureBrowserEnvironment();
 
@@ -507,17 +517,31 @@ export async function buildUserZipFromSelection({
   const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
+  const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
 
   let collected: SelectedAsset[] = [];
   let historySelectionDetails: HistorySelectionMetadata[] = [];
   let includedPullIds: Set<string> = new Set();
   if (selection.mode === 'history') {
-    const historyAggregation = aggregateHistoryItems(snapshot, selection, warnings, normalizedUserId);
+    const historyAggregation = aggregateHistoryItems(
+      snapshot,
+      selection,
+      warnings,
+      normalizedUserId,
+      normalizedItemFilter
+    );
     collected = historyAggregation.assets;
     historySelectionDetails = historyAggregation.pulls;
     includedPullIds = historyAggregation.includedPullIds;
   } else {
-    collected = aggregateInventoryItems(inventoriesForUser, catalogState, snapshot.appState, selection, warnings);
+    collected = aggregateInventoryItems(
+      inventoriesForUser,
+      catalogState,
+      snapshot.appState,
+      selection,
+      warnings,
+      normalizedItemFilter
+    );
     includedPullIds = collectPullIdsForSelection(snapshot.pullHistory, normalizedUserId, selection);
     if (includedPullIds.size > 0) {
       historySelectionDetails = collectHistoryMetadataForPullIds(

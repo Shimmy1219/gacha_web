@@ -213,6 +213,7 @@ export interface UiPreferencesStateV3 {
   gacha?: {
     drawDialog?: {
       lastSelectedGachaId?: string;
+      quickSendNewOnly?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;
