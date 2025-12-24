@@ -22,6 +22,7 @@ export interface GachaCatalogItemV3 {
   order?: number;
   pickupTarget?: boolean;
   completeTarget?: boolean;
+  originalPrize?: boolean;
   imageAssetId?: string;
   thumbnailAssetId?: string | null;
   riagu?: boolean;
@@ -51,6 +52,7 @@ export interface GachaCatalogItemV4 {
   order?: number;
   pickupTarget?: boolean;
   completeTarget?: boolean;
+  originalPrize?: boolean;
   assets?: GachaCatalogItemAssetV4[];
   riagu?: boolean;
   updatedAt?: string;
@@ -120,6 +122,7 @@ export interface UserInventorySnapshotV3 {
   totalCount?: number;
   items: Record<string, string[]>;
   counts: Record<string, Record<string, number>>;
+  originalPrizeAssets?: Record<string, OriginalPrizeAssetV1[]>;
 }
 
 export interface UserInventoriesStateV3 {
@@ -127,6 +130,11 @@ export interface UserInventoriesStateV3 {
   updatedAt: string;
   inventories: Record<string, Record<string, UserInventorySnapshotV3>>;
   byItemId: Record<string, Array<{ userId: string; gachaId: string; rarityId: string; count: number }>>;
+}
+
+export interface OriginalPrizeAssetV1 {
+  assetId: string;
+  thumbnailAssetId?: string | null;
 }
 
 export interface HitCountsStateV3 {

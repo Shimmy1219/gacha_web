@@ -329,6 +329,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
 
       const itemsByRarity = inventory.items ?? {};
       const countsByRarity = inventory.counts ?? {};
+      const originalPrizeAssetsByItem = inventory.originalPrizeAssets ?? {};
 
       const pulls: UserInventoryEntryItem[] = [];
 
@@ -372,7 +373,9 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
               color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR,
               rarityNum: rarityEntity?.sortOrder
             },
-            count: totalCount
+            count: totalCount,
+            isOriginalPrize: Boolean(catalogItem?.originalPrize),
+            originalPrizeAssets: originalPrizeAssetsByItem[itemId] ?? []
           });
         });
       });

@@ -34,6 +34,7 @@ export interface PrizeSettingsDialogPayload {
   rarityOptions: RarityOption[];
   pickupTarget: boolean;
   completeTarget: boolean;
+  originalPrize: boolean;
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
@@ -48,6 +49,7 @@ export interface PrizeSettingsDialogPayload {
     rarityId: string;
     pickupTarget: boolean;
     completeTarget: boolean;
+    originalPrize: boolean;
     riagu: boolean;
     assets: PrizeSettingsAsset[];
   }) => void;
@@ -192,6 +194,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId: payload?.rarityId ?? '',
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
+      originalPrize: payload?.originalPrize ?? false,
       riagu: payload?.isRiagu ?? false,
       assets: normalizeAssets(payload?.assets)
     }),
@@ -202,6 +205,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [rarityId, setRarityId] = useState(initialState.rarityId);
   const [pickupTarget, setPickupTarget] = useState(initialState.pickup);
   const [completeTarget, setCompleteTarget] = useState(initialState.complete);
+  const [originalPrize, setOriginalPrize] = useState(initialState.originalPrize);
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [assetEntries, setAssetEntries] = useState<PrizeSettingsAsset[]>(initialState.assets);
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
@@ -357,6 +361,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     rarityId !== initialState.rarityId ||
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
+    originalPrize !== initialState.originalPrize ||
     riaguTarget !== initialState.riagu ||
     !areAssetsEqual(assetEntries, initialState.assets);
 
@@ -383,6 +388,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId,
       pickupTarget,
       completeTarget,
+      originalPrize,
       riagu: riaguTarget,
       assets: normalizeAssets(assetEntries)
     });
@@ -639,6 +645,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   checked={completeTarget}
                   onChange={setCompleteTarget}
                   name="completeTarget"
+                />
+                <SwitchField
+                  label="ユーザー毎にオリジナル景品"
+                  description="ユーザーごとにオリジナルの景品ファイルを割り当てます"
+                  checked={originalPrize}
+                  onChange={setOriginalPrize}
+                  name="originalPrize"
                 />
                 <SwitchField
                   label="リアグとして設定"

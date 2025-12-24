@@ -19,12 +19,14 @@ import { useDomainStores } from '../../../../features/storage/AppPersistenceProv
 import {
   ConfirmDialog,
   InventoryHistoryDialog,
+  OriginalPrizeSettingsDialog,
   useModal,
   UserDiscordProfileDialog,
   UserHistoryDialog
 } from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
+import type { OriginalPrizeAssetV1 } from '@domain/app-persistence';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -35,6 +37,8 @@ export interface UserInventoryEntryItem {
   itemName: string;
   rarity: RarityMeta;
   count: number;
+  isOriginalPrize?: boolean;
+  originalPrizeAssets?: OriginalPrizeAssetV1[];
 }
 
 export interface UserInventoryEntry {
@@ -590,6 +594,46 @@ function GachaInventoryCard({
     userName
   ]);
 
+  const originalPrizeItems = useMemo(() => {
+    return inventory.pulls.filter((pull) => pull.isOriginalPrize);
+  }, [inventory.pulls]);
+
+  const handleOpenOriginalPrizeSettings = useCallback(() => {
+    setMenuAnchor(null);
+    if (originalPrizeItems.length === 0) {
+      return;
+    }
+
+    push(OriginalPrizeSettingsDialog, {
+      id: `original-prize-settings-${inventory.inventoryId}`,
+      title: 'オリジナル景品設定',
+      description: 'ユーザーごとのオリジナル景品ファイルを割り当てます。',
+      size: 'lg',
+      payload: {
+        userId,
+        userName,
+        inventoryId: inventory.inventoryId,
+        gachaId: inventory.gachaId,
+        gachaName: inventory.gachaName,
+        items: originalPrizeItems.map((item) => ({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          rarityLabel: item.rarity.label ?? item.rarity.rarityId ?? '未分類',
+          count: item.count,
+          assets: item.originalPrizeAssets ?? []
+        }))
+      }
+    });
+  }, [
+    inventory.gachaId,
+    inventory.gachaName,
+    inventory.inventoryId,
+    originalPrizeItems,
+    push,
+    userId,
+    userName
+  ]);
+
   const handleDeleteInventory = useCallback(() => {
     push(ConfirmDialog, {
       id: `inventory-delete-${inventory.inventoryId}`,
@@ -639,6 +683,14 @@ function GachaInventoryCard({
         label: '履歴',
         onSelect: handleOpenHistory
       },
+      {
+        type: 'item',
+        id: 'inventory-original-prize',
+        label: 'オリジナル景品設定',
+        description: originalPrizeItems.length === 0 ? 'オリジナル景品がありません' : undefined,
+        disabled: originalPrizeItems.length === 0,
+        onSelect: handleOpenOriginalPrizeSettings
+      },
       { type: 'separator', id: 'inventory-menu-separator' },
       {
         type: 'item',
@@ -648,7 +700,13 @@ function GachaInventoryCard({
         onSelect: handleDeleteInventory
       }
     ],
-    [handleDeleteInventory, handleOpenHistory, handleToggleEditing]
+    [
+      handleDeleteInventory,
+      handleOpenHistory,
+      handleOpenOriginalPrizeSettings,
+      handleToggleEditing,
+      originalPrizeItems.length
+    ]
   );
 
   const handleStartEdit = useCallback(

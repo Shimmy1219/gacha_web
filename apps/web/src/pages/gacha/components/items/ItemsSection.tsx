@@ -300,6 +300,7 @@ export function ItemsSection(): JSX.Element {
           isRiagu: Boolean(snapshot.riagu || riaguCard),
           completeTarget: Boolean(snapshot.completeTarget),
           pickupTarget: Boolean(snapshot.pickupTarget),
+          originalPrize: Boolean(snapshot.originalPrize),
           order: snapshot.order ?? 0,
           createdAt: gachaMeta?.createdAt ?? snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
@@ -863,6 +864,7 @@ export function ItemsSection(): JSX.Element {
       order: baseOrder + 1,
       pickupTarget: false,
       completeTarget: false,
+      originalPrize: false,
       assets: [],
       riagu: false,
       updatedAt: timestamp
@@ -938,6 +940,7 @@ export function ItemsSection(): JSX.Element {
           rarityOptions,
           pickupTarget: model.pickupTarget,
           completeTarget: model.completeTarget,
+          originalPrize: model.originalPrize,
           isRiagu: model.isRiagu,
           hasRiaguCard: Boolean(riaguCard),
           riaguAssignmentCount,
@@ -954,6 +957,7 @@ export function ItemsSection(): JSX.Element {
                 rarityId: payload.rarityId,
                 pickupTarget: payload.pickupTarget,
                 completeTarget: payload.completeTarget,
+                originalPrize: payload.originalPrize,
                 riagu: payload.riagu,
                 assets: payload.assets
               };
