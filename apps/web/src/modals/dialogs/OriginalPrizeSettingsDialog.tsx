@@ -7,13 +7,14 @@ import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import type { OriginalPrizeAssetV1 } from '@domain/app-persistence';
+import type { OriginalPrizeInstance } from '@domain/originalPrize';
 
 export interface OriginalPrizeItemEntry {
   itemId: string;
   itemName: string;
   rarityLabel: string;
   count: number;
-  assets: OriginalPrizeAssetV1[];
+  instances: OriginalPrizeInstance[];
 }
 
 export interface OriginalPrizeSettingsDialogPayload {
@@ -25,22 +26,42 @@ export interface OriginalPrizeSettingsDialogPayload {
   items: OriginalPrizeItemEntry[];
 }
 
-function normalizeOriginalPrizeAssets(assets: OriginalPrizeAssetV1[]): OriginalPrizeAssetV1[] {
+function normalizeOriginalPrizeInstances(instances: OriginalPrizeInstance[]): OriginalPrizeInstance[] {
   const seen = new Set<string>();
-  const normalized: OriginalPrizeAssetV1[] = [];
+  const normalized: OriginalPrizeInstance[] = [];
 
-  assets.forEach((asset) => {
-    if (!asset?.assetId || seen.has(asset.assetId)) {
+  instances.forEach((instance) => {
+    if (!instance?.instanceId || seen.has(instance.instanceId)) {
       return;
     }
-    seen.add(asset.assetId);
+    seen.add(instance.instanceId);
     normalized.push({
-      assetId: asset.assetId,
-      thumbnailAssetId: asset.thumbnailAssetId ?? null
+      ...instance,
+      index: Number.isFinite(instance.index) ? instance.index : -1,
+      asset: instance.asset ?? null
     });
   });
 
   return normalized;
+}
+
+function formatAcquiredAt(value: string | undefined): string {
+  if (!value) {
+    return '不明';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) {
+    return '不明';
+  }
+
+  return parsed.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 interface AssetPreviewItemProps {
@@ -96,71 +117,118 @@ function AssetPreviewItem({ asset, onRemove }: AssetPreviewItemProps): JSX.Eleme
   );
 }
 
-interface OriginalPrizeItemRowProps {
-  item: OriginalPrizeItemEntry;
-  assets: OriginalPrizeAssetV1[];
-  onAddAssets: (itemId: string, files: FileList | null) => void;
-  onRemoveAsset: (itemId: string, assetId: string) => void;
+interface OriginalPrizeInstanceRowProps {
+  instance: OriginalPrizeInstance;
+  position: number;
+  onAddAsset: (instance: OriginalPrizeInstance, file: File | null) => void;
+  onRemoveAsset: (instance: OriginalPrizeInstance) => void;
   disabled?: boolean;
 }
 
-function OriginalPrizeItemRow({
-  item,
-  assets,
-  onAddAssets,
+function OriginalPrizeInstanceRow({
+  instance,
+  position,
+  onAddAsset,
   onRemoveAsset,
   disabled
-}: OriginalPrizeItemRowProps): JSX.Element {
+}: OriginalPrizeInstanceRowProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const canEdit = Boolean(instance.pullId) && instance.index >= 0 && !instance.isPlaceholder;
+  const hasAsset = Boolean(instance.asset?.assetId);
 
   const handleClickAdd = () => {
+    if (!canEdit || disabled) {
+      return;
+    }
     inputRef.current?.click();
   };
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onAddAssets(item.itemId, event.target.files);
+    const file = event.target.files?.[0] ?? null;
+    onAddAsset(instance, file);
     event.target.value = '';
   };
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast p-4">
+    <div className="space-y-2 rounded-xl border border-border/60 bg-surface/10 p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-surface-foreground">{item.itemName}</p>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span>{item.rarityLabel}</span>
-            <span className="rounded-full border border-border/60 px-2 py-0.5">所持 {item.count}個</span>
-          </div>
+          <p className="text-xs font-semibold text-surface-foreground">{position}個目</p>
+          <p className="text-[11px] text-muted-foreground">取得日時: {formatAcquiredAt(instance.acquiredAt)}</p>
         </div>
         <button
           type="button"
           className={clsx(
             'inline-flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition hover:border-accent hover:bg-accent/20',
-            disabled && 'cursor-not-allowed opacity-60'
+            (disabled || !canEdit) && 'cursor-not-allowed opacity-60'
           )}
           onClick={handleClickAdd}
-          disabled={disabled}
+          disabled={disabled || !canEdit}
         >
           <PlusCircleIcon className="h-4 w-4" />
-          ファイル追加
+          {hasAsset ? '差し替え' : 'ファイル追加'}
         </button>
         <input
           ref={inputRef}
           type="file"
-          multiple
           className="sr-only"
           onChange={handleInputChange}
+          disabled={disabled || !canEdit}
         />
       </div>
       <div className="space-y-2">
-        {assets.length === 0 ? (
-          <p className="text-xs text-muted-foreground">まだファイルが設定されていません。</p>
+        {hasAsset && instance.asset ? (
+          <AssetPreviewItem
+            asset={instance.asset}
+            onRemove={disabled || !canEdit ? undefined : (_assetId) => onRemoveAsset(instance)}
+          />
         ) : (
-          assets.map((asset) => (
-            <AssetPreviewItem
-              key={asset.assetId}
-              asset={asset}
-              onRemove={(assetId) => onRemoveAsset(item.itemId, assetId)}
+          <p className="text-xs text-muted-foreground">まだファイルが設定されていません。</p>
+        )}
+        {!canEdit ? (
+          <p className="text-[11px] text-muted-foreground">履歴がないため保存できません。</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+interface OriginalPrizeItemRowProps {
+  item: OriginalPrizeItemEntry;
+  instances: OriginalPrizeInstance[];
+  onAddAsset: (instance: OriginalPrizeInstance, file: File | null) => void;
+  onRemoveAsset: (instance: OriginalPrizeInstance) => void;
+  disabled?: boolean;
+}
+
+function OriginalPrizeItemRow({
+  item,
+  instances,
+  onAddAsset,
+  onRemoveAsset,
+  disabled
+}: OriginalPrizeItemRowProps): JSX.Element {
+  return (
+    <div className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast p-4">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-surface-foreground">{item.itemName}</p>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <span>{item.rarityLabel}</span>
+          <span className="rounded-full border border-border/60 px-2 py-0.5">所持 {item.count}個</span>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {instances.length === 0 ? (
+          <p className="text-xs text-muted-foreground">獲得履歴がありません。</p>
+        ) : (
+          instances.map((instance, index) => (
+            <OriginalPrizeInstanceRow
+              key={instance.instanceId}
+              instance={instance}
+              position={index + 1}
+              onAddAsset={onAddAsset}
+              onRemoveAsset={onRemoveAsset}
+              disabled={disabled}
             />
           ))
         )}
@@ -173,129 +241,122 @@ export function OriginalPrizeSettingsDialog({
   payload,
   close
 }: ModalComponentProps<OriginalPrizeSettingsDialogPayload>): JSX.Element {
-  const { userInventories: userInventoriesStore } = useDomainStores();
+  const { pullHistory: pullHistoryStore } = useDomainStores();
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
-  const assetRequestIdRef = useRef(0);
 
   const sortedItems = useMemo(() => {
     return (payload?.items ?? []).slice().sort((a, b) => a.itemName.localeCompare(b.itemName, 'ja'));
   }, [payload?.items]);
 
-  const [assetsByItemId, setAssetsByItemId] = useState<Record<string, OriginalPrizeAssetV1[]>>(() => {
-    const initial: Record<string, OriginalPrizeAssetV1[]> = {};
+  const [instancesByItemId, setInstancesByItemId] = useState<Record<string, OriginalPrizeInstance[]>>(() => {
+    const initial: Record<string, OriginalPrizeInstance[]> = {};
     sortedItems.forEach((item) => {
-      const normalized = normalizeOriginalPrizeAssets(item.assets ?? []);
-      if (normalized.length > 0) {
-        initial[item.itemId] = normalized;
-      }
+      initial[item.itemId] = normalizeOriginalPrizeInstances(item.instances ?? []);
     });
     return initial;
   });
 
-  const updateAssetsForItem = useCallback(
-    (itemId: string, assets: OriginalPrizeAssetV1[]) => {
-      if (!payload) {
+  const updateInstanceAssetState = useCallback(
+    (itemId: string, instanceId: string, asset: OriginalPrizeAssetV1 | null) => {
+      setInstancesByItemId((previous) => {
+        const current = previous[itemId] ?? [];
+        if (current.length === 0) {
+          return previous;
+        }
+        const nextInstances = current.map((instance) =>
+          instance.instanceId === instanceId ? { ...instance, asset } : instance
+        );
+        return { ...previous, [itemId]: nextInstances };
+      });
+    },
+    []
+  );
+
+  const persistAssignment = useCallback(
+    (instance: OriginalPrizeInstance, asset: OriginalPrizeAssetV1 | null) => {
+      if (!instance.pullId || instance.index < 0) {
         return;
       }
-      userInventoriesStore.updateOriginalPrizeAssets(
+      pullHistoryStore.updateOriginalPrizeAssignment(
         {
-          userId: payload.userId,
-          inventoryId: payload.inventoryId,
-          itemId,
-          assets
+          pullId: instance.pullId,
+          itemId: instance.itemId,
+          index: instance.index,
+          asset
         },
         { persist: 'debounced' }
       );
     },
-    [payload, userInventoriesStore]
+    [pullHistoryStore]
   );
 
-  const handleAddAssets = useCallback(
-    async (itemId: string, fileList: FileList | null) => {
-      if (!fileList || fileList.length === 0 || !payload) {
+  const handleAddAsset = useCallback(
+    async (instance: OriginalPrizeInstance, file: File | null) => {
+      if (!file) {
+        return;
+      }
+      if (!instance.pullId || instance.index < 0) {
+        setAssetError('履歴がないため保存できません。');
         return;
       }
 
       setAssetError(null);
-      const requestId = assetRequestIdRef.current + 1;
-      assetRequestIdRef.current = requestId;
       setIsProcessingAsset(true);
+      const previousAssetId = instance.asset?.assetId ?? null;
 
       try {
-        const results = await Promise.allSettled(
-          Array.from(fileList, async (file) => saveAsset(file))
-        );
-
-        const successful: Awaited<ReturnType<typeof saveAsset>>[] = [];
-        results.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            successful.push(result.value);
-          }
-        });
-
-        const failedCount = results.length - successful.length;
-
-        if (assetRequestIdRef.current !== requestId) {
-          await Promise.all(successful.map((record) => deleteAsset(record.id)));
-          return;
-        }
-
-        if (failedCount > 0) {
-          setAssetError('一部のファイル保存に失敗しました。');
-        }
-
-        const newAssets: OriginalPrizeAssetV1[] = successful.map((record) => ({
+        const record = await saveAsset(file);
+        const newAsset: OriginalPrizeAssetV1 = {
           assetId: record.id,
           thumbnailAssetId: record.previewId ?? null
-        }));
+        };
 
-        setAssetsByItemId((previous) => {
-          const current = previous[itemId] ?? [];
-          const nextAssets = normalizeOriginalPrizeAssets([...current, ...newAssets]);
-          const nextState = { ...previous };
-          if (nextAssets.length > 0) {
-            nextState[itemId] = nextAssets;
-          } else {
-            delete nextState[itemId];
+        updateInstanceAssetState(instance.itemId, instance.instanceId, newAsset);
+        persistAssignment(instance, newAsset);
+
+        if (previousAssetId) {
+          try {
+            await deleteAsset(previousAssetId);
+          } catch (error) {
+            console.warn('オリジナル景品ファイルの削除に失敗しました', error);
           }
-          updateAssetsForItem(itemId, nextAssets);
-          return nextState;
-        });
+        }
       } catch (error) {
         console.error('オリジナル景品ファイルの保存に失敗しました', error);
         setAssetError('ファイルの保存に失敗しました。もう一度お試しください。');
       } finally {
-        if (assetRequestIdRef.current === requestId) {
-          setIsProcessingAsset(false);
-        }
+        setIsProcessingAsset(false);
       }
     },
-    [payload, updateAssetsForItem]
+    [persistAssignment, updateInstanceAssetState]
   );
 
   const handleRemoveAsset = useCallback(
-    async (itemId: string, assetId: string) => {
-      setAssetsByItemId((previous) => {
-        const current = previous[itemId] ?? [];
-        const nextAssets = current.filter((asset) => asset.assetId !== assetId);
-        const nextState = { ...previous };
-        if (nextAssets.length > 0) {
-          nextState[itemId] = nextAssets;
-        } else {
-          delete nextState[itemId];
-        }
-        updateAssetsForItem(itemId, nextAssets);
-        return nextState;
-      });
+    async (instance: OriginalPrizeInstance) => {
+      const assetId = instance.asset?.assetId ?? '';
+      if (!assetId) {
+        return;
+      }
+      if (!instance.pullId || instance.index < 0) {
+        setAssetError('履歴がないため保存できません。');
+        return;
+      }
+
+      setAssetError(null);
+      setIsProcessingAsset(true);
+      updateInstanceAssetState(instance.itemId, instance.instanceId, null);
+      persistAssignment(instance, null);
 
       try {
         await deleteAsset(assetId);
       } catch (error) {
         console.warn('オリジナル景品ファイルの削除に失敗しました', error);
+      } finally {
+        setIsProcessingAsset(false);
       }
     },
-    [updateAssetsForItem]
+    [persistAssignment, updateInstanceAssetState]
   );
 
   return (
@@ -319,8 +380,8 @@ export function OriginalPrizeSettingsDialog({
               <OriginalPrizeItemRow
                 key={item.itemId}
                 item={item}
-                assets={assetsByItemId[item.itemId] ?? []}
-                onAddAssets={handleAddAssets}
+                instances={instancesByItemId[item.itemId] ?? []}
+                onAddAsset={handleAddAsset}
                 onRemoveAsset={handleRemoveAsset}
                 disabled={isProcessingAsset}
               />

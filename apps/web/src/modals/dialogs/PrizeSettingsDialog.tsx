@@ -648,7 +648,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                 />
                 <SwitchField
                   label="ユーザー毎にオリジナル景品"
-                  description="ユーザーごとにオリジナルの景品ファイルを割り当てます"
+                  description="ユーザーごとにオリジナルの景品ファイルを割り当てます。リクエストボイスやメッセージ入りの景品はこちらをONにしてください。画像の設定はユーザーのメニューから出来ます"
                   checked={originalPrize}
                   onChange={setOriginalPrize}
                   name="originalPrize"

@@ -6,6 +6,11 @@ import type {
   GachaRarityStateV3
 } from '@domain/app-persistence';
 import {
+  applyLegacyAssetsToInstances,
+  alignOriginalPrizeInstances,
+  buildOriginalPrizeInstanceMap
+} from '@domain/originalPrize';
+import {
   DEFAULT_USER_FILTER_PREFERENCES,
   type UserFilterPreferences,
   UiPreferencesStore
@@ -271,6 +276,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
   const catalogByGacha = snapshot.catalogState?.byGacha ?? {};
   const appMeta = snapshot.appState?.meta ?? {};
   const rarityEntities = snapshot.rarityState?.entities ?? {};
+  const pullHistory = snapshot.pullHistory;
   const gachaOrder = (snapshot.appState?.order ?? []).filter(
     (gachaId) => snapshot.appState?.meta?.[gachaId]?.isArchived !== true
   );
@@ -331,6 +337,35 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       const countsByRarity = inventory.counts ?? {};
       const originalPrizeAssetsByItem = inventory.originalPrizeAssets ?? {};
 
+      const originalPrizeItemIds = new Set<string>();
+      Object.values(countsByRarity).forEach((record) => {
+        Object.keys(record ?? {}).forEach((itemId) => {
+          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+          if (catalogItem?.originalPrize) {
+            originalPrizeItemIds.add(itemId);
+          }
+        });
+      });
+
+      Object.values(itemsByRarity).forEach((itemIds) => {
+        if (!Array.isArray(itemIds)) {
+          return;
+        }
+        itemIds.forEach((itemId) => {
+          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+          if (catalogItem?.originalPrize) {
+            originalPrizeItemIds.add(itemId);
+          }
+        });
+      });
+
+      const originalPrizeInstanceMap = buildOriginalPrizeInstanceMap({
+        pullHistory,
+        userId,
+        gachaId: inventory.gachaId,
+        targetItemIds: originalPrizeItemIds
+      });
+
       const pulls: UserInventoryEntryItem[] = [];
 
       Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
@@ -364,6 +399,14 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           }
 
           const rarityEntity = rarityEntities[rarityId];
+          const isOriginalPrize = Boolean(catalogItem?.originalPrize);
+          const instances = isOriginalPrize
+            ? applyLegacyAssetsToInstances(
+                alignOriginalPrizeInstances(originalPrizeInstanceMap[itemId] ?? [], totalCount, itemId),
+                originalPrizeAssetsByItem[itemId]
+              )
+            : undefined;
+
           pulls.push({
             itemId,
             itemName: catalogItem?.name ?? itemId,
@@ -374,8 +417,8 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
               rarityNum: rarityEntity?.sortOrder
             },
             count: totalCount,
-            isOriginalPrize: Boolean(catalogItem?.originalPrize),
-            originalPrizeAssets: originalPrizeAssetsByItem[itemId] ?? []
+            isOriginalPrize,
+            originalPrizeInstances: instances
           });
         });
       });

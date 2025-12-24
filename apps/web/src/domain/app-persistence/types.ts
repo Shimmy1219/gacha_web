@@ -137,6 +137,12 @@ export interface OriginalPrizeAssetV1 {
   thumbnailAssetId?: string | null;
 }
 
+export interface OriginalPrizeAssignmentV1 {
+  index: number;
+  assetId: string;
+  thumbnailAssetId?: string | null;
+}
+
 export interface HitCountsStateV3 {
   version: number;
   updatedAt: string;
@@ -273,7 +279,9 @@ export interface PullHistoryEntryV1 {
   rarityCounts?: Record<string, number>;
   source: PullHistoryEntrySourceV1;
   status?: PullHistoryEntryStatus;
+  hasOriginalPrizeMissing?: boolean;
   newItems?: string[];
+  originalPrizeAssignments?: Record<string, OriginalPrizeAssignmentV1[]>;
 }
 
 export interface PullHistoryStateV1 {

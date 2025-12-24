@@ -13,7 +13,11 @@ import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { useStoreValue } from '@domain/stores';
-import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
+import {
+  buildUserZipFromSelection,
+  findOriginalPrizeMissingItems,
+  type OriginalPrizeMissingItem
+} from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
@@ -22,10 +26,16 @@ import {
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import {
+  applyLegacyAssetsToInstances,
+  alignOriginalPrizeInstances,
+  buildOriginalPrizeInstanceMap
+} from '@domain/originalPrize';
+import { OriginalPrizeSettingsDialog, type OriginalPrizeSettingsDialogPayload } from './OriginalPrizeSettingsDialog';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -67,8 +77,20 @@ function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: st
   }
   const executedAt = formatExpiresAt(entry.executedAt) ?? '日時不明';
   const pullCount = Number.isFinite(entry.pullCount) ? `${entry.pullCount}連` : '回数不明';
-  const statusLabel = getPullHistoryStatusLabel(entry.status);
+  const statusLabel = getPullHistoryStatusLabel(entry.status, {
+    hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+  });
   return `${executedAt} / ${gachaName} (${pullCount})${statusLabel ? ` / ${statusLabel}` : ''}`;
+}
+
+function formatMissingOriginalPrizeMessage(items: OriginalPrizeMissingItem[]): string {
+  const uniqueNames = Array.from(new Set(items.map((item) => item.itemName || item.itemId)));
+  const itemCount = uniqueNames.length;
+  const previewNames = uniqueNames.slice(0, 3).map((name) => `「${name}」`).join('、');
+  const suffix = uniqueNames.length > 3 ? `など${uniqueNames.length}件` : '';
+  const countLabel = itemCount === 1 ? '1つの景品' : `${itemCount}つの景品`;
+  const previewLabel = previewNames ? `対象: ${previewNames}${suffix}。` : '';
+  return `オリジナル景品のうち${countLabel}にファイルが割り当てられていません。${previewLabel}後で設定するか、今設定をしてください。`;
 }
 
 export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<SaveOptionsDialogPayload>): JSX.Element {
@@ -116,6 +138,146 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
     return userId;
   }, [snapshot.userProfiles?.users, userId, userName]);
+
+  const buildOriginalPrizeSettingsPayload = useCallback(
+    (gachaId: string | undefined): OriginalPrizeSettingsDialogPayload | null => {
+      if (!gachaId) {
+        return null;
+      }
+      const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
+      if (!inventoriesForUser) {
+        return null;
+      }
+      const inventory = Object.values(inventoriesForUser).find((entry) => entry?.gachaId === gachaId);
+      if (!inventory) {
+        return null;
+      }
+
+      const catalogSnapshot = snapshot.catalogState?.byGacha?.[gachaId];
+      const rarityEntities = snapshot.rarityState?.entities ?? {};
+      const itemsByRarity = inventory.items ?? {};
+      const countsByRarity = inventory.counts ?? {};
+      const legacyAssetsByItem = inventory.originalPrizeAssets ?? {};
+
+      const originalItemIds = new Set<string>();
+      const itemCounts = new Map<string, { count: number; rarityId: string }>();
+
+      Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
+        if (!Array.isArray(itemIds) || itemIds.length === 0) {
+          return;
+        }
+
+        const fallbackCounts = new Map<string, number>();
+        itemIds.forEach((itemId) => {
+          fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+        });
+
+        Array.from(fallbackCounts.keys()).forEach((itemId) => {
+          const catalogItem = catalogSnapshot?.items?.[itemId];
+          if (!catalogItem?.originalPrize) {
+            return;
+          }
+          const explicitCount = countsByRarity[rarityId]?.[itemId];
+          const totalCount = typeof explicitCount === 'number' && explicitCount > 0
+            ? explicitCount
+            : fallbackCounts.get(itemId) ?? 0;
+          if (totalCount <= 0) {
+            return;
+          }
+          originalItemIds.add(itemId);
+          itemCounts.set(itemId, { count: totalCount, rarityId });
+        });
+      });
+
+      if (originalItemIds.size === 0) {
+        return null;
+      }
+
+      const instanceMap = buildOriginalPrizeInstanceMap({
+        pullHistory: snapshot.pullHistory,
+        userId,
+        gachaId,
+        targetItemIds: originalItemIds
+      });
+
+      const items: OriginalPrizeSettingsDialogPayload['items'] = [];
+      originalItemIds.forEach((itemId) => {
+        const meta = itemCounts.get(itemId);
+        if (!meta) {
+          return;
+        }
+        const catalogItem = catalogSnapshot?.items?.[itemId];
+        const totalCount = meta.count;
+        const baseInstances = instanceMap[itemId] ?? [];
+        const alignedInstances = alignOriginalPrizeInstances(baseInstances, totalCount, itemId);
+        const instances = applyLegacyAssetsToInstances(alignedInstances, legacyAssetsByItem[itemId]);
+
+        items.push({
+          itemId,
+          itemName: catalogItem?.name ?? itemId,
+          rarityLabel: rarityEntities[meta.rarityId]?.label ?? meta.rarityId ?? '未分類',
+          count: totalCount,
+          instances
+        });
+      });
+
+      items.sort((a, b) => a.itemName.localeCompare(b.itemName, 'ja'));
+
+      return {
+        userId,
+        userName: receiverDisplayName,
+        inventoryId: inventory.inventoryId,
+        gachaId,
+        gachaName: snapshot.appState?.meta?.[gachaId]?.displayName ?? gachaId,
+        items
+      };
+    },
+    [receiverDisplayName, snapshot, userId]
+  );
+
+  const openOriginalPrizeSettings = useCallback(
+    (items: OriginalPrizeMissingItem[]) => {
+      const target = items[0];
+      if (!target) {
+        return;
+      }
+      const payload = buildOriginalPrizeSettingsPayload(target.gachaId);
+      if (!payload) {
+        return;
+      }
+      push(OriginalPrizeSettingsDialog, {
+        id: `original-prize-settings-${payload.inventoryId}`,
+        title: 'オリジナル景品設定',
+        description: 'ユーザーごとのオリジナル景品ファイルを割り当てます。',
+        size: 'lg',
+        payload
+      });
+    },
+    [buildOriginalPrizeSettingsPayload, push]
+  );
+
+  const maybeWarnMissingOriginalPrize = useCallback(
+    (onProceed: () => void) => {
+      const missingItems = findOriginalPrizeMissingItems({ snapshot, selection, userId });
+      if (missingItems.length === 0) {
+        onProceed();
+        return;
+      }
+
+      push(ConfirmDialog, {
+        id: `original-prize-warning-${userId}`,
+        title: 'オリジナル景品の警告',
+        payload: {
+          message: formatMissingOriginalPrizeMessage(missingItems),
+          confirmLabel: '今すぐ設定する',
+          cancelLabel: '後で設定する',
+          onConfirm: () => openOriginalPrizeSettings(missingItems),
+          onCancel: onProceed
+        }
+      });
+    },
+    [openOriginalPrizeSettings, push, selection, snapshot, userId]
+  );
 
   const linkDiscordProfile = useCallback(
     (params: {
@@ -268,7 +430,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
   };
 
-  const handleSaveToDevice = async () => {
+  const runSaveToDevice = async () => {
     if (isProcessing) {
       return;
     }
@@ -286,6 +448,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       const pullIdsForStatus = resolvePullIdsForStatus(result.pullIds);
       if (pullIdsForStatus.length > 0) {
         pullHistoryStore.markPullStatus(pullIdsForStatus, 'ziped');
+        pullHistoryStore.markPullOriginalPrizeMissing(
+          pullIdsForStatus,
+          result.originalPrizeMissingPullIds
+        );
       }
 
       const blobUrl = window.URL.createObjectURL(result.blob);
@@ -310,6 +476,15 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleSaveToDevice = () => {
+    if (isProcessing) {
+      return;
+    }
+    maybeWarnMissingOriginalPrize(() => {
+      void runSaveToDevice();
+    });
   };
 
   const runZipUpload = useCallback(async () => {
@@ -369,7 +544,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     userId
   ]);
 
-  const handleUploadToShimmy = async () => {
+  const runUploadToShimmy = async () => {
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
@@ -398,6 +573,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
       if (pullIdsForStatus.length > 0) {
         pullHistoryStore.markPullStatus(pullIdsForStatus, 'ziped');
+        pullHistoryStore.markPullOriginalPrizeMissing(
+          pullIdsForStatus,
+          zip.originalPrizeMissingPullIds
+        );
       }
 
       const uploadResponse = await uploadZip({
@@ -436,6 +615,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       });
       if (pullIdsForStatus.length > 0) {
         pullHistoryStore.markPullStatus(pullIdsForStatus, 'uploaded');
+        pullHistoryStore.markPullOriginalPrizeMissing(
+          pullIdsForStatus,
+          zip.originalPrizeMissingPullIds
+        );
       }
       setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
     } catch (error) {
@@ -451,10 +634,19 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
   };
 
+  const handleUploadToShimmy = () => {
+    if (isProcessing || isUploading || isDiscordSharing) {
+      return;
+    }
+    maybeWarnMissingOriginalPrize(() => {
+      void runUploadToShimmy();
+    });
+  };
+
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const discordHelperText = isDiscordLoggedIn ? 'Discordに共有' : 'ログインが必要';
 
-  const handleShareToDiscord = async () => {
+  const runShareToDiscord = async () => {
     setErrorBanner(null);
     if (!isDiscordLoggedIn) {
       setErrorBanner('Discordにログインしてから共有してください。');
@@ -691,6 +883,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         });
         if (pullIdsForStatus.length > 0) {
           pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
+          pullHistoryStore.markPullOriginalPrizeMissing(
+            pullIdsForStatus,
+            zip.originalPrizeMissingPullIds
+          );
         }
 
         setErrorBanner(null);
@@ -770,6 +966,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           });
           if (pullIdsForStatus.length > 0) {
             pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
+            pullHistoryStore.markPullOriginalPrizeMissing(
+              pullIdsForStatus,
+              zip.originalPrizeMissingPullIds
+            );
           }
           setUploadNotice({
             id: Date.now(),
@@ -789,6 +989,25 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     } finally {
       setIsDiscordSharing(false);
     }
+  };
+
+  const handleShareToDiscord = () => {
+    setErrorBanner(null);
+    if (!isDiscordLoggedIn) {
+      setErrorBanner('Discordにログインしてから共有してください。');
+      return;
+    }
+    if (!discordUserId) {
+      setErrorBanner('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      return;
+    }
+    if (isProcessing || isUploading || isDiscordSharing) {
+      return;
+    }
+
+    maybeWarnMissingOriginalPrize(() => {
+      void runShareToDiscord();
+    });
   };
 
   const uploadNoticePortal =

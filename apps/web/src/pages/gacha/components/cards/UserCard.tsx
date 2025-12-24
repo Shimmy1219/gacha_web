@@ -26,7 +26,7 @@ import {
 } from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
-import type { OriginalPrizeAssetV1 } from '@domain/app-persistence';
+import type { OriginalPrizeInstance } from '@domain/originalPrize';
 
 export type UserId = string;
 export type InventoryId = string;
@@ -38,7 +38,7 @@ export interface UserInventoryEntryItem {
   rarity: RarityMeta;
   count: number;
   isOriginalPrize?: boolean;
-  originalPrizeAssets?: OriginalPrizeAssetV1[];
+  originalPrizeInstances?: OriginalPrizeInstance[];
 }
 
 export interface UserInventoryEntry {
@@ -620,7 +620,7 @@ function GachaInventoryCard({
           itemName: item.itemName,
           rarityLabel: item.rarity.label ?? item.rarity.rarityId ?? '未分類',
           count: item.count,
-          assets: item.originalPrizeAssets ?? []
+          instances: item.originalPrizeInstances ?? []
         }))
       }
     });

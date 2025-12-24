@@ -1,5 +1,7 @@
 import {
   AppPersistence,
+  type OriginalPrizeAssignmentV1,
+  type OriginalPrizeAssetV1,
   type PullHistoryEntrySourceV1,
   type PullHistoryEntryStatus,
   type PullHistoryEntryV1,
@@ -87,6 +89,49 @@ function normalizeNewItems(value: unknown): string[] | undefined {
   return Array.from(new Set(normalized));
 }
 
+function normalizeOriginalPrizeAssignments(
+  value: Record<string, OriginalPrizeAssignmentV1[]> | undefined
+): Record<string, OriginalPrizeAssignmentV1[]> | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const normalized: Record<string, OriginalPrizeAssignmentV1[]> = {};
+
+  Object.entries(value).forEach(([itemId, assignments]) => {
+    if (!itemId || !Array.isArray(assignments) || assignments.length === 0) {
+      return;
+    }
+
+    const byIndex = new Map<number, OriginalPrizeAssignmentV1>();
+
+    assignments.forEach((assignment) => {
+      if (!assignment?.assetId) {
+        return;
+      }
+
+      const index = Math.trunc(assignment.index);
+      if (index < 0 || byIndex.has(index)) {
+        return;
+      }
+
+      byIndex.set(index, {
+        index,
+        assetId: assignment.assetId,
+        thumbnailAssetId: assignment.thumbnailAssetId ?? null
+      });
+    });
+
+    if (byIndex.size === 0) {
+      return;
+    }
+
+    normalized[itemId] = Array.from(byIndex.values()).sort((a, b) => a.index - b.index);
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 const PULL_HISTORY_STATUS_VALUES: readonly PullHistoryEntryStatus[] = ['new', 'ziped', 'uploaded', 'discord_shared'];
 
 function normalizeStatusValue(value: string | undefined): PullHistoryEntryStatus | undefined {
@@ -102,8 +147,16 @@ function normalizeEntry(entry: PullHistoryEntryV1 | undefined): PullHistoryEntry
   }
 
   const normalizedStatus = normalizeStatusValue(entry.status);
+  const normalizedOriginalPrizeMissing = entry.hasOriginalPrizeMissing === true ? true : undefined;
   const normalizedNewItems = normalizeNewItems(entry.newItems);
-  const { status: _ignoredStatus, newItems: _ignoredNewItems, ...rest } = entry;
+  const normalizedAssignments = normalizeOriginalPrizeAssignments(entry.originalPrizeAssignments);
+  const {
+    status: _ignoredStatus,
+    hasOriginalPrizeMissing: _ignoredOriginalPrizeMissing,
+    newItems: _ignoredNewItems,
+    originalPrizeAssignments: _ignoredAssignments,
+    ...rest
+  } = entry;
   const normalizedEntry: PullHistoryEntryV1 = {
     ...rest,
     source: entry.source ?? 'insiteResult'
@@ -112,8 +165,14 @@ function normalizeEntry(entry: PullHistoryEntryV1 | undefined): PullHistoryEntry
   if (normalizedStatus) {
     normalizedEntry.status = normalizedStatus;
   }
+  if (normalizedOriginalPrizeMissing) {
+    normalizedEntry.hasOriginalPrizeMissing = true;
+  }
   if (normalizedNewItems) {
     normalizedEntry.newItems = normalizedNewItems;
+  }
+  if (normalizedAssignments) {
+    normalizedEntry.originalPrizeAssignments = normalizedAssignments;
   }
 
   return normalizedEntry;
@@ -181,6 +240,82 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
 
   getPull(pullId: string): PullHistoryEntryV1 | undefined {
     return this.state?.pulls?.[pullId];
+  }
+
+  updateOriginalPrizeAssignment(
+    params: { pullId: string; itemId: string; index: number; asset: OriginalPrizeAssetV1 | null },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedPullId = params.pullId?.trim() ?? '';
+    const normalizedItemId = params.itemId?.trim() ?? '';
+    const normalizedIndex = Math.trunc(params.index);
+
+    if (!normalizedPullId || !normalizedItemId || !Number.isFinite(normalizedIndex) || normalizedIndex < 0) {
+      return;
+    }
+
+    const normalizedAssetId = params.asset?.assetId?.trim() ?? '';
+    const normalizedThumbnail = params.asset?.thumbnailAssetId ?? null;
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      const entry = base.pulls[normalizedPullId];
+      if (!entry) {
+        return base;
+      }
+
+      const rawCount = entry.itemCounts?.[normalizedItemId];
+      const normalizedCount = Number.isFinite(rawCount) ? Math.trunc(rawCount ?? 0) : 0;
+      if (normalizedCount <= 0 || normalizedIndex >= normalizedCount) {
+        return base;
+      }
+
+      const existingAssignments = entry.originalPrizeAssignments?.[normalizedItemId] ?? [];
+      const existingAtIndex = existingAssignments.find((assignment) => assignment.index === normalizedIndex);
+
+      if (!normalizedAssetId) {
+        if (!existingAtIndex) {
+          return base;
+        }
+      } else if (existingAtIndex) {
+        const existingThumbnail = existingAtIndex.thumbnailAssetId ?? null;
+        if (existingAtIndex.assetId === normalizedAssetId && existingThumbnail === normalizedThumbnail) {
+          return base;
+        }
+      }
+
+      const nextAssignments = existingAssignments.filter((assignment) => assignment.index !== normalizedIndex);
+      if (normalizedAssetId) {
+        nextAssignments.push({
+          index: normalizedIndex,
+          assetId: normalizedAssetId,
+          thumbnailAssetId: normalizedThumbnail
+        });
+        nextAssignments.sort((a, b) => a.index - b.index);
+      }
+
+      const nextAssignmentsMap = { ...(entry.originalPrizeAssignments ?? {}) };
+      if (nextAssignments.length > 0) {
+        nextAssignmentsMap[normalizedItemId] = nextAssignments;
+      } else {
+        delete nextAssignmentsMap[normalizedItemId];
+      }
+
+      const nextEntry: PullHistoryEntryV1 = {
+        ...entry,
+        originalPrizeAssignments:
+          Object.keys(nextAssignmentsMap).length > 0 ? nextAssignmentsMap : undefined
+      };
+
+      return {
+        ...base,
+        updatedAt: new Date().toISOString(),
+        pulls: {
+          ...base.pulls,
+          [normalizedPullId]: nextEntry
+        }
+      } satisfies PullHistoryStateV1;
+    }, options);
   }
 
   appendPull(params: AppendPullParams, options: UpdateOptions = { persist: 'immediate' }): string {
@@ -665,6 +800,65 @@ export class PullHistoryStore extends PersistedStore<PullHistoryStateV1 | undefi
           return;
         }
         nextPulls[pullId] = { ...entry, status: normalizedStatus };
+        mutated = true;
+      });
+
+      if (!mutated) {
+        return previous;
+      }
+
+      const now = new Date().toISOString();
+
+      return {
+        version: 1,
+        updatedAt: now,
+        order: [...base.order],
+        pulls: nextPulls
+      } satisfies PullHistoryStateV1;
+    }, options);
+  }
+
+  markPullOriginalPrizeMissing(
+    pullIds: Iterable<string>,
+    missingPullIds: Iterable<string>,
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const targetIds = Array.from(
+      new Set(
+        Array.from(pullIds, (id) => (typeof id === 'string' ? id.trim() : '')).filter(
+          (id): id is string => id.length > 0
+        )
+      )
+    );
+    if (targetIds.length === 0) {
+      return;
+    }
+
+    const missingSet = new Set(
+      Array.from(missingPullIds, (id) => (typeof id === 'string' ? id.trim() : '')).filter(
+        (id): id is string => id.length > 0
+      )
+    );
+
+    this.update((previous) => {
+      const base = normalizeState(previous ?? this.loadLatestState());
+      let mutated = false;
+      const nextPulls = { ...base.pulls };
+
+      targetIds.forEach((pullId) => {
+        const entry = nextPulls[pullId];
+        if (!entry) {
+          return;
+        }
+        const shouldMark = missingSet.has(pullId);
+        const currentMark = entry.hasOriginalPrizeMissing === true;
+        if (shouldMark === currentMark) {
+          return;
+        }
+        nextPulls[pullId] = {
+          ...entry,
+          hasOriginalPrizeMissing: shouldMark ? true : undefined
+        };
         mutated = true;
       });
 
