@@ -561,6 +561,15 @@ export function ReceivePage(): JSX.Element {
     setCleanupError(null);
   }, [activeToken]);
 
+  const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
+  const expiration = useMemo(() => normalizeExpiration(resolved?.exp), [resolved?.exp]);
+  const activeHistoryEntry = useMemo(
+    () => historyEntries.find((entry) => entry.id === activeHistoryId) ?? null,
+    [activeHistoryId, historyEntries]
+  );
+  const isViewingHistory = useMemo(() => Boolean(activeHistoryId), [activeHistoryId]);
+  const shouldShowSteps = isShareLinkMode || hasAttemptedLoad || isViewingHistory;
+
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -712,15 +721,6 @@ export function ReceivePage(): JSX.Element {
     },
     []
   );
-
-  const totalSize = useMemo(() => mediaItems.reduce((sum, item) => sum + item.size, 0), [mediaItems]);
-  const expiration = useMemo(() => normalizeExpiration(resolved?.exp), [resolved?.exp]);
-  const activeHistoryEntry = useMemo(
-    () => historyEntries.find((entry) => entry.id === activeHistoryId) ?? null,
-    [activeHistoryId, historyEntries]
-  );
-  const isViewingHistory = useMemo(() => Boolean(activeHistoryId), [activeHistoryId]);
-  const shouldShowSteps = isShareLinkMode || hasAttemptedLoad || isViewingHistory;
 
   const handleDownloadAll = useCallback(async () => {
     if (mediaItems.length === 0) {
