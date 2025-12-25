@@ -47,6 +47,7 @@ export interface UserFilterController {
   setHideMiss(next: boolean): void;
   setShowCounts(next: boolean): void;
   setShowSkipOnly(next: boolean): void;
+  setShowUnobtainedItems(next: boolean): void;
   setKeyword(keyword: string): void;
   reset(): void;
 }
@@ -215,6 +216,16 @@ export function useUserFilterController(): UserFilterController {
     [updatePreferences]
   );
 
+  const setShowUnobtainedItems = useCallback(
+    (next: boolean) => {
+      updatePreferences((previous) => ({
+        ...previous,
+        showUnobtainedItems: Boolean(next)
+      }));
+    },
+    [updatePreferences]
+  );
+
   const setKeyword = useCallback(
     (keyword: string) => {
       updatePreferences((previous) => ({
@@ -236,6 +247,7 @@ export function useUserFilterController(): UserFilterController {
     setHideMiss,
     setShowCounts,
     setShowSkipOnly,
+    setShowUnobtainedItems,
     setKeyword,
     reset
   };
@@ -261,6 +273,16 @@ function matchesSelection(selection: '*' | string[], value: string): boolean {
   return selection.includes(value);
 }
 
+function isMissRarity(rarityId: string, rarityLabel: string | undefined): boolean {
+  if (rarityId === 'rar-miss') {
+    return true;
+  }
+  if (!rarityLabel) {
+    return false;
+  }
+  return rarityLabel.trim() === 'はずれ';
+}
+
 function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: DerivedUser[]; showCounts: boolean } {
   if (!snapshot || !snapshot.userProfiles?.users || !snapshot.userInventories?.inventories) {
     return { users: [], showCounts: filters.showCounts };
@@ -283,6 +305,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
   const hasKeyword = keyword.length > 0;
   const gachaSelection = filters.selectedGachaIds === '*' ? '*' : [...new Set(filters.selectedGachaIds)];
   const raritySelection = filters.selectedRarityIds === '*' ? '*' : [...new Set(filters.selectedRarityIds)];
+  const showUnobtainedItems = filters.showUnobtainedItems;
 
   const users: DerivedUser[] = [];
 
@@ -329,40 +352,104 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
 
       const itemsByRarity = inventory.items ?? {};
       const countsByRarity = inventory.counts ?? {};
+      const gachaCatalog = catalogByGacha[inventory.gachaId];
+      const catalogItems = gachaCatalog?.items ?? {};
+      const catalogOrder = Array.isArray(gachaCatalog?.order) ? gachaCatalog.order : Object.keys(catalogItems);
+      const catalogItemsByRarity = new Map<string, string[]>();
+
+      if (showUnobtainedItems) {
+        const catalogOrderSet = new Set<string>();
+        catalogOrder.forEach((itemId) => {
+          catalogOrderSet.add(itemId);
+          const item = catalogItems[itemId];
+          if (!item) {
+            return;
+          }
+          const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+          list.push(item.itemId);
+          catalogItemsByRarity.set(item.rarityId, list);
+        });
+
+        Object.values(catalogItems).forEach((item) => {
+          if (catalogOrderSet.has(item.itemId)) {
+            return;
+          }
+          const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+          list.push(item.itemId);
+          catalogItemsByRarity.set(item.rarityId, list);
+        });
+      }
 
       const pulls: UserInventoryEntryItem[] = [];
+      const rarityIdSet = new Set<string>(Object.keys(itemsByRarity));
+      if (showUnobtainedItems) {
+        catalogItemsByRarity.forEach((_items, rarityId) => {
+          rarityIdSet.add(rarityId);
+        });
+      }
 
-      Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
-        if (!Array.isArray(itemIds) || itemIds.length === 0) {
-          return;
+      rarityIdSet.forEach((rarityId) => {
+        const itemIds = itemsByRarity[rarityId];
+        const fallbackCounts = new Map<string, number>();
+        if (Array.isArray(itemIds)) {
+          itemIds.forEach((itemId) => {
+            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+          });
         }
+
         if (!matchesSelection(raritySelection, rarityId)) {
           return;
         }
 
-        const fallbackCounts = new Map<string, number>();
-        itemIds.forEach((itemId) => {
-          fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+        const rarityEntity = rarityEntities[rarityId];
+        if (filters.hideMiss && isMissRarity(rarityId, rarityEntity?.label)) {
+          return;
+        }
+
+        const explicitCounts = countsByRarity[rarityId] ?? {};
+        const catalogItemIds = showUnobtainedItems ? catalogItemsByRarity.get(rarityId) ?? [] : [];
+        const itemIdSet = new Set<string>(catalogItemIds);
+
+        Object.keys(explicitCounts).forEach((itemId) => {
+          itemIdSet.add(itemId);
         });
 
-        const sortedItemIds = Array.from(fallbackCounts.keys()).sort((a, b) => a.localeCompare(b, 'ja'));
+        fallbackCounts.forEach((_count, itemId) => {
+          itemIdSet.add(itemId);
+        });
 
-        sortedItemIds.forEach((itemId) => {
-          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+        if (itemIdSet.size === 0) {
+          return;
+        }
+
+        const orderedItemIds = (() => {
+          if (catalogItemIds.length > 0) {
+            const extra = Array.from(itemIdSet).filter((itemId) => !catalogItemIds.includes(itemId));
+            if (extra.length === 0) {
+              return [...catalogItemIds];
+            }
+            extra.sort((a, b) => a.localeCompare(b, 'ja'));
+            return [...catalogItemIds, ...extra];
+          }
+          return Array.from(itemIdSet).sort((a, b) => a.localeCompare(b, 'ja'));
+        })();
+
+        orderedItemIds.forEach((itemId) => {
+          const catalogItem = catalogItems[itemId];
           if (filters.showSkipOnly && !catalogItem?.riagu) {
             return;
           }
 
-          const explicitCount = countsByRarity[rarityId]?.[itemId];
+          const explicitCount = explicitCounts[itemId];
           const totalCount = typeof explicitCount === 'number' && explicitCount > 0
             ? explicitCount
             : fallbackCounts.get(itemId) ?? 0;
+          const isMissing = totalCount <= 0;
 
-          if (totalCount <= 0) {
+          if (isMissing && !showUnobtainedItems) {
             return;
           }
 
-          const rarityEntity = rarityEntities[rarityId];
           pulls.push({
             itemId,
             itemName: catalogItem?.name ?? itemId,
@@ -372,7 +459,8 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
               color: rarityEntity?.color ?? FALLBACK_RARITY_COLOR,
               rarityNum: rarityEntity?.sortOrder
             },
-            count: totalCount
+            count: totalCount,
+            isMissing
           });
         });
       });

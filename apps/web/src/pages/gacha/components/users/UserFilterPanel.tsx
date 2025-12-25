@@ -117,8 +117,17 @@ interface UserFilterPanelProps {
 export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
   const { id, open = true } = props ?? {};
   const { gachaOptions, rarityOptions } = useUserFilterOptions();
-  const { state, setSelectedGachaIds, setSelectedRarityIds, setHideMiss, setShowCounts, setShowSkipOnly, setKeyword, reset } =
-    useUserFilterController();
+  const {
+    state,
+    setSelectedGachaIds,
+    setSelectedRarityIds,
+    setHideMiss,
+    setShowCounts,
+    setShowSkipOnly,
+    setShowUnobtainedItems,
+    setKeyword,
+    reset
+  } = useUserFilterController();
 
   return (
     <section
@@ -148,6 +157,7 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
         />
         <ToggleRow label="はずれを隠す" value={state.hideMiss} onChange={setHideMiss} />
         <ToggleRow label="獲得数を表示" value={state.showCounts} onChange={setShowCounts} />
+        <ToggleRow label="未獲得景品の表示" value={state.showUnobtainedItems} onChange={setShowUnobtainedItems} />
         <ToggleRow label="リアグのみを表示" value={state.showSkipOnly} onChange={setShowSkipOnly} />
         <div className="user-filter-panel__search-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">
           <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
@@ -177,4 +187,3 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
     </section>
   );
 }
-
