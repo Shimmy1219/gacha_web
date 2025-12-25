@@ -607,6 +607,50 @@ export function ReceivePage(): JSX.Element {
     [searchParams, setSearchParams, tokenInput]
   );
 
+  const persistHistoryEntry = useCallback(
+    async (zipBlob: Blob, items: ReceiveMediaItem[]) => {
+      if (!isHistoryStorageAvailable()) {
+        return;
+      }
+      setIsSavingHistory(true);
+      setHistorySaveError(null);
+
+      const entryId = generateHistoryId();
+      const timestamp = new Date().toISOString();
+      const totalBytes = items.reduce((sum, item) => sum + item.size, 0);
+      const entry: ReceiveHistoryEntryMetadata = {
+        id: entryId,
+        token: activeToken || null,
+        name: resolved?.name ?? null,
+        purpose: resolved?.purpose ?? null,
+        expiresAt: expiration ? expiration.toISOString() : null,
+        downloadedAt: timestamp,
+        itemCount: items.length,
+        totalBytes,
+        previewItems: items.slice(0, 4).map((item) => ({
+          id: item.id,
+          name: item.filename,
+          kind: item.kind,
+          size: item.size
+        }))
+      };
+
+      try {
+        await saveHistoryFile(entryId, zipBlob);
+        const nextEntries = [entry, ...historyEntries.filter((h) => h.id !== entryId)].slice(0, 50);
+        setHistoryEntries(nextEntries);
+        persistHistoryMetadata(nextEntries);
+        setActiveHistoryId(entryId);
+      } catch (error) {
+        console.error('Failed to persist receive history', error);
+        setHistorySaveError('履歴の保存に失敗しました。ブラウザの設定をご確認ください。');
+      } finally {
+        setIsSavingHistory(false);
+      }
+    },
+    [activeToken, expiration, historyEntries, resolved?.name, resolved?.purpose]
+  );
+
   const handleStartDownload = useCallback(async () => {
     if (!resolved?.url) {
       return;
@@ -717,51 +761,6 @@ export function ReceivePage(): JSX.Element {
       setTimeout(() => setCopyState('idle'), 1600);
     }
   }, []);
-
-  const persistHistoryEntry = useCallback(
-    async (zipBlob: Blob, items: ReceiveMediaItem[]) => {
-      if (!isHistoryStorageAvailable()) {
-        return;
-      }
-      setIsSavingHistory(true);
-      setHistorySaveError(null);
-
-      const entryId = generateHistoryId();
-      const timestamp = new Date().toISOString();
-      const totalBytes = items.reduce((sum, item) => sum + item.size, 0);
-      const entry: ReceiveHistoryEntryMetadata = {
-        id: entryId,
-        token: activeToken || null,
-        name: resolved?.name ?? null,
-        purpose: resolved?.purpose ?? null,
-        expiresAt: expiration ? expiration.toISOString() : null,
-        downloadedAt: timestamp,
-        itemCount: items.length,
-        totalBytes,
-        previewItems: items.slice(0, 4).map((item) => ({
-          id: item.id,
-          name: item.filename,
-          kind: item.kind,
-          size: item.size
-        }))
-      };
-
-      try {
-        await saveHistoryFile(entryId, zipBlob);
-        const nextEntries = [entry, ...historyEntries.filter((h) => h.id !== entryId)].slice(0, 50);
-        setHistoryEntries(nextEntries);
-        persistHistoryMetadata(nextEntries);
-        setActiveHistoryId(entryId);
-      } catch (error) {
-        console.error('Failed to persist receive history', error);
-        setHistorySaveError('履歴の保存に失敗しました。ブラウザの設定をご確認ください。');
-      } finally {
-        setIsSavingHistory(false);
-      }
-    },
-    [activeToken, expiration, historyEntries, resolved?.name, resolved?.purpose]
-  );
-
   const handleSelectHistory = useCallback(
     async (entry: ReceiveHistoryEntryMetadata) => {
       resolveAbortRef.current?.abort();
