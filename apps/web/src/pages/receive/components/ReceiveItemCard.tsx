@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
@@ -10,6 +10,7 @@ import {
 } from '../../../pages/gacha/components/rarity/color-picker/palette';
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
+import { ReceiveSaveButton } from './ReceiveSaveButtons';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
@@ -226,14 +227,10 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               </div>
             </div>
             <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-              <button
-                type="button"
+              <ReceiveSaveButton
                 onClick={() => onSave(item)}
-                className="receive-item-card-save-button btn btn-primary rounded-xl"
-              >
-                <ArrowUpTrayIcon className="receive-item-card-save-icon h-5 w-5" aria-hidden="true" />
-                <span className="receive-item-card-save-text">保存</span>
-              </button>
+                className="receive-item-card-save-button"
+              />
             </div>
           </div>
         </div>

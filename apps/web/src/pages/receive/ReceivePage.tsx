@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  ArrowDownTrayIcon,
   ArrowPathIcon,
   CheckIcon,
   ClockIcon,
@@ -11,6 +10,7 @@ import {
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
+import { ReceiveBulkSaveButton } from './components/ReceiveSaveButtons';
 import type { ReceiveMediaItem } from './types';
 import {
   generateHistoryId,
@@ -23,6 +23,7 @@ import {
 } from './historyStorage';
 import { extractReceiveMediaItems } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
+import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 interface ResolveSuccessPayload {
   url: string;
   name?: string;
@@ -153,24 +154,6 @@ async function downloadZipWithProgress(
   return new Blob(chunks, { type: 'application/zip' });
 }
 
-function normalizeZipPath(path: string): string {
-  return path.replace(/^\.\//, '').replace(/^\//, '');
-}
-
-function deriveDownloadFilename(item: ReceiveMediaItem): string {
-  if (item.path) {
-    const normalizedPath = normalizeZipPath(item.path);
-    const withoutItemsPrefix = normalizedPath.startsWith('items/')
-      ? normalizedPath.slice('items/'.length)
-      : normalizedPath;
-    const sanitized = withoutItemsPrefix.replace(/\/+/g, '__').replace(/__+/g, '__');
-    if (sanitized.trim().length > 0) {
-      return sanitized;
-    }
-  }
-  return item.filename;
-}
-
 function parseInputValue(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -196,107 +179,6 @@ function formatExpiration(date?: Date): string | undefined {
     hour: '2-digit',
     minute: '2-digit'
   });
-}
-
-function triggerBlobDownload(blob: Blob, filename: string): void {
-  if (typeof document === 'undefined') {
-    return;
-  }
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.style.display = 'none';
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
-
-const DEFAULT_SHARE_FILE_TYPE = 'application/octet-stream';
-const MAX_WEB_SHARE_FILE_COUNT = 30;
-const MAX_WEB_SHARE_TOTAL_BYTES = 200 * 1024 * 1024;
-const BULK_SHARE_TITLE = '受け取りファイル';
-const BULK_ARCHIVE_FILENAME = 'received_files.zip';
-
-function createShareFile(filename: string, blob: Blob): File | null {
-  if (typeof File === 'undefined') {
-    return null;
-  }
-  try {
-    return new File([blob], filename, { type: blob.type || DEFAULT_SHARE_FILE_TYPE });
-  } catch (error) {
-    console.warn('Failed to create share file', error);
-    return null;
-  }
-}
-
-async function shareFilesIfPossible(files: File[], title: string): Promise<boolean> {
-  if (typeof navigator === 'undefined' || typeof navigator.canShare !== 'function' || files.length === 0) {
-    return false;
-  }
-  try {
-    if (navigator.canShare({ files })) {
-      await navigator.share({ files, title });
-      return true;
-    }
-  } catch (error) {
-    console.warn('Web Share API failed', error);
-  }
-  return false;
-}
-
-async function saveOneWithShare(filename: string, blob: Blob): Promise<void> {
-  const file = createShareFile(filename, blob);
-  if (file) {
-    const shared = await shareFilesIfPossible([file], filename);
-    if (shared) {
-      return;
-    }
-  }
-  triggerBlobDownload(blob, filename);
-}
-
-async function saveAllWithShare(items: ReceiveMediaItem[]): Promise<void> {
-  if (items.length === 0) {
-    return;
-  }
-
-  const canUseWebShare = typeof navigator !== 'undefined' && typeof navigator.canShare === 'function' && typeof File !== 'undefined';
-  if (canUseWebShare) {
-    const files: File[] = [];
-    let totalSize = 0;
-    for (const item of items) {
-      const filename = deriveDownloadFilename(item);
-      const file = createShareFile(filename, item.blob);
-      if (!file) {
-        files.length = 0;
-        break;
-      }
-      files.push(file);
-      totalSize += item.blob.size;
-      if (files.length >= MAX_WEB_SHARE_FILE_COUNT || totalSize > MAX_WEB_SHARE_TOTAL_BYTES) {
-        break;
-      }
-    }
-
-    const shared = await shareFilesIfPossible(files, BULK_SHARE_TITLE);
-    if (shared) {
-      return;
-    }
-  }
-
-  const zip = new JSZip();
-  for (const item of items) {
-    const filename = deriveDownloadFilename(item);
-    zip.file(filename, item.blob, { binary: true, compression: 'STORE' });
-  }
-  const archiveBlob = await zip.generateAsync({
-    type: 'blob',
-    compression: 'DEFLATE',
-    compressionOptions: { level: 6 }
-  });
-  await saveOneWithShare(BULK_ARCHIVE_FILENAME, archiveBlob);
 }
 
 export function ReceivePage(): JSX.Element {
@@ -583,8 +465,7 @@ export function ReceivePage(): JSX.Element {
     async (item: ReceiveMediaItem) => {
       setBulkDownloadError(null);
       try {
-        const downloadName = deriveDownloadFilename(item);
-        await saveOneWithShare(downloadName, item.blob);
+        await saveReceiveItem(item);
       } catch (error) {
         console.error('Failed to save item with Web Share API fallback', error);
         setBulkDownloadError('保存中にエラーが発生しました。もう一度お試しください。');
@@ -604,7 +485,7 @@ export function ReceivePage(): JSX.Element {
     setIsBulkDownloading(true);
     setBulkDownloadError(null);
     try {
-      await saveAllWithShare(mediaItems);
+      await saveReceiveItems(mediaItems);
     } catch (error) {
       console.error('Failed to perform bulk save', error);
       setBulkDownloadError('まとめて保存中にエラーが発生しました。個別保存をお試しください。');
@@ -866,22 +747,13 @@ export function ReceivePage(): JSX.Element {
               <div className="receive-page-completion-summary mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-muted-foreground">
                 <span className="receive-page-completion-summary-text">
                   {mediaItems.length} 件 ・ 合計 {formatReceiveBytes(totalSize)}
-                  {resolved?.purpose ? ` ・ 用途: ${resolved.purpose}` : ''}
                 </span>
                 <div className="receive-page-completion-summary-actions flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
+                  <ReceiveBulkSaveButton
                     onClick={handleDownloadAll}
-                    disabled={isBulkDownloading}
-                    className="receive-page-bulk-download-button btn btn-muted rounded-full disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isBulkDownloading ? (
-                      <ArrowPathIcon className="receive-page-bulk-download-spinner h-5 w-5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <ArrowDownTrayIcon className="receive-page-bulk-download-icon h-5 w-5" aria-hidden="true" />
-                    )}
-                    <span className="receive-page-bulk-download-button-text">まとめて保存</span>
-                  </button>
+                    isLoading={isBulkDownloading}
+                    className="receive-page-bulk-download-button"
+                  />
                   <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-muted-foreground">受け取り完了</span>
                 </div>
               </div>

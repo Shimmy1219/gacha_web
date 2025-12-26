@@ -177,7 +177,6 @@ export function ReceiveHistoryPage(): JSX.Element {
                   <span className="chip">{pullCount}連</span>
                   <span className="chip">アイテム {entry.itemCount} 件</span>
                   <span className="chip">{formatReceiveBytes(entry.totalBytes)}</span>
-                  {entry.purpose ? <span className="chip">用途: {entry.purpose}</span> : null}
                   {entry.token ? <span className="chip">ID: {entry.token}</span> : null}
                 </div>
 
