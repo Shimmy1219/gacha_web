@@ -10,12 +10,10 @@ import clsx from 'clsx';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { useNavigate } from 'react-router-dom';
-import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
+import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
@@ -33,6 +31,7 @@ import type {
   GachaAppStateV3,
   GachaCatalogStateV4,
   GachaRarityStateV3,
+  PtSettingV3,
   UserProfileCardV3
 } from '@domain/app-persistence';
 import type { GachaResultPayload } from '@domain/gacha/gachaResult';
@@ -41,16 +40,11 @@ import {
   calculateDrawPlan,
   executeGacha,
   inferRarityFractionDigits,
+  normalizePtSetting,
   type DrawPlan,
   type GachaPoolDefinition
 } from '../../logic/gacha';
-import type { CompleteDrawMode } from '../../logic/gacha/types';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
-
-const COMPLETE_MODE_LABELS: Record<CompleteDrawMode, string> = {
-  repeat: 'コンプ回数分すべて排出',
-  frontload: '初回のみ全種→残り通常抽選'
-};
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -81,6 +75,69 @@ interface QueuedDiscordDeliveryRequest {
   selection: DiscordGuildSelection;
   requestedAt: number;
   itemIdFilter?: string[];
+}
+
+function resolvePlanForPulls({
+  pulls,
+  gacha,
+  ptSetting,
+  completeExecutionsOverride,
+  disableComplete
+}: {
+  pulls: number;
+  gacha: GachaDefinition;
+  ptSetting: PtSettingV3 | undefined;
+  completeExecutionsOverride?: number | null;
+  disableComplete?: boolean;
+}): { plan: DrawPlan; points: number } | { error: string; warnings: string[] } {
+  const { normalized } = normalizePtSetting(ptSetting);
+  const priceCandidates: number[] = [];
+  const unitPriceCandidates: number[] = [];
+
+  if (normalized.perPull) {
+    priceCandidates.push(normalized.perPull.price);
+    unitPriceCandidates.push(normalized.perPull.price / normalized.perPull.pulls);
+  }
+  normalized.bundles.forEach((bundle) => {
+    priceCandidates.push(bundle.price);
+    unitPriceCandidates.push(bundle.price / bundle.pulls);
+  });
+  if (normalized.complete && !disableComplete) {
+    priceCandidates.push(normalized.complete.price);
+    if (gacha.pool.items.length > 0) {
+      unitPriceCandidates.push(normalized.complete.price / gacha.pool.items.length);
+    }
+  }
+
+  const minStep = priceCandidates.length > 0 ? Math.min(...priceCandidates) : 1;
+  const unitPrice = unitPriceCandidates.length > 0 ? Math.min(...unitPriceCandidates) : 1;
+
+  let points = Math.max(minStep, Math.ceil(pulls * unitPrice));
+  let plan = calculateDrawPlan({
+    points,
+    settings: ptSetting,
+    totalItemTypes: gacha.pool.items.length,
+    completeExecutionsOverride: completeExecutionsOverride ?? undefined
+  });
+
+  let safety = 0;
+  while (plan.totalPulls < pulls && safety < 1000) {
+    points += minStep;
+    plan = calculateDrawPlan({
+      points,
+      settings: ptSetting,
+      totalItemTypes: gacha.pool.items.length,
+      completeExecutionsOverride: completeExecutionsOverride ?? undefined
+    });
+    safety += 1;
+  }
+
+  if (plan.errors.length > 0 || plan.totalPulls <= 0) {
+    const message = plan.errors[0] ?? 'ポイント設定を確認してください。';
+    return { error: message, warnings: plan.warnings };
+  }
+
+  return { plan, points };
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -187,9 +244,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const userInventoriesState = useStoreValue(userInventories);
   const pullHistoryState = useStoreValue(pullHistory);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
-  const navigate = useNavigate();
   const gachaSelectId = useId();
-  const completeMode = resolveCompleteModePreference(ptSettingsState);
+  const pointsInputId = useId();
+  const pullsInputId = useId();
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () => buildGachaDefinitions(appState, catalogState, rarityState),
@@ -226,6 +283,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [applySelectedGacha]
   );
   const [pointsInput, setPointsInput] = useState('100');
+  const [pointsInputMode, setPointsInputMode] = useState<'points' | 'pulls'>('points');
+  const [pullsInput, setPullsInput] = useState('10');
+  const [completeExecutionsOverride, setCompleteExecutionsOverride] = useState<number | null>(null);
   const [userName, setUserName] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -296,6 +356,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastTotalPulls(null);
     setLastUserName('');
     setLastUserId(null);
+    setCompleteExecutionsOverride(null);
     setDiscordDeliveryError(null);
     setDiscordDeliveryNotice(null);
     setDiscordDeliveryCompleted(false);
@@ -312,6 +373,36 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     const value = Number(pointsInput);
     return Number.isFinite(value) ? value : NaN;
   }, [pointsInput]);
+
+  const parsedPulls = useMemo(() => {
+    if (!pullsInput.trim()) {
+      return NaN;
+    }
+    const value = Number(pullsInput);
+    return Number.isFinite(value) ? value : NaN;
+  }, [pullsInput]);
+
+  const adjustPointsInput = useCallback((delta: number) => {
+    const current = Number(pointsInput);
+    const base = Number.isFinite(current) ? current : 0;
+    const nextValue = Math.max(0, base + delta);
+    setPointsInput(String(nextValue));
+  }, [pointsInput]);
+
+  const adjustPullsInput = useCallback((delta: number) => {
+    const current = Number(pullsInput);
+    const base = Number.isFinite(current) ? current : 0;
+    const nextValue = Math.max(1, base + delta);
+    setPullsInput(String(nextValue));
+  }, [pullsInput]);
+
+  const handleQuickAdjust = useCallback((delta: number) => {
+    if (pointsInputMode === 'pulls') {
+      adjustPullsInput(delta);
+      return;
+    }
+    adjustPointsInput(delta);
+  }, [adjustPointsInput, adjustPullsInput, pointsInputMode]);
 
   const normalizedUserName = userName.trim();
 
@@ -361,19 +452,54 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const { uploadZip } = useBlobUpload();
   const { data: discordSession } = useDiscordSession();
   const persistence = useAppPersistence();
+  const isPullsMode = pointsInputMode === 'pulls';
+  const completeExecutionsOverrideForPlan = isPullsMode ? 0 : completeExecutionsOverride;
 
-  const drawPlan = useMemo(() => {
+  const planResolution = useMemo(() => {
     if (!selectedGacha) {
-      return null;
+      return { plan: null, points: NaN, error: null as string | null };
     }
 
-    return calculateDrawPlan({
+    if (pointsInputMode === 'pulls') {
+      if (!Number.isFinite(parsedPulls) || parsedPulls <= 0) {
+        return { plan: null, points: NaN, error: '連数を入力してください。' };
+      }
+      const resolved = resolvePlanForPulls({
+        pulls: Math.floor(parsedPulls),
+        gacha: selectedGacha,
+        ptSetting: selectedPtSetting,
+        completeExecutionsOverride: completeExecutionsOverrideForPlan,
+        disableComplete: isPullsMode
+      });
+      if ('error' in resolved) {
+        return { plan: null, points: NaN, error: resolved.error };
+      }
+      return { plan: resolved.plan, points: resolved.points, error: null };
+    }
+
+    return {
+      plan: calculateDrawPlan({
+        points: parsedPoints,
+        settings: selectedPtSetting,
+        totalItemTypes: selectedGacha.pool.items.length,
+        completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined
+      }),
       points: parsedPoints,
-      settings: selectedPtSetting,
-      totalItemTypes: selectedGacha.pool.items.length,
-      completeMode
-    });
-  }, [completeMode, parsedPoints, selectedGacha, selectedPtSetting]);
+      error: null
+    };
+  }, [
+    completeExecutionsOverrideForPlan,
+    completeExecutionsOverride,
+    parsedPoints,
+    parsedPulls,
+    pointsInputMode,
+    selectedGacha,
+    selectedPtSetting
+  ]);
+
+  const drawPlan = planResolution.plan;
+  const resolvedPoints = planResolution.points;
+  const planErrorMessage = planResolution.error;
 
   const handleExecute = async () => {
     if (isExecuting) {
@@ -411,8 +537,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return;
       }
 
-      if (!drawPlan || drawPlan.errors.length > 0) {
-        setErrorMessage(drawPlan?.errors?.[0] ?? 'ポイント設定を確認してください。');
+      if (planErrorMessage || !drawPlan || drawPlan.errors.length > 0) {
+        setErrorMessage(planErrorMessage ?? drawPlan?.errors?.[0] ?? 'ポイント設定を確認してください。');
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
@@ -433,8 +559,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         gachaId: selectedGacha.id,
         pool: selectedGacha.pool,
         settings: selectedPtSetting,
-        points: parsedPoints,
-        completeMode
+        points: resolvedPoints,
+        completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined
       });
 
       if (executionResult.errors.length > 0) {
@@ -559,12 +685,124 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     const ids = resultItems.filter((item) => item.isNew).map((item) => item.itemId);
     return Array.from(new Set(ids));
   }, [resultItems]);
+  const rarityOrderIds = useMemo(() => {
+    if (!selectedGacha) {
+      return [];
+    }
+    const orderFromState = rarityState?.byGacha?.[selectedGacha.id];
+    if (orderFromState && orderFromState.length > 0) {
+      return orderFromState;
+    }
+    return Array.from(selectedGacha.pool.rarityGroups.keys());
+  }, [rarityState, selectedGacha]);
+  const rarityOrderIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    rarityOrderIds.forEach((rarityId, index) => {
+      map.set(rarityId, index);
+    });
+    return map;
+  }, [rarityOrderIds]);
+  const itemOrderIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!selectedGacha) {
+      return map;
+    }
+    selectedGacha.items.forEach((item, index) => {
+      map.set(item.itemId, index);
+    });
+    return map;
+  }, [selectedGacha]);
+  const sortedResultItems = useMemo(() => {
+    if (!resultItems) {
+      return null;
+    }
+    const items = [...resultItems];
+    items.sort((a, b) => {
+      const rarityOrderA = rarityOrderIndex.get(a.rarityId) ?? Number.POSITIVE_INFINITY;
+      const rarityOrderB = rarityOrderIndex.get(b.rarityId) ?? Number.POSITIVE_INFINITY;
+      if (rarityOrderA !== rarityOrderB) {
+        return rarityOrderA - rarityOrderB;
+      }
+      const itemOrderA = itemOrderIndex.get(a.itemId) ?? Number.POSITIVE_INFINITY;
+      const itemOrderB = itemOrderIndex.get(b.itemId) ?? Number.POSITIVE_INFINITY;
+      if (itemOrderA !== itemOrderB) {
+        return itemOrderA - itemOrderB;
+      }
+      return a.name.localeCompare(b.name, 'ja');
+    });
+    return items;
+  }, [itemOrderIndex, rarityOrderIndex, resultItems]);
   const planWarnings = drawPlan?.warnings ?? [];
-  const planErrorMessage = drawPlan?.errors?.[0] ?? null;
   const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
-  const displayCompleteMode: CompleteDrawMode =
-    normalizedCompleteSetting?.mode === 'frontload' ? 'frontload' : 'repeat';
-  const completeModeLabel = COMPLETE_MODE_LABELS[displayCompleteMode];
+  const maxCompleteExecutions = useMemo(() => {
+    if (isPullsMode || !normalizedCompleteSetting || !Number.isFinite(resolvedPoints)) {
+      return 0;
+    }
+    if (!Number.isFinite(normalizedCompleteSetting.price) || normalizedCompleteSetting.price <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.floor(resolvedPoints / normalizedCompleteSetting.price));
+  }, [normalizedCompleteSetting, resolvedPoints]);
+  const currentCompleteExecutions = useMemo(() => {
+    if (isPullsMode) {
+      return 0;
+    }
+    if (!normalizedCompleteSetting) {
+      return 0;
+    }
+    if (completeExecutionsOverride != null && Number.isFinite(completeExecutionsOverride)) {
+      return Math.min(maxCompleteExecutions, Math.max(0, Math.floor(completeExecutionsOverride)));
+    }
+    return drawPlan?.completeExecutions ?? 0;
+  }, [
+    completeExecutionsOverride,
+    drawPlan,
+    isPullsMode,
+    maxCompleteExecutions,
+    normalizedCompleteSetting
+  ]);
+  const completePointsUsed = useMemo(() => {
+    if (!normalizedCompleteSetting) {
+      return 0;
+    }
+    return Math.max(0, normalizedCompleteSetting.price * currentCompleteExecutions);
+  }, [currentCompleteExecutions, normalizedCompleteSetting]);
+
+  useEffect(() => {
+    if (isPullsMode) {
+      return;
+    }
+    if (!normalizedCompleteSetting) {
+      if (completeExecutionsOverride != null) {
+        setCompleteExecutionsOverride(null);
+      }
+      return;
+    }
+    if (completeExecutionsOverride == null) {
+      return;
+    }
+    const clamped = Math.min(maxCompleteExecutions, Math.max(0, Math.floor(completeExecutionsOverride)));
+    if (!Number.isFinite(clamped)) {
+      if (completeExecutionsOverride !== 0) {
+        setCompleteExecutionsOverride(0);
+      }
+      return;
+    }
+    if (clamped !== completeExecutionsOverride) {
+      setCompleteExecutionsOverride(clamped);
+    }
+  }, [completeExecutionsOverride, isPullsMode, maxCompleteExecutions, normalizedCompleteSetting]);
+
+  const handleCompleteAdjust = useCallback(
+    (delta: number) => {
+      if (isPullsMode || !normalizedCompleteSetting) {
+        return;
+      }
+      const next = Math.min(maxCompleteExecutions, Math.max(0, currentCompleteExecutions + delta));
+      setCompleteExecutionsOverride(next);
+    },
+    [currentCompleteExecutions, isPullsMode, maxCompleteExecutions, normalizedCompleteSetting]
+  );
   const guaranteeSummaries = useMemo(() => {
     if (!drawPlan || !selectedGacha) {
       return [] as Array<{
@@ -1242,45 +1480,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void copyShareText('draw-result', shareContent.shareText);
   }, [copyShareText, shareContent]);
 
-  const resolveIsStandalonePwa = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    const mediaStandalone =
-      typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches;
-
-    const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
-    const iosStandalone =
-      typeof navigatorWithStandalone.standalone === 'boolean' && navigatorWithStandalone.standalone;
-
-    return mediaStandalone || iosStandalone;
-  }, []);
-
-  const handleOpenGachaTestPage = useCallback(() => {
-    const targetUrl = '/gacha/test';
-
-    if (resolveIsStandalonePwa()) {
-      close();
-      navigate(targetUrl);
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      window.open(targetUrl, '_blank', 'noopener');
-    }
-  }, [close, navigate, resolveIsStandalonePwa]);
-
-  const handleOpenSettings = useCallback(() => {
-    push(PageSettingsDialog, {
-      id: 'page-settings',
-      title: 'サイト設定',
-      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
-      size: 'xl',
-      panelPaddingClassName: 'p-2 lg:p-6'
-    });
-  }, [push]);
-
   return (
     <>
       <ModalBody className="space-y-6">
@@ -1290,9 +1489,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               <label className="block text-sm font-semibold text-muted-foreground" htmlFor={gachaSelectId}>
                 ガチャの種類
               </label>
-              <button type="button" className="btn btn-ghost btn-xs" onClick={handleOpenGachaTestPage}>
-                テスト
-              </button>
             </div>
             <SingleSelectDropdown
               id={gachaSelectId}
@@ -1309,18 +1505,90 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             </p>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className="block text-sm font-semibold text-muted-foreground">ポイント</span>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={pointsInput}
-                onChange={(event) => setPointsInput(event.currentTarget.value)}
-                className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
-                placeholder="100"
-              />
-            </label>
+            <div className="space-y-2">
+              <span className="block text-sm font-semibold text-muted-foreground">ポイント / 連数</span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'ポイント指定', value: 'points' },
+                  { label: '連数指定', value: 'pulls' }
+                ].map((option) => {
+                  const isSelected = pointsInputMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setPointsInputMode(option.value as 'points' | 'pulls')}
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 ${
+                        isSelected
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border/60 text-muted-foreground hover:border-accent hover:text-accent'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {pointsInputMode === 'points' ? (
+                <>
+                  <label className="block text-xs font-semibold text-muted-foreground" htmlFor={pointsInputId}>
+                    ポイント
+                  </label>
+                  <input
+                    id={pointsInputId}
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={pointsInput}
+                    onChange={(event) => setPointsInput(event.currentTarget.value)}
+                    className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    placeholder="100"
+                  />
+                </>
+              ) : (
+                <>
+                  <label className="block text-xs font-semibold text-muted-foreground" htmlFor={pullsInputId}>
+                    連数
+                  </label>
+                  <input
+                    id={pullsInputId}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={pullsInput}
+                    onChange={(event) => setPullsInput(event.currentTarget.value)}
+                    className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+                    placeholder="10"
+                  />
+                </>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: '+1000', delta: 1000 },
+                  { label: '+100', delta: 100 },
+                  { label: '+10', delta: 10 },
+                  { label: '+1', delta: 1 },
+                  { label: '-1', delta: -1 },
+                  { label: '-10', delta: -10 },
+                  { label: '-100', delta: -100 },
+                  { label: '-1000', delta: -1000 }
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => handleQuickAdjust(item.delta)}
+                    className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {pointsInputMode === 'pulls' ? (
+                <p className="text-xs text-muted-foreground">
+                  必要ポイント: {Number.isFinite(resolvedPoints) ? `${formatNumber(resolvedPoints)} pt` : '計算中'}
+                </p>
+              ) : null}
+            </div>
             <div className="space-y-2">
               <label className="space-y-2">
                 <span className="block text-sm font-semibold text-muted-foreground">名前（必須）</span>
@@ -1376,12 +1644,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     {formatNumber(drawPlan.pointsUsed)} pt
                   </span>
                 </span>
-                <span>
-                  残り:
-                  <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.pointsRemainder)} pt
+                {normalizedCompleteSetting ? (
+                  <span>
+                    内、コンプリート排出分
+                    <span className="ml-1 font-mono text-surface-foreground">
+                      {formatNumber(completePointsUsed)} pt
+                    </span>
                   </span>
-                </span>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
@@ -1391,29 +1661,36 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   </span>
                 </span>
               </div>
-              {drawPlan.completeExecutions > 0 ? (
-                <div>
-                  コンプリート排出:
-                  <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.completeExecutions)} 回
-                  </span>
-                </div>
-              ) : null}
               {normalizedCompleteSetting ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
-                    コンプリート排出モード:
-                    <span className="ml-1 font-semibold text-surface-foreground">
-                      {completeModeLabel}
-                    </span>
+                    コンプリートガチャ(MAX:{formatNumber(maxCompleteExecutions)}回):
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleOpenSettings}
-                    className="inline-flex items-center rounded-lg border border-border/60 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                  >
-                    モードを変更
-                  </button>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="font-mono text-surface-foreground">
+                      {formatNumber(currentCompleteExecutions)} 回
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteAdjust(-1)}
+                        disabled={currentCompleteExecutions <= 0}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/60 text-xs font-semibold text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="コンプリートガチャ回数を減らす"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteAdjust(1)}
+                        disabled={currentCompleteExecutions >= maxCompleteExecutions}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/60 text-xs font-semibold text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="コンプリートガチャ回数を増やす"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </span>
                 </div>
               ) : null}
               {guaranteeSummaries.length ? (
@@ -1460,7 +1737,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             {errorMessage}
           </div>
         ) : null}
-        {resultItems ? (
+        {sortedResultItems ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
@@ -1469,7 +1746,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               <span className="font-mono text-xs">合計 {totalCount} 個</span>
             </div>
             <div className="space-y-2 rounded-2xl border border-border/60 bg-surface-alt p-4">
-              {resultItems.map((item) => {
+              {sortedResultItems.map((item) => {
                 const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
                   item.rarityColor
                 );

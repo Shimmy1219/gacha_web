@@ -200,7 +200,6 @@ export interface PtSettingV3 {
   };
   complete?: {
     price: number;
-    mode?: 'repeat' | 'frontload';
   };
   bundles?: PtBundleV3[];
   guarantees?: PtGuaranteeV3[];
@@ -210,7 +209,6 @@ export interface PtSettingV3 {
 export interface PtSettingsStateV3 {
   version: number;
   updatedAt: string;
-  completeMode?: 'repeat' | 'frontload';
   byGachaId: Record<string, PtSettingV3>;
 }
 

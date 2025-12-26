@@ -194,7 +194,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
 
       const instanceMap = buildOriginalPrizeInstanceMap({
-        pullHistory: snapshot.pullHistory,
+        pullHistory: pullHistoryStore.getState() ?? snapshot.pullHistory,
         userId,
         gachaId,
         targetItemIds: originalItemIds
@@ -232,8 +232,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         items
       };
     },
-    [receiverDisplayName, snapshot, userId]
+    [pullHistoryStore, receiverDisplayName, snapshot, userId]
   );
+
+  const resolveZipSnapshot = useCallback(() => {
+    const latestPullHistory = pullHistoryStore.getState();
+    if (latestPullHistory) {
+      return { ...snapshot, pullHistory: latestPullHistory };
+    }
+    return snapshot;
+  }, [pullHistoryStore, snapshot]);
 
   const openOriginalPrizeSettings = useCallback(
     (items: OriginalPrizeMissingItem[]) => {
@@ -258,7 +266,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
   const maybeWarnMissingOriginalPrize = useCallback(
     (onProceed: () => void) => {
-      const missingItems = findOriginalPrizeMissingItems({ snapshot, selection, userId });
+      const missingItems = findOriginalPrizeMissingItems({
+        snapshot: resolveZipSnapshot(),
+        selection,
+        userId
+      });
       if (missingItems.length === 0) {
         onProceed();
         return;
@@ -276,7 +288,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         }
       });
     },
-    [openOriginalPrizeSettings, push, selection, snapshot, userId]
+    [openOriginalPrizeSettings, push, resolveZipSnapshot, selection, userId]
   );
 
   const linkDiscordProfile = useCallback(
@@ -438,7 +450,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     setErrorBanner(null);
     try {
       const result = await buildUserZipFromSelection({
-        snapshot,
+        snapshot: resolveZipSnapshot(),
         selection,
         userId,
         userName: receiverDisplayName,
@@ -489,7 +501,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
   const runZipUpload = useCallback(async () => {
     const zip = await buildUserZipFromSelection({
-      snapshot,
+      snapshot: resolveZipSnapshot(),
       selection,
       userId,
       userName: receiverDisplayName
@@ -538,8 +550,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     discordSession?.user?.name,
     persistence,
     receiverDisplayName,
+    resolveZipSnapshot,
     selection,
-    snapshot,
     uploadZip,
     userId
   ]);
@@ -564,7 +576,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     try {
       await runZipUpload();
       const zip = await buildUserZipFromSelection({
-        snapshot,
+        snapshot: resolveZipSnapshot(),
         selection,
         userId,
         userName: receiverDisplayName

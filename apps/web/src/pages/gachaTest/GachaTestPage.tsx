@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { SingleSelectDropdown, type SingleSelectOption } from '../gacha/components/select/SingleSelectDropdown';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
+import { useStoreValue } from '@domain/stores';
 import type { PtSettingV3 } from '@domain/app-persistence';
 import {
   buildGachaPools,
@@ -15,7 +15,6 @@ import {
   type GachaItemDefinition,
   type GachaPoolDefinition
 } from '../../logic/gacha';
-import type { CompleteDrawMode } from '../../logic/gacha/types';
 
 interface GachaDefinition {
   id: string;
@@ -146,7 +145,6 @@ interface SimulationError {
 interface SimulationRequest {
   gacha: GachaDefinition;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
   pullsPerRun: number;
   runCount: number;
   rarityDigits: Map<string, number>;
@@ -163,13 +161,11 @@ function formatObservedRate(rate: number, rarityDigits: Map<string, number>, rar
 function resolvePlanForPulls({
   pulls,
   gacha,
-  ptSetting,
-  completeMode
+  ptSetting
 }: {
   pulls: number;
   gacha: GachaDefinition;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
 }): { plan: DrawPlan; points: number } | SimulationError {
   const { normalized } = normalizePtSetting(ptSetting);
   const priceCandidates: number[] = [];
@@ -197,8 +193,7 @@ function resolvePlanForPulls({
   let plan = calculateDrawPlan({
     points,
     settings: ptSetting,
-    totalItemTypes: gacha.pool.items.length,
-    completeMode
+    totalItemTypes: gacha.pool.items.length
   });
 
   let safety = 0;
@@ -207,8 +202,7 @@ function resolvePlanForPulls({
     plan = calculateDrawPlan({
       points,
       settings: ptSetting,
-      totalItemTypes: gacha.pool.items.length,
-      completeMode
+      totalItemTypes: gacha.pool.items.length
     });
     safety += 1;
   }
@@ -224,7 +218,6 @@ function resolvePlanForPulls({
 function simulateGacha({
   gacha,
   ptSetting,
-  completeMode,
   pullsPerRun,
   runCount,
   rarityDigits
@@ -234,8 +227,7 @@ function simulateGacha({
   const planResolution = resolvePlanForPulls({
     pulls: normalizedPulls,
     gacha,
-    ptSetting,
-    completeMode
+    ptSetting
   });
 
   if ('error' in planResolution) {
@@ -294,8 +286,7 @@ function simulateGacha({
       gachaId: gacha.id,
       pool: gacha.pool,
       settings: ptSetting,
-      points,
-      completeMode
+      points
     });
 
     if (result.errors.length > 0) {
@@ -433,7 +424,6 @@ interface GachaTestSectionProps {
   defaultRuns: number;
   gacha: GachaDefinition | undefined;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
   rarityDigits: Map<string, number>;
 }
 
@@ -443,7 +433,6 @@ function GachaTestSection({
   defaultRuns,
   gacha,
   ptSetting,
-  completeMode,
   rarityDigits
 }: GachaTestSectionProps): JSX.Element {
   const [pullsPerRun, setPullsPerRun] = useState(defaultPulls);
@@ -471,7 +460,6 @@ function GachaTestSection({
       const simulation = simulateGacha({
         gacha,
         ptSetting,
-        completeMode,
         pullsPerRun,
         runCount,
         rarityDigits
@@ -493,7 +481,7 @@ function GachaTestSection({
     } finally {
       setIsRunning(false);
     }
-  }, [completeMode, gacha, ptSetting, pullsPerRun, runCount, rarityDigits]);
+  }, [gacha, ptSetting, pullsPerRun, runCount, rarityDigits]);
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((previous) => !previous);
@@ -731,7 +719,6 @@ export function GachaTestPage(): JSX.Element {
   const { ptControls: ptControlsStore } = useDomainStores();
   const ptSettingsState = useStoreValue(ptControlsStore);
   const { options, map, rarityDigits } = useGachaDefinitions();
-  const completeMode = resolveCompleteModePreference(ptSettingsState);
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => options[0]?.value);
   const selectedGacha = selectedGachaId ? map.get(selectedGachaId) : undefined;
@@ -772,7 +759,6 @@ export function GachaTestPage(): JSX.Element {
               defaultRuns={section.runs}
               gacha={selectedGacha}
               ptSetting={selectedPtSetting}
-              completeMode={completeMode}
               rarityDigits={rarityDigits}
             />
           ))}
