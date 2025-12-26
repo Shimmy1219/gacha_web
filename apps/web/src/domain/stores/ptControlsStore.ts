@@ -6,34 +6,7 @@ import {
   type PtSettingsStateV3
 } from '../app-persistence';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
-import type { CompleteDrawMode } from '../../logic/gacha/types';
-
 type LegacyPtSetting = PtSettingV3 & { complate?: PtSettingV3['complete'] };
-
-const DEFAULT_COMPLETE_MODE: CompleteDrawMode = 'repeat';
-
-export function resolveCompleteModePreference(state: PtSettingsStateV3 | undefined): CompleteDrawMode {
-  if (state?.completeMode === 'frontload') {
-    return 'frontload';
-  }
-  return DEFAULT_COMPLETE_MODE;
-}
-
-export function applyCompleteModeToSetting(
-  setting: PtSettingV3 | undefined,
-  completeMode: CompleteDrawMode
-): PtSettingV3 | undefined {
-  if (!setting?.complete) {
-    return setting;
-  }
-  return {
-    ...setting,
-    complete: {
-      ...setting.complete,
-      mode: completeMode
-    }
-  };
-}
 
 function isPerPullEqual(a: PtSettingV3['perPull'], b: PtSettingV3['perPull']): boolean {
   if (!a && !b) {
@@ -54,9 +27,7 @@ function isCompleteEqual(a: PtSettingV3['complete'], b: PtSettingV3['complete'])
   if (!a || !b) {
     return false;
   }
-  const aMode = a.mode ?? 'repeat';
-  const bMode = b.mode ?? 'repeat';
-  return a.price === b.price && aMode === bMode;
+  return a.price === b.price;
 }
 
 function areBundlesEqual(a: PtBundleV3[] | undefined, b: PtBundleV3[] | undefined): boolean {
@@ -136,7 +107,7 @@ function areSettingsEqual(a: PtSettingV3 | undefined, b: PtSettingV3 | undefined
 function cloneSettingWithoutUpdatedAt(setting: PtSettingV3): PtSettingV3 {
   return {
     ...(setting.perPull ? { perPull: { ...setting.perPull } } : {}),
-    ...(setting.complete ? { complete: { ...setting.complete } } : {}),
+    ...(setting.complete ? { complete: { price: setting.complete.price } } : {}),
     ...(setting.bundles ? { bundles: setting.bundles.map((bundle) => ({ ...bundle })) } : {}),
     ...(setting.guarantees
       ? {
@@ -178,7 +149,6 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
 
         const timestamp = new Date().toISOString();
         const nextByGacha = { ...(previous?.byGachaId ?? {}) };
-        const completeMode = resolveCompleteModePreference(previous);
 
         if (!nextSetting) {
           if (previousSetting === undefined) {
@@ -195,7 +165,6 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
         const nextState: PtSettingsStateV3 = {
           version: typeof previous?.version === 'number' ? previous.version : 3,
           updatedAt: timestamp,
-          completeMode,
           byGachaId: nextByGacha
         };
 
@@ -211,33 +180,6 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
 
   protected persistDebounced(state: PtSettingsStateV3 | undefined): void {
     this.persistence.savePtSettingsDebounced(state);
-  }
-
-  setCompleteMode(mode: CompleteDrawMode, options: UpdateOptions = { persist: 'debounced' }): void {
-    const persistMode = options.persist ?? 'debounced';
-    const emit = options.emit;
-
-    const resolvedMode: CompleteDrawMode = mode === 'frontload' ? 'frontload' : DEFAULT_COMPLETE_MODE;
-
-    this.update(
-      (previous) => {
-        const current = resolveCompleteModePreference(previous);
-        if (current === resolvedMode) {
-          return previous;
-        }
-
-        const timestamp = new Date().toISOString();
-        const nextState: PtSettingsStateV3 = {
-          version: typeof previous?.version === 'number' ? previous.version : 3,
-          updatedAt: timestamp,
-          completeMode: resolvedMode,
-          byGachaId: { ...(previous?.byGachaId ?? {}) }
-        };
-
-        return nextState;
-      },
-      { persist: persistMode, emit }
-    );
   }
 
   removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {
@@ -259,21 +201,15 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
         mutated = true;
       }
     });
-
-    const nextCompleteMode: CompleteDrawMode =
-      state.completeMode === 'frontload'
-        ? 'frontload'
-        : Object.values(nextByGacha).some((entry) => entry?.complete?.mode === 'frontload')
-          ? 'frontload'
-          : DEFAULT_COMPLETE_MODE;
-
-    if (!mutated && state.completeMode === nextCompleteMode) {
+    const hasLegacyCompleteMode = Object.prototype.hasOwnProperty.call(state, 'completeMode');
+    if (!mutated && !hasLegacyCompleteMode) {
       return state;
     }
 
+    const { completeMode: _legacy, ...rest } = state as PtSettingsStateV3 & { completeMode?: unknown };
+
     return {
-      ...state,
-      completeMode: nextCompleteMode,
+      ...rest,
       byGachaId: nextByGacha
     };
   }
@@ -314,6 +250,12 @@ export class PtControlsStore extends PersistedStore<PtSettingsStateV3 | undefine
     }
 
     delete (next as LegacyPtSetting).complate;
+    if (next.complete) {
+      next = {
+        ...next,
+        complete: { price: next.complete.price }
+      };
+    }
     return next;
   }
 }

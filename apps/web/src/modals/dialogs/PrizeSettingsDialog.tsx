@@ -34,6 +34,7 @@ export interface PrizeSettingsDialogPayload {
   rarityOptions: RarityOption[];
   pickupTarget: boolean;
   completeTarget: boolean;
+  originalPrize: boolean;
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
@@ -48,6 +49,7 @@ export interface PrizeSettingsDialogPayload {
     rarityId: string;
     pickupTarget: boolean;
     completeTarget: boolean;
+    originalPrize: boolean;
     riagu: boolean;
     assets: PrizeSettingsAsset[];
   }) => void;
@@ -192,6 +194,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId: payload?.rarityId ?? '',
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
+      originalPrize: payload?.originalPrize ?? false,
       riagu: payload?.isRiagu ?? false,
       assets: normalizeAssets(payload?.assets)
     }),
@@ -202,6 +205,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [rarityId, setRarityId] = useState(initialState.rarityId);
   const [pickupTarget, setPickupTarget] = useState(initialState.pickup);
   const [completeTarget, setCompleteTarget] = useState(initialState.complete);
+  const [originalPrize, setOriginalPrize] = useState(initialState.originalPrize);
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [assetEntries, setAssetEntries] = useState<PrizeSettingsAsset[]>(initialState.assets);
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
@@ -264,6 +268,28 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     setRiaguTarget(nextValue);
   };
 
+  const handleOriginalPrizeToggleChange = useCallback(
+    (nextValue: boolean) => {
+      setOriginalPrize(nextValue);
+      if (!nextValue || assetEntries.length === 0) {
+        return;
+      }
+
+      const assetIds = assetEntries.map((entry) => entry.assetId).filter((assetId) => assetId);
+      setAssetEntries([]);
+      unsavedAssetIdsRef.current.clear();
+      setAssetError(null);
+
+      void Promise.allSettled(assetIds.map((assetId) => deleteAsset(assetId))).then((results) => {
+        const failedCount = results.filter((result) => result.status === 'rejected').length;
+        if (failedCount > 0) {
+          setAssetError('プレビューのファイル削除に失敗しました。');
+        }
+      });
+    },
+    [assetEntries]
+  );
+
   useEffect(() => {
     return () => {
       const pendingIds = Array.from(unsavedAssetIdsRef.current);
@@ -273,7 +299,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     };
   }, []);
 
-  const primaryAsset = assetEntries[0] ?? null;
+  const previewAssetEntries = originalPrize ? [] : assetEntries;
+  const primaryAsset = previewAssetEntries[0] ?? null;
   const primaryPreview = useAssetPreview(primaryAsset?.assetId ?? null, {
     previewAssetId: primaryAsset?.thumbnailAssetId ?? null
   });
@@ -282,7 +309,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
   const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
   const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
-  const canRemoveImage = assetEntries.length > 0;
+  const canRemoveImage = previewAssetEntries.length > 0;
 
   const handleRemoveAsset = useCallback(async (assetId: string) => {
     setAssetEntries((previous) => previous.filter((entry) => entry.assetId !== assetId));
@@ -295,7 +322,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
   const handleFilesAdd = useCallback(
     async (fileList: FileList | null) => {
-      if (!fileList || fileList.length === 0) {
+      if (!fileList || fileList.length === 0 || originalPrize) {
         return;
       }
 
@@ -343,7 +370,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         }
       }
     },
-    []
+    [originalPrize]
   );
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -357,6 +384,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     rarityId !== initialState.rarityId ||
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
+    originalPrize !== initialState.originalPrize ||
     riaguTarget !== initialState.riagu ||
     !areAssetsEqual(assetEntries, initialState.assets);
 
@@ -383,8 +411,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId,
       pickupTarget,
       completeTarget,
+      originalPrize,
       riagu: riaguTarget,
-      assets: normalizeAssets(assetEntries)
+      assets: originalPrize ? [] : normalizeAssets(assetEntries)
     });
 
     unsavedAssetIdsRef.current.clear();
@@ -466,51 +495,64 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     });
   };
 
-  const renderFileSelectionContent = () => (
-    <>
-      <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
-          <PlusCircleIcon className="h-4 w-4" />
-          ファイルを追加
-          <input
-            type="file"
-            multiple
-            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
-            className="sr-only"
-            onChange={handleFileInputChange}
-            disabled={isProcessingAsset}
-          />
-        </label>
-        {canRemoveImage ? (
-          <span className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground">
-            登録済み: {assetEntries.length}件
-          </span>
-        ) : null}
-      </div>
-      {assetEntries.length > 0 ? (
-        <div className="mt-3 space-y-2">
-          {assetEntries.map((asset, index) => (
-            <AssetPreviewItem
-              key={asset.assetId}
-              asset={asset}
-              isPrimary={index === 0}
-              onRemove={handleRemoveAsset}
+  const renderFileSelectionContent = () => {
+    if (originalPrize) {
+      return (
+        <>
+          <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            オリジナル景品はこの画面でファイルを設定できません。ユーザーごとの割り当て画面から設定してください。
+          </p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
+            <PlusCircleIcon className="h-4 w-4" />
+            ファイルを追加
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*,.m4a,audio/mp4"
+              className="sr-only"
+              onChange={handleFileInputChange}
+              disabled={isProcessingAsset}
             />
-          ))}
+          </label>
+          {canRemoveImage ? (
+            <span className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground">
+              登録済み: {assetEntries.length}件
+            </span>
+          ) : null}
         </div>
-      ) : (
-        <p className="mt-3 text-xs text-muted-foreground">まだファイルが登録されていません。</p>
-      )}
-      {assetError ? <p className="mt-2 text-[11px] text-red-200">{assetError}</p> : null}
-      {isProcessingAsset ? (
-        <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
-      ) : null}
-    </>
-  );
+        {assetEntries.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {assetEntries.map((asset, index) => (
+              <AssetPreviewItem
+                key={asset.assetId}
+                asset={asset}
+                isPrimary={index === 0}
+                onRemove={handleRemoveAsset}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">まだファイルが登録されていません。</p>
+        )}
+        {assetError ? <p className="mt-2 text-[11px] text-red-200">{assetError}</p> : null}
+        {isProcessingAsset ? (
+          <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
+        ) : null}
+      </>
+    );
+  };
 
   return (
     <>
@@ -639,6 +681,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   checked={completeTarget}
                   onChange={setCompleteTarget}
                   name="completeTarget"
+                />
+                <SwitchField
+                  label="ユーザー毎にオリジナル景品"
+                  description="ユーザーごとにオリジナルの景品ファイルを割り当てます。リクエストボイスやメッセージ入りの景品はこちらをONにしてください。画像の設定はユーザーのメニューから出来ます。このオプションを有効にした場合、この画面のプレビューに登録されているファイルは削除されます。"
+                  checked={originalPrize}
+                  onChange={handleOriginalPrizeToggleChange}
+                  name="originalPrize"
                 />
                 <SwitchField
                   label="リアグとして設定"

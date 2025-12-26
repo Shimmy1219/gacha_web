@@ -37,6 +37,7 @@ export interface ItemCardModel {
   isRiagu: boolean;
   completeTarget: boolean;
   pickupTarget: boolean;
+  originalPrize: boolean;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -141,6 +142,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
       >
         {model.completeTarget ? <span className="badge badge--status badge--status-complete">コンプ対象</span> : null}
         {model.pickupTarget ? <span className="badge badge--status badge--status-pickup">ピックアップ</span> : null}
+        {model.originalPrize ? <span className="badge badge--status badge--status-original">オリジナル</span> : null}
         {model.isRiagu ? <span className="badge badge--status badge--status-riagu">リアグ</span> : null}
       </div>
       <div

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
-import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 import type {
   GachaAppStateV3,
@@ -38,6 +38,7 @@ interface HistorySelectionEntry {
   executedAt: string;
   pullCount: number;
   status?: PullHistoryEntryStatus;
+  hasOriginalPrizeMissing?: boolean;
   itemTypeCount: number;
   items: HistorySelectionItem[];
   rarityGroups: HistorySelectionRarityGroup[];
@@ -51,6 +52,8 @@ interface HistorySelectionItem {
   rarityId?: string;
   rarityLabel?: string;
   rarityColor?: string;
+  isOriginalPrize?: boolean;
+  hasOriginalPrizeMissing?: boolean;
 }
 
 interface HistorySelectionRarityGroup {
@@ -166,6 +169,26 @@ function buildHistoryEntries(
     }
 
     const catalogSnapshot = entry.gachaId ? catalogState?.byGacha?.[entry.gachaId] : undefined;
+    const assignedCounts = new Map<string, number>();
+    Object.entries(entry.originalPrizeAssignments ?? {}).forEach(([itemId, assignments]) => {
+      if (!itemId || !Array.isArray(assignments)) {
+        return;
+      }
+      const indices = new Set<number>();
+      assignments.forEach((assignment) => {
+        if (!assignment?.assetId) {
+          return;
+        }
+        const index = Math.trunc(assignment.index);
+        if (index < 0) {
+          return;
+        }
+        indices.add(index);
+      });
+      if (indices.size > 0) {
+        assignedCounts.set(itemId, indices.size);
+      }
+    });
     const rarityOrderIndex = new Map<string, number>();
     if (entry.gachaId) {
       rarityState?.byGacha?.[entry.gachaId]?.forEach((rarityId, index) => {
@@ -197,13 +220,17 @@ function buildHistoryEntries(
         const catalogItem = catalogSnapshot?.items?.[itemId];
         const rarityId = catalogItem?.rarityId;
         const rarity = rarityId ? rarityEntities[rarityId] : undefined;
+        const isOriginalPrize = catalogItem?.originalPrize === true;
+        const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
         return {
           itemId,
           itemName: catalogItem?.name ?? itemId,
           count,
           rarityId,
           rarityLabel: rarity?.label ?? '未分類',
-          rarityColor: rarity?.color
+          rarityColor: rarity?.color,
+          isOriginalPrize,
+          hasOriginalPrizeMissing: isOriginalPrize && count > assignedCount
         };
       })
       .sort((a, b) => {
@@ -253,6 +280,7 @@ function buildHistoryEntries(
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
       status: entry.status,
+      hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing,
       itemTypeCount: normalizedItems.length,
       items,
       rarityGroups,
@@ -604,7 +632,9 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
             ) : (
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                 {historyEntries.map((entry) => {
-                  const statusLabel = getPullHistoryStatusLabel(entry.status);
+                  const statusLabel = getPullHistoryStatusLabel(entry.status, {
+                    hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+                  });
                   const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
                   const newItemsSet = new Set(entry.newItems);
                   return (
@@ -692,7 +722,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                                         key={`${entry.id}-${groupKey}-${item.itemId}`}
                                         className={clsx(
                                           'inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px]',
-                                          newItemsOnlyActive && !newItemsSet.has(item.itemId)
+                                          newItemsOnlyActive && !newItemsSet.has(item.itemId) && !item.isOriginalPrize
                                             ? 'text-muted-foreground opacity-40'
                                             : 'text-surface-foreground/90'
                                         )}
@@ -700,6 +730,12 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                                         <span className="max-w-[10rem] truncate">{item.itemName}</span>
                                         {item.count > 1 ? (
                                           <span className="text-[10px] text-muted-foreground">×{item.count}</span>
+                                        ) : null}
+                                        {item.hasOriginalPrizeMissing ? (
+                                          <ExclamationTriangleIcon
+                                            className="h-3 w-3 text-amber-500"
+                                            aria-label="未送信"
+                                          />
                                         ) : null}
                                       </span>
                                     ))}

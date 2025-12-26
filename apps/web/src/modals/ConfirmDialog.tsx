@@ -6,10 +6,17 @@ interface ConfirmDialogPayload {
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm?: () => void;
+  onCancel?: () => void;
 }
 
 export function ConfirmDialog({ payload, close }: ModalComponentProps<ConfirmDialogPayload>): JSX.Element {
-  const { message, confirmLabel = '確定', cancelLabel = 'キャンセル', onConfirm } = payload ?? {};
+  const {
+    message,
+    confirmLabel = '確定',
+    cancelLabel = 'キャンセル',
+    onConfirm,
+    onCancel
+  } = payload ?? {};
 
   return (
     <>
@@ -17,7 +24,14 @@ export function ConfirmDialog({ payload, close }: ModalComponentProps<ConfirmDia
         {message ? <p className="text-sm leading-relaxed text-muted-foreground">{message}</p> : null}
       </ModalBody>
       <ModalFooter>
-        <button type="button" className="btn btn-muted" onClick={close}>
+        <button
+          type="button"
+          className="btn btn-muted"
+          onClick={() => {
+            onCancel?.();
+            close();
+          }}
+        >
           {cancelLabel}
         </button>
         <button

@@ -286,6 +286,9 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
   ) {
     return false;
   }
+  if (a.showUnobtainedItems !== b.showUnobtainedItems) {
+    return false;
+  }
   const aGacha = a.selectedGachaIds === '*' ? '*' : [...a.selectedGachaIds].sort();
   const bGacha = b.selectedGachaIds === '*' ? '*' : [...b.selectedGachaIds].sort();
   if (Array.isArray(aGacha) && Array.isArray(bGacha)) {
