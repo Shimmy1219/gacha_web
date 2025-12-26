@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 
 import { AppHeaderShell } from '../pages/gacha/components/app-shell/AppHeaderShell';
 import { useGachaRegistrationState } from '../pages/gacha/hooks/useGachaRegistrationState';
+import { ReceiveNavActions } from '../pages/receive/components/ReceiveNavActions';
 
 export interface GachaLayoutProps {
   title: string;
@@ -35,6 +36,8 @@ export function GachaLayout({
 
   const shouldShowToolbarActions = !isReceiveRoute && !isGachaTestRoute && !shouldShowSplash;
   const shouldShowDiscordLoginButton = !shouldShowSplash;
+  const receiveNavActions = isReceiveRoute ? <ReceiveNavActions mode="desktop" /> : null;
+  const receiveNavActionsMobile = isReceiveRoute ? <ReceiveNavActions mode="mobile" /> : null;
 
   return (
     <div className="app min-h-screen bg-transparent text-surface-foreground">
@@ -49,7 +52,9 @@ export function GachaLayout({
         showRegisterGachaButton={shouldShowToolbarActions}
         showExportButton={shouldShowToolbarActions}
         showDiscordLoginButton={shouldShowDiscordLoginButton}
-        appearance={isReceiveRoute ? 'dark' : 'default'}
+        navActions={receiveNavActions}
+        mobileNavActions={receiveNavActionsMobile}
+        appearance="default"
       />
       <main ref={mainRef} className={clsx('app__main', !isMobile && 'px-4 pb-[5px] pt-4')}>
         {children}

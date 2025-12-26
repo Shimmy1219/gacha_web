@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { HomeIcon } from '@heroicons/react/24/outline';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
@@ -21,6 +21,8 @@ export interface AppHeaderShellProps {
   showRegisterGachaButton?: boolean;
   showExportButton?: boolean;
   showDiscordLoginButton?: boolean;
+  navActions?: ReactNode;
+  mobileNavActions?: ReactNode;
   appearance?: 'default' | 'dark';
 }
 
@@ -35,17 +37,22 @@ export function AppHeaderShell({
   showRegisterGachaButton = true,
   showExportButton = true,
   showDiscordLoginButton = true,
+  navActions,
+  mobileNavActions,
   appearance = 'default'
 }: AppHeaderShellProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const { isMobile } = useResponsiveDashboard();
+  const location = useLocation();
   const drawerId = useId();
   const drawerTitleId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const headerHeightRef = useRef(0);
   const hiddenStateRef = useRef(isHidden);
   const lastScrollYRef = useRef(0);
+  const hasToolbarActions = showDrawGachaButton || showRegisterGachaButton || showExportButton;
+  const resolvedMobileNavActions = mobileNavActions ?? navActions;
 
   const handleClose = useCallback(() => setOpen(false), []);
 
@@ -158,6 +165,10 @@ export function AppHeaderShell({
     }
   }, [isMobile, open]);
 
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
   const isDarkAppearance = appearance === 'dark';
 
   return (
@@ -176,7 +187,7 @@ export function AppHeaderShell({
           <HeaderBrand title={title} tagline={tagline} appearance={appearance} />
         </div>
         <div className="app-header-shell__actions flex flex-shrink-0 items-center gap-3">
-          {!isMobile ? (
+          {!isMobile && hasToolbarActions ? (
             <ToolbarActions
               mode="desktop"
               onDrawGacha={onDrawGacha}
@@ -186,6 +197,11 @@ export function AppHeaderShell({
               showRegisterGachaButton={showRegisterGachaButton}
               showExportButton={showExportButton}
             />
+          ) : null}
+          {!isMobile && navActions ? (
+            <div className="app-header-shell__nav-actions flex items-center gap-2">
+              {navActions}
+            </div>
           ) : null}
           {showDiscordLoginButton && !isMobile ? (
             <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
@@ -212,13 +228,13 @@ export function AppHeaderShell({
               <div className="app-header-shell__mobile-header flex items-center justify-between">
                 <h2
                   id={drawerTitleId}
-                className={clsx(
-                  'text-xs font-semibold uppercase tracking-[0.3em]',
-                  isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
-                )}
-              >
-                ツールバー
-              </h2>
+                  className={clsx(
+                    'text-xs font-semibold uppercase tracking-[0.3em]',
+                    isDarkAppearance ? 'text-white/60' : 'text-muted-foreground'
+                  )}
+                >
+                  ツールバー
+                </h2>
               <button
                 type="button"
                 onClick={handleClose}
@@ -230,18 +246,25 @@ export function AppHeaderShell({
                 閉じる
               </button>
             </div>
-            <ToolbarActions
-              mode="mobile"
-              onDrawGacha={onDrawGacha}
-              onRegisterGacha={onRegisterGacha}
-              onExportAll={onExportAll}
-              showDrawGachaButton={showDrawGachaButton}
-              showRegisterGachaButton={showRegisterGachaButton}
-              showExportButton={showExportButton}
-            />
-              {showDiscordLoginButton ? (
-                <div className="app-header-shell__mobile-login">
-                  <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+            {resolvedMobileNavActions ? (
+              <div className="app-header-shell__mobile-nav">
+                {resolvedMobileNavActions}
+              </div>
+            ) : null}
+            {hasToolbarActions ? (
+              <ToolbarActions
+                mode="mobile"
+                onDrawGacha={onDrawGacha}
+                onRegisterGacha={onRegisterGacha}
+                onExportAll={onExportAll}
+                showDrawGachaButton={showDrawGachaButton}
+                showRegisterGachaButton={showRegisterGachaButton}
+                showExportButton={showExportButton}
+              />
+            ) : null}
+            {showDiscordLoginButton ? (
+              <div className="app-header-shell__mobile-login">
+                <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
                 </div>
               ) : null}
             </div>

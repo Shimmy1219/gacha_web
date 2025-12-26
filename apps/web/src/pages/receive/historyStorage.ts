@@ -1,4 +1,5 @@
 const HISTORY_STORAGE_KEY = 'receive:receive-history:v1';
+const HISTORY_STORAGE_FALLBACK_KEY = 'receive:receive-hisotry:v1';
 const DB_NAME = 'receive-history-store';
 const DB_VERSION = 1;
 const FILE_STORE_NAME = 'receiveFiles';
@@ -9,6 +10,10 @@ export interface ReceiveHistoryEntryMetadata {
   name?: string | null;
   purpose?: string | null;
   expiresAt?: string | null;
+  gachaNames?: string[];
+  itemNames?: string[];
+  pullCount?: number;
+  userName?: string | null;
   downloadedAt: string;
   itemCount: number;
   totalBytes: number;
@@ -69,6 +74,24 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
         })
         .filter((item): item is { id: string; name: string; kind: string; size: number } => Boolean(item));
 
+      const gachaNamesRaw = Array.isArray((entry as { gachaNames?: unknown }).gachaNames)
+        ? ((entry as { gachaNames: unknown[] }).gachaNames ?? [])
+        : [];
+      const gachaNames = gachaNamesRaw
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+
+      const itemNamesRaw = Array.isArray((entry as { itemNames?: unknown }).itemNames)
+        ? ((entry as { itemNames: unknown[] }).itemNames ?? [])
+        : [];
+      const itemNames = itemNamesRaw
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+
+      const pullCount = Number.isFinite((entry as { pullCount?: unknown }).pullCount)
+        ? Number((entry as { pullCount: number }).pullCount)
+        : null;
+
       return {
         id,
         token: typeof (entry as { token?: unknown }).token === 'string' ? (entry as { token: string }).token : null,
@@ -78,6 +101,10 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
           typeof (entry as { expiresAt?: unknown }).expiresAt === 'string'
             ? (entry as { expiresAt: string }).expiresAt
             : null,
+        gachaNames: gachaNames.length > 0 ? Array.from(new Set(gachaNames)) : undefined,
+        itemNames: itemNames.length > 0 ? Array.from(new Set(itemNames)) : undefined,
+        pullCount: pullCount === null ? undefined : pullCount,
+        userName: typeof (entry as { userName?: unknown }).userName === 'string' ? (entry as { userName: string }).userName : null,
         downloadedAt,
         itemCount,
         totalBytes,
@@ -93,7 +120,7 @@ export function loadHistoryMetadata(): ReceiveHistoryEntryMetadata[] {
     return [];
   }
   try {
-    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? window.localStorage.getItem(HISTORY_STORAGE_FALLBACK_KEY);
     if (!raw) {
       return [];
     }
