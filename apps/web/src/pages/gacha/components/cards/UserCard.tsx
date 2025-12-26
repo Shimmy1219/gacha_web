@@ -37,6 +37,7 @@ export interface UserInventoryEntryItem {
   itemName: string;
   rarity: RarityMeta;
   count: number;
+  isMissing?: boolean;
   isOriginalPrize?: boolean;
   originalPrizeInstances?: OriginalPrizeInstance[];
 }

@@ -333,6 +333,32 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
         return;
       }
 
+      const gachaCatalog = catalogByGacha[inventory.gachaId];
+      const catalogItems = gachaCatalog?.items ?? {};
+      const catalogOrder = Array.isArray(gachaCatalog?.order) ? gachaCatalog.order : Object.keys(catalogItems);
+      const catalogItemsByRarity = new Map<string, string[]>();
+      const catalogOrderSet = new Set<string>();
+
+      catalogOrder.forEach((itemId) => {
+        catalogOrderSet.add(itemId);
+        const item = catalogItems[itemId];
+        if (!item) {
+          return;
+        }
+        const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+        list.push(item.itemId);
+        catalogItemsByRarity.set(item.rarityId, list);
+      });
+
+      Object.values(catalogItems).forEach((item) => {
+        if (catalogOrderSet.has(item.itemId)) {
+          return;
+        }
+        const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+        list.push(item.itemId);
+        catalogItemsByRarity.set(item.rarityId, list);
+      });
+
       const itemsByRarity = inventory.items ?? {};
       const countsByRarity = inventory.counts ?? {};
       const originalPrizeAssetsByItem = inventory.originalPrizeAssets ?? {};
@@ -340,7 +366,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       const originalPrizeItemIds = new Set<string>();
       Object.values(countsByRarity).forEach((record) => {
         Object.keys(record ?? {}).forEach((itemId) => {
-          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+          const catalogItem = catalogItems[itemId];
           if (catalogItem?.originalPrize) {
             originalPrizeItemIds.add(itemId);
           }
@@ -352,7 +378,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           return;
         }
         itemIds.forEach((itemId) => {
-          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+          const catalogItem = catalogItems[itemId];
           if (catalogItem?.originalPrize) {
             originalPrizeItemIds.add(itemId);
           }
@@ -381,10 +407,22 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
         });
 
-        const sortedItemIds = Array.from(fallbackCounts.keys()).sort((a, b) => a.localeCompare(b, 'ja'));
+        const orderIndex = new Map<string, number>();
+        const orderedItems = catalogItemsByRarity.get(rarityId) ?? [];
+        orderedItems.forEach((itemId, index) => {
+          orderIndex.set(itemId, index);
+        });
+        const sortedItemIds = Array.from(fallbackCounts.keys()).sort((a, b) => {
+          const orderA = orderIndex.get(a) ?? Number.POSITIVE_INFINITY;
+          const orderB = orderIndex.get(b) ?? Number.POSITIVE_INFINITY;
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          return a.localeCompare(b, 'ja');
+        });
 
         sortedItemIds.forEach((itemId) => {
-          const catalogItem = catalogByGacha[inventory.gachaId]?.items?.[itemId];
+          const catalogItem = catalogItems[itemId];
           if (filters.showSkipOnly && !catalogItem?.riagu) {
             return;
           }
