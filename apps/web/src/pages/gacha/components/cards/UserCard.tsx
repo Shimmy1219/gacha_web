@@ -962,10 +962,14 @@ function GachaInventoryCard({
                       key={`${inventory.inventoryId}-${editorKey}`}
                       type="button"
                       className={clsx(
-                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border border-border/60 bg-muted',
-                        'px-3 py-1 text-xs text-surface-foreground transition',
+                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition',
+                        item.isMissing
+                          ? 'border-dashed border-border/40 bg-surface/10 text-muted-foreground/60 opacity-60'
+                          : 'border-border/60 bg-muted text-surface-foreground',
                         isEditing && item.rarity.rarityId
-                          ? 'hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+                          ? item.isMissing
+                            ? 'hover:border-border/70 hover:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
+                            : 'hover:border-accent/60 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent'
                           : 'cursor-default'
                       )}
                       onClick={() => item.rarity.rarityId && handleStartEdit(rarityId, item.itemId, item.count)}

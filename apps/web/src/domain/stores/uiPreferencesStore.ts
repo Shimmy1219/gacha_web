@@ -278,7 +278,12 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
   if (a.keyword !== b.keyword) {
     return false;
   }
-  if (a.hideMiss !== b.hideMiss || a.showCounts !== b.showCounts || a.showSkipOnly !== b.showSkipOnly) {
+  if (
+    a.hideMiss !== b.hideMiss ||
+    a.showCounts !== b.showCounts ||
+    a.showSkipOnly !== b.showSkipOnly ||
+    a.showUnobtainedItems !== b.showUnobtainedItems
+  ) {
     return false;
   }
   if (a.showUnobtainedItems !== b.showUnobtainedItems) {
