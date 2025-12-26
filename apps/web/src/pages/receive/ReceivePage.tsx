@@ -346,13 +346,23 @@ export function ReceivePage(): JSX.Element {
       }
       setHasAttemptedLoad(true);
       setDuplicateHistoryEntry(null);
+      const existingEntry = historyEntries.find((entry) => entry.token && entry.token === parsed);
+      if (existingEntry) {
+        setDuplicateHistoryEntry(existingEntry);
+        setResolveStatus('idle');
+        setResolveError(null);
+        setResolved(null);
+        setDownloadPhase('waiting');
+        setMediaItems([]);
+        return;
+      }
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set('t', parsed);
       nextParams.delete('key');
       nextParams.delete('history');
       setSearchParams(nextParams);
     },
-    [searchParams, setSearchParams, tokenInput]
+    [historyEntries, searchParams, setSearchParams, tokenInput]
   );
 
   const persistHistoryEntry = useCallback(
@@ -685,7 +695,7 @@ export function ReceivePage(): JSX.Element {
                   履歴を表示中
                 </span>
               ) : null}
-              <div className="rounded-xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-muted-foreground">
+              <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
                 DiscordやXのアプリ内ブラウザから来た方は、safariやchromeなどで開きなおすことをオススメします。
               </div>
               <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
@@ -770,8 +780,8 @@ export function ReceivePage(): JSX.Element {
               </div>
             )}
 
-            {downloadPhase === 'complete' && duplicateHistoryEntry ? (
-              <div className="receive-page-duplicate-history mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-muted-foreground">
+            {duplicateHistoryEntry ? (
+              <div className="receive-page-duplicate-history mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
                 <span className="receive-page-duplicate-history-text">
                   この受け取りIDは既にダウンロード済みです。履歴を開いて確認できます。
                 </span>
@@ -779,7 +789,7 @@ export function ReceivePage(): JSX.Element {
                   to={`/receive?history=${encodeURIComponent(duplicateHistoryEntry.id)}`}
                   className="btn btn-muted rounded-full"
                 >
-                  受け取り画面で開く
+                  受け取り画面で、履歴を表示する
                 </Link>
               </div>
             ) : null}
