@@ -7,6 +7,7 @@ export interface UserFilterPreferences {
   hideMiss: boolean;
   showCounts: boolean;
   showSkipOnly: boolean;
+  showUnobtainedItems: boolean;
   keyword: string;
 }
 
@@ -16,6 +17,7 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   hideMiss: false,
   showCounts: true,
   showSkipOnly: false,
+  showUnobtainedItems: false,
   keyword: ''
 };
 
@@ -233,6 +235,10 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
     raw.showSkipOnly ?? raw.riaguOnly,
     DEFAULT_USER_FILTER_PREFERENCES.showSkipOnly
   );
+  const showUnobtainedItems = normalizeBoolean(
+    raw.showUnobtainedItems,
+    DEFAULT_USER_FILTER_PREFERENCES.showUnobtainedItems
+  );
   const keyword = normalizeKeyword(raw.keyword ?? raw.query ?? raw.userSearch);
 
   return {
@@ -241,6 +247,7 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
     hideMiss,
     showCounts,
     showSkipOnly,
+    showUnobtainedItems,
     keyword
   };
 }
@@ -259,6 +266,7 @@ function serializeUserFilterPreferences(preferences: UserFilterPreferences): Rec
     hideMiss: preferences.hideMiss,
     showCounts: preferences.showCounts,
     showSkipOnly: preferences.showSkipOnly,
+    showUnobtainedItems: preferences.showUnobtainedItems,
     query: preferences.keyword
   };
 }
@@ -271,6 +279,9 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
     return false;
   }
   if (a.hideMiss !== b.hideMiss || a.showCounts !== b.showCounts || a.showSkipOnly !== b.showSkipOnly) {
+    return false;
+  }
+  if (a.showUnobtainedItems !== b.showUnobtainedItems) {
     return false;
   }
   const aGacha = a.selectedGachaIds === '*' ? '*' : [...a.selectedGachaIds].sort();

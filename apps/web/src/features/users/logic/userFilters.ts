@@ -52,6 +52,7 @@ export interface UserFilterController {
   setHideMiss(next: boolean): void;
   setShowCounts(next: boolean): void;
   setShowSkipOnly(next: boolean): void;
+  setShowUnobtainedItems(next: boolean): void;
   setKeyword(keyword: string): void;
   reset(): void;
 }
@@ -220,6 +221,16 @@ export function useUserFilterController(): UserFilterController {
     [updatePreferences]
   );
 
+  const setShowUnobtainedItems = useCallback(
+    (next: boolean) => {
+      updatePreferences((previous) => ({
+        ...previous,
+        showUnobtainedItems: Boolean(next)
+      }));
+    },
+    [updatePreferences]
+  );
+
   const setKeyword = useCallback(
     (keyword: string) => {
       updatePreferences((previous) => ({
@@ -241,6 +252,7 @@ export function useUserFilterController(): UserFilterController {
     setHideMiss,
     setShowCounts,
     setShowSkipOnly,
+    setShowUnobtainedItems,
     setKeyword,
     reset
   };
@@ -266,6 +278,16 @@ function matchesSelection(selection: '*' | string[], value: string): boolean {
   return selection.includes(value);
 }
 
+function isMissRarity(rarityId: string, rarityLabel: string | undefined): boolean {
+  if (rarityId === 'rar-miss') {
+    return true;
+  }
+  if (!rarityLabel) {
+    return false;
+  }
+  return rarityLabel.trim() === 'はずれ';
+}
+
 function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: DerivedUser[]; showCounts: boolean } {
   if (!snapshot || !snapshot.userProfiles?.users || !snapshot.userInventories?.inventories) {
     return { users: [], showCounts: filters.showCounts };
@@ -289,6 +311,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
   const hasKeyword = keyword.length > 0;
   const gachaSelection = filters.selectedGachaIds === '*' ? '*' : [...new Set(filters.selectedGachaIds)];
   const raritySelection = filters.selectedRarityIds === '*' ? '*' : [...new Set(filters.selectedRarityIds)];
+  const showUnobtainedItems = filters.showUnobtainedItems;
 
   const users: DerivedUser[] = [];
 
@@ -393,26 +416,55 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       });
 
       const pulls: UserInventoryEntryItem[] = [];
+      const rarityIdSet = new Set<string>(Object.keys(itemsByRarity));
+      if (showUnobtainedItems) {
+        catalogItemsByRarity.forEach((_items, rarityId) => {
+          rarityIdSet.add(rarityId);
+        });
+      }
 
-      Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
-        if (!Array.isArray(itemIds) || itemIds.length === 0) {
-          return;
-        }
+      rarityIdSet.forEach((rarityId) => {
+        const itemIds = itemsByRarity[rarityId];
         if (!matchesSelection(raritySelection, rarityId)) {
           return;
         }
 
+        const rarityEntity = rarityEntities[rarityId];
+        if (filters.hideMiss && isMissRarity(rarityId, rarityEntity?.label)) {
+          return;
+        }
+
         const fallbackCounts = new Map<string, number>();
-        itemIds.forEach((itemId) => {
-          fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+        if (Array.isArray(itemIds)) {
+          itemIds.forEach((itemId) => {
+            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+          });
+        }
+
+        const explicitCounts = countsByRarity[rarityId] ?? {};
+        const catalogItemIds = catalogItemsByRarity.get(rarityId) ?? [];
+        const itemIdSet = new Set<string>();
+        if (showUnobtainedItems) {
+          catalogItemIds.forEach((itemId) => {
+            itemIdSet.add(itemId);
+          });
+        }
+        Object.keys(explicitCounts).forEach((itemId) => {
+          itemIdSet.add(itemId);
+        });
+        fallbackCounts.forEach((_count, itemId) => {
+          itemIdSet.add(itemId);
         });
 
+        if (itemIdSet.size === 0) {
+          return;
+        }
+
         const orderIndex = new Map<string, number>();
-        const orderedItems = catalogItemsByRarity.get(rarityId) ?? [];
-        orderedItems.forEach((itemId, index) => {
+        catalogItemIds.forEach((itemId, index) => {
           orderIndex.set(itemId, index);
         });
-        const sortedItemIds = Array.from(fallbackCounts.keys()).sort((a, b) => {
+        const orderedItemIds = Array.from(itemIdSet).sort((a, b) => {
           const orderA = orderIndex.get(a) ?? Number.POSITIVE_INFINITY;
           const orderB = orderIndex.get(b) ?? Number.POSITIVE_INFINITY;
           if (orderA !== orderB) {
@@ -421,22 +473,22 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           return a.localeCompare(b, 'ja');
         });
 
-        sortedItemIds.forEach((itemId) => {
+        orderedItemIds.forEach((itemId) => {
           const catalogItem = catalogItems[itemId];
           if (filters.showSkipOnly && !catalogItem?.riagu) {
             return;
           }
 
-          const explicitCount = countsByRarity[rarityId]?.[itemId];
+          const explicitCount = explicitCounts[itemId];
           const totalCount = typeof explicitCount === 'number' && explicitCount > 0
             ? explicitCount
             : fallbackCounts.get(itemId) ?? 0;
+          const isMissing = totalCount <= 0;
 
-          if (totalCount <= 0) {
+          if (isMissing && !showUnobtainedItems) {
             return;
           }
 
-          const rarityEntity = rarityEntities[rarityId];
           const isOriginalPrize = Boolean(catalogItem?.originalPrize);
           const instances = isOriginalPrize
             ? applyLegacyAssetsToInstances(
@@ -455,6 +507,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
               rarityNum: rarityEntity?.sortOrder
             },
             count: totalCount,
+            isMissing,
             isOriginalPrize,
             originalPrizeInstances: instances
           });
