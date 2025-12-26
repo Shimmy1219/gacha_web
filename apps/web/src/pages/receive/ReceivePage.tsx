@@ -202,6 +202,7 @@ export function ReceivePage(): JSX.Element {
   const [isSavingHistory, setIsSavingHistory] = useState<boolean>(false);
   const [isRestoringHistory, setIsRestoringHistory] = useState<boolean>(false);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [duplicateHistoryEntry, setDuplicateHistoryEntry] = useState<ReceiveHistoryEntryMetadata | null>(null);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
@@ -224,14 +225,17 @@ export function ReceivePage(): JSX.Element {
 
   useEffect(() => {
     if (hasHistoryParam) {
+      setDuplicateHistoryEntry(null);
       setHasAttemptedLoad(true);
       return;
     }
     if (isShareLinkMode) {
+      setDuplicateHistoryEntry(null);
       setHasAttemptedLoad(true);
       return;
     }
     if (!activeToken) {
+      setDuplicateHistoryEntry(null);
       setHasAttemptedLoad(false);
     }
   }, [activeToken, hasHistoryParam, isShareLinkMode]);
@@ -341,6 +345,7 @@ export function ReceivePage(): JSX.Element {
         return;
       }
       setHasAttemptedLoad(true);
+      setDuplicateHistoryEntry(null);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set('t', parsed);
       nextParams.delete('key');
@@ -357,6 +362,26 @@ export function ReceivePage(): JSX.Element {
       }
       setIsSavingHistory(true);
       setHistorySaveError(null);
+
+      const hasToken = Boolean(activeToken && activeToken.trim());
+      const existingEntry = hasToken
+        ? historyEntries.find((entry) => entry.token && entry.token === activeToken)
+        : null;
+      if (existingEntry) {
+        try {
+          const existingBlob = await loadHistoryFile(existingEntry.id);
+          if (!existingBlob) {
+            await saveHistoryFile(existingEntry.id, zipBlob);
+          }
+        } catch (error) {
+          console.error('Failed to reuse receive history entry', error);
+        } finally {
+          setActiveHistoryId(existingEntry.id);
+          setDuplicateHistoryEntry(existingEntry);
+          setIsSavingHistory(false);
+        }
+        return;
+      }
 
       const entryId = generateHistoryId();
       const timestamp = new Date().toISOString();
@@ -403,6 +428,7 @@ export function ReceivePage(): JSX.Element {
         setHistoryEntries(nextEntries);
         persistHistoryMetadata(nextEntries);
         setActiveHistoryId(entryId);
+        setDuplicateHistoryEntry(null);
       } catch (error) {
         console.error('Failed to persist receive history', error);
         setHistorySaveError('履歴の保存に失敗しました。ブラウザの設定をご確認ください。');
@@ -506,6 +532,7 @@ export function ReceivePage(): JSX.Element {
       setCleanupStatus('idle');
       setCleanupError(null);
       setDownloadError(null);
+      setDuplicateHistoryEntry(null);
       setResolveStatus('success');
       setResolved({
         url: '',
@@ -742,6 +769,20 @@ export function ReceivePage(): JSX.Element {
                 <ProgressBar label="解凍" value={downloadPhase === 'unpacking' ? unpackProgress : 0} />
               </div>
             )}
+
+            {downloadPhase === 'complete' && duplicateHistoryEntry ? (
+              <div className="receive-page-duplicate-history mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-muted-foreground">
+                <span className="receive-page-duplicate-history-text">
+                  この受け取りIDは既にダウンロード済みです。履歴を開いて確認できます。
+                </span>
+                <Link
+                  to={`/receive?history=${encodeURIComponent(duplicateHistoryEntry.id)}`}
+                  className="btn btn-muted rounded-full"
+                >
+                  受け取り画面で開く
+                </Link>
+              </div>
+            ) : null}
 
             {downloadPhase === 'complete' && mediaItems.length > 0 ? (
               <div className="receive-page-completion-summary mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-muted-foreground">
