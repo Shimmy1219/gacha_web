@@ -85,13 +85,13 @@ function ReceiveInventoryItemCard({
               {item.rarity}
             </span>
           ) : null}
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span className="chip">x{item.obtainedCount}</span>
-            {item.isRiagu ? (
-              <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
-            ) : null}
-          </div>
-          <div className="mt-3 flex justify-end">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="chip">x{item.obtainedCount}</span>
+              {item.isRiagu ? (
+                <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
+              ) : null}
+            </div>
             <ReceiveSaveButton
               onClick={onSave}
               disabled={isSaving}
