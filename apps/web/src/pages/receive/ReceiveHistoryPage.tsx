@@ -75,8 +75,21 @@ export function ReceiveHistoryPage(): JSX.Element {
         const hasPullCount = typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount);
         const hasPullIds = Boolean(entry.pullIds && entry.pullIds.length > 0);
         const hasOwnerName = Boolean(entry.ownerName && entry.ownerName.trim());
+        const maybeFileCountBased =
+          hasPullCount &&
+          typeof entry.itemCount === 'number' &&
+          Number.isFinite(entry.itemCount) &&
+          entry.pullCount === entry.itemCount;
 
-        if (hasUserName && hasGachaNames && hasItemNames && hasPullCount && hasPullIds && hasOwnerName) {
+        if (
+          hasUserName &&
+          hasGachaNames &&
+          hasItemNames &&
+          hasPullCount &&
+          hasPullIds &&
+          hasOwnerName &&
+          !maybeFileCountBased
+        ) {
           continue;
         }
 
@@ -96,7 +109,8 @@ export function ReceiveHistoryPage(): JSX.Element {
           ownerName: hasOwnerName ? entry.ownerName : summary.ownerName ?? entry.ownerName,
           gachaNames: hasGachaNames ? entry.gachaNames : summary.gachaNames.length > 0 ? summary.gachaNames : entry.gachaNames,
           itemNames: hasItemNames ? entry.itemNames : summary.itemNames.length > 0 ? summary.itemNames : entry.itemNames,
-          pullCount: hasPullCount ? entry.pullCount : summary.pullCount ?? entry.pullCount,
+          pullCount:
+            summary.pullCount ?? (hasPullCount ? entry.pullCount : undefined),
           pullIds: hasPullIds ? entry.pullIds : summary.pullIds.length > 0 ? summary.pullIds : entry.pullIds
         };
 
@@ -127,16 +141,14 @@ export function ReceiveHistoryPage(): JSX.Element {
       const itemNames = allItemNames.slice(0, 20);
       const pullCount = typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount)
         ? entry.pullCount
-        : entry.itemCount;
-      const extraCount = Math.max(0, entry.itemCount - itemNames.length);
+        : null;
 
       return {
         entry,
         gachaLabel,
         displayUser,
         itemNames,
-        pullCount,
-        extraCount
+        pullCount
       };
     }),
     [entries]
@@ -167,7 +179,7 @@ export function ReceiveHistoryPage(): JSX.Element {
 
         {hasEntries ? (
           <section className="flex flex-col gap-4">
-            {cards.map(({ entry, gachaLabel, displayUser, itemNames, pullCount, extraCount }) => (
+            {cards.map(({ entry, gachaLabel, displayUser, itemNames, pullCount }) => (
               <article
                 key={entry.id}
                 className="rounded-2xl border border-border/60 bg-panel/85 p-5 shadow-sm"
@@ -181,8 +193,8 @@ export function ReceiveHistoryPage(): JSX.Element {
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span className="chip">{pullCount}連</span>
-                  <span className="chip">アイテム {entry.itemCount} 件</span>
+                  {pullCount !== null ? <span className="chip">{pullCount}連</span> : null}
+                  <span className="chip">ファイル数 {entry.itemCount} 件</span>
                   <span className="chip">{formatReceiveBytes(entry.totalBytes)}</span>
                   {entry.token ? <span className="chip">ID: {entry.token}</span> : null}
                 </div>
@@ -192,7 +204,6 @@ export function ReceiveHistoryPage(): JSX.Element {
                     {itemNames.map((name) => (
                       <span key={`${entry.id}-${name}`} className="chip">{name}</span>
                     ))}
-                    {extraCount > 0 ? <span className="chip">他 {extraCount} 件</span> : null}
                   </div>
                 ) : null}
 

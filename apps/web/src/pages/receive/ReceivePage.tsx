@@ -195,6 +195,19 @@ function resolveOmittedItemNames(metadataEntries: ReceiveItemMetadata[]): string
   return Array.from(omitted);
 }
 
+function resolvePullCount(metadataEntries: ReceiveItemMetadata[]): number | null {
+  if (metadataEntries.length === 0) {
+    return null;
+  }
+  const total = metadataEntries.reduce((sum, entry) => {
+    if (typeof entry.obtainedCount === 'number' && Number.isFinite(entry.obtainedCount)) {
+      return sum + Math.max(0, entry.obtainedCount);
+    }
+    return sum;
+  }, 0);
+  return total > 0 ? total : null;
+}
+
 function formatOmittedMessage(itemNames: string[]): string | null {
   if (itemNames.length === 0) {
     return null;
@@ -399,7 +412,7 @@ export function ReceivePage(): JSX.Element {
   );
 
   const persistHistoryEntry = useCallback(
-    async (zipBlob: Blob, items: ReceiveMediaItem[]) => {
+    async (zipBlob: Blob, items: ReceiveMediaItem[], metadataEntries: ReceiveItemMetadata[]) => {
       if (!isHistoryStorageAvailable()) {
         return;
       }
@@ -489,12 +502,7 @@ export function ReceivePage(): JSX.Element {
             .filter((value): value is string => Boolean(value))
         )
       );
-      const pullCount = items.reduce((sum, item) => {
-        if (typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)) {
-          return sum + Math.max(0, item.metadata.obtainedCount);
-        }
-        return sum + 1;
-      }, 0);
+      const pullCount = resolvePullCount(metadataEntries);
       const entry: ReceiveHistoryEntryMetadata = {
         id: entryId,
         token: activeToken || null,
@@ -503,7 +511,7 @@ export function ReceivePage(): JSX.Element {
         expiresAt: expiration ? expiration.toISOString() : null,
         gachaNames: gachaNames.length > 0 ? gachaNames : undefined,
         itemNames: itemNames.length > 0 ? itemNames.slice(0, 24) : undefined,
-        pullCount: pullCount > 0 ? pullCount : undefined,
+        pullCount: pullCount ?? undefined,
         ownerName: ownerName ?? null,
         pullIds: pullIds.length > 0 ? pullIds : undefined,
         downloadedAt: timestamp,
@@ -574,7 +582,7 @@ export function ReceivePage(): JSX.Element {
       setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
       setMediaItems(items);
       setDownloadPhase('complete');
-      await persistHistoryEntry(blob, items);
+      await persistHistoryEntry(blob, items, metadataEntries);
     } catch (error) {
       if (controller.signal.aborted) {
         return;
