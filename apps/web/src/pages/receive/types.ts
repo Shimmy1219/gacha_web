@@ -2,8 +2,10 @@ export type ReceiveMediaKind = 'image' | 'video' | 'audio' | 'text' | 'other';
 
 export interface ReceiveItemMetadata {
   id: string;
-  filePath: string;
+  filePath: string | null;
+  gachaId?: string | null;
   gachaName: string;
+  itemId?: string | null;
   itemName: string;
   rarity: string;
   rarityColor: string | null;
@@ -11,6 +13,7 @@ export interface ReceiveItemMetadata {
   riaguType: string | null;
   obtainedCount: number;
   isNewForUser: boolean;
+  isOmitted?: boolean;
 }
 
 export interface ReceiveMediaItem {

@@ -24,8 +24,10 @@ interface SelectedAsset {
 }
 
 interface ZipItemMetadata {
-  filePath: string;
+  filePath: string | null;
+  gachaId?: string | null;
   gachaName: string;
+  itemId?: string | null;
   itemName: string;
   rarity: string;
   rarityColor: string | null;
@@ -33,6 +35,7 @@ interface ZipItemMetadata {
   riaguType: string | null;
   obtainedCount: number;
   isNewForUser: boolean;
+  isOmitted?: boolean;
 }
 
 interface HistorySelectionMetadata {
@@ -531,6 +534,8 @@ export async function buildUserZipFromSelection({
   let collected: SelectedAsset[] = [];
   let historySelectionDetails: HistorySelectionMetadata[] = [];
   let includedPullIds: Set<string> = new Set();
+  let metadataAssets: SelectedAsset[] = [];
+  let omittedAssetIds: Set<string> = new Set();
   if (selection.mode === 'history') {
     const newItemsOnlyPullIds =
       selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
@@ -547,6 +552,26 @@ export async function buildUserZipFromSelection({
     collected = historyAggregation.assets;
     historySelectionDetails = historyAggregation.pulls;
     includedPullIds = historyAggregation.includedPullIds;
+
+    if (newItemsOnlyPullIds && newItemsOnlyPullIds.size > 0) {
+      const allHistoryAggregation = aggregateHistoryItems(
+        snapshot,
+        selection,
+        warnings,
+        normalizedUserId,
+        normalizedItemFilter,
+        null
+      );
+      metadataAssets = allHistoryAggregation.assets;
+      const selectedAssetIds = new Set(collected.map((item) => item.assetId));
+      omittedAssetIds = new Set(
+        metadataAssets
+          .filter((item) => !selectedAssetIds.has(item.assetId))
+          .map((item) => item.assetId)
+      );
+    } else {
+      metadataAssets = collected;
+    }
   } else {
     collected = aggregateInventoryItems(
       inventoriesForUser,
@@ -564,6 +589,7 @@ export async function buildUserZipFromSelection({
         Array.from(includedPullIds)
       );
     }
+    metadataAssets = collected;
   }
 
   if (collected.length === 0) {
@@ -618,17 +644,44 @@ export async function buildUserZipFromSelection({
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
       itemMetadataMap[item.assetId] = {
         filePath,
+        gachaId: item.gachaId ?? null,
         gachaName: item.gachaName,
+        itemId: item.itemId ?? null,
         itemName: item.itemName,
         rarity: rarityLabel,
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
         obtainedCount: item.count,
-        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
+        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
+        isOmitted: false
       };
     }
   });
+
+  if (itemMetadataMap && metadataAssets.length > 0) {
+    metadataAssets.forEach((item) => {
+      if (itemMetadataMap[item.assetId]) {
+        return;
+      }
+      const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
+      const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
+      itemMetadataMap[item.assetId] = {
+        filePath: null,
+        gachaId: item.gachaId ?? null,
+        gachaName: item.gachaName,
+        itemId: item.itemId ?? null,
+        itemName: item.itemName,
+        rarity: rarityLabel,
+        rarityColor,
+        isRiagu: item.isRiagu,
+        riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+        obtainedCount: item.count,
+        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
+        isOmitted: omittedAssetIds.has(item.assetId)
+      };
+    });
+  }
 
   const metaFolder = includeMetadata ? zip.folder('meta') : null;
   const generatedAt = includeMetadata ? new Date().toISOString() : null;

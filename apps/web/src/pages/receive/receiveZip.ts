@@ -64,7 +64,15 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
     const parsed = JSON.parse(jsonText) as Record<string, Omit<ReceiveItemMetadata, 'id'>>;
     const mapped: Record<string, ReceiveItemMetadata> = {};
     for (const [id, metadata] of Object.entries(parsed)) {
-      mapped[id] = { id, ...metadata, rarityColor: metadata.rarityColor ?? null };
+      mapped[id] = {
+        id,
+        ...metadata,
+        filePath: typeof metadata.filePath === 'string' ? metadata.filePath : null,
+        gachaId: typeof metadata.gachaId === 'string' ? metadata.gachaId : metadata.gachaId ?? null,
+        itemId: typeof metadata.itemId === 'string' ? metadata.itemId : metadata.itemId ?? null,
+        rarityColor: metadata.rarityColor ?? null,
+        isOmitted: Boolean(metadata.isOmitted)
+      };
     }
     return mapped;
   } catch (error) {
@@ -73,20 +81,22 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
   }
 }
 
-export async function extractReceiveMediaItems(
-  blob: Blob,
+async function extractReceiveMediaItemsFromZip(
+  zip: JSZip,
+  metadataEntries: ReceiveItemMetadata[],
   onProgress?: (processed: number, total: number) => void
 ): Promise<ReceiveMediaItem[]> {
-  const zip = await JSZip.loadAsync(blob);
-  const metadataMap = await loadItemsMetadata(zip);
-  const metadataEntries = Object.values(metadataMap);
-
   if (metadataEntries.length > 0) {
     const mediaItems: ReceiveMediaItem[] = [];
     const total = metadataEntries.length;
     let processed = 0;
 
     for (const metadata of metadataEntries) {
+      if (!metadata.filePath) {
+        processed += 1;
+        onProgress?.(processed, total);
+        continue;
+      }
       const entry = findZipObjectByRelativePath(zip, metadata.filePath);
       if (!entry) {
         processed += 1;
@@ -153,6 +163,27 @@ export async function extractReceiveMediaItems(
   return mediaItems;
 }
 
+export async function extractReceiveMediaItems(
+  blob: Blob,
+  onProgress?: (processed: number, total: number) => void
+): Promise<ReceiveMediaItem[]> {
+  const zip = await JSZip.loadAsync(blob);
+  const metadataMap = await loadItemsMetadata(zip);
+  const metadataEntries = Object.values(metadataMap);
+  return extractReceiveMediaItemsFromZip(zip, metadataEntries, onProgress);
+}
+
+export async function loadReceiveZipInventory(
+  blob: Blob,
+  onProgress?: (processed: number, total: number) => void
+): Promise<{ metadataEntries: ReceiveItemMetadata[]; mediaItems: ReceiveMediaItem[] }> {
+  const zip = await JSZip.loadAsync(blob);
+  const metadataMap = await loadItemsMetadata(zip);
+  const metadataEntries = Object.values(metadataMap);
+  const mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataEntries, onProgress);
+  return { metadataEntries, mediaItems };
+}
+
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   const unique = new Set<string>();
   values.forEach((value) => {
@@ -206,6 +237,17 @@ export async function loadReceiveZipPullIds(blob: Blob): Promise<string[]> {
     return resolvePullIds(selection);
   } catch (error) {
     console.error('Failed to parse receive zip pull ids', error);
+    return [];
+  }
+}
+
+export async function loadReceiveZipItemMetadata(blob: Blob): Promise<ReceiveItemMetadata[]> {
+  try {
+    const zip = await JSZip.loadAsync(blob);
+    const metadataMap = await loadItemsMetadata(zip);
+    return Object.values(metadataMap);
+  } catch (error) {
+    console.error('Failed to parse receive zip item metadata', error);
     return [];
   }
 }

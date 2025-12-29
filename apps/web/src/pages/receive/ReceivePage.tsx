@@ -11,7 +11,7 @@ import {
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
 import { ReceiveBulkSaveButton } from './components/ReceiveSaveButtons';
-import type { ReceiveMediaItem } from './types';
+import type { ReceiveItemMetadata, ReceiveMediaItem } from './types';
 import {
   generateHistoryId,
   isHistoryStorageAvailable,
@@ -21,7 +21,7 @@ import {
   saveHistoryFile,
   type ReceiveHistoryEntryMetadata
 } from './historyStorage';
-import { extractReceiveMediaItems, loadReceiveZipSelectionInfo } from './receiveZip';
+import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 interface ResolveSuccessPayload {
@@ -181,6 +181,28 @@ function formatExpiration(date?: Date): string | undefined {
   });
 }
 
+function resolveOmittedItemNames(metadataEntries: ReceiveItemMetadata[]): string[] {
+  const omitted = new Set<string>();
+  metadataEntries.forEach((entry) => {
+    if (!entry.isOmitted) {
+      return;
+    }
+    const name = entry.itemName?.trim() || '名称未設定';
+    if (name) {
+      omitted.add(name);
+    }
+  });
+  return Array.from(omitted);
+}
+
+function formatOmittedMessage(itemNames: string[]): string | null {
+  if (itemNames.length === 0) {
+    return null;
+  }
+  const label = itemNames.map((name) => `アイテム${name}`).join('・');
+  return `${label}は既に保有済みのため、省略されました。ただし所持一覧には加算されます。`;
+}
+
 export function ReceivePage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tokenInput, setTokenInput] = useState<string>('');
@@ -204,6 +226,7 @@ export function ReceivePage(): JSX.Element {
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [duplicateHistoryEntry, setDuplicateHistoryEntry] = useState<ReceiveHistoryEntryMetadata | null>(null);
   const [duplicateReason, setDuplicateReason] = useState<'token' | 'pull' | null>(null);
+  const [omittedItemNames, setOmittedItemNames] = useState<string[]>([]);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
@@ -241,6 +264,7 @@ export function ReceivePage(): JSX.Element {
       setDuplicateHistoryEntry(null);
       setDuplicateReason(null);
       setHasAttemptedLoad(false);
+      setOmittedItemNames([]);
     }
   }, [activeToken, hasHistoryParam, isShareLinkMode]);
 
@@ -255,6 +279,7 @@ export function ReceivePage(): JSX.Element {
       setResolveError(null);
       setDownloadPhase('waiting');
       setMediaItems([]);
+      setOmittedItemNames([]);
       setActiveHistoryId(null);
       return;
     }
@@ -310,6 +335,7 @@ export function ReceivePage(): JSX.Element {
   );
   const isViewingHistory = useMemo(() => Boolean(activeHistoryId), [activeHistoryId]);
   const shouldShowSteps = isShareLinkMode || hasAttemptedLoad || isViewingHistory;
+  const omittedMessage = useMemo(() => formatOmittedMessage(omittedItemNames), [omittedItemNames]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -351,6 +377,7 @@ export function ReceivePage(): JSX.Element {
       setHasAttemptedLoad(true);
       setDuplicateHistoryEntry(null);
       setDuplicateReason(null);
+      setOmittedItemNames([]);
       const existingEntry = historyEntries.find((entry) => entry.token && entry.token === parsed);
       if (existingEntry) {
         setDuplicateHistoryEntry(existingEntry);
@@ -521,6 +548,7 @@ export function ReceivePage(): JSX.Element {
     setUnpackProgress(0);
     setDownloadError(null);
     setMediaItems([]);
+    setOmittedItemNames([]);
     setBulkDownloadError(null);
     setIsBulkDownloading(false);
     setCleanupStatus('idle');
@@ -536,13 +564,14 @@ export function ReceivePage(): JSX.Element {
         }
       });
       setDownloadPhase('unpacking');
-      const items = await extractReceiveMediaItems(blob, (processed, total) => {
+      const { metadataEntries, mediaItems: items } = await loadReceiveZipInventory(blob, (processed, total) => {
         if (total === 0) {
           setUnpackProgress(100);
           return;
         }
         setUnpackProgress(Math.round((processed / total) * 100));
       });
+      setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
       setMediaItems(items);
       setDownloadPhase('complete');
       await persistHistoryEntry(blob, items);
@@ -603,6 +632,7 @@ export function ReceivePage(): JSX.Element {
       setDownloadError(null);
       setDuplicateHistoryEntry(null);
       setDuplicateReason(null);
+      setOmittedItemNames([]);
       setResolveStatus('success');
       setResolved({
         url: '',
@@ -619,13 +649,14 @@ export function ReceivePage(): JSX.Element {
         if (!blob) {
           throw new Error('保存済みのファイルが見つかりませんでした。履歴を削除して再度お試しください。');
         }
-        const items = await extractReceiveMediaItems(blob, (processed, total) => {
+        const { metadataEntries, mediaItems: items } = await loadReceiveZipInventory(blob, (processed, total) => {
           if (total === 0) {
             setUnpackProgress(100);
             return;
           }
           setUnpackProgress(Math.round((processed / total) * 100));
         });
+        setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
         setMediaItems(items);
         setDownloadPhase('complete');
       } catch (error) {
@@ -768,7 +799,7 @@ export function ReceivePage(): JSX.Element {
                 <label htmlFor="receive-token" className="receive-page-token-label text-sm font-medium text-surface-foreground">
                   受け取りID または 共有リンク
                 </label>
-                <div className="receive-page-token-row flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="receive-page-token-row flex flex-col gap-3 lg:flex-row lg:items-stretch">
                   <input
                     id="receive-token"
                     type="text"
@@ -785,7 +816,7 @@ export function ReceivePage(): JSX.Element {
                   />
                   <button
                     type="submit"
-                    className="receive-page-token-submit-button btn btn-primary h-[52px] rounded-2xl px-6 text-base"
+                    className="receive-page-token-submit-button btn btn-primary h-[52px] rounded-2xl px-6 text-base lg:self-stretch"
                   >
                     <span className="receive-page-token-submit-button-text">リンクを読み込む</span>
                   </button>
@@ -853,6 +884,12 @@ export function ReceivePage(): JSX.Element {
                 >
                   受け取り画面で、履歴を表示する
                 </Link>
+              </div>
+            ) : null}
+
+            {omittedMessage ? (
+              <div className="receive-page-omitted-note mt-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600">
+                {omittedMessage}
               </div>
             ) : null}
 
