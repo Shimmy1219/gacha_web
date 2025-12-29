@@ -22,7 +22,8 @@ import {
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
+import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
@@ -116,6 +117,36 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
     return userId;
   }, [snapshot.userProfiles?.users, userId, userName]);
+
+  const resolveOwnerName = useCallback(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    return prefs?.ownerName?.trim() ?? '';
+  }, [persistence]);
+
+  const ensureOwnerName = useCallback(() => {
+    const ownerName = resolveOwnerName();
+    if (ownerName) {
+      return ownerName;
+    }
+    push(ConfirmDialog, {
+      id: 'owner-name-warning',
+      title: 'オーナー名の設定',
+      size: 'sm',
+      payload: {
+        message: 'オーナー名が未設定です。共有リンクを作成する前にサイト設定でオーナー名を設定してください。',
+        confirmLabel: '設定を開く',
+        cancelLabel: '閉じる',
+        onConfirm: () => {
+          push(PageSettingsDialog, {
+            id: 'page-settings',
+            title: 'ページ設定',
+            size: 'lg'
+          });
+        }
+      }
+    });
+    return null;
+  }, [push, resolveOwnerName]);
 
   const linkDiscordProfile = useCallback(
     (params: {
@@ -312,12 +343,13 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
   };
 
-  const runZipUpload = useCallback(async () => {
+  const runZipUpload = useCallback(async (ownerName: string) => {
     const zip = await buildUserZipFromSelection({
       snapshot,
       selection,
       userId,
-      userName: receiverDisplayName
+      userName: receiverDisplayName,
+      ownerName
     });
 
     const uploadResponse = await uploadZip({
@@ -373,6 +405,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
     setIsUploading(true);
     setErrorBanner(null);
     if (noticeTimerRef.current) {
@@ -387,12 +423,13 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
     });
     try {
-      await runZipUpload();
+      await runZipUpload(ownerName);
       const zip = await buildUserZipFromSelection({
         snapshot,
         selection,
         userId,
-        userName: receiverDisplayName
+        userName: receiverDisplayName,
+        ownerName
       });
 
       const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
@@ -467,6 +504,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
 
     setIsDiscordSharing(true);
     setUploadResult(null);
@@ -480,7 +521,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     let pullIdsForStatus: string[] = [];
 
     try {
-      const { result, zip } = await runZipUpload();
+      const { result, zip } = await runZipUpload(ownerName);
       uploadData = result;
       pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
     } catch (error) {

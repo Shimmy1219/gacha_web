@@ -46,6 +46,7 @@ interface BuildParams {
   selection: SaveTargetSelection;
   userId: string;
   userName: string;
+  ownerName?: string;
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
 }
@@ -513,6 +514,7 @@ export async function buildUserZipFromSelection({
   selection,
   userId,
   userName,
+  ownerName,
   includeMetadata = true,
   itemIdFilter
 }: BuildParams): Promise<ZipBuildResult> {
@@ -631,6 +633,7 @@ export async function buildUserZipFromSelection({
   const metaFolder = includeMetadata ? zip.folder('meta') : null;
   const generatedAt = includeMetadata ? new Date().toISOString() : null;
   const pullIds = Array.from(includedPullIds);
+  const normalizedOwnerName = typeof ownerName === 'string' ? ownerName.trim() : '';
   if (includeMetadata && metaFolder && generatedAt && itemMetadataMap) {
     metaFolder.file(
       'selection.json',
@@ -642,6 +645,7 @@ export async function buildUserZipFromSelection({
             id: userId,
             displayName: userName
           },
+          owner: normalizedOwnerName ? { displayName: normalizedOwnerName } : undefined,
           selection,
           itemCount: availableRecords.length,
           warnings: Array.from(warnings),

@@ -4,7 +4,9 @@ import type { ReceiveItemMetadata, ReceiveMediaItem, ReceiveMediaKind } from './
 
 interface SelectionMetadataPayload {
   user?: { displayName?: string };
-  historyPulls?: Array<{ pullCount?: number }>;
+  owner?: { displayName?: string };
+  pullIds?: string[];
+  historyPulls?: Array<{ pullId?: string; pullCount?: number }>;
 }
 
 export interface ReceiveZipSummary {
@@ -12,7 +14,9 @@ export interface ReceiveZipSummary {
   itemNames: string[];
   pullCount: number | null;
   userName: string | null;
+  ownerName: string | null;
   itemCount: number;
+  pullIds: string[];
 }
 
 function detectMediaKind(filename: string, mimeType?: string): ReceiveMediaKind {
@@ -160,6 +164,68 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return Array.from(unique);
 }
 
+function resolvePullIds(payload: SelectionMetadataPayload | null): string[] {
+  if (!payload) {
+    return [];
+  }
+  const direct = Array.isArray(payload.pullIds) ? payload.pullIds : [];
+  const history = Array.isArray(payload.historyPulls)
+    ? payload.historyPulls.map((entry) => entry?.pullId ?? null)
+    : [];
+  return uniqueStrings([...direct, ...history]);
+}
+
+function resolveOwnerName(payload: SelectionMetadataPayload | null): string | null {
+  if (!payload?.owner?.displayName) {
+    return null;
+  }
+  const trimmed = payload.owner.displayName.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+async function loadSelectionMetadata(zip: JSZip): Promise<SelectionMetadataPayload | null> {
+  const selectionEntry = Object.values(zip.files).find(
+    (entry) => !entry.dir && entry.name.endsWith('meta/selection.json')
+  );
+  if (!selectionEntry) {
+    return null;
+  }
+  try {
+    const raw = await selectionEntry.async('string');
+    return JSON.parse(raw) as SelectionMetadataPayload;
+  } catch (error) {
+    console.warn('Failed to parse receive selection metadata', error);
+    return null;
+  }
+}
+
+export async function loadReceiveZipPullIds(blob: Blob): Promise<string[]> {
+  try {
+    const zip = await JSZip.loadAsync(blob);
+    const selection = await loadSelectionMetadata(zip);
+    return resolvePullIds(selection);
+  } catch (error) {
+    console.error('Failed to parse receive zip pull ids', error);
+    return [];
+  }
+}
+
+export async function loadReceiveZipSelectionInfo(
+  blob: Blob
+): Promise<{ pullIds: string[]; ownerName: string | null }> {
+  try {
+    const zip = await JSZip.loadAsync(blob);
+    const selection = await loadSelectionMetadata(zip);
+    return {
+      pullIds: resolvePullIds(selection),
+      ownerName: resolveOwnerName(selection)
+    };
+  } catch (error) {
+    console.error('Failed to parse receive zip selection info', error);
+    return { pullIds: [], ownerName: null };
+  }
+}
+
 export async function loadReceiveZipSummary(blob: Blob): Promise<ReceiveZipSummary | null> {
   try {
     const zip = await JSZip.loadAsync(blob);
@@ -178,29 +244,23 @@ export async function loadReceiveZipSummary(blob: Blob): Promise<ReceiveZipSumma
     let pullCount: number | null = obtainedTotal > 0 ? obtainedTotal : null;
     let userName: string | null = null;
 
-    const selectionEntry = Object.values(zip.files).find(
-      (entry) => !entry.dir && entry.name.endsWith('meta/selection.json')
-    );
-    if (selectionEntry) {
-      try {
-        const raw = await selectionEntry.async('string');
-        const parsed = JSON.parse(raw) as SelectionMetadataPayload;
-        if (typeof parsed?.user?.displayName === 'string' && parsed.user.displayName.trim()) {
-          userName = parsed.user.displayName.trim();
+    const selection = await loadSelectionMetadata(zip);
+    const pullIds = resolvePullIds(selection);
+    const ownerName = resolveOwnerName(selection);
+    if (selection) {
+      if (typeof selection?.user?.displayName === 'string' && selection.user.displayName.trim()) {
+        userName = selection.user.displayName.trim();
+      }
+      if (Array.isArray(selection?.historyPulls)) {
+        const summed = selection.historyPulls.reduce((sum, entry) => {
+          const value = typeof entry?.pullCount === 'number' && Number.isFinite(entry.pullCount)
+            ? Math.max(0, entry.pullCount)
+            : 0;
+          return sum + value;
+        }, 0);
+        if (summed > 0) {
+          pullCount = summed;
         }
-        if (Array.isArray(parsed?.historyPulls)) {
-          const summed = parsed.historyPulls.reduce((sum, entry) => {
-            const value = typeof entry?.pullCount === 'number' && Number.isFinite(entry.pullCount)
-              ? Math.max(0, entry.pullCount)
-              : 0;
-            return sum + value;
-          }, 0);
-          if (summed > 0) {
-            pullCount = summed;
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to parse receive selection metadata', error);
       }
     }
 
@@ -209,7 +269,9 @@ export async function loadReceiveZipSummary(blob: Blob): Promise<ReceiveZipSumma
       itemNames,
       pullCount,
       userName,
-      itemCount: metadataEntries.length
+      ownerName,
+      itemCount: metadataEntries.length,
+      pullIds
     };
   } catch (error) {
     console.error('Failed to parse receive zip summary', error);

@@ -12,6 +12,9 @@ import { loadReceiveZipSummary } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 
 function resolveDisplayUser(entry: ReceiveHistoryEntryMetadata): string {
+  if (entry.ownerName && entry.ownerName.trim()) {
+    return entry.ownerName.trim();
+  }
   if (entry.userName && entry.userName.trim()) {
     return entry.userName.trim();
   }
@@ -70,8 +73,10 @@ export function ReceiveHistoryPage(): JSX.Element {
         const hasGachaNames = Boolean(entry.gachaNames && entry.gachaNames.length > 0);
         const hasItemNames = Boolean(entry.itemNames && entry.itemNames.length > 0);
         const hasPullCount = typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount);
+        const hasPullIds = Boolean(entry.pullIds && entry.pullIds.length > 0);
+        const hasOwnerName = Boolean(entry.ownerName && entry.ownerName.trim());
 
-        if (hasUserName && hasGachaNames && hasItemNames && hasPullCount) {
+        if (hasUserName && hasGachaNames && hasItemNames && hasPullCount && hasPullIds && hasOwnerName) {
           continue;
         }
 
@@ -88,9 +93,11 @@ export function ReceiveHistoryPage(): JSX.Element {
         const merged: ReceiveHistoryEntryMetadata = {
           ...entry,
           userName: hasUserName ? entry.userName : summary.userName ?? entry.userName,
+          ownerName: hasOwnerName ? entry.ownerName : summary.ownerName ?? entry.ownerName,
           gachaNames: hasGachaNames ? entry.gachaNames : summary.gachaNames.length > 0 ? summary.gachaNames : entry.gachaNames,
           itemNames: hasItemNames ? entry.itemNames : summary.itemNames.length > 0 ? summary.itemNames : entry.itemNames,
-          pullCount: hasPullCount ? entry.pullCount : summary.pullCount ?? entry.pullCount
+          pullCount: hasPullCount ? entry.pullCount : summary.pullCount ?? entry.pullCount,
+          pullIds: hasPullIds ? entry.pullIds : summary.pullIds.length > 0 ? summary.pullIds : entry.pullIds
         };
 
         nextEntries[index] = merged;

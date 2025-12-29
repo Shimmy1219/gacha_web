@@ -11,6 +11,7 @@ import {
 import { clsx } from 'clsx';
 
 import { useDiscordSession } from '../../../../features/discord/useDiscordSession';
+import { useAppPersistence } from '../../../../features/storage/AppPersistenceProvider';
 import { useModal, DiscordBotInviteDialog } from '../../../../modals';
 import {
   loadDiscordGuildSelection,
@@ -42,6 +43,7 @@ export function DiscordLoginButton({
   const { data, isFetching, login, logout } = useDiscordSession();
   const { push } = useModal();
   const { triggerConfirmation } = useHaptics();
+  const persistence = useAppPersistence();
   const user = data?.user;
   const previousUserIdRef = useRef<string | null>(null);
   const openedGuildModalUserRef = useRef<string | null>(null);
@@ -59,6 +61,31 @@ export function DiscordLoginButton({
     }
     previousUserIdRef.current = userId ?? null;
   }, [triggerConfirmation, userId, userName]);
+
+  useEffect(() => {
+    const currentPrefs = persistence.loadSnapshot().receivePrefs;
+    const currentOwnerName = currentPrefs?.ownerName ?? null;
+    if (userId) {
+      const normalized = userName?.trim() || userId;
+      if (normalized && normalized !== currentOwnerName) {
+        persistence.saveReceivePrefs({
+          ...currentPrefs,
+          version: 3,
+          intro: currentPrefs?.intro ?? { skipIntro: false },
+          ownerName: normalized
+        });
+      }
+      return;
+    }
+    if (currentOwnerName) {
+      persistence.saveReceivePrefs({
+        ...currentPrefs,
+        version: 3,
+        intro: currentPrefs?.intro ?? { skipIntro: false },
+        ownerName: null
+      });
+    }
+  }, [persistence, userId, userName]);
 
   useEffect(() => {
     if (!userId) {

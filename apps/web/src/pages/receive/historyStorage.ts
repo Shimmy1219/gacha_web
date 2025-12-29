@@ -14,6 +14,8 @@ export interface ReceiveHistoryEntryMetadata {
   itemNames?: string[];
   pullCount?: number;
   userName?: string | null;
+  ownerName?: string | null;
+  pullIds?: string[];
   downloadedAt: string;
   itemCount: number;
   totalBytes: number;
@@ -92,6 +94,13 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
         ? Number((entry as { pullCount: number }).pullCount)
         : null;
 
+      const pullIdsRaw = Array.isArray((entry as { pullIds?: unknown }).pullIds)
+        ? ((entry as { pullIds: unknown[] }).pullIds ?? [])
+        : [];
+      const pullIds = pullIdsRaw
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0);
+
       return {
         id,
         token: typeof (entry as { token?: unknown }).token === 'string' ? (entry as { token: string }).token : null,
@@ -105,6 +114,10 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
         itemNames: itemNames.length > 0 ? Array.from(new Set(itemNames)) : undefined,
         pullCount: pullCount === null ? undefined : pullCount,
         userName: typeof (entry as { userName?: unknown }).userName === 'string' ? (entry as { userName: string }).userName : null,
+        ownerName: typeof (entry as { ownerName?: unknown }).ownerName === 'string'
+          ? (entry as { ownerName: string }).ownerName
+          : null,
+        pullIds: pullIds.length > 0 ? Array.from(new Set(pullIds)) : undefined,
         downloadedAt,
         itemCount,
         totalBytes,

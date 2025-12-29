@@ -21,7 +21,7 @@ import {
   saveHistoryFile,
   type ReceiveHistoryEntryMetadata
 } from './historyStorage';
-import { extractReceiveMediaItems } from './receiveZip';
+import { extractReceiveMediaItems, loadReceiveZipSelectionInfo } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 interface ResolveSuccessPayload {
@@ -203,6 +203,7 @@ export function ReceivePage(): JSX.Element {
   const [isRestoringHistory, setIsRestoringHistory] = useState<boolean>(false);
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   const [duplicateHistoryEntry, setDuplicateHistoryEntry] = useState<ReceiveHistoryEntryMetadata | null>(null);
+  const [duplicateReason, setDuplicateReason] = useState<'token' | 'pull' | null>(null);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
@@ -226,16 +227,19 @@ export function ReceivePage(): JSX.Element {
   useEffect(() => {
     if (hasHistoryParam) {
       setDuplicateHistoryEntry(null);
+      setDuplicateReason(null);
       setHasAttemptedLoad(true);
       return;
     }
     if (isShareLinkMode) {
       setDuplicateHistoryEntry(null);
+      setDuplicateReason(null);
       setHasAttemptedLoad(true);
       return;
     }
     if (!activeToken) {
       setDuplicateHistoryEntry(null);
+      setDuplicateReason(null);
       setHasAttemptedLoad(false);
     }
   }, [activeToken, hasHistoryParam, isShareLinkMode]);
@@ -346,9 +350,11 @@ export function ReceivePage(): JSX.Element {
       }
       setHasAttemptedLoad(true);
       setDuplicateHistoryEntry(null);
+      setDuplicateReason(null);
       const existingEntry = historyEntries.find((entry) => entry.token && entry.token === parsed);
       if (existingEntry) {
         setDuplicateHistoryEntry(existingEntry);
+        setDuplicateReason('token');
         setResolveStatus('idle');
         setResolveError(null);
         setResolved(null);
@@ -388,8 +394,58 @@ export function ReceivePage(): JSX.Element {
         } finally {
           setActiveHistoryId(existingEntry.id);
           setDuplicateHistoryEntry(existingEntry);
+          setDuplicateReason('token');
           setIsSavingHistory(false);
         }
+        return;
+      }
+
+      const selectionInfo = await loadReceiveZipSelectionInfo(zipBlob);
+      const pullIds = selectionInfo.pullIds;
+      const ownerName = selectionInfo.ownerName;
+      let nextHistoryEntries = historyEntries;
+      let metadataChanged = false;
+      if (historyEntries.length > 0) {
+        const updatedEntries = [...historyEntries];
+        for (const entry of historyEntries) {
+          if (entry.pullIds && entry.pullIds.length > 0) {
+            continue;
+          }
+          const entryBlob = await loadHistoryFile(entry.id);
+          if (!entryBlob) {
+            continue;
+          }
+          const entrySelectionInfo = await loadReceiveZipSelectionInfo(entryBlob);
+          const entryPullIds = entrySelectionInfo.pullIds;
+          if (entryPullIds.length === 0) {
+            continue;
+          }
+          const index = updatedEntries.findIndex((candidate) => candidate.id === entry.id);
+          if (index >= 0) {
+            updatedEntries[index] = {
+              ...updatedEntries[index],
+              pullIds: entryPullIds,
+              ownerName: entrySelectionInfo.ownerName ?? updatedEntries[index].ownerName
+            };
+            metadataChanged = true;
+          }
+        }
+        if (metadataChanged) {
+          nextHistoryEntries = updatedEntries;
+          setHistoryEntries(updatedEntries);
+          persistHistoryMetadata(updatedEntries);
+        }
+      }
+
+      const pullIdSet = new Set(pullIds);
+      const duplicatedByPull = pullIds.length > 0
+        ? nextHistoryEntries.find((entry) => entry.pullIds?.some((pullId) => pullIdSet.has(pullId)))
+        : null;
+      if (duplicatedByPull) {
+        setActiveHistoryId(duplicatedByPull.id);
+        setDuplicateHistoryEntry(duplicatedByPull);
+        setDuplicateReason('pull');
+        setIsSavingHistory(false);
         return;
       }
 
@@ -421,6 +477,8 @@ export function ReceivePage(): JSX.Element {
         gachaNames: gachaNames.length > 0 ? gachaNames : undefined,
         itemNames: itemNames.length > 0 ? itemNames.slice(0, 24) : undefined,
         pullCount: pullCount > 0 ? pullCount : undefined,
+        ownerName: ownerName ?? null,
+        pullIds: pullIds.length > 0 ? pullIds : undefined,
         downloadedAt: timestamp,
         itemCount: items.length,
         totalBytes,
@@ -439,6 +497,7 @@ export function ReceivePage(): JSX.Element {
         persistHistoryMetadata(nextEntries);
         setActiveHistoryId(entryId);
         setDuplicateHistoryEntry(null);
+        setDuplicateReason(null);
       } catch (error) {
         console.error('Failed to persist receive history', error);
         setHistorySaveError('履歴の保存に失敗しました。ブラウザの設定をご確認ください。');
@@ -543,6 +602,7 @@ export function ReceivePage(): JSX.Element {
       setCleanupError(null);
       setDownloadError(null);
       setDuplicateHistoryEntry(null);
+      setDuplicateReason(null);
       setResolveStatus('success');
       setResolved({
         url: '',
@@ -783,7 +843,9 @@ export function ReceivePage(): JSX.Element {
             {duplicateHistoryEntry ? (
               <div className="receive-page-duplicate-history mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
                 <span className="receive-page-duplicate-history-text">
-                  この受け取りIDは既にダウンロード済みです。履歴を開いて確認できます。
+                  {duplicateReason === 'pull'
+                    ? '既に受け取り済みです。履歴を開いて確認できます。'
+                    : 'この受け取りIDは既にダウンロード済みです。履歴を開いて確認できます。'}
                 </span>
                 <Link
                   to={`/receive?history=${encodeURIComponent(duplicateHistoryEntry.id)}`}

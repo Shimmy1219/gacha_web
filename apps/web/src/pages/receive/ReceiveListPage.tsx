@@ -5,17 +5,19 @@ import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
-import { extractReceiveMediaItems } from './receiveZip';
+import { extractReceiveMediaItems, loadReceiveZipSelectionInfo } from './receiveZip';
 import {
   isHistoryStorageAvailable,
   loadHistoryFile,
-  loadHistoryMetadata
+  loadHistoryMetadata,
+  persistHistoryMetadata
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 
 interface ReceiveInventoryItem {
   key: string;
   gachaName: string;
+  ownerName: string | null;
   itemName: string;
   rarity: string | null;
   rarityColor: string | null;
@@ -28,6 +30,7 @@ interface ReceiveInventoryItem {
 
 interface ReceiveGachaGroup {
   gachaName: string;
+  ownerName: string | null;
   items: ReceiveInventoryItem[];
   totalCount: number;
   sourceItems: ReceiveMediaItem[];
@@ -124,6 +127,9 @@ export function ReceiveListPage(): JSX.Element {
       }
 
       const historyEntries = loadHistoryMetadata();
+      let metadataChanged = false;
+      const updatedHistoryEntries = [...historyEntries];
+      const seenPullIds = new Set<string>();
       if (historyEntries.length === 0) {
         setGroups([]);
         setStatus('ready');
@@ -133,7 +139,12 @@ export function ReceiveListPage(): JSX.Element {
       try {
         const gachaMap = new Map<
           string,
-          { itemMap: Map<string, ReceiveInventoryItem>; sourceItems: ReceiveMediaItem[] }
+          {
+            ownerName: string | null;
+            gachaName: string;
+            itemMap: Map<string, ReceiveInventoryItem>;
+            sourceItems: ReceiveMediaItem[];
+          }
         >();
 
         for (const entry of historyEntries) {
@@ -142,14 +153,45 @@ export function ReceiveListPage(): JSX.Element {
             continue;
           }
 
+          const selectionInfo = await loadReceiveZipSelectionInfo(blob);
+          const pullIds = selectionInfo.pullIds;
+          const ownerName = selectionInfo.ownerName;
+          if (pullIds.length > 0 && (!entry.pullIds || entry.pullIds.length === 0)) {
+            const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
+            if (index >= 0) {
+              updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], pullIds };
+              metadataChanged = true;
+            }
+          }
+          if (ownerName && (!entry.ownerName || !entry.ownerName.trim())) {
+            const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
+            if (index >= 0) {
+              updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], ownerName };
+              metadataChanged = true;
+            }
+          }
+
+          const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
+          if (hasOverlap) {
+            continue;
+          }
+          pullIds.forEach((pullId) => seenPullIds.add(pullId));
+
           const items = await extractReceiveMediaItems(blob);
           for (const item of items) {
             const gachaName = item.metadata?.gachaName?.trim() || '不明なガチャ';
             const itemName = (item.metadata?.itemName ?? item.filename).trim() || '名称未設定';
-            const itemKey = item.metadata?.id ?? `${gachaName}:${itemName}`;
+            const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
+            const itemKey = item.metadata?.id ?? `${ownerLabel}:${gachaName}:${itemName}`;
 
+            const groupKey = `${ownerLabel}::${gachaName}`;
             const existingGroup =
-              gachaMap.get(gachaName) ?? { itemMap: new Map<string, ReceiveInventoryItem>(), sourceItems: [] };
+              gachaMap.get(groupKey) ?? {
+                ownerName: ownerLabel,
+                gachaName,
+                itemMap: new Map<string, ReceiveInventoryItem>(),
+                sourceItems: []
+              };
             const itemMap = existingGroup.itemMap;
             const existing = itemMap.get(itemKey);
             const obtained = typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)
@@ -173,6 +215,7 @@ export function ReceiveListPage(): JSX.Element {
               itemMap.set(itemKey, {
                 key: itemKey,
                 gachaName,
+                ownerName: ownerLabel,
                 itemName,
                 rarity: item.metadata?.rarity ?? null,
                 rarityColor: item.metadata?.rarityColor ?? null,
@@ -185,19 +228,29 @@ export function ReceiveListPage(): JSX.Element {
             }
 
             existingGroup.sourceItems.push(item);
-            if (!gachaMap.has(gachaName)) {
-              gachaMap.set(gachaName, existingGroup);
+            if (!gachaMap.has(groupKey)) {
+              gachaMap.set(groupKey, existingGroup);
             }
           }
         }
 
-        const nextGroups = Array.from(gachaMap.entries()).map(([gachaName, { itemMap, sourceItems }]) => {
+        const nextGroups = Array.from(gachaMap.values()).map(({ ownerName, gachaName, itemMap, sourceItems }) => {
           const items = Array.from(itemMap.values()).sort((a, b) => a.itemName.localeCompare(b.itemName));
           const totalCount = items.reduce((sum, item) => sum + item.obtainedCount, 0);
-          return { gachaName, items, totalCount, sourceItems };
+          return { ownerName, gachaName, items, totalCount, sourceItems };
         });
 
-        nextGroups.sort((a, b) => a.gachaName.localeCompare(b.gachaName));
+        nextGroups.sort((a, b) => {
+          const ownerCompare = (a.ownerName ?? '').localeCompare(b.ownerName ?? '');
+          if (ownerCompare !== 0) {
+            return ownerCompare;
+          }
+          return a.gachaName.localeCompare(b.gachaName);
+        });
+
+        if (metadataChanged) {
+          persistHistoryMetadata(updatedHistoryEntries);
+        }
 
         if (active) {
           setGroups(nextGroups);
@@ -318,6 +371,9 @@ export function ReceiveListPage(): JSX.Element {
                     <h2 className="text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
                     <p className="text-xs text-muted-foreground">
                       {group.items.length} 種類 / 合計 {group.totalCount} 個
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      オーナー: {group.ownerName ?? 'オーナー不明'}
                     </p>
                   </div>
                   <ReceiveBulkSaveButton
