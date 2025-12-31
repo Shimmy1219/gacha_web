@@ -10,6 +10,7 @@ export interface ReceiveHistoryEntryMetadata {
   name?: string | null;
   purpose?: string | null;
   expiresAt?: string | null;
+  deletedAt?: string | null;
   gachaNames?: string[];
   itemNames?: string[];
   pullCount?: number;
@@ -100,6 +101,10 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
       const pullIds = pullIdsRaw
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter((value) => value.length > 0);
+      const deletedAt =
+        typeof (entry as { deletedAt?: unknown }).deletedAt === 'string'
+          ? (entry as { deletedAt: string }).deletedAt
+          : null;
 
       return {
         id,
@@ -110,6 +115,7 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
           typeof (entry as { expiresAt?: unknown }).expiresAt === 'string'
             ? (entry as { expiresAt: string }).expiresAt
             : null,
+        deletedAt,
         gachaNames: gachaNames.length > 0 ? Array.from(new Set(gachaNames)) : undefined,
         itemNames: itemNames.length > 0 ? Array.from(new Set(itemNames)) : undefined,
         pullCount: pullCount === null ? undefined : pullCount,

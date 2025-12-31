@@ -349,6 +349,7 @@ export function ReceivePage(): JSX.Element {
   const isViewingHistory = useMemo(() => Boolean(hasHistoryParam), [hasHistoryParam]);
   const shouldShowSteps = isShareLinkMode || hasAttemptedLoad || isViewingHistory;
   const omittedMessage = useMemo(() => formatOmittedMessage(omittedItemNames), [omittedItemNames]);
+  const isCleanupMarkedDeleted = Boolean(activeHistoryEntry?.deletedAt);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -701,7 +702,8 @@ export function ReceivePage(): JSX.Element {
     if (cleanupStatus === 'working' || cleanupStatus === 'success') {
       return;
     }
-    if (!activeToken) {
+    const resolvedToken = activeToken?.trim() || activeHistoryEntry?.token?.trim() || '';
+    if (!resolvedToken) {
       setCleanupStatus('error');
       setCleanupError('受け取りIDが確認できません。もう一度お試しください。');
       return;
@@ -715,7 +717,7 @@ export function ReceivePage(): JSX.Element {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ token: activeToken })
+        body: JSON.stringify({ token: resolvedToken })
       });
 
       let payload: { ok?: boolean; error?: string } | null = null;
@@ -731,12 +733,20 @@ export function ReceivePage(): JSX.Element {
       }
 
       setCleanupStatus('success');
+      if (activeHistoryEntry && !activeHistoryEntry.deletedAt) {
+        const deletedAt = new Date().toISOString();
+        const updatedEntries = historyEntries.map((entry) =>
+          entry.id === activeHistoryEntry.id ? { ...entry, deletedAt } : entry
+        );
+        setHistoryEntries(updatedEntries);
+        persistHistoryMetadata(updatedEntries);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'ファイルの削除に失敗しました。もう一度お試しください。';
       setCleanupError(message);
       setCleanupStatus('error');
     }
-  }, [activeToken, cleanupStatus]);
+  }, [activeHistoryEntry, activeToken, cleanupStatus, historyEntries]);
 
   const renderResolveStatus = () => {
     if (resolveStatus === 'loading') {
@@ -815,7 +825,7 @@ export function ReceivePage(): JSX.Element {
                         setResolveStatus('idle');
                       }
                     }}
-                    placeholder="例: https://example.com/receive?t=XXXXXXXXXX"
+                    placeholder="例: https://shimmy3.com/receive?t=XXXXXXXXXX"
                     className="receive-page-token-input h-[52px] w-full flex-1 rounded-2xl border border-border/60 bg-surface/80 px-4 text-base text-surface-foreground shadow-inner shadow-black/5 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
                   />
                   <button
@@ -839,7 +849,7 @@ export function ReceivePage(): JSX.Element {
               <div className="receive-page-steps-description">
                 <h2 className="receive-page-steps-title text-2xl font-semibold text-surface-foreground">手順</h2>
                 <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                  <li className="receive-page-step-item">「受け取る」ボタンを押すとブラウザ上でZIPのダウンロードが始まります（端末には自動保存されません）。</li>
+                  <li className="receive-page-step-item">「受け取る」ボタンを押すとダウンロードが始まります（端末には自動保存されません）。</li>
                   <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
                   <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。</li>
                 </ol>
@@ -943,7 +953,7 @@ export function ReceivePage(): JSX.Element {
           </div>
         ) : null}
 
-        {downloadPhase === 'complete' && mediaItems.length > 0 ? (
+        {downloadPhase === 'complete' && mediaItems.length > 0 && (!isCleanupMarkedDeleted || cleanupStatus === 'success') ? (
           <div className="receive-page-cleanup-callout mt-2 space-y-3 rounded-3xl border border-amber-500/40 bg-amber-500/10 p-6 text-sm text-amber-500">
             <div className="space-y-1">
               <p className="receive-page-cleanup-title text-base font-semibold text-amber-500">
