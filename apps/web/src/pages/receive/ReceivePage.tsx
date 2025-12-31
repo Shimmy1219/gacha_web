@@ -346,7 +346,7 @@ export function ReceivePage(): JSX.Element {
     () => historyEntries.find((entry) => entry.id === activeHistoryId) ?? null,
     [activeHistoryId, historyEntries]
   );
-  const isViewingHistory = useMemo(() => Boolean(activeHistoryId), [activeHistoryId]);
+  const isViewingHistory = useMemo(() => Boolean(hasHistoryParam), [hasHistoryParam]);
   const shouldShowSteps = isShareLinkMode || hasAttemptedLoad || isViewingHistory;
   const omittedMessage = useMemo(() => formatOmittedMessage(omittedItemNames), [omittedItemNames]);
 
@@ -759,10 +759,6 @@ export function ReceivePage(): JSX.Element {
       const expiryText = formatExpiration(expiration);
       return (
         <div className="receive-page-resolve-status-success flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="receive-page-resolve-status-success-chip chip border-border/60 bg-surface/40 text-muted-foreground">
-            {isViewingHistory ? '履歴を表示中' : 'リンク確認済み'}
-          </span>
-          {resolved.name ? <span className="receive-page-resolve-status-success-name">ファイル名: {resolved.name}</span> : null}
           {expiryText ? <span className="receive-page-resolve-status-success-expiry">期限: {expiryText}</span> : null}
           {activeHistoryEntry ? (
             <span className="receive-page-resolve-status-success-expiry chip border-border/60 bg-surface/40 text-muted-foreground">
@@ -784,7 +780,7 @@ export function ReceivePage(): JSX.Element {
             <div className="receive-page-hero-info space-y-3">
               <div className="space-y-1">
                 <h1 className="receive-page-hero-title text-3xl font-bold tracking-tight">景品を受け取る</h1>
-                <p className="receive-page-hero-description max-w-2xl text-sm text-muted-foreground">
+                <p className="receive-page-hero-description max-w-none text-sm text-muted-foreground">
                   受け取りIDを入力するか、履歴ページから選択するとすぐにダウンロード・復元できます。履歴はブラウザに自動保存され、リロード後も残ります。
                 </p>
               </div>
@@ -973,9 +969,6 @@ export function ReceivePage(): JSX.Element {
                   {cleanupStatus === 'success' ? '削除が完了しました。ご協力ありがとうございました。' : 'アップロード元を削除する'}
                 </span>
               </button>
-              {cleanupStatus === 'success' ? (
-                <span className="receive-page-cleanup-status text-xs uppercase tracking-wide text-amber-500">削除済み</span>
-              ) : null}
             </div>
             {cleanupError ? (
               <div className="receive-page-cleanup-error rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-rose-500">
@@ -994,8 +987,8 @@ export function ReceivePage(): JSX.Element {
           ) : null}
           <ul className="mt-3 list-disc space-y-2 pl-5">
             <li>履歴はブラウザに保存されます。別の端末では共有されません。</li>
-            <li>保存先のブラウザストレージを削除すると履歴も消えます。</li>
-            <li>ZIPの復元中はブラウザを閉じずにお待ちください。</li>
+            <li>ブラウザの閲覧履歴削除行為や、キャッシュ削除行為などでこのサイトのダウンロード履歴も消えます。また、OSが自動的に消すこともあります。</li>
+            <li>ダウンロード中はブラウザを閉じずにお待ちください。</li>
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link to="/receive/history" className="btn btn-muted rounded-full">履歴を見る</Link>
