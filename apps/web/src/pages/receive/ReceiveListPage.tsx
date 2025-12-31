@@ -22,6 +22,7 @@ interface ReceiveInventoryItem {
   gachaName: string;
   gachaId: string | null;
   itemName: string;
+  itemId: string | null;
   rarity: string | null;
   rarityColor: string | null;
   isRiagu: boolean;
@@ -29,6 +30,8 @@ interface ReceiveInventoryItem {
   kind: ReceiveMediaKind;
   previewUrl: string | null;
   sourceItems: ReceiveMediaItem[];
+  assetCount: number | null;
+  isOwned: boolean;
 }
 
 interface ReceiveGachaGroup {
@@ -36,7 +39,9 @@ interface ReceiveGachaGroup {
   gachaId: string | null;
   ownerNames: string[];
   items: ReceiveInventoryItem[];
-  totalCount: number;
+  ownedKinds: number;
+  totalKinds: number;
+  ownedCount: number;
   sourceItems: ReceiveMediaItem[];
 }
 
@@ -53,6 +58,13 @@ function resolvePreviewKind(kind: ReceiveMediaKind): PreviewKind {
     return 'audio';
   }
   return 'unknown';
+}
+
+function resolveItemKey(gachaKey: string, itemId: string | null, itemName: string): string {
+  if (itemId && itemId.trim()) {
+    return `${gachaKey}:${itemId.trim()}`;
+  }
+  return `${gachaKey}:${itemName}`;
 }
 
 function formatOwnerNames(names: string[]): string {
@@ -89,9 +101,16 @@ function ReceiveInventoryItemCard({
   );
   const previewKind = resolvePreviewKind(item.kind);
   const hasSource = item.sourceItems.length > 0;
+  const fileCount = item.assetCount ?? item.sourceItems.length;
+  const showFileCount = fileCount > 1;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-panel-muted/70 p-4">
+    <div
+      className={clsx(
+        'rounded-2xl border border-border/60 bg-panel-muted/70 p-4',
+        !item.isOwned && 'opacity-60 grayscale'
+      )}
+    >
       <div className="flex items-start gap-3">
         <ItemPreview
           previewUrl={item.previewUrl ?? null}
@@ -104,8 +123,8 @@ function ReceiveInventoryItemCard({
         />
         <div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-sm font-semibold text-surface-foreground">{item.itemName}</p>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex items-start justify-between gap-3 text-xs text-muted-foreground">
+            <div className="flex min-w-0 flex-col gap-1">
               {item.rarity ? (
                 <span
                   className={clsx('text-[11px] font-semibold', rarityPresentation.className)}
@@ -114,16 +133,21 @@ function ReceiveInventoryItemCard({
                   {item.rarity}
                 </span>
               ) : null}
-              <span className="chip">x{item.obtainedCount}</span>
-              {item.isRiagu ? (
-                <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
-              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="chip">x{item.obtainedCount}</span>
+                {showFileCount ? <span className="chip">ファイル {fileCount}</span> : null}
+                {item.isRiagu ? (
+                  <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
+                ) : null}
+              </div>
             </div>
-            <ReceiveSaveButton
-              onClick={onSave}
-              disabled={isSaving || !hasSource}
-              className="h-8 px-3 text-xs"
-            />
+            {item.isOwned ? (
+              <ReceiveSaveButton
+                onClick={onSave}
+                disabled={isSaving || !hasSource}
+                className="h-8 px-3 text-xs"
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -196,134 +220,232 @@ export function ReceiveListPage(): JSX.Element {
             }
           }
 
-          const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
-          if (hasOverlap) {
-            continue;
-          }
-          pullIds.forEach((pullId) => seenPullIds.add(pullId));
-
-          const { metadataEntries, mediaItems } = await loadReceiveZipInventory(blob);
+          const { metadataEntries, mediaItems, catalog } = await loadReceiveZipInventory(blob);
           const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
           const entryItemKeys = new Set<string>();
+          const metadataAssetCounts = new Map<string, number>();
+          const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
+          pullIds.forEach((pullId) => seenPullIds.add(pullId));
+          const shouldCountInventory = !hasOverlap;
 
-          for (const metadata of metadataEntries) {
-            const gachaName = metadata.gachaName?.trim() || '不明なガチャ';
-            const gachaId = metadata.gachaId?.trim() || null;
-            const gachaKey = gachaId || gachaName;
-            const itemName = metadata.itemName?.trim() || '名称未設定';
-            const itemId = metadata.itemId?.trim() || null;
-            const itemKey = itemId ? `${gachaKey}:${itemId}` : `${gachaKey}:${itemName}`;
-            if (entryItemKeys.has(itemKey)) {
-              continue;
+          if (shouldCountInventory) {
+            for (const metadata of metadataEntries) {
+              const gachaName = metadata.gachaName?.trim() || '不明なガチャ';
+              const gachaId = metadata.gachaId?.trim() || null;
+              const gachaKey = gachaId || gachaName;
+              const itemName = metadata.itemName?.trim() || '名称未設定';
+              const itemId = metadata.itemId?.trim() || null;
+              const itemKey = resolveItemKey(gachaKey, itemId, itemName);
+              const nextAssetCount = (metadataAssetCounts.get(itemKey) ?? 0) + 1;
+              metadataAssetCounts.set(itemKey, nextAssetCount);
+
+              const existingGroup =
+                gachaMap.get(gachaKey) ?? {
+                  gachaId,
+                  gachaName,
+                  ownerNames: new Set<string>(),
+                  itemMap: new Map<string, ReceiveInventoryItem>(),
+                  sourceItems: []
+                };
+              existingGroup.ownerNames.add(ownerLabel);
+
+              const itemMap = existingGroup.itemMap;
+              const existing = itemMap.get(itemKey);
+              if (existing) {
+                existing.assetCount = Math.max(existing.assetCount ?? 0, nextAssetCount);
+                if (!existing.rarity && metadata.rarity) {
+                  existing.rarity = metadata.rarity;
+                }
+                if (!existing.rarityColor && metadata.rarityColor) {
+                  existing.rarityColor = metadata.rarityColor;
+                }
+                if (!existing.itemId && itemId) {
+                  existing.itemId = itemId;
+                }
+              }
+
+              if (entryItemKeys.has(itemKey)) {
+                if (!gachaMap.has(gachaKey)) {
+                  gachaMap.set(gachaKey, existingGroup);
+                }
+                continue;
+              }
+              entryItemKeys.add(itemKey);
+
+              const obtained = typeof metadata.obtainedCount === 'number' && Number.isFinite(metadata.obtainedCount)
+                ? Math.max(0, metadata.obtainedCount)
+                : 1;
+
+              if (existing) {
+                existing.obtainedCount += obtained;
+                existing.isOwned = true;
+              } else {
+                itemMap.set(itemKey, {
+                  key: itemKey,
+                  gachaName,
+                  gachaId,
+                  itemName,
+                  itemId,
+                  rarity: metadata.rarity ?? null,
+                  rarityColor: metadata.rarityColor ?? null,
+                  isRiagu: Boolean(metadata.isRiagu),
+                  obtainedCount: obtained,
+                  kind: 'unknown',
+                  previewUrl: null,
+                  sourceItems: [],
+                  assetCount: nextAssetCount,
+                  isOwned: true
+                });
+              }
+
+              if (!gachaMap.has(gachaKey)) {
+                gachaMap.set(gachaKey, existingGroup);
+              }
             }
-            entryItemKeys.add(itemKey);
 
-            const existingGroup =
-              gachaMap.get(gachaKey) ?? {
-                gachaId,
-                gachaName,
-                ownerNames: new Set<string>(),
-                itemMap: new Map<string, ReceiveInventoryItem>(),
-                sourceItems: []
-              };
-            existingGroup.ownerNames.add(ownerLabel);
+            for (const item of mediaItems) {
+              const gachaName = item.metadata?.gachaName?.trim() || '不明なガチャ';
+              const gachaId = item.metadata?.gachaId?.trim() || null;
+              const gachaKey = gachaId || gachaName;
+              const itemName = (item.metadata?.itemName ?? item.filename).trim() || '名称未設定';
+              const itemId = item.metadata?.itemId?.trim() || null;
+              const itemKey = resolveItemKey(gachaKey, itemId, itemName);
 
-            const itemMap = existingGroup.itemMap;
-            const existing = itemMap.get(itemKey);
-            const obtained = typeof metadata.obtainedCount === 'number' && Number.isFinite(metadata.obtainedCount)
-              ? Math.max(0, metadata.obtainedCount)
-              : 1;
+              const existingGroup =
+                gachaMap.get(gachaKey) ?? {
+                  gachaId,
+                  gachaName,
+                  ownerNames: new Set<string>(),
+                  itemMap: new Map<string, ReceiveInventoryItem>(),
+                  sourceItems: []
+                };
+              existingGroup.ownerNames.add(ownerLabel);
 
-            if (existing) {
-              existing.obtainedCount += obtained;
-            } else {
-              itemMap.set(itemKey, {
-                key: itemKey,
-                gachaName,
-                gachaId,
-                itemName,
-                rarity: metadata.rarity ?? null,
-                rarityColor: metadata.rarityColor ?? null,
-                isRiagu: Boolean(metadata.isRiagu),
-                obtainedCount: obtained,
-                kind: 'unknown',
-                previewUrl: null,
-                sourceItems: []
-              });
-            }
+              const itemMap = existingGroup.itemMap;
+              const existing = itemMap.get(itemKey);
+              if (existing) {
+                existing.kind = item.kind;
+                if (!existing.previewUrl && item.kind === 'image') {
+                  const url = URL.createObjectURL(item.blob);
+                  objectUrls.push(url);
+                  existing.previewUrl = url;
+                }
+                existing.sourceItems.push(item);
+                existing.assetCount = Math.max(existing.assetCount ?? 0, existing.sourceItems.length);
+              } else {
+                const previewUrl = item.kind === 'image' ? URL.createObjectURL(item.blob) : null;
+                if (previewUrl) {
+                  objectUrls.push(previewUrl);
+                }
+                const obtained = typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)
+                  ? Math.max(0, item.metadata.obtainedCount)
+                  : 1;
+                itemMap.set(itemKey, {
+                  key: itemKey,
+                  gachaName,
+                  gachaId,
+                  itemName,
+                  itemId,
+                  rarity: item.metadata?.rarity ?? null,
+                  rarityColor: item.metadata?.rarityColor ?? null,
+                  isRiagu: Boolean(item.metadata?.isRiagu),
+                  obtainedCount: obtained,
+                  kind: item.kind,
+                  previewUrl,
+                  sourceItems: [item],
+                  assetCount: 1,
+                  isOwned: true
+                });
+              }
 
-            if (!gachaMap.has(gachaKey)) {
-              gachaMap.set(gachaKey, existingGroup);
+              existingGroup.sourceItems.push(item);
+              if (!gachaMap.has(gachaKey)) {
+                gachaMap.set(gachaKey, existingGroup);
+              }
             }
           }
 
-          for (const item of mediaItems) {
-            const gachaName = item.metadata?.gachaName?.trim() || '不明なガチャ';
-            const gachaId = item.metadata?.gachaId?.trim() || null;
-            const gachaKey = gachaId || gachaName;
-            const itemName = (item.metadata?.itemName ?? item.filename).trim() || '名称未設定';
-            const itemId = item.metadata?.itemId?.trim() || null;
-            const itemKey = itemId ? `${gachaKey}:${itemId}` : `${gachaKey}:${itemName}`;
+          if (catalog.length > 0) {
+            for (const gacha of catalog) {
+              const gachaName = gacha.gachaName?.trim() || '不明なガチャ';
+              const gachaId = gacha.gachaId?.trim() || null;
+              const gachaKey = gachaId || gachaName;
+              const existingGroup =
+                gachaMap.get(gachaKey) ?? {
+                  gachaId,
+                  gachaName,
+                  ownerNames: new Set<string>(),
+                  itemMap: new Map<string, ReceiveInventoryItem>(),
+                  sourceItems: []
+                };
+              existingGroup.ownerNames.add(ownerLabel);
 
-            const existingGroup =
-              gachaMap.get(gachaKey) ?? {
-                gachaId,
-                gachaName,
-                ownerNames: new Set<string>(),
-                itemMap: new Map<string, ReceiveInventoryItem>(),
-                sourceItems: []
-              };
-            existingGroup.ownerNames.add(ownerLabel);
+              const itemMap = existingGroup.itemMap;
+              for (const item of gacha.items) {
+                const itemName = item.itemName?.trim() || '名称未設定';
+                const itemId = item.itemId?.trim() || null;
+                const itemKey = resolveItemKey(gachaKey, itemId, itemName);
+                const existing = itemMap.get(itemKey);
+                const assetCount = Number.isFinite(item.assetCount) ? Math.max(0, item.assetCount) : 0;
 
-            const itemMap = existingGroup.itemMap;
-            const existing = itemMap.get(itemKey);
-            if (existing) {
-              existing.kind = item.kind;
-              if (!existing.previewUrl && item.kind === 'image') {
-                const url = URL.createObjectURL(item.blob);
-                objectUrls.push(url);
-                existing.previewUrl = url;
+                if (existing) {
+                  existing.assetCount = Math.max(existing.assetCount ?? 0, assetCount);
+                  if (!existing.rarity && item.rarityLabel) {
+                    existing.rarity = item.rarityLabel;
+                  }
+                  if (!existing.rarityColor && item.rarityColor) {
+                    existing.rarityColor = item.rarityColor;
+                  }
+                  if (!existing.itemId && itemId) {
+                    existing.itemId = itemId;
+                  }
+                  existing.isRiagu = existing.isRiagu || Boolean(item.isRiagu);
+                } else {
+                  itemMap.set(itemKey, {
+                    key: itemKey,
+                    gachaName,
+                    gachaId,
+                    itemName,
+                    itemId,
+                    rarity: item.rarityLabel ?? null,
+                    rarityColor: item.rarityColor ?? null,
+                    isRiagu: Boolean(item.isRiagu),
+                    obtainedCount: 0,
+                    kind: 'unknown',
+                    previewUrl: null,
+                    sourceItems: [],
+                    assetCount,
+                    isOwned: false
+                  });
+                }
               }
-              existing.sourceItems.push(item);
-            } else {
-              const previewUrl = item.kind === 'image' ? URL.createObjectURL(item.blob) : null;
-              if (previewUrl) {
-                objectUrls.push(previewUrl);
-              }
-              const obtained = typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)
-                ? Math.max(0, item.metadata.obtainedCount)
-                : 1;
-              itemMap.set(itemKey, {
-                key: itemKey,
-                gachaName,
-                gachaId,
-                itemName,
-                rarity: item.metadata?.rarity ?? null,
-                rarityColor: item.metadata?.rarityColor ?? null,
-                isRiagu: Boolean(item.metadata?.isRiagu),
-                obtainedCount: obtained,
-                kind: item.kind,
-                previewUrl,
-                sourceItems: [item]
-              });
-            }
 
-            existingGroup.sourceItems.push(item);
-            if (!gachaMap.has(gachaKey)) {
-              gachaMap.set(gachaKey, existingGroup);
+              if (!gachaMap.has(gachaKey)) {
+                gachaMap.set(gachaKey, existingGroup);
+              }
             }
           }
         }
 
         const nextGroups = Array.from(gachaMap.values()).map(({ ownerNames, gachaId, gachaName, itemMap, sourceItems }) => {
-          const items = Array.from(itemMap.values()).sort((a, b) => a.itemName.localeCompare(b.itemName));
-          const totalCount = items.reduce((sum, item) => sum + item.obtainedCount, 0);
+          const items = Array.from(itemMap.values()).sort((a, b) => {
+            if (a.isOwned !== b.isOwned) {
+              return a.isOwned ? -1 : 1;
+            }
+            return a.itemName.localeCompare(b.itemName, 'ja');
+          });
+          const ownedItems = items.filter((item) => item.isOwned);
+          const ownedKinds = ownedItems.length;
+          const totalKinds = items.length;
+          const ownedCount = ownedItems.reduce((sum, item) => sum + item.obtainedCount, 0);
           return {
             ownerNames: Array.from(ownerNames).sort((a, b) => a.localeCompare(b)),
             gachaId,
             gachaName,
             items,
-            totalCount,
+            ownedKinds,
+            totalKinds,
+            ownedCount,
             sourceItems
           };
         });
@@ -358,8 +480,9 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const isEmpty = status === 'ready' && groups.length === 0;
-  const totalItems = useMemo(() => groups.reduce((sum, group) => sum + group.items.length, 0), [groups]);
-  const totalCount = useMemo(() => groups.reduce((sum, group) => sum + group.totalCount, 0), [groups]);
+  const totalOwnedKinds = useMemo(() => groups.reduce((sum, group) => sum + group.ownedKinds, 0), [groups]);
+  const totalKinds = useMemo(() => groups.reduce((sum, group) => sum + group.totalKinds, 0), [groups]);
+  const totalOwnedCount = useMemo(() => groups.reduce((sum, group) => sum + group.ownedCount, 0), [groups]);
   const hasSaving = Boolean(savingGroupKey || savingItemKey);
 
   const handleSaveItem = useCallback(async (item: ReceiveInventoryItem) => {
@@ -415,7 +538,7 @@ export function ReceiveListPage(): JSX.Element {
           </p>
           {status === 'ready' && groups.length > 0 ? (
             <p className="mt-3 text-xs text-muted-foreground">
-              合計 {totalItems} 種類 / {totalCount} 個
+              所持 {totalOwnedKinds} 種類 / 全 {totalKinds} 種類 ・ 合計 {totalOwnedCount} 個
             </p>
           ) : null}
         </header>
@@ -455,7 +578,7 @@ export function ReceiveListPage(): JSX.Element {
                   <div>
                     <h2 className="text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
                     <p className="text-xs text-muted-foreground">
-                      {group.items.length} 種類 / 合計 {group.totalCount} 個
+                      所持 {group.ownedKinds} 種類 / 全 {group.totalKinds} 種類 ・ 合計 {group.ownedCount} 個
                     </p>
                     <p className="text-xs text-muted-foreground">
                       オーナー: {formatOwnerNames(group.ownerNames)}

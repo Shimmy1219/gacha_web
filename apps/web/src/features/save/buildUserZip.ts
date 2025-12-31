@@ -38,6 +38,23 @@ interface ZipItemMetadata {
   isOmitted?: boolean;
 }
 
+interface ZipCatalogItemMetadata {
+  itemId: string;
+  itemName: string;
+  rarityId: string;
+  rarityLabel: string;
+  rarityColor: string | null;
+  isRiagu: boolean;
+  assetCount: number;
+  order: number | null;
+}
+
+interface ZipCatalogGachaMetadata {
+  gachaId: string;
+  gachaName: string;
+  items: ZipCatalogItemMetadata[];
+}
+
 interface HistorySelectionMetadata {
   pullId: string;
   pullCount: number;
@@ -512,6 +529,101 @@ function isItemNewForUser(
   return !entries.some((entry) => normalizeUserId(entry.userId) === normalizedUserId && entry.gachaId === gachaId);
 }
 
+function resolveCatalogGachaIds(
+  selection: SaveTargetSelection,
+  catalogState: GachaCatalogStateV4 | undefined,
+  metadataAssets: SelectedAsset[]
+): string[] {
+  if (!catalogState?.byGacha) {
+    return [];
+  }
+  if (selection.mode === 'gacha') {
+    return Array.from(new Set(selection.gachaIds.filter((id) => id && id.trim())));
+  }
+  if (selection.mode === 'history') {
+    return Array.from(
+      new Set(
+        metadataAssets
+          .map((asset) => asset.gachaId)
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      )
+    );
+  }
+  return Object.keys(catalogState.byGacha);
+}
+
+function buildCatalogSummary(
+  catalogState: GachaCatalogStateV4 | undefined,
+  appState: GachaLocalStorageSnapshot['appState'] | undefined,
+  rarityState: GachaRarityStateV3 | undefined,
+  selection: SaveTargetSelection,
+  metadataAssets: SelectedAsset[]
+): ZipCatalogGachaMetadata[] {
+  if (!catalogState?.byGacha) {
+    return [];
+  }
+  const gachaIds = resolveCatalogGachaIds(selection, catalogState, metadataAssets);
+  if (gachaIds.length === 0) {
+    return [];
+  }
+
+  const summaries: ZipCatalogGachaMetadata[] = [];
+  gachaIds.forEach((gachaId) => {
+    const gachaSnapshot = catalogState.byGacha[gachaId];
+    if (!gachaSnapshot) {
+      return;
+    }
+    const gachaName = appState?.meta?.[gachaId]?.displayName ?? gachaId;
+    const orderIndex = new Map<string, number>();
+    (gachaSnapshot.order ?? []).forEach((itemId, index) => {
+      orderIndex.set(itemId, index);
+    });
+
+    const items: ZipCatalogItemMetadata[] = Object.entries(gachaSnapshot.items ?? {}).map(([itemId, item]) => {
+      const rarityLabel = resolveRarityLabel(rarityState, item.rarityId ?? '');
+      const rarityColor = rarityState?.entities?.[item.rarityId ?? '']?.color ?? null;
+      const assetCount = Array.isArray(item.assets) ? item.assets.length : 0;
+      const fallbackOrder = orderIndex.get(itemId);
+      const orderValue = Number.isFinite(item.order)
+        ? (item.order as number)
+        : Number.isFinite(fallbackOrder)
+          ? (fallbackOrder as number)
+          : null;
+
+      return {
+        itemId,
+        itemName: item.name ?? itemId,
+        rarityId: item.rarityId ?? 'unknown',
+        rarityLabel,
+        rarityColor,
+        isRiagu: Boolean(item.riagu),
+        assetCount,
+        order: orderValue
+      };
+    });
+
+    items.sort((a, b) => {
+      if (a.order !== null && b.order !== null && a.order !== b.order) {
+        return a.order - b.order;
+      }
+      if (a.order !== null) {
+        return -1;
+      }
+      if (b.order !== null) {
+        return 1;
+      }
+      return a.itemName.localeCompare(b.itemName, 'ja');
+    });
+
+    if (items.length > 0) {
+      summaries.push({ gachaId, gachaName, items });
+    }
+  });
+
+  summaries.sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'));
+  return summaries;
+}
+
 export async function buildUserZipFromSelection({
   snapshot,
   selection,
@@ -688,6 +800,7 @@ export async function buildUserZipFromSelection({
   const pullIds = Array.from(includedPullIds);
   const normalizedOwnerName = typeof ownerName === 'string' ? ownerName.trim() : '';
   if (includeMetadata && metaFolder && generatedAt && itemMetadataMap) {
+    const catalogSummary = buildCatalogSummary(catalogState, snapshot.appState, rarityState, selection, metadataAssets);
     metaFolder.file(
       'selection.json',
       JSON.stringify(
@@ -718,6 +831,26 @@ export async function buildUserZipFromSelection({
         compressionOptions: { level: 6 }
       }
     );
+
+    if (catalogSummary.length > 0) {
+      metaFolder.file(
+        'catalog.json',
+        JSON.stringify(
+          {
+            version: 1,
+            generatedAt,
+            gachas: catalogSummary
+          },
+          null,
+          2
+        ),
+        {
+          date: new Date(generatedAt),
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        }
+      );
+    }
 
     metaFolder.file(
       'items.json',

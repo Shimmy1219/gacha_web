@@ -19,6 +19,46 @@ export interface ReceiveZipSummary {
   pullIds: string[];
 }
 
+interface CatalogMetadataPayloadItem {
+  itemId?: string;
+  itemName?: string;
+  rarityId?: string;
+  rarityLabel?: string;
+  rarityColor?: string | null;
+  isRiagu?: boolean;
+  assetCount?: number;
+  order?: number;
+}
+
+interface CatalogMetadataPayloadGacha {
+  gachaId?: string;
+  gachaName?: string;
+  items?: CatalogMetadataPayloadItem[];
+}
+
+interface CatalogMetadataPayload {
+  version?: number;
+  generatedAt?: string;
+  gachas?: CatalogMetadataPayloadGacha[];
+}
+
+export interface ReceiveCatalogItem {
+  itemId: string | null;
+  itemName: string;
+  rarityId: string | null;
+  rarityLabel: string | null;
+  rarityColor: string | null;
+  isRiagu: boolean;
+  assetCount: number;
+  order: number | null;
+}
+
+export interface ReceiveCatalogGacha {
+  gachaId: string | null;
+  gachaName: string;
+  items: ReceiveCatalogItem[];
+}
+
 function detectMediaKind(filename: string, mimeType?: string): ReceiveMediaKind {
   const lower = filename.toLowerCase();
   if (mimeType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) {
@@ -78,6 +118,70 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
   } catch (error) {
     console.error('Failed to parse items metadata', error);
     return {};
+  }
+}
+
+async function loadCatalogMetadata(zip: JSZip): Promise<ReceiveCatalogGacha[]> {
+  const catalogEntry = Object.values(zip.files).find(
+    (entry) => !entry.dir && entry.name.endsWith('meta/catalog.json')
+  );
+  if (!catalogEntry) {
+    return [];
+  }
+
+  try {
+    const jsonText = await catalogEntry.async('string');
+    const parsed = JSON.parse(jsonText) as CatalogMetadataPayload;
+    const gachas = Array.isArray(parsed.gachas) ? parsed.gachas : [];
+    return gachas
+      .map((gacha): ReceiveCatalogGacha | null => {
+        const gachaId = typeof gacha.gachaId === 'string' ? gacha.gachaId.trim() : null;
+        const gachaName =
+          typeof gacha.gachaName === 'string' && gacha.gachaName.trim()
+            ? gacha.gachaName.trim()
+            : gachaId ?? '不明なガチャ';
+        const items = Array.isArray(gacha.items)
+          ? gacha.items
+              .map((item): ReceiveCatalogItem | null => {
+                const itemName =
+                  typeof item.itemName === 'string' && item.itemName.trim()
+                    ? item.itemName.trim()
+                    : '';
+                if (!itemName) {
+                  return null;
+                }
+                const itemId = typeof item.itemId === 'string' ? item.itemId.trim() : null;
+                const rarityId = typeof item.rarityId === 'string' ? item.rarityId.trim() : null;
+                const rarityLabel = typeof item.rarityLabel === 'string' ? item.rarityLabel : null;
+                const rarityColor = typeof item.rarityColor === 'string' ? item.rarityColor : null;
+                const assetCount =
+                  typeof item.assetCount === 'number' && Number.isFinite(item.assetCount)
+                    ? Math.max(0, Math.floor(item.assetCount))
+                    : 0;
+                const order =
+                  typeof item.order === 'number' && Number.isFinite(item.order) ? item.order : null;
+                return {
+                  itemId,
+                  itemName,
+                  rarityId,
+                  rarityLabel,
+                  rarityColor,
+                  isRiagu: Boolean(item.isRiagu),
+                  assetCount,
+                  order
+                };
+              })
+              .filter((item): item is ReceiveCatalogItem => Boolean(item))
+          : [];
+        if (items.length === 0) {
+          return null;
+        }
+        return { gachaId, gachaName, items };
+      })
+      .filter((gacha): gacha is ReceiveCatalogGacha => Boolean(gacha));
+  } catch (error) {
+    console.error('Failed to parse catalog metadata', error);
+    return [];
   }
 }
 
@@ -176,12 +280,13 @@ export async function extractReceiveMediaItems(
 export async function loadReceiveZipInventory(
   blob: Blob,
   onProgress?: (processed: number, total: number) => void
-): Promise<{ metadataEntries: ReceiveItemMetadata[]; mediaItems: ReceiveMediaItem[] }> {
+): Promise<{ metadataEntries: ReceiveItemMetadata[]; mediaItems: ReceiveMediaItem[]; catalog: ReceiveCatalogGacha[] }> {
   const zip = await JSZip.loadAsync(blob);
   const metadataMap = await loadItemsMetadata(zip);
   const metadataEntries = Object.values(metadataMap);
   const mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataEntries, onProgress);
-  return { metadataEntries, mediaItems };
+  const catalog = await loadCatalogMetadata(zip);
+  return { metadataEntries, mediaItems, catalog };
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
