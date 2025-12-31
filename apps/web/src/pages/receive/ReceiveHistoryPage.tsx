@@ -158,10 +158,9 @@ export function ReceiveHistoryPage(): JSX.Element {
     <div className="receive-history-page min-h-screen text-surface-foreground">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
         <header className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
-          <span className="badge">履歴</span>
           <h1 className="mt-3 text-3xl font-bold">受け取り履歴</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            ブラウザに保存されている受け取り履歴を一覧で確認できます。
+            受け取り履歴を一覧で確認出来ます。
           </p>
         </header>
 

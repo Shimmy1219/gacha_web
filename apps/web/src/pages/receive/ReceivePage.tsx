@@ -785,7 +785,7 @@ export function ReceivePage(): JSX.Element {
                 </p>
               </div>
               {isViewingHistory ? (
-                <span className="badge">
+                <span className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-semibold text-muted-foreground">
                   <ClockIcon className="h-4 w-4" />
                   履歴を表示中
                 </span>
@@ -886,7 +886,7 @@ export function ReceivePage(): JSX.Element {
                   to={`/receive?history=${encodeURIComponent(duplicateHistoryEntry.id)}`}
                   className="btn btn-muted rounded-full"
                 >
-                  受け取り画面で、履歴を表示する
+                  受け取り画面で履歴を表示
                 </Link>
               </div>
             ) : null}
