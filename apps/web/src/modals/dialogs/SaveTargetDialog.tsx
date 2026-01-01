@@ -307,6 +307,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   const [historySelectionInitialized, setHistorySelectionInitialized] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [newItemsOnlyHistoryIds, setNewItemsOnlyHistoryIds] = useState<string[]>([]);
+  const [missingOnlyHistoryIds, setMissingOnlyHistoryIds] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const appMeta = data?.appState?.meta;
@@ -322,6 +323,13 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
     () => buildHistoryEntries(data?.pullHistory, payload.userId, appMeta, catalogState, rarityState),
     [appMeta, catalogState, data?.pullHistory, payload.userId, rarityState]
   );
+  const historyMissingEntryIds = useMemo(() => {
+    return new Set(
+      historyEntries
+        .filter((entry) => entry.hasOriginalPrizeMissing || entry.items.some((item) => item.hasOriginalPrizeMissing))
+        .map((entry) => entry.id)
+    );
+  }, [historyEntries]);
 
   useEffect(() => {
     setValidationError(null);
@@ -404,6 +412,20 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   }, [selectedHistoryIds, historyEntries]);
 
   useEffect(() => {
+    setMissingOnlyHistoryIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+      const selectedSet = new Set(selectedHistoryIds);
+      const validIds = previous.filter((id) => selectedSet.has(id) && historyMissingEntryIds.has(id));
+      if (validIds.length === previous.length) {
+        return previous;
+      }
+      return validIds;
+    });
+  }, [historyMissingEntryIds, selectedHistoryIds]);
+
+  useEffect(() => {
     setExpandedHistoryIds((previous) =>
       previous.filter((id) => historyEntries.some((entry) => entry.id === id))
     );
@@ -447,7 +469,29 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       }
       return [...previous, entryId];
     });
+    if (!newItemsOnlyHistoryIds.includes(entryId)) {
+      setMissingOnlyHistoryIds((previous) => previous.filter((id) => id !== entryId));
+    }
     setNewItemsOnlyHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous.filter((id) => id !== entryId);
+      }
+      return [...previous, entryId];
+    });
+  };
+
+  const toggleHistoryMissingOnly = (entryId: string) => {
+    setHistorySelectionInitialized(true);
+    setSelectedHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous;
+      }
+      return [...previous, entryId];
+    });
+    if (!missingOnlyHistoryIds.includes(entryId)) {
+      setNewItemsOnlyHistoryIds((previous) => previous.filter((id) => id !== entryId));
+    }
+    setMissingOnlyHistoryIds((previous) => {
       if (previous.includes(entryId)) {
         return previous.filter((id) => id !== entryId);
       }
@@ -486,10 +530,14 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       const uniqueNewOnlyIds = Array.from(new Set(newItemsOnlyHistoryIds)).filter((id) =>
         uniqueHistoryIds.includes(id)
       );
+      const uniqueMissingOnlyIds = Array.from(new Set(missingOnlyHistoryIds)).filter(
+        (id) => uniqueHistoryIds.includes(id) && historyMissingEntryIds.has(id)
+      );
       selection = {
         mode: 'history',
         pullIds: uniqueHistoryIds,
-        ...(uniqueNewOnlyIds.length > 0 ? { newItemsOnlyPullIds: uniqueNewOnlyIds } : {})
+        ...(uniqueNewOnlyIds.length > 0 ? { newItemsOnlyPullIds: uniqueNewOnlyIds } : {}),
+        ...(uniqueMissingOnlyIds.length > 0 ? { missingOnlyPullIds: uniqueMissingOnlyIds } : {})
       };
     } else {
       selection = { mode: 'all' };
@@ -632,10 +680,12 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
             ) : (
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                 {historyEntries.map((entry) => {
+                  const entryHasOriginalPrizeMissing = historyMissingEntryIds.has(entry.id);
                   const statusLabel = getPullHistoryStatusLabel(entry.status, {
-                    hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+                    hasOriginalPrizeMissing: entryHasOriginalPrizeMissing
                   });
                   const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
+                  const missingOnlyActive = missingOnlyHistoryIds.includes(entry.id);
                   const newItemsSet = new Set(entry.newItems);
                   return (
                     <div
@@ -688,6 +738,20 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                             />
                             <span>ユーザーが新規に取得したものだけを保存</span>
                           </label>
+                          {entryHasOriginalPrizeMissing ? (
+                            <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/70">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={missingOnlyActive}
+                                onChange={() => toggleHistoryMissingOnly(entry.id)}
+                              />
+                              <span className="flex items-center gap-1">
+                                未送信分のみ保存
+                                <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" aria-hidden="true" />
+                              </span>
+                            </label>
+                          ) : null}
                         </div>
                         <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
                       </div>

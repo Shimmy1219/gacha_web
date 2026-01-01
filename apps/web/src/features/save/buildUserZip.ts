@@ -385,7 +385,7 @@ function collectOriginalPrizeSelection(params: {
             itemId,
             itemName,
             rarityId: catalogItem.rarityId ?? 'unknown',
-            count: requiredCount,
+            count: 1,
             isRiagu: Boolean(catalogItem.riagu)
           });
           contributed = true;
@@ -521,7 +521,8 @@ function collectOriginalPrizeSelection(params: {
         seenAssets.add(assignment.assetId);
         assets.push({
           ...required.item,
-          assetId: assignment.assetId
+          assetId: assignment.assetId,
+          count: 1
         });
       });
     });
@@ -645,6 +646,7 @@ function aggregateHistoryItems(
   normalizedTargetUserId: string,
   itemIdFilter?: Set<string> | null,
   newItemsOnlyPullIds?: Set<string> | null,
+  originalPrizeOnlyPullIds?: Set<string> | null,
   seenAssets?: Set<string>
 ): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
@@ -674,7 +676,8 @@ function aggregateHistoryItems(
       return;
     }
 
-    const newItemsOnly = Boolean(newItemsOnlyPullIds && newItemsOnlyPullIds.has(entryId));
+    const originalPrizeOnly = Boolean(originalPrizeOnlyPullIds && originalPrizeOnlyPullIds.has(entryId));
+    const newItemsOnly = !originalPrizeOnly && Boolean(newItemsOnlyPullIds && newItemsOnlyPullIds.has(entryId));
     const newItemsSet = newItemsOnly ? new Set(entry.newItems ?? []) : null;
 
     const normalizedPullCount = Number.isFinite(entry.pullCount)
@@ -690,37 +693,39 @@ function aggregateHistoryItems(
     const context = resolveCatalogContext(catalogState, appState, entry.gachaId);
     let entryContributed = false;
 
-    Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
-      if (!itemId || !Number.isFinite(count) || count <= 0) {
-        return;
-      }
-      if (itemIdFilter && !itemIdFilter.has(itemId)) {
-        return;
-      }
-      if (newItemsSet && !newItemsSet.has(itemId)) {
-        return;
-      }
-
-      const assets = createSelectedAssets(
-        context,
-        itemId,
-        'unknown',
-        count,
-        warnings,
-        resolvedSeenAssets,
-        (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
-          const id = warningGachaId ?? 'unknown';
-          return type === 'missingItem'
-            ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
-            : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
+    if (!originalPrizeOnly) {
+      Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
+        if (!itemId || !Number.isFinite(count) || count <= 0) {
+          return;
         }
-      );
+        if (itemIdFilter && !itemIdFilter.has(itemId)) {
+          return;
+        }
+        if (newItemsSet && !newItemsSet.has(itemId)) {
+          return;
+        }
 
-      if (assets.length > 0) {
-        selected.push(...assets);
-        entryContributed = true;
-      }
-    });
+        const assets = createSelectedAssets(
+          context,
+          itemId,
+          'unknown',
+          count,
+          warnings,
+          resolvedSeenAssets,
+          (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
+            const id = warningGachaId ?? 'unknown';
+            return type === 'missingItem'
+              ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
+              : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
+          }
+        );
+
+        if (assets.length > 0) {
+          selected.push(...assets);
+          entryContributed = true;
+        }
+      });
+    }
 
     if (entryContributed) {
       includedPullIds.add(entryId);
@@ -992,6 +997,10 @@ export async function buildUserZipFromSelection({
       selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
         ? new Set(selection.newItemsOnlyPullIds)
         : null;
+    const missingOnlyPullIds =
+      selection.missingOnlyPullIds && selection.missingOnlyPullIds.length > 0
+        ? new Set(selection.missingOnlyPullIds)
+        : null;
     const historyAggregation = aggregateHistoryItems(
       snapshot,
       selection,
@@ -999,6 +1008,7 @@ export async function buildUserZipFromSelection({
       normalizedUserId,
       normalizedItemFilter,
       newItemsOnlyPullIds,
+      missingOnlyPullIds,
       seenAssets
     );
     collected = [...originalPrizeSelection.assets, ...historyAggregation.assets];
@@ -1015,7 +1025,8 @@ export async function buildUserZipFromSelection({
         warnings,
         normalizedUserId,
         normalizedItemFilter,
-        null
+        null,
+        missingOnlyPullIds
       );
       const metadataEntries = new Map<string, SelectedAsset>();
       originalPrizeSelection.assets.forEach((item) => {
