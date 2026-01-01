@@ -884,6 +884,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         if (zip.pullIds.length > 0) {
           pullHistory.markPullStatus(zip.pullIds, 'uploaded');
+          pullHistory.markPullOriginalPrizeMissing(
+            zip.pullIds,
+            zip.originalPrizeMissingPullIds
+          );
         }
 
         const guildSelection = selectionOverride ?? requireDiscordGuildSelection(staffDiscordId);
@@ -1032,6 +1036,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         if (zip.pullIds.length > 0) {
           pullHistory.markPullStatus(zip.pullIds, 'discord_shared');
+          pullHistory.markPullOriginalPrizeMissing(
+            zip.pullIds,
+            zip.originalPrizeMissingPullIds
+          );
         }
 
         const sharedAt = new Date().toISOString();

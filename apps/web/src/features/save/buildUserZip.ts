@@ -23,6 +23,15 @@ interface SelectedAsset {
   isRiagu: boolean;
 }
 
+export interface OriginalPrizeMissingItem {
+  gachaId: string | undefined;
+  gachaName: string;
+  inventoryId?: string;
+  itemId: string;
+  itemName: string;
+  missingCount: number;
+}
+
 interface ZipItemMetadata {
   filePath: string | null;
   gachaId?: string | null;
@@ -212,6 +221,10 @@ function createSelectedAssets(
     return [];
   }
 
+  if (catalogItem.originalPrize) {
+    return [];
+  }
+
   const assetEntries = Array.isArray(catalogItem.assets) ? catalogItem.assets : [];
   const assetIds = assetEntries
     .map((asset) => asset?.assetId)
@@ -251,13 +264,328 @@ function createSelectedAssets(
   }, []);
 }
 
+interface OriginalPrizeSelectionResult {
+  assets: SelectedAsset[];
+  missingItems: OriginalPrizeMissingItem[];
+  includedPullIds?: Set<string>;
+  missingPullIds: Set<string>;
+}
+
+function resolveInventoryIdForGacha(
+  inventories: Record<string, UserInventorySnapshotV3 | undefined> | undefined,
+  gachaId: string | undefined
+): string | undefined {
+  if (!inventories || !gachaId) {
+    return undefined;
+  }
+  const snapshot = Object.values(inventories).find((entry) => entry?.gachaId === gachaId);
+  return snapshot?.inventoryId;
+}
+
+function collectOriginalPrizeSelection(params: {
+  snapshot: GachaLocalStorageSnapshot;
+  selection: SaveTargetSelection;
+  userId: string;
+  normalizedUserId: string;
+  itemIdFilter: Set<string> | null | undefined;
+  warnings: Set<string>;
+  seenAssets: Set<string>;
+}): OriginalPrizeSelectionResult {
+  const { snapshot, selection, userId, normalizedUserId, itemIdFilter, warnings, seenAssets } = params;
+  const history = snapshot.pullHistory;
+  const catalogState = snapshot.catalogState;
+  const appState = snapshot.appState;
+  const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
+  const assets: SelectedAsset[] = [];
+  const missingItems: OriginalPrizeMissingItem[] = [];
+  const missingPullIds = new Set<string>();
+
+  const addMissingItem = (entry: {
+    gachaId: string | undefined;
+    itemId: string;
+    itemName: string;
+    missingCount: number;
+  }): void => {
+    const gachaName = entry.gachaId ? appState?.meta?.[entry.gachaId]?.displayName ?? entry.gachaId : 'unknown-gacha';
+    missingItems.push({
+      gachaId: entry.gachaId,
+      gachaName,
+      inventoryId: resolveInventoryIdForGacha(inventoriesForUser, entry.gachaId),
+      itemId: entry.itemId,
+      itemName: entry.itemName,
+      missingCount: entry.missingCount
+    });
+    warnings.add(`オリジナル景品のファイルが未設定: ${gachaName} / ${entry.itemName}`);
+  };
+
+  if (selection.mode === 'history') {
+    if (!history?.pulls) {
+      return { assets, missingItems, includedPullIds: new Set<string>(), missingPullIds };
+    }
+    const includedPullIds = new Set<string>();
+
+    selection.pullIds.forEach((rawId) => {
+      const entryId = rawId?.trim();
+      if (!entryId) {
+        return;
+      }
+
+      const entry = history.pulls?.[entryId];
+      if (!entry || normalizeUserId(entry.userId) !== normalizedUserId) {
+        return;
+      }
+
+      const context = resolveCatalogContext(catalogState, appState, entry.gachaId);
+      const assignedKeys = new Set<string>();
+      let contributed = false;
+      let entryHasOriginalPrize = false;
+
+      Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
+        if (!itemId || !Number.isFinite(count) || count <= 0) {
+          return;
+        }
+        if (itemIdFilter && !itemIdFilter.has(itemId)) {
+          return;
+        }
+
+        const catalogItem = context.catalogGacha?.items?.[itemId];
+        if (!catalogItem?.originalPrize) {
+          return;
+        }
+
+        entryHasOriginalPrize = true;
+        const requiredCount = Math.trunc(count);
+        const itemName = catalogItem.name ?? itemId;
+        const assignments = entry.originalPrizeAssignments?.[itemId] ?? [];
+        let assignedCount = 0;
+
+        assignments.forEach((assignment) => {
+          if (!assignment?.assetId) {
+            return;
+          }
+          const index = Math.trunc(assignment.index);
+          if (index < 0) {
+            return;
+          }
+          const assignmentKey = `${entry.id}:${itemId}:${index}`;
+          if (assignedKeys.has(assignmentKey)) {
+            return;
+          }
+          assignedKeys.add(assignmentKey);
+          assignedCount += 1;
+
+          if (seenAssets.has(assignment.assetId)) {
+            return;
+          }
+          seenAssets.add(assignment.assetId);
+          assets.push({
+            assetId: assignment.assetId,
+            gachaId: entry.gachaId,
+            gachaName: context.gachaName,
+            itemId,
+            itemName,
+            rarityId: catalogItem.rarityId ?? 'unknown',
+            count: requiredCount,
+            isRiagu: Boolean(catalogItem.riagu)
+          });
+          contributed = true;
+        });
+
+        if (assignedCount < requiredCount) {
+          addMissingItem({
+            gachaId: entry.gachaId,
+            itemId,
+            itemName,
+            missingCount: requiredCount - assignedCount
+          });
+          missingPullIds.add(entryId);
+        }
+      });
+
+      if (contributed || entryHasOriginalPrize) {
+        includedPullIds.add(entryId);
+      }
+    });
+
+    return { assets, missingItems, includedPullIds, missingPullIds };
+  }
+
+  const gachaFilter = selection.mode === 'gacha' ? new Set(selection.gachaIds) : null;
+  const requiredCounts = new Map<string, { count: number; item: SelectedAsset }>();
+
+  Object.values(inventoriesForUser ?? {}).forEach((inventory) => {
+    if (!inventory) {
+      return;
+    }
+    if (gachaFilter && !gachaFilter.has(inventory.gachaId)) {
+      return;
+    }
+
+    const context = resolveCatalogContext(catalogState, appState, inventory.gachaId);
+    const countsByRarity = inventory.counts ?? {};
+    const itemsByRarity = inventory.items ?? {};
+
+    Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return;
+      }
+
+      const fallbackCounts = new Map<string, number>();
+      itemIds.forEach((itemId) => {
+        fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+      });
+
+      Array.from(fallbackCounts.keys()).forEach((itemId) => {
+        if (itemIdFilter && !itemIdFilter.has(itemId)) {
+          return;
+        }
+        const catalogItem = context.catalogGacha?.items?.[itemId];
+        if (!catalogItem?.originalPrize) {
+          return;
+        }
+
+        const explicitCount = countsByRarity[rarityId]?.[itemId];
+        const totalCount = typeof explicitCount === 'number' && explicitCount > 0
+          ? explicitCount
+          : fallbackCounts.get(itemId) ?? 0;
+        if (totalCount <= 0) {
+          return;
+        }
+
+        const key = `${inventory.gachaId}:${itemId}`;
+        requiredCounts.set(key, {
+          count: totalCount,
+          item: {
+            assetId: '',
+            gachaId: inventory.gachaId,
+            gachaName: context.gachaName,
+            itemId,
+            itemName: catalogItem.name ?? itemId,
+            rarityId: catalogItem.rarityId ?? rarityId,
+            count: totalCount,
+            isRiagu: Boolean(catalogItem.riagu)
+          }
+        });
+      });
+    });
+  });
+
+  if (requiredCounts.size === 0) {
+    return { assets, missingItems, missingPullIds };
+  }
+
+  const assignedCounts = new Map<string, number>();
+  const assignmentKeys = new Set<string>();
+
+  Object.values(history?.pulls ?? {}).forEach((entry) => {
+    if (!entry || normalizeUserId(entry.userId) !== normalizedUserId) {
+      return;
+    }
+    if (gachaFilter && !gachaFilter.has(entry.gachaId)) {
+      return;
+    }
+
+    const assignedCountsForEntry = new Map<string, number>();
+
+    Object.entries(entry.originalPrizeAssignments ?? {}).forEach(([itemId, assignments]) => {
+      const key = `${entry.gachaId}:${itemId}`;
+      const required = requiredCounts.get(key);
+      if (!required || !Array.isArray(assignments)) {
+        return;
+      }
+
+      const uniqueIndices = new Set<number>();
+      assignments.forEach((assignment) => {
+        if (!assignment?.assetId) {
+          return;
+        }
+        const index = Math.trunc(assignment.index);
+        if (index < 0) {
+          return;
+        }
+        if (uniqueIndices.has(index)) {
+          return;
+        }
+        uniqueIndices.add(index);
+        assignedCountsForEntry.set(itemId, uniqueIndices.size);
+        const assignmentKey = `${entry.id}:${itemId}:${index}`;
+        if (assignmentKeys.has(assignmentKey)) {
+          return;
+        }
+        assignmentKeys.add(assignmentKey);
+        assignedCounts.set(key, (assignedCounts.get(key) ?? 0) + 1);
+
+        if (seenAssets.has(assignment.assetId)) {
+          return;
+        }
+        seenAssets.add(assignment.assetId);
+        assets.push({
+          ...required.item,
+          assetId: assignment.assetId
+        });
+      });
+    });
+
+    Object.entries(entry.itemCounts ?? {}).forEach(([itemId, rawCount]) => {
+      if (!itemId || !Number.isFinite(rawCount) || rawCount <= 0) {
+        return;
+      }
+      const key = `${entry.gachaId}:${itemId}`;
+      if (!requiredCounts.has(key)) {
+        return;
+      }
+      const entryCount = Math.trunc(rawCount);
+      const assignedCount = assignedCountsForEntry.get(itemId) ?? 0;
+      if (assignedCount < entryCount) {
+        missingPullIds.add(entry.id);
+      }
+    });
+  });
+
+  requiredCounts.forEach((required, key) => {
+    const assigned = assignedCounts.get(key) ?? 0;
+    if (assigned >= required.count) {
+      return;
+    }
+    addMissingItem({
+      gachaId: required.item.gachaId,
+      itemId: required.item.itemId,
+      itemName: required.item.itemName,
+      missingCount: required.count - assigned
+    });
+  });
+
+  return { assets, missingItems, missingPullIds };
+}
+
+export function findOriginalPrizeMissingItems(params: {
+  snapshot: GachaLocalStorageSnapshot;
+  selection: SaveTargetSelection;
+  userId: string;
+  itemIdFilter?: Set<string> | null;
+}): OriginalPrizeMissingItem[] {
+  const warnings = new Set<string>();
+  const seenAssets = new Set<string>();
+  const normalizedUserId = normalizeUserId(params.userId);
+  return collectOriginalPrizeSelection({
+    snapshot: params.snapshot,
+    selection: params.selection,
+    userId: params.userId,
+    normalizedUserId,
+    itemIdFilter: params.itemIdFilter,
+    warnings,
+    seenAssets
+  }).missingItems;
+}
+
 function aggregateInventoryItems(
   inventories: Record<string, UserInventorySnapshotV3 | undefined> | undefined,
   catalogState: GachaCatalogStateV4 | undefined,
   appState: GachaLocalStorageSnapshot['appState'] | undefined,
   selection: SaveTargetSelection,
   warnings: Set<string>,
-  itemIdFilter?: Set<string> | null
+  itemIdFilter: Set<string> | null | undefined,
+  seenAssets: Set<string>
 ): SelectedAsset[] {
   if (!inventories) {
     return [];
@@ -265,7 +593,6 @@ function aggregateInventoryItems(
 
   const gachaFilter = selection.mode === 'gacha' ? new Set(selection.gachaIds) : null;
   const selected: SelectedAsset[] = [];
-  const seenAssets = new Set<string>();
 
   Object.values(inventories).forEach((snapshot) => {
     if (!snapshot) {
@@ -317,7 +644,8 @@ function aggregateHistoryItems(
   warnings: Set<string>,
   normalizedTargetUserId: string,
   itemIdFilter?: Set<string> | null,
-  newItemsOnlyPullIds?: Set<string> | null
+  newItemsOnlyPullIds?: Set<string> | null,
+  seenAssets?: Set<string>
 ): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
@@ -326,7 +654,7 @@ function aggregateHistoryItems(
 
   const catalogState = snapshot.catalogState;
   const appState = snapshot.appState;
-  const seenAssets = new Set<string>();
+  const resolvedSeenAssets = seenAssets ?? new Set<string>();
   const selected: SelectedAsset[] = [];
   const pullMetadata: HistorySelectionMetadata[] = [];
   const includedPullIds = new Set<string>();
@@ -379,7 +707,7 @@ function aggregateHistoryItems(
         'unknown',
         count,
         warnings,
-        seenAssets,
+        resolvedSeenAssets,
         (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
           const id = warningGachaId ?? 'unknown';
           return type === 'missingItem'
@@ -636,12 +964,23 @@ export async function buildUserZipFromSelection({
   ensureBrowserEnvironment();
 
   const warnings = new Set<string>();
+  const seenAssets = new Set<string>();
 
   const catalogState = snapshot.catalogState;
   const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
   const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
+
+  const originalPrizeSelection = collectOriginalPrizeSelection({
+    snapshot,
+    selection,
+    userId,
+    normalizedUserId,
+    itemIdFilter: normalizedItemFilter,
+    warnings,
+    seenAssets
+  });
 
   let collected: SelectedAsset[] = [];
   let historySelectionDetails: HistorySelectionMetadata[] = [];
@@ -659,11 +998,15 @@ export async function buildUserZipFromSelection({
       warnings,
       normalizedUserId,
       normalizedItemFilter,
-      newItemsOnlyPullIds
+      newItemsOnlyPullIds,
+      seenAssets
     );
-    collected = historyAggregation.assets;
+    collected = [...originalPrizeSelection.assets, ...historyAggregation.assets];
     historySelectionDetails = historyAggregation.pulls;
     includedPullIds = historyAggregation.includedPullIds;
+    if (originalPrizeSelection.includedPullIds) {
+      originalPrizeSelection.includedPullIds.forEach((id) => includedPullIds.add(id));
+    }
 
     if (newItemsOnlyPullIds && newItemsOnlyPullIds.size > 0) {
       const allHistoryAggregation = aggregateHistoryItems(
@@ -674,7 +1017,14 @@ export async function buildUserZipFromSelection({
         normalizedItemFilter,
         null
       );
-      metadataAssets = allHistoryAggregation.assets;
+      const metadataEntries = new Map<string, SelectedAsset>();
+      originalPrizeSelection.assets.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      allHistoryAggregation.assets.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      metadataAssets = Array.from(metadataEntries.values());
       const selectedAssetIds = new Set(collected.map((item) => item.assetId));
       omittedAssetIds = new Set(
         metadataAssets
@@ -682,7 +1032,11 @@ export async function buildUserZipFromSelection({
           .map((item) => item.assetId)
       );
     } else {
-      metadataAssets = collected;
+      const metadataEntries = new Map<string, SelectedAsset>();
+      collected.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      metadataAssets = Array.from(metadataEntries.values());
     }
   } else {
     collected = aggregateInventoryItems(
@@ -691,8 +1045,12 @@ export async function buildUserZipFromSelection({
       snapshot.appState,
       selection,
       warnings,
-      normalizedItemFilter
+      normalizedItemFilter,
+      seenAssets
     );
+    if (originalPrizeSelection.assets.length > 0) {
+      collected = [...originalPrizeSelection.assets, ...collected];
+    }
     includedPullIds = collectPullIdsForSelection(snapshot.pullHistory, normalizedUserId, selection);
     if (includedPullIds.size > 0) {
       historySelectionDetails = collectHistoryMetadataForPullIds(
@@ -701,7 +1059,11 @@ export async function buildUserZipFromSelection({
         Array.from(includedPullIds)
       );
     }
-    metadataAssets = collected;
+    const metadataEntries = new Map<string, SelectedAsset>();
+    collected.forEach((item) => {
+      metadataEntries.set(item.assetId, item);
+    });
+    metadataAssets = Array.from(metadataEntries.values());
   }
 
   if (collected.length === 0) {
@@ -866,12 +1228,14 @@ export async function buildUserZipFromSelection({
   const blob = await zip.generateAsync({ type: 'blob' });
   const timestamp = formatTimestamp(new Date());
   const fileName = sanitizeFileName(userName || userId, timestamp);
+  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
 
   return {
     blob,
     fileName,
     fileCount: availableRecords.length,
     warnings: Array.from(warnings),
-    pullIds
+    pullIds,
+    originalPrizeMissingPullIds
   };
 }

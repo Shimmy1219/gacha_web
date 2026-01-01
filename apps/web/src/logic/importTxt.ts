@@ -417,6 +417,7 @@ function mergeNamazuIntoSnapshot(
   const projection = projectInventories({
     pullHistory: pullHistoryState,
     catalogState: catalogResult.state,
+    previousState: snapshot.userInventories,
     now: nowIso
   });
 

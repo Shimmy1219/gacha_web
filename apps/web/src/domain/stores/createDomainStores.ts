@@ -76,7 +76,8 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
 
     const { state, diagnostics } = projectInventories({
       pullHistory: pullHistoryState,
-      catalogState: stores.catalog.getState()
+      catalogState: stores.catalog.getState(),
+      previousState: stores.userInventories.getState()
     });
 
     const durationMs = Date.now() - startedAt;

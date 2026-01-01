@@ -1,8 +1,8 @@
-import { ClipboardIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { ClipboardIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { type CSSProperties } from 'react';
 
-import { PULL_HISTORY_STATUS_LABELS } from '@domain/pullHistoryStatusLabels';
+import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 import { type PullHistoryEntrySourceV1, type PullHistoryEntryV1 } from '@domain/app-persistence';
 import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
 import { XLogoIcon } from '../../../components/icons/XLogoIcon';
@@ -52,6 +52,7 @@ interface ItemEntryViewModel {
   rarityTextStyle?: CSSProperties;
   raritySortOrder: number;
   isNew: boolean;
+  hasOriginalPrizeMissing: boolean;
 }
 
 export interface HistoryEntriesListProps {
@@ -79,7 +80,9 @@ export function HistoryEntriesList({
         const entryKey = entry.id ?? `${entry.executedAt ?? 'unknown'}-${index}`;
         const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
         const sourceLabel = SOURCE_LABELS[entry.source] ?? '不明なソース';
-        const statusLabel = entry.status ? PULL_HISTORY_STATUS_LABELS[entry.status] : null;
+        const statusLabel = getPullHistoryStatusLabel(entry.status, {
+          hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+        });
         const sourceClassName = SOURCE_CLASSNAMES[entry.source] ?? 'border-border/60 bg-panel-muted text-muted-foreground';
         const pullCountValue =
           typeof entry.pullCount === 'number' && Number.isFinite(entry.pullCount)
@@ -93,6 +96,27 @@ export function HistoryEntriesList({
 
         const newItemSet = new Set(entry.newItems ?? []);
 
+        const assignedCounts = new Map<string, number>();
+        Object.entries(entry.originalPrizeAssignments ?? {}).forEach(([itemId, assignments]) => {
+          if (!itemId || !Array.isArray(assignments)) {
+            return;
+          }
+          const indices = new Set<number>();
+          assignments.forEach((assignment) => {
+            if (!assignment?.assetId) {
+              return;
+            }
+            const index = Math.trunc(assignment.index);
+            if (index < 0) {
+              return;
+            }
+            indices.add(index);
+          });
+          if (indices.size > 0) {
+            assignedCounts.set(itemId, indices.size);
+          }
+        });
+
         const itemEntries = Object.entries(entry.itemCounts ?? {})
           .map(([itemId, rawCount]) => {
             const count = Number(rawCount);
@@ -103,6 +127,8 @@ export function HistoryEntriesList({
             const rarityLabel = metadata?.rarityLabel;
             const rarityColor = metadata?.rarityColor ?? undefined;
             const raritySortOrder = metadata?.raritySortOrder ?? Number.NEGATIVE_INFINITY;
+            const isOriginalPrize = metadata?.isOriginalPrize === true;
+            const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
             const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
               typeof rarityColor === 'string' ? rarityColor : undefined
             );
@@ -115,7 +141,8 @@ export function HistoryEntriesList({
               rarityTextClassName,
               rarityTextStyle,
               raritySortOrder,
-              isNew: count > 0 && newItemSet.has(itemId)
+              isNew: count > 0 && newItemSet.has(itemId),
+              hasOriginalPrizeMissing: isOriginalPrize && count > assignedCount
             } satisfies ItemEntryViewModel;
           })
           .filter((value): value is ItemEntryViewModel => value !== null)
@@ -197,8 +224,18 @@ export function HistoryEntriesList({
                         ) : null}
                       </span>
                     </span>
-                    <span className={clsx('font-mono text-sm', item.count < 0 ? 'text-red-500' : 'text-surface-foreground')}>
-                      {formatCount(numberFormatter, item.count)}
+                    <span className="flex items-center gap-1">
+                      {item.hasOriginalPrizeMissing ? (
+                        <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" aria-label="未送信" />
+                      ) : null}
+                      <span
+                        className={clsx(
+                          'font-mono text-sm',
+                          item.count < 0 ? 'text-red-500' : 'text-surface-foreground'
+                        )}
+                      >
+                        {formatCount(numberFormatter, item.count)}
+                      </span>
                     </span>
                   </div>
                 ))}

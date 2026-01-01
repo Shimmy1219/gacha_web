@@ -16,4 +16,5 @@ export interface ZipBuildResult {
   fileCount: number;
   warnings: string[];
   pullIds: string[];
+  originalPrizeMissingPullIds: string[];
 }

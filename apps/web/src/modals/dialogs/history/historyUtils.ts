@@ -12,6 +12,7 @@ export interface HistoryItemMetadata {
   rarityLabel?: string;
   rarityColor?: string | null;
   raritySortOrder?: number | null;
+  isOriginalPrize?: boolean;
 }
 
 export const DEFAULT_HISTORY_USER_ID = generateDeterministicUserId('default-user');
@@ -61,7 +62,8 @@ export function buildItemMetadataMap(
       rarityId,
       rarityLabel: rarityEntity?.label ?? rarityId,
       rarityColor: rarityEntity?.color ?? null,
-      raritySortOrder: rarityEntity?.sortOrder ?? null
+      raritySortOrder: rarityEntity?.sortOrder ?? null,
+      isOriginalPrize: item.originalPrize === true
     });
   });
 
