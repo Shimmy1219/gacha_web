@@ -274,7 +274,7 @@ export function App(): JSX.Element {
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {
     title: '四遊楽ガチャツール',
-    tagline: 'Integrated Gacha Management Tool',
+    tagline: 'Integrated Gacha Management Tool emergency',
     mainRef,
     isMobile,
     onDrawGacha: handleDrawGacha,
