@@ -9,6 +9,7 @@ import type {
   GachaPoolDefinition,
   GachaRarityGroup
 } from './types';
+import { resolveRemainingStock } from './stock';
 
 function clampFractionDigits(value?: number | null): number | undefined {
   if (value == null || Number.isNaN(value)) {
@@ -83,7 +84,8 @@ export function inferRarityFractionDigits(
 export function buildGachaPools({
   catalogState,
   rarityState,
-  rarityFractionDigits
+  rarityFractionDigits,
+  inventoryCountsByItemId
 }: BuildGachaPoolsArgs): BuildGachaPoolsResult {
   const poolsByGachaId = new Map<string, GachaPoolDefinition>();
   const itemsById = new Map<string, GachaItemDefinition>();
@@ -100,12 +102,24 @@ export function buildGachaPools({
     }
 
     const rarityStats = new Map<string, { itemCount: number; totalWeight: number }>();
+    const remainingStockByItemId = new Map<string, number | null>();
 
     catalog.order.forEach((itemId) => {
       const snapshot = catalog.items?.[itemId];
       if (!snapshot) {
         return;
       }
+
+      const remainingStock = resolveRemainingStock(
+        snapshot.itemId,
+        snapshot.stockCount,
+        inventoryCountsByItemId
+      );
+      remainingStockByItemId.set(snapshot.itemId, remainingStock);
+      if (remainingStock === 0) {
+        return;
+      }
+
       const weight = snapshot.pickupTarget ? 2 : 1;
       const existing = rarityStats.get(snapshot.rarityId);
       if (existing) {
@@ -125,6 +139,11 @@ export function buildGachaPools({
         return;
       }
 
+      const remainingStock = remainingStockByItemId.get(snapshot.itemId) ?? null;
+      if (remainingStock === 0) {
+        return;
+      }
+
       const rarityEntity = rarityEntities[snapshot.rarityId];
       const rarityEmitRate = typeof rarityEntity?.emitRate === 'number' ? rarityEntity.emitRate : undefined;
       const stats = rarityStats.get(snapshot.rarityId);
@@ -133,6 +152,9 @@ export function buildGachaPools({
       const itemRate = rarityEmitRate && totalWeight > 0 ? (rarityEmitRate * itemWeight) / totalWeight : undefined;
       const ratePrecision = rarityFractionDigits?.get(snapshot.rarityId);
       const formattedRate = formatItemRateWithPrecision(itemRate, ratePrecision);
+      const stockCount = typeof snapshot.stockCount === 'number' && Number.isFinite(snapshot.stockCount)
+        ? Math.max(0, Math.floor(snapshot.stockCount))
+        : undefined;
 
       const item: GachaItemDefinition = {
         itemId: snapshot.itemId,
@@ -144,7 +166,9 @@ export function buildGachaPools({
         itemRate,
         itemRateDisplay: formattedRate ? `${formattedRate}%` : '',
         pickupTarget: Boolean(snapshot.pickupTarget),
-        drawWeight: itemWeight
+        drawWeight: itemWeight,
+        stockCount,
+        remainingStock: remainingStock ?? undefined
       };
 
       items.push(item);

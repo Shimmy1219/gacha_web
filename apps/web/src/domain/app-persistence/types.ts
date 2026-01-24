@@ -55,6 +55,7 @@ export interface GachaCatalogItemV4 {
   originalPrize?: boolean;
   assets?: GachaCatalogItemAssetV4[];
   riagu?: boolean;
+  stockCount?: number;
   updatedAt?: string;
 }
 

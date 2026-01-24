@@ -267,4 +267,48 @@ describe('buildGachaPools item rate distribution', () => {
     expect(group?.totalWeight).toBe(6);
     expect(group?.itemCount).toBe(4);
   });
+
+  it('excludes out-of-stock items from pools', () => {
+    const gachaId = 'gacha-stock';
+    const rarityId = 'rarity-stock';
+    const catalogState = {
+      version: 4,
+      updatedAt: baseTimestamp,
+      byGacha: {
+        [gachaId]: {
+          order: ['item-1', 'item-2'],
+          items: {
+            'item-1': { itemId: 'item-1', name: 'Item One', rarityId, stockCount: 1 },
+            'item-2': { itemId: 'item-2', name: 'Item Two', rarityId }
+          }
+        }
+      }
+    } satisfies import('@domain/app-persistence').GachaCatalogStateV4;
+
+    const rarityState = {
+      version: 3,
+      updatedAt: baseTimestamp,
+      byGacha: {
+        [gachaId]: [rarityId]
+      },
+      entities: {
+        [rarityId]: {
+          id: rarityId,
+          gachaId,
+          label: 'R',
+          emitRate: 0.2
+        }
+      }
+    } satisfies import('@domain/app-persistence').GachaRarityStateV3;
+
+    const { poolsByGachaId } = buildGachaPools({
+      catalogState,
+      rarityState,
+      rarityFractionDigits: inferRarityFractionDigits(rarityState),
+      inventoryCountsByItemId: new Map([['item-1', 1]])
+    });
+
+    const pool = poolsByGachaId.get(gachaId);
+    expect(pool?.items.map((item) => item.itemId)).toEqual(['item-2']);
+  });
 });

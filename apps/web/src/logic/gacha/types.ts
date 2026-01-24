@@ -11,6 +11,8 @@ export interface GachaItemDefinition {
   itemRateDisplay?: string;
   pickupTarget: boolean;
   drawWeight: number;
+  stockCount?: number;
+  remainingStock?: number;
 }
 
 export interface GachaRarityGroup {
@@ -141,12 +143,15 @@ export interface BuildGachaPoolsArgs {
   catalogState: import('@domain/app-persistence').GachaCatalogStateV4 | undefined;
   rarityState: import('@domain/app-persistence').GachaRarityStateV3 | undefined;
   rarityFractionDigits?: Map<string, number>;
+  inventoryCountsByItemId?: ItemInventoryCountMap;
 }
 
 export interface BuildGachaPoolsResult {
   poolsByGachaId: Map<string, GachaPoolDefinition>;
   itemsById: Map<string, GachaItemDefinition>;
 }
+
+export type ItemInventoryCountMap = Map<string, number> | Record<string, number> | undefined;
 
 export type GachaPtSettingsLookup = Record<string, PtSettingV3 | undefined>;
 

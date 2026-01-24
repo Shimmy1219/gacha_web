@@ -37,6 +37,7 @@ import type {
 import type { GachaResultPayload } from '@domain/gacha/gachaResult';
 import {
   buildGachaPools,
+  buildItemInventoryCountMap,
   calculateDrawPlan,
   executeGacha,
   inferRarityFractionDigits,
@@ -151,7 +152,8 @@ function formatNumber(value: number | null | undefined): string {
 function buildGachaDefinitions(
   appState: GachaAppStateV3 | undefined,
   catalogState: GachaCatalogStateV4 | undefined,
-  rarityState: GachaRarityStateV3 | undefined
+  rarityState: GachaRarityStateV3 | undefined,
+  inventoryCountsByItemId: ReturnType<typeof buildItemInventoryCountMap>
 ): { options: Array<SingleSelectOption<string>>; map: Map<string, GachaDefinition> } {
   const options: Array<SingleSelectOption<string>> = [];
   const map = new Map<string, GachaDefinition>();
@@ -164,7 +166,8 @@ function buildGachaDefinitions(
   const { poolsByGachaId } = buildGachaPools({
     catalogState,
     rarityState,
-    rarityFractionDigits
+    rarityFractionDigits,
+    inventoryCountsByItemId
   });
 
   const catalogByGacha = catalogState.byGacha;
@@ -247,10 +250,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const gachaSelectId = useId();
   const pointsInputId = useId();
   const pullsInputId = useId();
+  const inventoryCountsByItemId = useMemo(
+    () => buildItemInventoryCountMap(userInventoriesState?.byItemId),
+    [userInventoriesState?.byItemId]
+  );
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
-    () => buildGachaDefinitions(appState, catalogState, rarityState),
-    [appState, catalogState, rarityState]
+    () => buildGachaDefinitions(appState, catalogState, rarityState, inventoryCountsByItemId),
+    [appState, catalogState, inventoryCountsByItemId, rarityState]
   );
 
   const lastPreferredGachaId = useMemo(

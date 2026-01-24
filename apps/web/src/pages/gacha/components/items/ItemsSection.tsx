@@ -34,8 +34,10 @@ import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
 import {
   buildGachaPools,
+  buildItemInventoryCountMap,
   formatItemRateWithPrecision,
-  inferRarityFractionDigits
+  inferRarityFractionDigits,
+  resolveRemainingStock
 } from '../../../../logic/gacha';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
@@ -195,14 +197,20 @@ export function ItemsSection(): JSX.Element {
     [data?.rarityState]
   );
 
+  const itemInventoryCounts = useMemo(
+    () => buildItemInventoryCountMap(data?.userInventories?.byItemId),
+    [data?.userInventories?.byItemId]
+  );
+
   const { poolsByGachaId, itemsById } = useMemo(
     () =>
       buildGachaPools({
         catalogState: data?.catalogState,
         rarityState: data?.rarityState,
-        rarityFractionDigits
+        rarityFractionDigits,
+        inventoryCountsByItemId: itemInventoryCounts
       }),
-    [data?.catalogState, data?.rarityState, rarityFractionDigits]
+    [data?.catalogState, data?.rarityState, itemInventoryCounts, rarityFractionDigits]
   );
 
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
@@ -230,10 +238,7 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
-      const pool = poolsByGachaId.get(gachaId);
-      if (!pool) {
-        return;
-      }
+      const pool = poolsByGachaId.get(gachaId) ?? null;
 
       const gachaMeta = data.appState?.meta?.[gachaId];
       const results: ItemEntry[] = [];
@@ -245,20 +250,29 @@ export function ItemsSection(): JSX.Element {
         }
 
         const poolItem = itemsById.get(snapshot.itemId);
+        const remainingStock = resolveRemainingStock(
+          snapshot.itemId,
+          snapshot.stockCount,
+          itemInventoryCounts
+        );
+        const isOutOfStock = remainingStock === 0;
         const rarityEntity = rarityEntities[snapshot.rarityId];
-        const rarityGroup = pool.rarityGroups.get(snapshot.rarityId);
+        const rarityGroup = pool?.rarityGroups.get(snapshot.rarityId);
 
         const emitRate = poolItem?.rarityEmitRate ?? rarityEntity?.emitRate;
         const baseWeight = poolItem?.drawWeight ?? (snapshot.pickupTarget ? 2 : 1);
-        const computedItemRate =
-          poolItem?.itemRate ??
-          (rarityGroup?.emitRate && rarityGroup?.totalWeight
-            ? (rarityGroup.emitRate * baseWeight) / rarityGroup.totalWeight
-            : undefined);
+        const computedItemRate = isOutOfStock
+          ? undefined
+          : poolItem?.itemRate ??
+            (rarityGroup?.emitRate && rarityGroup?.totalWeight
+              ? (rarityGroup.emitRate * baseWeight) / rarityGroup.totalWeight
+              : undefined);
         const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
-        const baseDisplay = poolItem?.itemRateDisplay
-          ? poolItem.itemRateDisplay.replace(/%$/, '')
-          : '';
+        const baseDisplay = isOutOfStock
+          ? ''
+          : poolItem?.itemRateDisplay
+            ? poolItem.itemRateDisplay.replace(/%$/, '')
+            : '';
         const formattedRate = baseDisplay
           ? baseDisplay
           : formatItemRateWithPrecision(computedItemRate, ratePrecision);
@@ -303,7 +317,8 @@ export function ItemsSection(): JSX.Element {
           originalPrize: Boolean(snapshot.originalPrize),
           order: snapshot.order ?? 0,
           createdAt: gachaMeta?.createdAt ?? snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
-          updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
+          updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
+          remainingStock
         };
 
         const entry: ItemEntry = {
@@ -321,7 +336,15 @@ export function ItemsSection(): JSX.Element {
     });
 
     return { itemsByGacha: entries, flatItems: flat };
-  }, [data?.appState, data?.catalogState, data?.rarityState, itemsById, poolsByGachaId, rarityFractionDigits]);
+  }, [
+    data?.appState,
+    data?.catalogState,
+    data?.rarityState,
+    itemInventoryCounts,
+    itemsById,
+    poolsByGachaId,
+    rarityFractionDigits
+  ]);
 
   const itemEntryById = useMemo(() => {
     const map = new Map<string, ItemEntry>();
@@ -944,6 +967,7 @@ export function ItemsSection(): JSX.Element {
           isRiagu: model.isRiagu,
           hasRiaguCard: Boolean(riaguCard),
           riaguAssignmentCount,
+          stockCount: catalogItem?.stockCount ?? null,
           assets: assetEntries,
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
@@ -959,7 +983,8 @@ export function ItemsSection(): JSX.Element {
                 completeTarget: payload.completeTarget,
                 originalPrize: payload.originalPrize,
                 riagu: payload.riagu,
-                assets: payload.assets
+                assets: payload.assets,
+                stockCount: payload.stockCount == null ? undefined : payload.stockCount
               };
               catalogStore.updateItem({
                 gachaId: model.gachaId,

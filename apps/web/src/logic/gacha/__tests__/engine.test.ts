@@ -231,4 +231,50 @@ describe('executeGacha', () => {
     expect(result.plan.completeExecutions).toBe(2);
     expect(result.plan.completePulls).toBe(pool.items.length * 2);
   });
+
+  test('respects remaining stock limits during random draws', () => {
+    const limitedItem: GachaItemDefinition = {
+      itemId: 'limited-1',
+      name: 'Limited One',
+      rarityId: 'common',
+      rarityLabel: 'Common',
+      rarityColor: '#cccccc',
+      rarityEmitRate: 1,
+      itemRate: 1,
+      itemRateDisplay: '100%',
+      pickupTarget: false,
+      drawWeight: 1,
+      remainingStock: 1
+    };
+
+    const limitedPool: GachaPoolDefinition = {
+      gachaId: 'limited',
+      items: [limitedItem],
+      rarityGroups: new Map([
+        [
+          'common',
+          {
+            rarityId: 'common',
+            label: 'Common',
+            color: '#cccccc',
+            emitRate: 1,
+            itemCount: 1,
+            totalWeight: 1,
+            items: [limitedItem]
+          }
+        ]
+      ])
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 1, pulls: 1 }
+    };
+
+    const result = executeGacha({ gachaId: 'limited', pool: limitedPool, settings, points: 3 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].count).toBe(1);
+    expect(result.totalPulls).toBe(1);
+    expect(result.warnings).toContain('在庫不足のため、一部の抽選が実行できませんでした。');
+  });
 });

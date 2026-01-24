@@ -6,6 +6,7 @@ import { useStoreValue } from '@domain/stores';
 import type { PtSettingV3 } from '@domain/app-persistence';
 import {
   buildGachaPools,
+  buildItemInventoryCountMap,
   calculateDrawPlan,
   executeGacha,
   formatItemRateWithPrecision,
@@ -32,15 +33,22 @@ interface GachaDefinitionsResult {
 }
 
 function useGachaDefinitions(): GachaDefinitionsResult {
-  const { appState: appStateStore, catalog: catalogStore, rarities: rarityStore } = useDomainStores();
+  const {
+    appState: appStateStore,
+    catalog: catalogStore,
+    rarities: rarityStore,
+    userInventories: userInventoriesStore
+  } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
+  const userInventoriesState = useStoreValue(userInventoriesStore);
 
   return useMemo(() => {
     const options: Array<SingleSelectOption<string>> = [];
     const map = new Map<string, GachaDefinition>();
     const rarityDigits = inferRarityFractionDigits(rarityState);
+    const inventoryCountsByItemId = buildItemInventoryCountMap(userInventoriesState?.byItemId);
 
     if (!catalogState?.byGacha) {
       return { options, map, rarityDigits };
@@ -49,7 +57,8 @@ function useGachaDefinitions(): GachaDefinitionsResult {
     const { poolsByGachaId } = buildGachaPools({
       catalogState,
       rarityState,
-      rarityFractionDigits: rarityDigits
+      rarityFractionDigits: rarityDigits,
+      inventoryCountsByItemId
     });
 
     const catalogByGacha = catalogState.byGacha;
@@ -91,7 +100,7 @@ function useGachaDefinitions(): GachaDefinitionsResult {
     Object.keys(catalogByGacha).forEach(appendGacha);
 
     return { options, map, rarityDigits };
-  }, [appState, catalogState, rarityState]);
+  }, [appState, catalogState, rarityState, userInventoriesState?.byItemId]);
 }
 
 interface SimulationItemResult {
