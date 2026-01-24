@@ -19,6 +19,7 @@ import {
   normalizeDiscordMemberGiftChannels,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { DISCORD_BOT_INVITE_URL } from '../../features/discord/discordInviteConfig';
 
 interface DiscordBotInviteDialogPayload {
   userId: string;
@@ -26,9 +27,6 @@ interface DiscordBotInviteDialogPayload {
   inviteUrl?: string;
   onGuildSelected?: (selection: DiscordGuildSelection) => void;
 }
-
-const DEFAULT_INVITE_URL =
-  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 interface DiscordMembersResponse {
   ok: boolean;
@@ -55,7 +53,7 @@ export function DiscordBotInviteDialog({
   push
 }: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
-  const inviteUrl = payload?.inviteUrl ?? DEFAULT_INVITE_URL;
+  const inviteUrl = payload?.inviteUrl ?? DISCORD_BOT_INVITE_URL;
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
   const [submitStage, setSubmitStage] = useState<'idle' | 'members' | 'channels'>('idle');
