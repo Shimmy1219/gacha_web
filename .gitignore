@@ -1,3 +1,6 @@
+<<<<<<< HEAD
+node_modules
+=======
 # === Node 基本 ===
 node_modules/
 npm-debug.log*
@@ -51,3 +54,4 @@ Thumbs.db
 .svelte-kit/
 .vercel/
 .netlify/
+>>>>>>> c7b442e06b2408e3c84a1699b1d3f7a3dfbbdcf2
