@@ -323,6 +323,10 @@
     @apply bg-accent text-white;
   }
 
+  .item-card .badge--status-original {
+    @apply bg-indigo-400 text-indigo-950;
+  }
+
   .item-card .badge--action {
     @apply cursor-pointer hover:border-accent/60;
   }

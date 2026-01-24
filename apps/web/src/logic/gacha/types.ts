@@ -35,11 +35,8 @@ export interface NormalizedPerPullSetting {
   unitPrice: number;
 }
 
-export type CompleteDrawMode = 'repeat' | 'frontload';
-
 export interface NormalizedCompleteSetting {
   price: number;
-  mode: CompleteDrawMode;
 }
 
 export interface NormalizedBundleSetting {
@@ -107,7 +104,7 @@ export interface CalculateDrawPlanArgs {
   points: number;
   settings: PtSettingV3 | undefined;
   totalItemTypes: number;
-  completeMode?: CompleteDrawMode;
+  completeExecutionsOverride?: number;
 }
 
 export interface ExecuteGachaArgs {
@@ -115,7 +112,7 @@ export interface ExecuteGachaArgs {
   pool: GachaPoolDefinition;
   settings: PtSettingV3 | undefined;
   points: number;
-  completeMode?: CompleteDrawMode;
+  completeExecutionsOverride?: number;
   rng?: () => number;
 }
 
@@ -141,7 +138,7 @@ export interface ExecuteGachaResult {
 }
 
 export interface BuildGachaPoolsArgs {
-  catalogState: import('@domain/app-persistence').GachaCatalogStateV3 | undefined;
+  catalogState: import('@domain/app-persistence').GachaCatalogStateV4 | undefined;
   rarityState: import('@domain/app-persistence').GachaRarityStateV3 | undefined;
   rarityFractionDigits?: Map<string, number>;
 }

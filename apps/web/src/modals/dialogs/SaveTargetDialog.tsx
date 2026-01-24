@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
-import { ChevronDownIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 import type {
   GachaAppStateV3,
-  GachaCatalogStateV3,
+  GachaCatalogStateV4,
   PullHistoryEntryStatus,
   PullHistoryEntryV1,
   PullHistoryStateV1,
@@ -38,9 +38,11 @@ interface HistorySelectionEntry {
   executedAt: string;
   pullCount: number;
   status?: PullHistoryEntryStatus;
+  hasOriginalPrizeMissing?: boolean;
   itemTypeCount: number;
   items: HistorySelectionItem[];
   rarityGroups: HistorySelectionRarityGroup[];
+  newItems: string[];
 }
 
 interface HistorySelectionItem {
@@ -50,6 +52,8 @@ interface HistorySelectionItem {
   rarityId?: string;
   rarityLabel?: string;
   rarityColor?: string;
+  isOriginalPrize?: boolean;
+  hasOriginalPrizeMissing?: boolean;
 }
 
 interface HistorySelectionRarityGroup {
@@ -149,7 +153,7 @@ function buildHistoryEntries(
   history: PullHistoryStateV1 | undefined,
   userId: string,
   appMeta: AppMetaMap,
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   rarityState: GachaRarityStateV3 | undefined
 ): HistorySelectionEntry[] {
   if (!history?.order || !history.pulls) {
@@ -165,6 +169,26 @@ function buildHistoryEntries(
     }
 
     const catalogSnapshot = entry.gachaId ? catalogState?.byGacha?.[entry.gachaId] : undefined;
+    const assignedCounts = new Map<string, number>();
+    Object.entries(entry.originalPrizeAssignments ?? {}).forEach(([itemId, assignments]) => {
+      if (!itemId || !Array.isArray(assignments)) {
+        return;
+      }
+      const indices = new Set<number>();
+      assignments.forEach((assignment) => {
+        if (!assignment?.assetId) {
+          return;
+        }
+        const index = Math.trunc(assignment.index);
+        if (index < 0) {
+          return;
+        }
+        indices.add(index);
+      });
+      if (indices.size > 0) {
+        assignedCounts.set(itemId, indices.size);
+      }
+    });
     const rarityOrderIndex = new Map<string, number>();
     if (entry.gachaId) {
       rarityState?.byGacha?.[entry.gachaId]?.forEach((rarityId, index) => {
@@ -186,19 +210,27 @@ function buildHistoryEntries(
       },
       []
     );
+    const normalizedItemIds = new Set(normalizedItems.map((item) => item.itemId));
+    const normalizedNewItems = Array.from(new Set(entry.newItems ?? [])).filter((itemId) =>
+      normalizedItemIds.has(itemId)
+    );
 
     const items: HistorySelectionItem[] = normalizedItems
       .map(({ itemId, count }) => {
         const catalogItem = catalogSnapshot?.items?.[itemId];
         const rarityId = catalogItem?.rarityId;
         const rarity = rarityId ? rarityEntities[rarityId] : undefined;
+        const isOriginalPrize = catalogItem?.originalPrize === true;
+        const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
         return {
           itemId,
           itemName: catalogItem?.name ?? itemId,
           count,
           rarityId,
           rarityLabel: rarity?.label ?? '未分類',
-          rarityColor: rarity?.color
+          rarityColor: rarity?.color,
+          isOriginalPrize,
+          hasOriginalPrizeMissing: isOriginalPrize && count > assignedCount
         };
       })
       .sort((a, b) => {
@@ -248,9 +280,11 @@ function buildHistoryEntries(
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
       status: entry.status,
+      hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing,
       itemTypeCount: normalizedItems.length,
       items,
-      rarityGroups
+      rarityGroups,
+      newItems: normalizedNewItems
     });
   });
 
@@ -272,6 +306,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [historySelectionInitialized, setHistorySelectionInitialized] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
+  const [newItemsOnlyHistoryIds, setNewItemsOnlyHistoryIds] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const appMeta = data?.appState?.meta;
@@ -355,6 +390,20 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   }, [historyEntries]);
 
   useEffect(() => {
+    setNewItemsOnlyHistoryIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+      const selectedSet = new Set(selectedHistoryIds);
+      const validIds = previous.filter((id) => selectedSet.has(id));
+      if (validIds.length === previous.length) {
+        return previous;
+      }
+      return validIds;
+    });
+  }, [selectedHistoryIds, historyEntries]);
+
+  useEffect(() => {
     setExpandedHistoryIds((previous) =>
       previous.filter((id) => historyEntries.some((entry) => entry.id === id))
     );
@@ -390,6 +439,22 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
     });
   };
 
+  const toggleHistoryNewOnly = (entryId: string) => {
+    setHistorySelectionInitialized(true);
+    setSelectedHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous;
+      }
+      return [...previous, entryId];
+    });
+    setNewItemsOnlyHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous.filter((id) => id !== entryId);
+      }
+      return [...previous, entryId];
+    });
+  };
+
   const toggleHistoryExpanded = (entryId: string) => {
     setExpandedHistoryIds((previous) => {
       if (previous.includes(entryId)) {
@@ -417,7 +482,15 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
         setValidationError('保存する履歴を選択してください');
         return;
       }
-      selection = { mode: 'history', pullIds: [...new Set(selectedHistoryIds)] };
+      const uniqueHistoryIds = [...new Set(selectedHistoryIds)];
+      const uniqueNewOnlyIds = Array.from(new Set(newItemsOnlyHistoryIds)).filter((id) =>
+        uniqueHistoryIds.includes(id)
+      );
+      selection = {
+        mode: 'history',
+        pullIds: uniqueHistoryIds,
+        ...(uniqueNewOnlyIds.length > 0 ? { newItemsOnlyPullIds: uniqueNewOnlyIds } : {})
+      };
     } else {
       selection = { mode: 'all' };
     }
@@ -559,7 +632,11 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
             ) : (
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                 {historyEntries.map((entry) => {
-                  const statusLabel = getPullHistoryStatusLabel(entry.status);
+                  const statusLabel = getPullHistoryStatusLabel(entry.status, {
+                    hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+                  });
+                  const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
+                  const newItemsSet = new Set(entry.newItems);
                   return (
                     <div
                       key={entry.id}
@@ -591,68 +668,87 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                           )}
                         />
                       </button>
-                    <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface/30 px-3 py-2 text-xs">
-                      <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/80">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={selectedHistoryIds.includes(entry.id)}
-                          onChange={() => toggleHistory(entry.id)}
-                        />
-                        <span>この履歴を保存</span>
-                      </label>
-                      <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
-                    </div>
-                    <div
-                      id={`history-entry-${entry.id}`}
-                      className={clsx(
-                        'border-t border-border/60 bg-surface/40 px-3 text-xs text-muted-foreground transition-all duration-200 ease-in-out',
-                        expandedHistoryIds.includes(entry.id)
-                          ? 'max-h-96 overflow-y-auto py-3 opacity-100'
-                          : 'max-h-0 overflow-hidden py-0 opacity-0'
-                      )}
-                    >
-                      {entry.rarityGroups.length > 0 ? (
-                        <div className="space-y-3 text-xs">
-                          {entry.rarityGroups.map((group) => {
-                            const { className, style } = getRarityTextPresentation(group.rarityColor);
-                            const groupKey = group.rarityId ?? `unassigned-${group.rarityLabel}`;
-                            return (
-                              <div
-                                key={`${entry.id}-${groupKey}`}
-                                className="grid gap-2 sm:grid-cols-[minmax(4rem,auto),1fr] sm:items-start"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={clsx('text-xs font-semibold', className)}
-                                    style={style}
-                                  >
-                                    {group.rarityLabel}
-                                  </span>
-                                  <span className="text-[10px] text-muted-foreground">{group.totalCount}件</span>
-                                </div>
-                                <div className="flex flex-wrap items-start gap-2">
-                                  {group.items.map((item) => (
-                                    <span
-                                      key={`${entry.id}-${groupKey}-${item.itemId}`}
-                                      className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px] text-surface-foreground/90"
-                                    >
-                                      <span className="max-w-[10rem] truncate">{item.itemName}</span>
-                                      {item.count > 1 ? (
-                                        <span className="text-[10px] text-muted-foreground">×{item.count}</span>
-                                      ) : null}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div className="flex items-start justify-between gap-3 border-t border-border/60 bg-surface/30 px-3 py-2 text-xs">
+                        <div className="flex flex-col gap-1">
+                          <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/80">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={selectedHistoryIds.includes(entry.id)}
+                              onChange={() => toggleHistory(entry.id)}
+                            />
+                            <span>この履歴を保存</span>
+                          </label>
+                          <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/70">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={newItemsOnlyHistoryIds.includes(entry.id)}
+                              onChange={() => toggleHistoryNewOnly(entry.id)}
+                            />
+                            <span>ユーザーが新規に取得したものだけを保存</span>
+                          </label>
                         </div>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground">景品情報が見つかりませんでした。</p>
-                      )}
+                        <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
+                      </div>
+                      <div
+                        id={`history-entry-${entry.id}`}
+                        className={clsx(
+                          'border-t border-border/60 bg-surface/40 px-3 text-xs text-muted-foreground transition-all duration-200 ease-in-out',
+                          expandedHistoryIds.includes(entry.id)
+                            ? 'max-h-96 overflow-y-auto py-3 opacity-100'
+                            : 'max-h-0 overflow-hidden py-0 opacity-0'
+                        )}
+                      >
+                        {entry.rarityGroups.length > 0 ? (
+                          <div className="space-y-3 text-xs">
+                            {entry.rarityGroups.map((group) => {
+                              const { className, style } = getRarityTextPresentation(group.rarityColor);
+                              const groupKey = group.rarityId ?? `unassigned-${group.rarityLabel}`;
+                              return (
+                                <div
+                                  key={`${entry.id}-${groupKey}`}
+                                  className="grid gap-2 sm:grid-cols-[minmax(4rem,auto),1fr] sm:items-start"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className={clsx('text-xs font-semibold', className)} style={style}>
+                                      {group.rarityLabel}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">{group.totalCount}件</span>
+                                  </div>
+                                  <div className="flex flex-wrap items-start gap-2">
+                                    {group.items.map((item) => (
+                                      <span
+                                        key={`${entry.id}-${groupKey}-${item.itemId}`}
+                                        className={clsx(
+                                          'inline-flex min-w-0 items-center gap-1 rounded-full border border-border/60 bg-surface/70 px-2 py-0.5 text-[11px]',
+                                          newItemsOnlyActive && !newItemsSet.has(item.itemId) && !item.isOriginalPrize
+                                            ? 'text-muted-foreground opacity-40'
+                                            : 'text-surface-foreground/90'
+                                        )}
+                                      >
+                                        <span className="max-w-[10rem] truncate">{item.itemName}</span>
+                                        {item.count > 1 ? (
+                                          <span className="text-[10px] text-muted-foreground">×{item.count}</span>
+                                        ) : null}
+                                        {item.hasOriginalPrizeMissing ? (
+                                          <ExclamationTriangleIcon
+                                            className="h-3 w-3 text-amber-500"
+                                            aria-label="未送信"
+                                          />
+                                        ) : null}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">景品情報が見つかりませんでした。</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
                   );
                 })}
               </div>

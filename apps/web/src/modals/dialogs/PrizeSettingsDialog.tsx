@@ -1,6 +1,6 @@
 import { MusicalNoteIcon, PhotoIcon, PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
@@ -19,6 +19,11 @@ interface RarityOption {
   color?: string | null;
 }
 
+interface PrizeSettingsAsset {
+  assetId: string;
+  thumbnailAssetId?: string | null;
+}
+
 export interface PrizeSettingsDialogPayload {
   gachaId: string;
   itemId: string;
@@ -29,12 +34,11 @@ export interface PrizeSettingsDialogPayload {
   rarityOptions: RarityOption[];
   pickupTarget: boolean;
   completeTarget: boolean;
+  originalPrize: boolean;
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
-  thumbnailAssetId?: string | null;
-  thumbnailUrl: string | null;
-  imageAssetId: string | null;
+  assets?: PrizeSettingsAsset[];
   rarityColor?: string;
   riaguPrice?: number;
   riaguType?: string;
@@ -45,9 +49,9 @@ export interface PrizeSettingsDialogPayload {
     rarityId: string;
     pickupTarget: boolean;
     completeTarget: boolean;
+    originalPrize: boolean;
     riagu: boolean;
-    imageAssetId: string | null;
-    thumbnailAssetId: string | null;
+    assets: PrizeSettingsAsset[];
   }) => void;
   onDelete?: (data: { itemId: string; gachaId: string }) => void;
 }
@@ -76,6 +80,113 @@ function getBadgeBackground(color?: string | null): string | undefined {
   return undefined;
 }
 
+function normalizeAssets(entries: PrizeSettingsAsset[] | undefined): PrizeSettingsAsset[] {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: PrizeSettingsAsset[] = [];
+
+  entries.forEach((asset) => {
+    if (!asset?.assetId) {
+      return;
+    }
+    if (seen.has(asset.assetId)) {
+      return;
+    }
+    seen.add(asset.assetId);
+    normalized.push({
+      assetId: asset.assetId,
+      thumbnailAssetId: asset.thumbnailAssetId ?? null
+    });
+  });
+
+  return normalized;
+}
+
+function areAssetsEqual(left: PrizeSettingsAsset[], right: PrizeSettingsAsset[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEntry = left[index];
+    const rightEntry = right[index];
+    if (leftEntry?.assetId !== rightEntry?.assetId) {
+      return false;
+    }
+    const leftPreview = leftEntry?.thumbnailAssetId ?? null;
+    const rightPreview = rightEntry?.thumbnailAssetId ?? null;
+    if (leftPreview !== rightPreview) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+interface AssetPreviewItemProps {
+  asset: PrizeSettingsAsset;
+  isPrimary: boolean;
+  onRemove?: (assetId: string) => void;
+}
+
+function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps): JSX.Element {
+  const preview = useAssetPreview(asset.assetId, {
+    previewAssetId: asset.thumbnailAssetId ?? null
+  });
+  const previewUrl = preview.url ?? null;
+  const previewType = preview.previewType ?? preview.type ?? (previewUrl ? 'image/*' : null);
+  const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
+  const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
+  const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
+  const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明';
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
+      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-border/20">
+        {previewUrl ? (
+          isImagePreview ? (
+            <img src={previewUrl} alt={preview.name ?? asset.assetId} className="h-full w-full object-contain" />
+          ) : isVideoPreview ? (
+            <video src={previewUrl} className="max-h-full max-w-full" />
+          ) : isAudioPreview ? (
+            <MusicalNoteIcon className="h-6 w-6 text-muted-foreground" />
+          ) : (
+            <PhotoIcon className="h-6 w-6 text-muted-foreground" />
+          )
+        ) : (
+          <PhotoIcon className="h-6 w-6 text-muted-foreground" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-semibold text-surface-foreground">
+          {preview.name ?? asset.assetId}
+        </p>
+        <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+          {isPrimary ? (
+            <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent">
+              メイン
+            </span>
+          ) : null}
+          <span>{typeLabel}</span>
+        </div>
+      </div>
+      {onRemove ? (
+        <button
+          type="button"
+          className="inline-flex items-center justify-center rounded-lg border border-border/60 p-2 text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+          onClick={() => onRemove(asset.assetId)}
+        >
+          <XMarkIcon className="h-4 w-4" />
+          <span className="sr-only">削除</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProps<PrizeSettingsDialogPayload>): JSX.Element {
   const initialState = useMemo(
     () => ({
@@ -83,10 +194,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId: payload?.rarityId ?? '',
       pickup: payload?.pickupTarget ?? false,
       complete: payload?.completeTarget ?? false,
+      originalPrize: payload?.originalPrize ?? false,
       riagu: payload?.isRiagu ?? false,
-      thumbnailAssetId: payload?.thumbnailAssetId ?? null,
-      thumbnailUrl: payload?.thumbnailUrl ?? null,
-      assetId: payload?.imageAssetId ?? null
+      assets: normalizeAssets(payload?.assets)
     }),
     [payload]
   );
@@ -95,20 +205,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [rarityId, setRarityId] = useState(initialState.rarityId);
   const [pickupTarget, setPickupTarget] = useState(initialState.pickup);
   const [completeTarget, setCompleteTarget] = useState(initialState.complete);
+  const [originalPrize, setOriginalPrize] = useState(initialState.originalPrize);
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [currentAssetId, setCurrentAssetId] = useState<string | null>(initialState.assetId);
-  const [currentThumbnailAssetId, setCurrentThumbnailAssetId] = useState<string | null>(
-    initialState.thumbnailAssetId
-  );
-  const [unsavedAssetId, setUnsavedAssetId] = useState<string | null>(null);
+  const [assetEntries, setAssetEntries] = useState<PrizeSettingsAsset[]>(initialState.assets);
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
+  const [assetError, setAssetError] = useState<string | null>(null);
   const assetRequestIdRef = useRef(0);
-  const unsavedAssetIdRef = useRef<string | null>(null);
-  const existingAssetPreview = useAssetPreview(payload?.imageAssetId ?? null, {
-    previewAssetId: payload?.thumbnailAssetId ?? null
-  });
+  const unsavedAssetIdsRef = useRef<Set<string>>(new Set());
 
   const rarityOptionMap = useMemo(() => {
     const map = new Map<string, RarityOption>();
@@ -132,13 +235,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const currentRarityLabel = selectedRarityOption?.label ?? payload?.rarityLabel ?? '未分類';
   const currentRarityColor = selectedRarityOption?.color ??
     (rarityId === payload?.rarityId ? payload?.rarityColor : undefined);
-
-  const revokePreview = () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
-  };
 
   const handleRiaguToggleChange = (nextValue: boolean) => {
     if (!payload) {
@@ -172,96 +268,115 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     setRiaguTarget(nextValue);
   };
 
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
+  const handleOriginalPrizeToggleChange = useCallback(
+    (nextValue: boolean) => {
+      setOriginalPrize(nextValue);
+      if (!nextValue || assetEntries.length === 0) {
+        return;
       }
-    };
-  }, [previewUrl]);
 
-  useEffect(() => {
-    unsavedAssetIdRef.current = unsavedAssetId;
-  }, [unsavedAssetId]);
+      const assetIds = assetEntries.map((entry) => entry.assetId).filter((assetId) => assetId);
+      setAssetEntries([]);
+      unsavedAssetIdsRef.current.clear();
+      setAssetError(null);
+
+      void Promise.allSettled(assetIds.map((assetId) => deleteAsset(assetId))).then((results) => {
+        const failedCount = results.filter((result) => result.status === 'rejected').length;
+        if (failedCount > 0) {
+          setAssetError('プレビューのファイル削除に失敗しました。');
+        }
+      });
+    },
+    [assetEntries]
+  );
 
   useEffect(() => {
     return () => {
-      const pendingId = unsavedAssetIdRef.current;
-      if (pendingId) {
-        void deleteAsset(pendingId);
+      const pendingIds = Array.from(unsavedAssetIdsRef.current);
+      if (pendingIds.length > 0) {
+        void Promise.allSettled(pendingIds.map((assetId) => deleteAsset(assetId)));
       }
     };
   }, []);
 
-  const currentPreview = previewUrl ?? existingAssetPreview.url ?? payload?.thumbnailUrl ?? null;
-  const previewType = selectedFile?.type ?? existingAssetPreview.type ?? (currentPreview ? 'image/*' : null);
+  const previewAssetEntries = originalPrize ? [] : assetEntries;
+  const primaryAsset = previewAssetEntries[0] ?? null;
+  const primaryPreview = useAssetPreview(primaryAsset?.assetId ?? null, {
+    previewAssetId: primaryAsset?.thumbnailAssetId ?? null
+  });
+  const currentPreview = primaryPreview.url ?? null;
+  const previewType = primaryPreview.previewType ?? primaryPreview.type ?? (currentPreview ? 'image/*' : null);
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
   const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
   const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
+  const canRemoveImage = previewAssetEntries.length > 0;
 
-  const handleFileChange = async (file: File | null) => {
-    revokePreview();
+  const handleRemoveAsset = useCallback(async (assetId: string) => {
+    setAssetEntries((previous) => previous.filter((entry) => entry.assetId !== assetId));
 
-    if (!file) {
-      const requestId = assetRequestIdRef.current + 1;
-      assetRequestIdRef.current = requestId;
-      setSelectedFile(null);
-      if (unsavedAssetId) {
-        await deleteAsset(unsavedAssetId);
-        setUnsavedAssetId(null);
-        unsavedAssetIdRef.current = null;
-      }
-      setCurrentAssetId(initialState.assetId ?? null);
-      setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
-      setIsProcessingAsset(false);
-      return;
+    if (unsavedAssetIdsRef.current.has(assetId)) {
+      unsavedAssetIdsRef.current.delete(assetId);
+      await deleteAsset(assetId);
     }
+  }, []);
 
-    const requestId = assetRequestIdRef.current + 1;
-    assetRequestIdRef.current = requestId;
-    setIsProcessingAsset(true);
-    setSelectedFile(file);
-    const nextUrl = URL.createObjectURL(file);
-    setPreviewUrl(nextUrl);
-
-    try {
-      if (unsavedAssetId) {
-        await deleteAsset(unsavedAssetId);
-        setUnsavedAssetId(null);
-        unsavedAssetIdRef.current = null;
-      }
-      const record = await saveAsset(file);
-      if (assetRequestIdRef.current !== requestId) {
-        await deleteAsset(record.id);
+  const handleFilesAdd = useCallback(
+    async (fileList: FileList | null) => {
+      if (!fileList || fileList.length === 0 || originalPrize) {
         return;
       }
-      setUnsavedAssetId(record.id);
-      unsavedAssetIdRef.current = record.id;
-      setCurrentAssetId(record.id);
-      setCurrentThumbnailAssetId(record.previewId ?? null);
-    } catch (error) {
-      console.error('ファイルの保存に失敗しました', error);
-      if (assetRequestIdRef.current === requestId) {
-        setSelectedFile(null);
-        setCurrentAssetId(initialState.assetId ?? null);
-        setCurrentThumbnailAssetId(initialState.thumbnailAssetId ?? null);
-        revokePreview();
+
+      setAssetError(null);
+      const requestId = assetRequestIdRef.current + 1;
+      assetRequestIdRef.current = requestId;
+      setIsProcessingAsset(true);
+
+      try {
+        const results = await Promise.allSettled(
+          Array.from(fileList, async (file) => saveAsset(file))
+        );
+
+        const successful: Awaited<ReturnType<typeof saveAsset>>[] = [];
+        results.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            successful.push(result.value);
+          }
+        });
+
+        const failedCount = results.length - successful.length;
+
+        if (assetRequestIdRef.current !== requestId) {
+          await Promise.all(successful.map((record) => deleteAsset(record.id)));
+          return;
+        }
+
+        if (failedCount > 0) {
+          setAssetError('一部のファイル保存に失敗しました。');
+        }
+
+        const newAssets: PrizeSettingsAsset[] = successful.map((record) => ({
+          assetId: record.id,
+          thumbnailAssetId: record.previewId ?? null
+        }));
+
+        setAssetEntries((previous) => normalizeAssets([...previous, ...newAssets]));
+        newAssets.forEach((asset) => unsavedAssetIdsRef.current.add(asset.assetId));
+      } catch (error) {
+        console.error('ファイルの保存に失敗しました', error);
+        setAssetError('ファイルの保存に失敗しました。もう一度お試しください。');
+      } finally {
+        if (assetRequestIdRef.current === requestId) {
+          setIsProcessingAsset(false);
+        }
       }
-    } finally {
-      if (assetRequestIdRef.current === requestId) {
-        setIsProcessingAsset(false);
-      }
-    }
-  };
+    },
+    [originalPrize]
+  );
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    void handleFileChange(file);
+    const files = event.target.files;
+    void handleFilesAdd(files);
     event.target.value = '';
-  };
-
-  const handleClearImage = () => {
-    void handleFileChange(null);
   };
 
   const hasChanges =
@@ -269,9 +384,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     rarityId !== initialState.rarityId ||
     pickupTarget !== initialState.pickup ||
     completeTarget !== initialState.complete ||
+    originalPrize !== initialState.originalPrize ||
     riaguTarget !== initialState.riagu ||
-    (currentAssetId ?? null) !== (initialState.assetId ?? null) ||
-    (currentThumbnailAssetId ?? null) !== (initialState.thumbnailAssetId ?? null);
+    !areAssetsEqual(assetEntries, initialState.assets);
 
   const rarityColor = currentRarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
@@ -296,15 +411,12 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       rarityId,
       pickupTarget,
       completeTarget,
+      originalPrize,
       riagu: riaguTarget,
-      imageAssetId: currentAssetId ?? null,
-      thumbnailAssetId: currentThumbnailAssetId ?? null
+      assets: originalPrize ? [] : normalizeAssets(assetEntries)
     });
 
-    if (unsavedAssetId) {
-      setUnsavedAssetId(null);
-      unsavedAssetIdRef.current = null;
-    }
+    unsavedAssetIdsRef.current.clear();
     close();
   };
 
@@ -383,44 +495,64 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     });
   };
 
-  const renderFileSelectionContent = () => (
-    <>
-      <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
-          <PlusCircleIcon className="h-4 w-4" />
-          ファイルを選ぶ
-          <input
-            type="file"
-            accept="image/*,video/*,audio/*,.m4a,audio/mp4"
-            className="sr-only"
-            onChange={handleFileInputChange}
-          />
-        </label>
-        {selectedFile ? (
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-            onClick={handleClearImage}
-          >
-            <XMarkIcon className="h-4 w-4" />
-            取り消す
-          </button>
+  const renderFileSelectionContent = () => {
+    if (originalPrize) {
+      return (
+        <>
+          <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            オリジナル景品はこの画面でファイルを設定できません。ユーザーごとの割り当て画面から設定してください。
+          </p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <p className="text-sm font-medium text-surface-foreground">メディアファイルを選択</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          画像（PNG / JPG / WEBP）に加え、動画や音声ファイルも登録できます。
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <label className="inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent/20 px-3 py-2 text-sm font-semibold text-accent">
+            <PlusCircleIcon className="h-4 w-4" />
+            ファイルを追加
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*,.m4a,audio/mp4"
+              className="sr-only"
+              onChange={handleFileInputChange}
+              disabled={isProcessingAsset}
+            />
+          </label>
+          {canRemoveImage ? (
+            <span className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground">
+              登録済み: {assetEntries.length}件
+            </span>
+          ) : null}
+        </div>
+        {assetEntries.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {assetEntries.map((asset, index) => (
+              <AssetPreviewItem
+                key={asset.assetId}
+                asset={asset}
+                isPrimary={index === 0}
+                onRemove={handleRemoveAsset}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">まだファイルが登録されていません。</p>
+        )}
+        {assetError ? <p className="mt-2 text-[11px] text-red-200">{assetError}</p> : null}
+        {isProcessingAsset ? (
+          <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
         ) : null}
-      </div>
-      {selectedFile ? (
-        <p className="mt-2 text-xs text-muted-foreground">選択中: {selectedFile.name}</p>
-      ) : existingAssetPreview.name ? (
-        <p className="mt-2 text-xs text-muted-foreground">現在のファイル: {existingAssetPreview.name}</p>
-      ) : null}
-      {isProcessingAsset ? (
-        <p className="mt-1 text-[11px] text-accent">ファイルを保存しています…</p>
-      ) : null}
-    </>
-  );
+      </>
+    );
+  };
 
   return (
     <>
@@ -551,6 +683,13 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                   name="completeTarget"
                 />
                 <SwitchField
+                  label="ユーザー毎にオリジナル景品"
+                  description="ユーザーごとにオリジナルの景品ファイルを割り当てます。リクエストボイスやメッセージ入りの景品はこちらをONにしてください。画像の設定はユーザーのメニューから出来ます。このオプションを有効にした場合、この画面のプレビューに登録されているファイルは削除されます。"
+                  checked={originalPrize}
+                  onChange={handleOriginalPrizeToggleChange}
+                  name="originalPrize"
+                />
+                <SwitchField
                   label="リアグとして設定"
                   description="リアグ情報の設定を有効にします"
                   checked={riaguTarget}
@@ -575,7 +714,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
         </div>
       </ModalBody>
       <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
-        画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は最新の画像が含まれます。
+        画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は登録済みの全ファイルが含まれます。
       </p>
       <ModalFooter className="flex flex-wrap justify-end gap-3">
         <button

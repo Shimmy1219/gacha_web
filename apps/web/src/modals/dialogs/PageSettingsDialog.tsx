@@ -13,20 +13,18 @@ import { ArrowPathIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/
 import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
-import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ConfirmDialog, ModalBody } from '..';
 import { type ModalComponent } from '../ModalTypes';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { deleteAllAssets } from '@domain/assets/assetStorage';
-import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
+import { useStoreValue } from '@domain/stores';
 import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
 import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
-import type { CompleteDrawMode } from '../../logic/gacha/types';
 import type { DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
 
 interface MenuItem {
@@ -57,19 +55,6 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'misc',
     label: 'その他の設定',
     description: '通知やガイドの表示方法をカスタマイズします。'
-  }
-];
-
-const COMPLETE_MODE_OPTIONS: Array<{ value: CompleteDrawMode; label: string; description: string }> = [
-  {
-    value: 'repeat',
-    label: 'コンプ回数分すべて排出',
-    description: 'コンプ購入の回数だけ全アイテムを1個ずつ排出します。'
-  },
-  {
-    value: 'frontload',
-    label: '初回のみ全種→残りは通常抽選',
-    description: '最初のコンプ分は全アイテムを配布し、以降は通常抽選になります。'
   }
 ];
 
@@ -169,9 +154,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     uiPreferencesStore.getDashboardDesktopLayout()
   );
   const appState = useStoreValue(appStateStore);
-  const ptSettingsState = useStoreValue(ptControlsStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
-  const completeMode = resolveCompleteModePreference(ptSettingsState);
+  const quickSendNewOnlyPreference = useMemo(
+    () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -202,11 +190,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaName('');
   }, [appStateStore, editingGachaId, editingGachaName]);
 
-  const handleCompleteModeChange = useCallback(
-    (mode: CompleteDrawMode) => {
-      ptControlsStore.setCompleteMode(mode, { persist: 'immediate' });
+  const handleQuickSendNewOnlyChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
     },
-    [ptControlsStore]
+    [uiPreferencesStore]
   );
 
   const handleDesktopLayoutChange = useCallback(
@@ -380,16 +368,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
-  const completeModeDropdownOptions = useMemo<SingleSelectOption<CompleteDrawMode>[]>(
-    () =>
-      COMPLETE_MODE_OPTIONS.map((option) => ({
-        value: option.value,
-        label: option.label,
-        description: option.description
-      })),
-    []
-  );
-
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
@@ -540,7 +518,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const renderMenuContent = () => {
     switch (activeMenu) {
       case 'gacha': {
-        const completeModeMeta = COMPLETE_MODE_OPTIONS.find((option) => option.value === completeMode);
         return (
           <div className="space-y-6">
             <div>
@@ -556,58 +533,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={showArchived}
                 onChange={setShowArchived}
               />
-            </div>
-            <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-surface-foreground">コンプリート排出モード</h3>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  ここで選択したモードが、登録済みのすべてのガチャに共通して適用されます。
-                </p>
-                <p className="text-[10px] leading-relaxed text-muted-foreground">
-                  例えばコンプptが10000ptで30000pt分引くとき、「コンプ回数分全て排出」を選択すると、全てのコンプ対象のアイテムが3つずつ排出されます。「初回のみ全種→残りは通常排出」を選択すると、10000pt分で、全てのコンプ対象のアイテムが1つずつ排出され、残りの20000pt分は通常のガチャとして消費されます。
-                </p>
-              </div>
-              <div className="space-y-2">
-                <SingleSelectDropdown<CompleteDrawMode>
-                  value={completeMode}
-                  onChange={handleCompleteModeChange}
-                  options={completeModeDropdownOptions}
-                  classNames={{
-                    root: 'relative w-full',
-                    button:
-                      'inline-flex w-full items-start justify-between gap-2 rounded-lg border border-border/60 bg-panel px-3 py-2 text-left text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90 focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
-                    buttonOpen: 'border-accent text-accent',
-                    buttonClosed: 'hover:border-accent/70',
-                    icon: 'h-4 w-4 text-muted-foreground transition-transform',
-                    iconOpen: 'rotate-180 text-accent',
-                    menu:
-                      'absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
-                    option: 'flex w-full items-start justify-between rounded-lg px-3 py-2 text-left transition',
-                    optionActive: 'bg-accent/10 text-surface-foreground',
-                    optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
-                    optionLabel: 'flex-1 text-left text-xs font-semibold',
-                    optionDescription: 'block text-[10px] text-muted-foreground',
-                    checkIcon: 'h-4 w-4 text-accent transition'
-                  }}
-                  renderButtonLabel={({ selectedOption }) =>
-                    selectedOption ? (
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs font-semibold leading-snug text-surface-foreground">
-                          {selectedOption.label}
-                        </span>
-                        {selectedOption.description ? (
-                          <span className="text-[10px] text-muted-foreground">{selectedOption.description}</span>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">モードを選択</span>
-                    )
-                  }
-                />
-                <p className="text-[10px] leading-relaxed text-muted-foreground">
-                  {completeModeMeta?.description ?? 'モードを選択すると挙動を切り替えられます。'}
-                </p>
-              </div>
+              <SwitchField
+                label="クイック送信時に新規取得したアイテムのみを送る"
+                description="お渡し部屋に景品を送信する際、Newタグの付いた景品だけを対象にします。"
+                checked={quickSendNewOnly}
+                onChange={handleQuickSendNewOnlyChange}
+              />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
               <div className="space-y-1">

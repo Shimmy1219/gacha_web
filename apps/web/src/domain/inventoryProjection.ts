@@ -1,8 +1,9 @@
 import {
-  type GachaCatalogStateV3,
+  type GachaCatalogStateV4,
   type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1,
+  type OriginalPrizeAssetV1,
   type UserInventoriesStateV3,
   type UserInventorySnapshotV3
 } from './app-persistence';
@@ -21,7 +22,8 @@ interface AggregatedSnapshot {
 
 export interface InventoryProjectionParams {
   pullHistory: PullHistoryStateV1 | undefined;
-  catalogState?: GachaCatalogStateV3 | undefined;
+  catalogState?: GachaCatalogStateV4 | undefined;
+  previousState?: UserInventoriesStateV3 | undefined;
   now?: string;
 }
 
@@ -81,7 +83,7 @@ function normalizeEntryItemCount(
 
 type ItemRarityIndex = Map<string, Map<string, string>>;
 
-function buildItemRarityIndex(catalogState: GachaCatalogStateV3 | undefined): ItemRarityIndex {
+function buildItemRarityIndex(catalogState: GachaCatalogStateV4 | undefined): ItemRarityIndex {
   const index: ItemRarityIndex = new Map();
 
   if (!catalogState?.byGacha) {
@@ -291,8 +293,44 @@ function buildSnapshotFromAggregate(
   return snapshot;
 }
 
+function normalizeOriginalPrizeAssets(
+  assetsMap: Record<string, OriginalPrizeAssetV1[]> | undefined,
+  validItemIds: Set<string>
+): Record<string, OriginalPrizeAssetV1[]> | undefined {
+  if (!assetsMap || Object.keys(assetsMap).length === 0) {
+    return undefined;
+  }
+
+  const normalized: Record<string, OriginalPrizeAssetV1[]> = {};
+
+  Object.entries(assetsMap).forEach(([itemId, assets]) => {
+    if (!validItemIds.has(itemId) || !Array.isArray(assets) || assets.length === 0) {
+      return;
+    }
+
+    const seen = new Set<string>();
+    const filtered = assets.reduce<OriginalPrizeAssetV1[]>((acc, asset) => {
+      if (!asset?.assetId || seen.has(asset.assetId)) {
+        return acc;
+      }
+      seen.add(asset.assetId);
+      acc.push({
+        assetId: asset.assetId,
+        thumbnailAssetId: asset.thumbnailAssetId ?? null
+      });
+      return acc;
+    }, []);
+
+    if (filtered.length > 0) {
+      normalized[itemId] = filtered;
+    }
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export function projectInventories(params: InventoryProjectionParams): InventoryProjectionResult {
-  const { pullHistory, catalogState, now } = params;
+  const { pullHistory, catalogState, previousState, now } = params;
   const nowIso = ensureIsoString(now, new Date().toISOString());
   const itemRarityIndex = buildItemRarityIndex(catalogState);
   const aggregated = new Map<string, Map<string, AggregatedSnapshot>>();
@@ -355,6 +393,7 @@ export function projectInventories(params: InventoryProjectionParams): Inventory
 
   aggregated.forEach((gachaMap, userId) => {
     const snapshots: Record<string, UserInventorySnapshotV3> = {};
+    const previousInventories = previousState?.inventories?.[userId] ?? {};
 
     gachaMap.forEach((aggregate) => {
       const snapshot = buildSnapshotFromAggregate(aggregate);
@@ -364,6 +403,23 @@ export function projectInventories(params: InventoryProjectionParams): Inventory
 
       snapshot.createdAt = snapshot.createdAt ?? nowIso;
       snapshot.updatedAt = snapshot.updatedAt ?? nowIso;
+
+      const previousSnapshot = previousInventories[snapshot.inventoryId];
+      if (previousSnapshot?.originalPrizeAssets) {
+        const validItemIds = new Set<string>();
+        Object.values(snapshot.counts).forEach((record) => {
+          Object.keys(record ?? {}).forEach((itemId) => {
+            if (itemId) {
+              validItemIds.add(itemId);
+            }
+          });
+        });
+
+        const normalizedAssets = normalizeOriginalPrizeAssets(previousSnapshot.originalPrizeAssets, validItemIds);
+        if (normalizedAssets) {
+          snapshot.originalPrizeAssets = normalizedAssets;
+        }
+      }
 
       snapshots[snapshot.inventoryId] = snapshot;
       applySnapshotToIndex(byItemId, snapshot, userId);

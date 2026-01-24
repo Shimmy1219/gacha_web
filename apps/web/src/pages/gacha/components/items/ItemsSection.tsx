@@ -26,7 +26,7 @@ import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPrev
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
-import { type GachaCatalogItemV3, type RiaguCardModelV3 } from '@domain/app-persistence';
+import { type GachaCatalogItemV4, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
@@ -277,9 +277,12 @@ export function ItemsSection(): JSX.Element {
         const riaguId = riaguIndex[snapshot.itemId];
         const riaguCard = riaguId ? riaguCards[riaguId] : undefined;
 
-        const imageAssetId = snapshot.imageAssetId ?? null;
-        const thumbnailAssetId = snapshot.thumbnailAssetId ?? null;
-        const hasImage = Boolean(thumbnailAssetId || imageAssetId);
+        const assetEntries = Array.isArray(snapshot.assets) ? snapshot.assets : [];
+        const primaryAsset = assetEntries[0] ?? null;
+        const imageAssetId = primaryAsset?.assetId ?? null;
+        const thumbnailAssetId = primaryAsset?.thumbnailAssetId ?? null;
+        const hasImage = assetEntries.length > 0;
+        const additionalAssetCount = Math.max(0, assetEntries.length - 1);
 
         const model: ItemCardModel = {
           itemId: snapshot.itemId,
@@ -293,9 +296,11 @@ export function ItemsSection(): JSX.Element {
             assetHash: imageAssetId,
             hasImage
           },
+          additionalAssetCount,
           isRiagu: Boolean(snapshot.riagu || riaguCard),
           completeTarget: Boolean(snapshot.completeTarget),
           pickupTarget: Boolean(snapshot.pickupTarget),
+          originalPrize: Boolean(snapshot.originalPrize),
           order: snapshot.order ?? 0,
           createdAt: gachaMeta?.createdAt ?? snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
           updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
@@ -617,7 +622,7 @@ export function ItemsSection(): JSX.Element {
           return;
         }
 
-        const patch: Partial<GachaCatalogItemV3> = { rarityId };
+        const patch: Partial<GachaCatalogItemV4> = { rarityId };
         catalogStore.updateItem({
           gachaId: entry.model.gachaId,
           itemId: entry.model.itemId,
@@ -644,7 +649,7 @@ export function ItemsSection(): JSX.Element {
           return;
         }
 
-        const patch: Partial<GachaCatalogItemV3> =
+        const patch: Partial<GachaCatalogItemV4> =
           field === 'pickupTarget' ? { pickupTarget: nextValue } : { completeTarget: nextValue };
 
         catalogStore.updateItem({
@@ -668,7 +673,7 @@ export function ItemsSection(): JSX.Element {
           return;
         }
 
-        const patch: Partial<GachaCatalogItemV3> = { riagu: nextValue };
+        const patch: Partial<GachaCatalogItemV4> = { riagu: nextValue };
         catalogStore.updateItem({
           gachaId: entry.model.gachaId,
           itemId: entry.model.itemId,
@@ -852,15 +857,15 @@ export function ItemsSection(): JSX.Element {
     const baseOrder = gachaCatalog.order?.length ?? 0;
     const timestamp = new Date().toISOString();
 
-    const item: GachaCatalogItemV3 = {
+    const item: GachaCatalogItemV4 = {
       itemId: generateItemId(),
       name: getSequentialItemName(baseOrder),
       rarityId,
       order: baseOrder + 1,
       pickupTarget: false,
       completeTarget: false,
-      imageAssetId: null,
-      thumbnailAssetId: null,
+      originalPrize: false,
+      assets: [],
       riagu: false,
       updatedAt: timestamp
     };
@@ -898,6 +903,8 @@ export function ItemsSection(): JSX.Element {
       }
 
       const { model, rarity, riaguCard } = target;
+      const catalogItem = data?.catalogState?.byGacha?.[model.gachaId]?.items?.[model.itemId];
+      const assetEntries = Array.isArray(catalogItem?.assets) ? catalogItem.assets : [];
       const assignmentRecords = data?.userInventories?.byItemId?.[model.itemId] ?? [];
       const userProfiles = data?.userProfiles?.users ?? {};
       const assignmentUsersMap = new Map<string, { userId: string; displayName: string }>();
@@ -933,28 +940,26 @@ export function ItemsSection(): JSX.Element {
           rarityOptions,
           pickupTarget: model.pickupTarget,
           completeTarget: model.completeTarget,
+          originalPrize: model.originalPrize,
           isRiagu: model.isRiagu,
           hasRiaguCard: Boolean(riaguCard),
           riaguAssignmentCount,
-          thumbnailAssetId: model.imageAsset.thumbnailAssetId,
-          thumbnailUrl: model.imageAsset.thumbnailUrl,
+          assets: assetEntries,
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
           riaguType: riaguCard?.typeLabel,
-          imageAssetId: model.imageAsset.assetHash,
           assignmentUsers,
           onSave: (payload) => {
             try {
               const timestamp = new Date().toISOString();
-              const patch: Partial<GachaCatalogItemV3> = {
+              const patch: Partial<GachaCatalogItemV4> = {
                 name: payload.name,
                 rarityId: payload.rarityId,
                 pickupTarget: payload.pickupTarget,
                 completeTarget: payload.completeTarget,
+                originalPrize: payload.originalPrize,
                 riagu: payload.riagu,
-                imageAssetId: typeof payload.imageAssetId === 'string' ? payload.imageAssetId : null,
-                thumbnailAssetId:
-                  typeof payload.thumbnailAssetId === 'string' ? payload.thumbnailAssetId : null
+                assets: payload.assets
               };
               catalogStore.updateItem({
                 gachaId: model.gachaId,
@@ -999,6 +1004,7 @@ export function ItemsSection(): JSX.Element {
     },
     [
       catalogStore,
+      data?.catalogState,
       data?.userInventories?.byItemId,
       data?.userProfiles?.users,
       flatItems,
@@ -1016,6 +1022,13 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
+      const catalogItem = data?.catalogState?.byGacha?.[payload.gachaId]?.items?.[payload.itemId];
+      const assetEntries = Array.isArray(catalogItem?.assets) ? catalogItem.assets : [];
+      const fallbackAsset = payload.assetHash
+        ? [{ assetId: payload.assetHash, thumbnailAssetId: payload.thumbnailAssetId ?? null }]
+        : [];
+      const assets = assetEntries.length > 0 ? assetEntries : fallbackAsset;
+
       push(ItemAssetPreviewDialog, {
         id: `item-preview-${payload.itemId}`,
         title: payload.itemName,
@@ -1027,13 +1040,14 @@ export function ItemsSection(): JSX.Element {
           gachaName: payload.gachaDisplayName,
           rarityLabel: target.rarity.label,
           rarityColor: target.rarity.color,
+          assets,
           assetHash: payload.assetHash,
           thumbnailAssetId: payload.thumbnailAssetId,
           thumbnailUrl: payload.thumbnailUrl
         }
       });
     },
-    [flatItems, push]
+    [data?.catalogState, flatItems, push]
   );
 
   const pickupActionLabel = selectionSummary.allPickup ? 'ピックアップを解除' : 'ピックアップに設定';

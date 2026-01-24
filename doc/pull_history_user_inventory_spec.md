@@ -49,7 +49,7 @@ Pull History の `order` 配列は最近の更新順で並び、プロジェク�
 ## プロジェクションの流れ
 `projectInventories` は Pull History 全体を走査して在庫スナップショットを構築する純粋関数である。【F:apps/web/src/domain/inventoryProjection.ts†L1-L214】【F:apps/web/src/domain/inventoryProjection.ts†L214-L400】主な手順は以下の通り。
 
-1. カタログ (`GachaCatalogStateV3`) を元にアイテム ID → レアリティ ID のインデックスを生成。
+1. カタログ (`GachaCatalogStateV4`) を元にアイテム ID → レアリティ ID のインデックスを生成。
 2. Pull History を `order` に従って整列し、各エントリをユーザー・ガチャ単位で集計。
    - `'manual'` 以外のソースは正の値のみ加算。`'manual'` は負数を含む差分として計上する。
    - エントリの `executedAt` が欠損・不正な場合はプロジェクション実行時刻で補完する。

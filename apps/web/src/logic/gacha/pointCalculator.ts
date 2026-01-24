@@ -5,7 +5,6 @@ type LegacyPtSetting = PtSettingV3 & { complate?: PtSettingV3['complete'] };
 import type {
   BundleApplication,
   CalculateDrawPlanArgs,
-  CompleteDrawMode,
   DrawPlan,
   NormalizePtSettingResult,
   NormalizedBundleSetting,
@@ -27,10 +26,6 @@ function toPositiveInteger(value: unknown): number | null {
     return null;
   }
   return Math.floor(positive);
-}
-
-function resolveCompleteMode(mode: unknown): CompleteDrawMode {
-  return mode === 'frontload' ? 'frontload' : 'repeat';
 }
 
 export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizePtSettingResult {
@@ -66,16 +61,7 @@ export function normalizePtSetting(setting: PtSettingV3 | undefined): NormalizeP
     if (!price) {
       warnings.push('コンプリート価格が無効なため、設定を無視しました。');
     } else {
-      let mode: CompleteDrawMode = 'repeat';
-      const requestedMode = completeSetting.mode;
-      if (requestedMode) {
-        if (requestedMode === 'repeat' || requestedMode === 'frontload') {
-          mode = requestedMode;
-        } else {
-          warnings.push('コンプリート排出モードが無効なため、既定値を使用しました。');
-        }
-      }
-      normalized.complete = { price, mode };
+      normalized.complete = { price };
     }
   }
 
@@ -225,21 +211,6 @@ function purchasePerPull(
   };
 }
 
-function estimateRandomPullsFromPoints(
-  points: number,
-  normalized: NormalizedPtSetting,
-  baseEfficiency: number | null
-): number {
-  if (points <= 0) {
-    return 0;
-  }
-
-  const { pullsGained, pointsRemaining } = applyBundles(normalized.bundles, points, baseEfficiency);
-  const perPullResult = purchasePerPull(normalized.perPull, pointsRemaining);
-
-  return pullsGained + perPullResult.pullsGained;
-}
-
 function createEmptyPlan(normalized: NormalizedPtSetting, warnings: string[]): DrawPlan {
   return {
     completeExecutions: 0,
@@ -260,15 +231,9 @@ export function calculateDrawPlan({
   points,
   settings,
   totalItemTypes,
-  completeMode: preferredCompleteMode
+  completeExecutionsOverride
 }: CalculateDrawPlanArgs): DrawPlan {
   const { normalized, warnings: normalizeWarnings } = normalizePtSetting(settings);
-  if (normalized.complete) {
-    normalized.complete = {
-      ...normalized.complete,
-      mode: resolveCompleteMode(preferredCompleteMode ?? normalized.complete.mode)
-    };
-  }
   const warnings = [...normalizeWarnings];
   const errors: string[] = [];
 
@@ -294,7 +259,6 @@ export function calculateDrawPlan({
   let pointsUsed = 0;
   let completeExecutions = 0;
   let completePulls = 0;
-  let randomPullsFromFrontload = 0;
   const baseEfficiency = normalized.perPull
     ? normalized.perPull.pulls / normalized.perPull.price
     : null;
@@ -302,33 +266,22 @@ export function calculateDrawPlan({
   if (normalized.complete) {
     const maxExecutions = Math.floor(pointsRemaining / normalized.complete.price);
     if (maxExecutions > 0) {
-      completeExecutions = maxExecutions;
-      const guaranteedExecutions =
-        normalized.complete.mode === 'frontload' ? Math.min(1, maxExecutions) : maxExecutions;
+      const normalizedOverride =
+        Number.isFinite(completeExecutionsOverride) && completeExecutionsOverride != null
+          ? Math.max(0, Math.floor(completeExecutionsOverride))
+          : null;
+      completeExecutions =
+        normalizedOverride != null ? Math.min(maxExecutions, normalizedOverride) : maxExecutions;
       if (totalItemTypes > 0) {
-        completePulls = totalItemTypes * guaranteedExecutions;
+        completePulls = totalItemTypes * completeExecutions;
       } else {
         warnings.push('アイテムが未登録のため、コンプリート購入は結果に反映されません。');
       }
-      if (normalized.complete.mode === 'frontload') {
-        const estimatedPulls = estimateRandomPullsFromPoints(
-          normalized.complete.price,
-          normalized,
-          baseEfficiency
-        );
-        const pullsPerExecution =
-          totalItemTypes > 0 ? Math.max(totalItemTypes, estimatedPulls) : estimatedPulls;
-        const guaranteedPulls = totalItemTypes > 0 ? totalItemTypes : 0;
-        if (guaranteedExecutions > 0) {
-          randomPullsFromFrontload += Math.max(0, pullsPerExecution - guaranteedPulls);
-        }
-        if (maxExecutions > guaranteedExecutions) {
-          randomPullsFromFrontload += pullsPerExecution * (maxExecutions - guaranteedExecutions);
-        }
+      if (completeExecutions > 0) {
+        const usedForComplete = normalized.complete.price * completeExecutions;
+        pointsRemaining -= usedForComplete;
+        pointsUsed += usedForComplete;
       }
-      const usedForComplete = normalized.complete.price * completeExecutions;
-      pointsRemaining -= usedForComplete;
-      pointsUsed += usedForComplete;
     }
   }
 
@@ -350,7 +303,7 @@ export function calculateDrawPlan({
     pointsUsed += perPullPoints;
   }
 
-  const randomPulls = randomPullsFromFrontload + bundlePulls + perPullPulls;
+  const randomPulls = bundlePulls + perPullPulls;
   const totalPulls = completePulls + randomPulls;
 
   if (totalPulls <= 0) {

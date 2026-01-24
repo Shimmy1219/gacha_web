@@ -283,7 +283,7 @@ function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSetti
   }
   return {
     ...(setting.perPull ? { perPull: { ...setting.perPull } } : {}),
-    ...(setting.complete ? { complete: { ...setting.complete } } : {}),
+    ...(setting.complete ? { complete: { price: setting.complete.price } } : {}),
     ...(setting.bundles ? { bundles: setting.bundles.map((bundle) => ({ ...bundle })) } : {}),
     ...(setting.guarantees ? { guarantees: setting.guarantees.map((guarantee) => ({ ...guarantee })) } : {})
   };
@@ -306,10 +306,7 @@ function buildSettingsFromSnapshot(
 
   const completePrice = parseNonNegativeNumber(snapshot.complete);
   if (completePrice != null) {
-    const previousMode = previous?.complete?.mode;
-    next.complete = previousMode
-      ? { price: completePrice, mode: previousMode }
-      : { price: completePrice };
+    next.complete = { price: completePrice };
   }
 
   const bundles = snapshot.bundles

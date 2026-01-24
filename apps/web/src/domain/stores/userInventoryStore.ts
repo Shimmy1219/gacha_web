@@ -1,9 +1,112 @@
-import { AppPersistence, type UserInventoriesStateV3 } from '../app-persistence';
+import { AppPersistence, type OriginalPrizeAssetV1, type UserInventoriesStateV3 } from '../app-persistence';
 import { PersistedStore, type UpdateOptions } from './persistedStore';
+
+function normalizeOriginalPrizeAssets(assets: OriginalPrizeAssetV1[]): OriginalPrizeAssetV1[] {
+  const seen = new Set<string>();
+  const normalized: OriginalPrizeAssetV1[] = [];
+
+  assets.forEach((asset) => {
+    if (!asset?.assetId || seen.has(asset.assetId)) {
+      return;
+    }
+    seen.add(asset.assetId);
+    normalized.push({
+      assetId: asset.assetId,
+      thumbnailAssetId: asset.thumbnailAssetId ?? null
+    });
+  });
+
+  return normalized;
+}
+
+function areOriginalPrizeAssetsEqual(left: OriginalPrizeAssetV1[], right: OriginalPrizeAssetV1[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftEntry = left[index];
+    const rightEntry = right[index];
+    if (leftEntry?.assetId !== rightEntry?.assetId) {
+      return false;
+    }
+    const leftPreview = leftEntry?.thumbnailAssetId ?? null;
+    const rightPreview = rightEntry?.thumbnailAssetId ?? null;
+    if (leftPreview !== rightPreview) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export class UserInventoryStore extends PersistedStore<UserInventoriesStateV3 | undefined> {
   constructor(persistence: AppPersistence) {
     super(persistence);
+  }
+
+  updateOriginalPrizeAssets(
+    params: { userId: string; inventoryId: string; itemId: string; assets: OriginalPrizeAssetV1[] },
+    options: UpdateOptions = { persist: 'immediate' }
+  ): void {
+    const normalizedUserId = params.userId.trim();
+    const normalizedInventoryId = params.inventoryId.trim();
+    const normalizedItemId = params.itemId.trim();
+
+    if (!normalizedUserId || !normalizedInventoryId || !normalizedItemId) {
+      return;
+    }
+
+    const normalizedAssets = normalizeOriginalPrizeAssets(params.assets ?? []);
+
+    this.update(
+      (previous) => {
+        if (!previous?.inventories?.[normalizedUserId]) {
+          return previous;
+        }
+
+        const userInventories = previous.inventories[normalizedUserId];
+        const snapshot = userInventories?.[normalizedInventoryId];
+        if (!snapshot) {
+          return previous;
+        }
+
+        const existingAssets = snapshot.originalPrizeAssets?.[normalizedItemId] ?? [];
+        if (areOriginalPrizeAssetsEqual(existingAssets, normalizedAssets)) {
+          return previous;
+        }
+
+        const nextOriginalPrizeAssets = { ...(snapshot.originalPrizeAssets ?? {}) };
+        if (normalizedAssets.length > 0) {
+          nextOriginalPrizeAssets[normalizedItemId] = normalizedAssets;
+        } else {
+          delete nextOriginalPrizeAssets[normalizedItemId];
+        }
+
+        const nextSnapshot = {
+          ...snapshot,
+          updatedAt: new Date().toISOString(),
+          ...(Object.keys(nextOriginalPrizeAssets).length > 0
+            ? { originalPrizeAssets: nextOriginalPrizeAssets }
+            : { originalPrizeAssets: undefined })
+        };
+
+        const nextUserInventories = {
+          ...userInventories,
+          [normalizedInventoryId]: nextSnapshot
+        };
+
+        return {
+          ...previous,
+          updatedAt: new Date().toISOString(),
+          inventories: {
+            ...previous.inventories,
+            [normalizedUserId]: nextUserInventories
+          }
+        } satisfies UserInventoriesStateV3;
+      },
+      options
+    );
   }
 
   removeGacha(gachaId: string, options: UpdateOptions = { persist: 'immediate' }): void {

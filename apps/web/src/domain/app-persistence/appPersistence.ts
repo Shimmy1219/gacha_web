@@ -1,6 +1,9 @@
 import {
   type GachaCatalogItemV3,
   type GachaCatalogStateV3,
+  type GachaCatalogItemV4,
+  type GachaCatalogItemAssetV4,
+  type GachaCatalogStateV4,
   type GachaLocalStorageSnapshot,
   type PtSettingsStateV3,
   type ReceiveHistoryStateV3,
@@ -20,7 +23,7 @@ export const GACHA_STORAGE_UPDATED_EVENT = 'gacha-storage:updated' as const;
 
 export const STORAGE_KEYS = {
   appState: 'gacha:app-state:v3',
-  catalogState: 'gacha:catalog-state:v3',
+  catalogState: 'gacha:catalog-state:v4',
   rarityState: 'gacha:rarity-state:v3',
   userInventories: 'gacha:user-inventories:v3',
   userProfiles: 'gacha:user-profiles:v3',
@@ -33,6 +36,22 @@ export const STORAGE_KEYS = {
   pullHistory: 'gacha:pull-history:v1'
 } as const;
 
+const LEGACY_STORAGE_KEYS = {
+  catalogStateV3: 'gacha:catalog-state:v3'
+} as const;
+
+const INDEXED_DB_CONFIG = {
+  name: 'gacha-app-state',
+  version: 1,
+  storeName: 'snapshots'
+} as const;
+
+const OFFLOADED_STORAGE_KEYS = new Set<string>([
+  STORAGE_KEYS.userInventories,
+  STORAGE_KEYS.userProfiles,
+  STORAGE_KEYS.pullHistory
+]);
+
 type StorageKey = keyof typeof STORAGE_KEYS;
 
 const STORAGE_KEY_LABELS: Partial<Record<StorageKey, string>> = {
@@ -43,12 +62,345 @@ const STORAGE_KEY_LABELS: Partial<Record<StorageKey, string>> = {
 
 const SAVE_OPTIONS_STORAGE_KEY = 'gacha:save-options:last-upload:v3';
 
+function migrateCatalogItemV3ToV4(item: GachaCatalogItemV3): GachaCatalogItemV4 {
+  const assets: GachaCatalogItemAssetV4[] = [];
+  if (item.imageAssetId) {
+    assets.push({
+      assetId: item.imageAssetId,
+      thumbnailAssetId: item.thumbnailAssetId ?? null
+    });
+  }
+
+  const { imageAssetId: _imageAssetId, thumbnailAssetId: _thumbnailAssetId, ...rest } = item;
+
+  return {
+    ...rest,
+    ...(assets.length > 0 ? { assets } : {})
+  };
+}
+
+function migrateCatalogStateV3ToV4(state: GachaCatalogStateV3): GachaCatalogStateV4 {
+  const nextByGacha: GachaCatalogStateV4['byGacha'] = {};
+
+  Object.entries(state.byGacha ?? {}).forEach(([gachaId, snapshot]) => {
+    if (!gachaId || !snapshot) {
+      return;
+    }
+
+    const nextItems: Record<string, GachaCatalogItemV4> = {};
+    Object.entries(snapshot.items ?? {}).forEach(([itemId, item]) => {
+      if (!itemId || !item) {
+        return;
+      }
+      nextItems[itemId] = migrateCatalogItemV3ToV4(item);
+    });
+
+    nextByGacha[gachaId] = {
+      order: Array.isArray(snapshot.order) ? snapshot.order : Object.keys(nextItems),
+      items: nextItems
+    };
+  });
+
+  return {
+    version: 4,
+    updatedAt: state.updatedAt ?? new Date().toISOString(),
+    byGacha: nextByGacha
+  };
+}
+
 export interface StorageLike {
   readonly length: number;
   key(index: number): string | null;
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+}
+
+interface IndexedDbSnapshotRecord {
+  key: string;
+  value: string;
+}
+
+let indexedDbOpenRequest: Promise<IDBDatabase> | null = null;
+
+function isIndexedDbAvailable(): boolean {
+  return typeof window !== 'undefined' && typeof window.indexedDB !== 'undefined';
+}
+
+function getWindowLocalStorage(): StorageLike | null {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return null;
+  }
+
+  return window.localStorage;
+}
+
+function wrapIndexedDbRequest<T>(request: IDBRequest<T>, errorMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result as T);
+    request.onerror = () => reject(request.error ?? new Error(errorMessage));
+  });
+}
+
+async function openIndexedDb(): Promise<IDBDatabase> {
+  if (!isIndexedDbAvailable()) {
+    throw new Error('IndexedDB is not available in the current environment');
+  }
+
+  if (indexedDbOpenRequest) {
+    return indexedDbOpenRequest;
+  }
+
+  indexedDbOpenRequest = new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(INDEXED_DB_CONFIG.name, INDEXED_DB_CONFIG.version);
+
+    request.onerror = () => {
+      reject(request.error ?? new Error('Failed to open app persistence database'));
+    };
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const transaction = request.transaction;
+
+      if (!transaction) {
+        return;
+      }
+
+      if (!db.objectStoreNames.contains(INDEXED_DB_CONFIG.storeName)) {
+        db.createObjectStore(INDEXED_DB_CONFIG.storeName, { keyPath: 'key' });
+      }
+    };
+
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        indexedDbOpenRequest = null;
+      };
+      resolve(db);
+    };
+  });
+
+  return indexedDbOpenRequest;
+}
+
+async function readIndexedDbValue(key: string): Promise<string | null> {
+  const db = await openIndexedDb();
+  const transaction = db.transaction(INDEXED_DB_CONFIG.storeName, 'readonly');
+  const store = transaction.objectStore(INDEXED_DB_CONFIG.storeName);
+  const result = await wrapIndexedDbRequest<IndexedDbSnapshotRecord | undefined | null>(
+    store.get(key),
+    'Failed to read snapshot from IndexedDB'
+  );
+
+  if (result && typeof result.value === 'string') {
+    return result.value;
+  }
+
+  return null;
+}
+
+async function writeIndexedDbValue(key: string, value: string | null): Promise<void> {
+  const db = await openIndexedDb();
+  const transaction = db.transaction(INDEXED_DB_CONFIG.storeName, 'readwrite');
+  const store = transaction.objectStore(INDEXED_DB_CONFIG.storeName);
+
+  if (value === null) {
+    await wrapIndexedDbRequest(store.delete(key), 'Failed to delete snapshot from IndexedDB');
+    return;
+  }
+
+  await wrapIndexedDbRequest(store.put({ key, value }), 'Failed to write snapshot to IndexedDB');
+}
+
+class IndexedDbBackedStorage implements StorageLike {
+  private readonly cache = new Map<string, string>();
+
+  private indexedDbAvailable = false;
+
+  private readonly initialization: Promise<void>;
+
+  constructor(private readonly baseStorage: StorageLike | null) {
+    this.primeCacheFromBaseStorage();
+    this.initialization = this.initialize().catch((error) => {
+      this.indexedDbAvailable = false;
+      console.warn('Failed to initialize IndexedDB-backed storage; falling back to base storage', error);
+    });
+  }
+
+  get length(): number {
+    return this.listKeys().length;
+  }
+
+  key(index: number): string | null {
+    const keys = this.listKeys();
+    return keys[index] ?? null;
+  }
+
+  getItem(key: string): string | null {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      if (this.cache.has(key)) {
+        return this.cache.get(key) ?? null;
+      }
+
+      const fallback = this.baseStorage?.getItem(key) ?? null;
+      if (fallback !== null) {
+        this.cache.set(key, fallback);
+        return fallback;
+      }
+
+      return null;
+    }
+
+    return this.baseStorage?.getItem(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      this.cache.set(key, value);
+      if (this.indexedDbAvailable) {
+        void this.persistToIndexedDb(key, value);
+        try {
+          this.baseStorage?.removeItem(key);
+        } catch (error) {
+          console.warn('Failed to remove migrated key from localStorage', error);
+        }
+      } else {
+        this.baseStorage?.setItem(key, value);
+      }
+      return;
+    }
+
+    this.baseStorage?.setItem(key, value);
+  }
+
+  removeItem(key: string): void {
+    if (OFFLOADED_STORAGE_KEYS.has(key)) {
+      this.cache.delete(key);
+      if (this.indexedDbAvailable) {
+        void this.persistToIndexedDb(key, null);
+        try {
+          this.baseStorage?.removeItem(key);
+        } catch (error) {
+          console.warn('Failed to remove migrated key from localStorage', error);
+        }
+      } else {
+        this.baseStorage?.removeItem(key);
+      }
+      return;
+    }
+
+    this.baseStorage?.removeItem(key);
+  }
+
+  ready(): Promise<void> {
+    return this.initialization;
+  }
+
+  private primeCacheFromBaseStorage(): void {
+    if (!this.baseStorage) {
+      return;
+    }
+
+    OFFLOADED_STORAGE_KEYS.forEach((key) => {
+      const value = this.baseStorage?.getItem(key);
+      if (typeof value === 'string') {
+        this.cache.set(key, value);
+      }
+    });
+  }
+
+  private async initialize(): Promise<void> {
+    if (!isIndexedDbAvailable()) {
+      return;
+    }
+
+    try {
+      await openIndexedDb();
+      this.indexedDbAvailable = true;
+    } catch (error) {
+      this.indexedDbAvailable = false;
+      throw error;
+    }
+
+    for (const key of OFFLOADED_STORAGE_KEYS) {
+      try {
+        const indexedDbValue = await readIndexedDbValue(key);
+
+        if (indexedDbValue !== null) {
+          this.cache.set(key, indexedDbValue);
+          this.baseStorage?.removeItem(key);
+          continue;
+        }
+
+        const fallback = this.baseStorage?.getItem(key);
+        if (fallback !== null && typeof fallback !== 'undefined') {
+          this.cache.set(key, fallback);
+          await writeIndexedDbValue(key, fallback);
+          this.baseStorage?.removeItem(key);
+        }
+      } catch (error) {
+        console.warn(`Failed to migrate key ${key} to IndexedDB`, error);
+      }
+    }
+
+    await this.migrateLegacyLocalStorageSnapshots();
+  }
+
+  private async persistToIndexedDb(key: string, value: string | null): Promise<void> {
+    try {
+      await writeIndexedDbValue(key, value);
+    } catch (error) {
+      console.error('Failed to persist snapshot to IndexedDB', error);
+    }
+  }
+
+  private listKeys(): string[] {
+    const keys = new Set<string>();
+
+    if (this.baseStorage) {
+      for (let index = 0; index < this.baseStorage.length; index += 1) {
+        const key = this.baseStorage.key(index);
+        if (key && !OFFLOADED_STORAGE_KEYS.has(key)) {
+          keys.add(key);
+        }
+      }
+    }
+
+    OFFLOADED_STORAGE_KEYS.forEach((key) => {
+      if (this.cache.has(key)) {
+        keys.add(key);
+      }
+    });
+
+    return Array.from(keys);
+  }
+
+  private async migrateLegacyLocalStorageSnapshots(): Promise<void> {
+    const windowLocalStorage = getWindowLocalStorage();
+    if (!windowLocalStorage || windowLocalStorage === this.baseStorage) {
+      return;
+    }
+
+    for (const key of OFFLOADED_STORAGE_KEYS) {
+      const legacyValue = windowLocalStorage.getItem(key);
+      if (legacyValue === null) {
+        continue;
+      }
+
+      try {
+        const indexedDbValue = await readIndexedDbValue(key);
+        if (indexedDbValue === null) {
+          await writeIndexedDbValue(key, legacyValue);
+          this.cache.set(key, legacyValue);
+        }
+
+        windowLocalStorage.removeItem(key);
+      } catch (error) {
+        console.warn(`Failed to migrate legacy localStorage value for ${key} to IndexedDB`, error);
+      }
+    }
+  }
 }
 
 export interface AppPersistenceOptions {
@@ -67,6 +419,8 @@ export interface PersistPartialSnapshot
 export class AppPersistence {
   private storage: StorageLike | null;
 
+  private storageReady: Promise<void>;
+
   private eventTarget: EventTarget | null;
 
   private readonly debounceMs: number;
@@ -76,11 +430,14 @@ export class AppPersistence {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: AppPersistenceOptions = {}) {
-    const fallbackStorage =
+    const baseStorage =
       typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
         ? window.localStorage
         : null;
+    const fallbackStorage = baseStorage ? new IndexedDbBackedStorage(baseStorage) : null;
     this.storage = options.storage ?? fallbackStorage;
+    this.storageReady =
+      this.storage instanceof IndexedDbBackedStorage ? this.storage.ready() : Promise.resolve();
 
     const fallbackEventTarget = typeof window !== 'undefined' ? window : null;
     this.eventTarget = options.eventTarget ?? fallbackEventTarget;
@@ -88,10 +445,14 @@ export class AppPersistence {
     this.debounceMs = typeof options.debounceMs === 'number' ? options.debounceMs : 250;
   }
 
+  whenReady(): Promise<void> {
+    return this.storageReady;
+  }
+
   loadSnapshot(): GachaLocalStorageSnapshot {
     return {
       appState: this.readJson<GachaAppStateV3>('appState'),
-      catalogState: this.readJson<GachaCatalogStateV3>('catalogState'),
+      catalogState: this.loadCatalogState(),
       rarityState: this.readJson<GachaRarityStateV3>('rarityState'),
       userInventories: this.readJson<UserInventoriesStateV3>('userInventories'),
       userProfiles: this.readJson<UserProfilesStateV3>('userProfiles'),
@@ -143,7 +504,7 @@ export class AppPersistence {
       touched = true;
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'catalogState')) {
-      this.persistValue('catalogState', partial.catalogState as GachaCatalogStateV3 | undefined);
+      this.persistValue('catalogState', partial.catalogState as GachaCatalogStateV4 | undefined);
       touched = true;
     }
     if (Object.prototype.hasOwnProperty.call(partial, 'rarityState')) {
@@ -204,11 +565,11 @@ export class AppPersistence {
     this.saveDebounced({ appState: state });
   }
 
-  saveCatalogState(state: GachaCatalogStateV3 | undefined): void {
+  saveCatalogState(state: GachaCatalogStateV4 | undefined): void {
     this.savePartial({ catalogState: state });
   }
 
-  saveCatalogStateDebounced(state: GachaCatalogStateV3 | undefined): void {
+  saveCatalogStateDebounced(state: GachaCatalogStateV4 | undefined): void {
     this.saveDebounced({ catalogState: state });
   }
 
@@ -308,6 +669,7 @@ export class AppPersistence {
       Object.values(STORAGE_KEYS).forEach((key) => {
         storage.removeItem(key);
       });
+      storage.removeItem(LEGACY_STORAGE_KEYS.catalogStateV3);
       storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
     } catch (error) {
       console.error('Failed to clear application storage', error);
@@ -353,7 +715,7 @@ export class AppPersistence {
   updateCatalogItem(params: {
     gachaId: string;
     itemId: string;
-    patch: Partial<GachaCatalogItemV3>;
+    patch: Partial<GachaCatalogItemV4>;
     updatedAt?: string;
   }): void {
     if (!this.ensureStorage()) {
@@ -383,7 +745,7 @@ export class AppPersistence {
 
     const timestamp = updatedAt ?? new Date().toISOString();
 
-    const nextItem: GachaCatalogItemV3 = {
+    const nextItem: GachaCatalogItemV4 = {
       ...currentItem,
       ...patch,
       itemId: currentItem.itemId,
@@ -392,7 +754,7 @@ export class AppPersistence {
       updatedAt: timestamp
     };
 
-    const nextCatalogState: GachaCatalogStateV3 = {
+    const nextCatalogState: GachaCatalogStateV4 = {
       ...catalogState,
       updatedAt: timestamp,
       byGacha: {
@@ -410,6 +772,30 @@ export class AppPersistence {
     this.savePartial({ catalogState: nextCatalogState });
   }
 
+  private loadCatalogState(): GachaCatalogStateV4 | undefined {
+    const current = this.readJson<GachaCatalogStateV4>('catalogState');
+    if (current) {
+      return current;
+    }
+
+    const legacy = this.readRawJson<GachaCatalogStateV3>(LEGACY_STORAGE_KEYS.catalogStateV3);
+    if (!legacy) {
+      return undefined;
+    }
+
+    const migrated = migrateCatalogStateV3ToV4(legacy);
+    this.persistValue('catalogState', migrated);
+
+    const storage = this.ensureStorage();
+    try {
+      storage?.removeItem(LEGACY_STORAGE_KEYS.catalogStateV3);
+    } catch (error) {
+      console.warn('Failed to remove legacy catalog state after migration', error);
+    }
+
+    return migrated;
+  }
+
   private readJson<T>(key: StorageKey): T | undefined {
     const storage = this.ensureStorage();
     if (!storage) {
@@ -417,6 +803,25 @@ export class AppPersistence {
     }
 
     const storageKey = STORAGE_KEYS[key];
+    const raw = storage.getItem(storageKey);
+    if (!raw) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      console.warn(`Failed to parse localStorage value for ${storageKey}`, error);
+      return undefined;
+    }
+  }
+
+  private readRawJson<T>(storageKey: string): T | undefined {
+    const storage = this.ensureStorage();
+    if (!storage) {
+      return undefined;
+    }
+
     const raw = storage.getItem(storageKey);
     if (!raw) {
       return undefined;
@@ -574,7 +979,9 @@ export class AppPersistence {
     }
 
     if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      this.storage = window.localStorage;
+      const nextStorage = new IndexedDbBackedStorage(window.localStorage);
+      this.storage = nextStorage;
+      this.storageReady = nextStorage.ready();
     }
 
     return this.storage;

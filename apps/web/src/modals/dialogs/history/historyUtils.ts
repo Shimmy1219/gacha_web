@@ -1,6 +1,6 @@
 import type {
-  GachaCatalogStateV3,
-  GachaCatalogGachaSnapshotV3,
+  GachaCatalogStateV4,
+  GachaCatalogGachaSnapshotV4,
   GachaRarityStateV3,
   GachaRarityEntityV3
 } from '@domain/app-persistence';
@@ -12,6 +12,7 @@ export interface HistoryItemMetadata {
   rarityLabel?: string;
   rarityColor?: string | null;
   raritySortOrder?: number | null;
+  isOriginalPrize?: boolean;
 }
 
 export const DEFAULT_HISTORY_USER_ID = generateDeterministicUserId('default-user');
@@ -22,9 +23,9 @@ export function normalizeHistoryUserId(value: string | undefined): string {
 }
 
 function getCatalogSnapshot(
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   gachaId: string
-): GachaCatalogGachaSnapshotV3 | undefined {
+): GachaCatalogGachaSnapshotV4 | undefined {
   return catalogState?.byGacha?.[gachaId];
 }
 
@@ -39,7 +40,7 @@ function getRarityEntity(
 }
 
 export function buildItemMetadataMap(
-  catalogState: GachaCatalogStateV3 | undefined,
+  catalogState: GachaCatalogStateV4 | undefined,
   rarityState: GachaRarityStateV3 | undefined,
   gachaId: string
 ): Map<string, HistoryItemMetadata> {
@@ -61,7 +62,8 @@ export function buildItemMetadataMap(
       rarityId,
       rarityLabel: rarityEntity?.label ?? rarityId,
       rarityColor: rarityEntity?.color ?? null,
-      raritySortOrder: rarityEntity?.sortOrder ?? null
+      raritySortOrder: rarityEntity?.sortOrder ?? null,
+      isOriginalPrize: item.originalPrize === true
     });
   });
 

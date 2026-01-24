@@ -52,86 +52,37 @@ describe('calculateDrawPlan', () => {
     expect(plan.pointsRemainder).toBe(0);
   });
 
-  test('frontload mode only guarantees the first completion', () => {
+  test('respects complete execution overrides', () => {
     const settings: PtSettingV3 = {
       perPull: { price: 10, pulls: 1 },
-      complete: { price: 100, mode: 'frontload' }
-    };
-
-    const plan = calculateDrawPlan({ points: 250, settings, totalItemTypes: 5 });
-
-    expect(plan.errors).toHaveLength(0);
-    expect(plan.completeExecutions).toBe(2);
-    expect(plan.completePulls).toBe(5);
-    expect(plan.randomPulls).toBe(20);
-    expect(plan.pointsUsed).toBe(250);
-    expect(plan.pointsRemainder).toBe(0);
-    expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
-  });
-
-  test('frontload mode converts leftover pulls when buying a single completion', () => {
-    const settings: PtSettingV3 = {
-      perPull: { price: 10, pulls: 1 },
-      complete: { price: 100, mode: 'frontload' }
-    };
-
-    const plan = calculateDrawPlan({ points: 100, settings, totalItemTypes: 8 });
-
-    expect(plan.errors).toHaveLength(0);
-    expect(plan.completeExecutions).toBe(1);
-    expect(plan.completePulls).toBe(8);
-    expect(plan.randomPulls).toBe(2);
-    expect(plan.totalPulls).toBe(10);
-    expect(plan.pointsUsed).toBe(100);
-    expect(plan.pointsRemainder).toBe(0);
-  });
-
-  test('frontload mode converts additional completions into random pulls', () => {
-    const settings: PtSettingV3 = {
-      complete: { price: 80, mode: 'frontload' }
-    };
-
-    const plan = calculateDrawPlan({ points: 240, settings, totalItemTypes: 4 });
-
-    expect(plan.errors).toHaveLength(0);
-    expect(plan.completeExecutions).toBe(3);
-    expect(plan.completePulls).toBe(4);
-    expect(plan.randomPulls).toBe(8);
-    expect(plan.totalPulls).toBe(12);
-    expect(plan.pointsUsed).toBe(240);
-    expect(plan.pointsRemainder).toBe(0);
-  });
-
-  test('applies global complete mode overrides', () => {
-    const settings: PtSettingV3 = {
-      perPull: { price: 10, pulls: 1 },
-      complete: { price: 100, mode: 'repeat' }
+      complete: { price: 100 }
     };
 
     const plan = calculateDrawPlan({
-      points: 200,
+      points: 250,
       settings,
-      totalItemTypes: 2,
-      completeMode: 'frontload'
+      totalItemTypes: 3,
+      completeExecutionsOverride: 1
     });
 
-    expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
-    expect(plan.completePulls).toBe(2);
-    expect(plan.completeExecutions).toBe(2);
+    expect(plan.completeExecutions).toBe(1);
+    expect(plan.completePulls).toBe(3);
+    expect(plan.randomPulls).toBe(15);
+    expect(plan.pointsUsed).toBe(250);
+    expect(plan.pointsRemainder).toBe(0);
   });
 
   test('accepts legacy complate field for complete settings', () => {
     const settings = {
-      complate: { price: 90, mode: 'frontload' }
+      complate: { price: 90 }
     } as PtSettingV3 & { complate: PtSettingV3['complete'] };
 
     const plan = calculateDrawPlan({ points: 180, settings, totalItemTypes: 6 });
 
     expect(plan.errors).toHaveLength(0);
     expect(plan.completeExecutions).toBe(2);
-    expect(plan.completePulls).toBe(6);
-    expect(plan.randomPulls).toBe(6);
-    expect(plan.normalizedSettings.complete?.mode).toBe('frontload');
+    expect(plan.completePulls).toBe(12);
+    expect(plan.randomPulls).toBe(0);
   });
 
   test('reports errors when no purchasable settings are provided', () => {

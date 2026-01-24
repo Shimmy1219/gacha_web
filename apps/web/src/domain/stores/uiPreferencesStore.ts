@@ -7,6 +7,7 @@ export interface UserFilterPreferences {
   hideMiss: boolean;
   showCounts: boolean;
   showSkipOnly: boolean;
+  showUnobtainedItems: boolean;
   keyword: string;
 }
 
@@ -16,6 +17,7 @@ export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   hideMiss: false,
   showCounts: true,
   showSkipOnly: false,
+  showUnobtainedItems: false,
   keyword: ''
 };
 
@@ -233,6 +235,10 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
     raw.showSkipOnly ?? raw.riaguOnly,
     DEFAULT_USER_FILTER_PREFERENCES.showSkipOnly
   );
+  const showUnobtainedItems = normalizeBoolean(
+    raw.showUnobtainedItems,
+    DEFAULT_USER_FILTER_PREFERENCES.showUnobtainedItems
+  );
   const keyword = normalizeKeyword(raw.keyword ?? raw.query ?? raw.userSearch);
 
   return {
@@ -241,6 +247,7 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
     hideMiss,
     showCounts,
     showSkipOnly,
+    showUnobtainedItems,
     keyword
   };
 }
@@ -259,6 +266,7 @@ function serializeUserFilterPreferences(preferences: UserFilterPreferences): Rec
     hideMiss: preferences.hideMiss,
     showCounts: preferences.showCounts,
     showSkipOnly: preferences.showSkipOnly,
+    showUnobtainedItems: preferences.showUnobtainedItems,
     query: preferences.keyword
   };
 }
@@ -270,7 +278,15 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
   if (a.keyword !== b.keyword) {
     return false;
   }
-  if (a.hideMiss !== b.hideMiss || a.showCounts !== b.showCounts || a.showSkipOnly !== b.showSkipOnly) {
+  if (
+    a.hideMiss !== b.hideMiss ||
+    a.showCounts !== b.showCounts ||
+    a.showSkipOnly !== b.showSkipOnly ||
+    a.showUnobtainedItems !== b.showUnobtainedItems
+  ) {
+    return false;
+  }
+  if (a.showUnobtainedItems !== b.showUnobtainedItems) {
     return false;
   }
   const aGacha = a.selectedGachaIds === '*' ? '*' : [...a.selectedGachaIds].sort();
@@ -324,6 +340,28 @@ function readDrawDialogLastSelectedGachaId(
   }
 
   return normalizeDrawDialogLastSelectedGachaId(drawDialog.lastSelectedGachaId);
+}
+
+function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'quickSendNewOnly')) {
+    return null;
+  }
+
+  return normalizeBoolean(drawDialog.quickSendNewOnly, false);
 }
 
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
@@ -524,6 +562,10 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readDrawDialogLastSelectedGachaId(this.state);
   }
 
+  getQuickSendNewOnlyPreference(): boolean | null {
+    return readQuickSendNewOnlyPreference(this.state);
+  }
+
   setLastSelectedDrawGachaId(
     nextId: string | null | undefined,
     options: UpdateOptions = { persist: 'debounced' }
@@ -560,6 +602,70 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
         const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
         if (nextDrawDialog) {
           delete nextDrawDialog.lastSelectedGachaId;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setQuickSendNewOnlyPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readQuickSendNewOnlyPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                quickSendNewOnly: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.quickSendNewOnly;
         }
 
         const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
