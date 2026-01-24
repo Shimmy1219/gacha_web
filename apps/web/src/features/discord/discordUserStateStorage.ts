@@ -126,3 +126,20 @@ export function clearDiscordUserState(discordUserId: string | undefined | null):
     console.warn('Failed to clear Discord user state from localStorage', error);
   }
 }
+
+export function clearAllDiscordUserStates(): void {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return;
+  }
+
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key && key.startsWith(DISCORD_USER_STATE_STORAGE_PREFIX)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to clear Discord user state entries from localStorage', error);
+  }
+}
