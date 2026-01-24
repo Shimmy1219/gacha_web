@@ -7,6 +7,7 @@ import {
   digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
+import { resolveDiscordRedirectUri } from '../../_lib/discordAuthConfig.js';
 
 function createStatePreview(value) {
   if (typeof value !== 'string') {
@@ -79,10 +80,22 @@ export default async function handler(req, res) {
     loginContext: normalizedContext,
   });
 
+  const redirectUri = resolveDiscordRedirectUri(req);
+  if (!redirectUri) {
+    log.error('Discord redirect_uri が設定されていません', {
+      envKeys: {
+        VITE_DISCORD_REDIRECT_URI: Boolean(process.env.VITE_DISCORD_REDIRECT_URI),
+        NEXT_PUBLIC_SITE_ORIGIN: Boolean(process.env.NEXT_PUBLIC_SITE_ORIGIN),
+        VERCEL_URL: Boolean(process.env.VERCEL_URL),
+      },
+    });
+    return res.status(500).json({ ok: false, error: 'Discord redirect_uri is not configured' });
+  }
+
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.DISCORD_CLIENT_ID,
-    redirect_uri: process.env.DISCORD_REDIRECT_URI,
+    redirect_uri: redirectUri,
     scope: 'identify guilds',
     state,
     code_challenge: challenge,
