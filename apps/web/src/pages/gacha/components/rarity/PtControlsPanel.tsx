@@ -164,7 +164,7 @@ function InlineNumberField({
       placeholder={placeholder}
       onChange={(event) => onChange(event.target.value)}
       className={clsx(
-        'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-panel-contrast px-3 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-panel-contrast px-2 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
         className
       )}
     />
@@ -277,6 +277,88 @@ function parsePositiveInteger(value: string): number | null {
   return parsed;
 }
 
+function formatPercentage(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function getBundleDiscountPercent(
+  perPullPrice: number | null,
+  bundlePrice: number | null,
+  pulls: number | null
+): number | null {
+  if (perPullPrice == null || bundlePrice == null || pulls == null) {
+    return null;
+  }
+  if (perPullPrice <= 0 || pulls <= 0) {
+    return null;
+  }
+  const normalTotal = perPullPrice * pulls;
+  if (!Number.isFinite(normalTotal) || normalTotal <= 0) {
+    return null;
+  }
+  return ((normalTotal - bundlePrice) / normalTotal) * 100;
+}
+
+function buildBundleEvaluations(
+  perPullPrice: number | null,
+  bundles: PtBundleRowState[]
+): Map<string, { discountPercent: number | null; isLoss: boolean; warnNotIncreasing: boolean }> {
+  const evaluations = new Map<
+    string,
+    {
+      discountPercent: number | null;
+      isLoss: boolean;
+      warnNotIncreasing: boolean;
+      warnDuplicatePrice: boolean;
+    }
+  >();
+  const entries = bundles.map((bundle) => {
+    const price = parseNonNegativeNumber(bundle.price);
+    const pulls = parsePositiveInteger(bundle.pulls);
+    const discountPercent = getBundleDiscountPercent(perPullPrice, price, pulls);
+    return { id: bundle.id, price, discountPercent };
+  });
+
+  const sorted = entries
+    .filter((entry) => entry.price != null && entry.discountPercent != null)
+    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+
+  let maxDiscount = -Infinity;
+  const warnSet = new Set<string>();
+  sorted.forEach((entry) => {
+    if (entry.discountPercent != null) {
+      if (entry.discountPercent <= maxDiscount) {
+        warnSet.add(entry.id);
+      } else {
+        maxDiscount = entry.discountPercent;
+      }
+    }
+  });
+
+  const priceCounts = new Map<number, number>();
+  entries.forEach((entry) => {
+    if (entry.price == null) {
+      return;
+    }
+    priceCounts.set(entry.price, (priceCounts.get(entry.price) ?? 0) + 1);
+  });
+
+  entries.forEach((entry) => {
+    const discountPercent = entry.discountPercent ?? null;
+    const warnDuplicatePrice =
+      entry.price != null ? (priceCounts.get(entry.price) ?? 0) > 1 : false;
+    evaluations.set(entry.id, {
+      discountPercent,
+      isLoss: discountPercent != null && discountPercent < 0,
+      warnNotIncreasing: warnSet.has(entry.id),
+      warnDuplicatePrice
+    });
+  });
+
+  return evaluations;
+}
+
 function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSettingV3 | undefined {
   if (!setting) {
     return undefined;
@@ -387,21 +469,31 @@ export function PtControlsPanel({
   useEffect(() => {
     syncingFromSettingsRef.current = true;
 
+    const comparable = cloneSettingWithoutUpdatedAt(settings);
+    const serialized = comparable ? JSON.stringify(comparable) : '';
+    const isEcho = lastEmittedRef.current === serialized;
+
     const nextPerPull = settings?.perPull?.price != null ? String(settings.perPull.price) : '';
     setPerPull((previous) => (previous === nextPerPull ? previous : nextPerPull));
 
     const nextComplete = settings?.complete?.price != null ? String(settings.complete.price) : '';
     setComplete((previous) => (previous === nextComplete ? previous : nextComplete));
 
-    const nextBundles = settings?.bundles
-      ? settings.bundles.map((bundle) =>
-          createBundleRow(bundle.id, {
-            price: String(bundle.price),
-            pulls: String(bundle.pulls)
-          })
-        )
-      : [];
-    setBundles((previous) => (areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles));
+    setBundles((previous) => {
+      if (isEcho) {
+        return previous;
+      }
+      if (!settings?.bundles) {
+        return [];
+      }
+      const nextBundles = settings.bundles.map((bundle) =>
+        createBundleRow(bundle.id, {
+          price: String(bundle.price),
+          pulls: String(bundle.pulls)
+        })
+      );
+      return areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles;
+    });
 
     const nextGuarantees = settings?.guarantees
       ? settings.guarantees.map((guarantee) => {
@@ -423,11 +515,8 @@ export function PtControlsPanel({
         })
       : [];
     setGuarantees((previous) =>
-      areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
+      isEcho || areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
     );
-
-    const comparable = cloneSettingWithoutUpdatedAt(settings);
-    const serialized = comparable ? JSON.stringify(comparable) : '';
     if (lastEmittedRef.current !== serialized) {
       lastEmittedRef.current = serialized;
     }
@@ -436,6 +525,14 @@ export function PtControlsPanel({
   const emitSettingsChange = useCallback(
     (snapshot: PanelSnapshot) => {
       if (!onSettingsChange) {
+        return;
+      }
+      const perPullPriceValue = parseNonNegativeNumber(snapshot.perPull);
+      const bundleEvaluations = buildBundleEvaluations(perPullPriceValue, snapshot.bundles);
+      const hasWarnings = Array.from(bundleEvaluations.values()).some(
+        (entry) => entry.isLoss || entry.warnNotIncreasing || entry.warnDuplicatePrice
+      );
+      if (hasWarnings) {
         return;
       }
       const nextSetting = buildSettingsFromSnapshot(snapshot, settings);
@@ -462,6 +559,12 @@ export function PtControlsPanel({
       guarantees
     });
   }, [perPull, complete, bundles, guarantees, emitSettingsChange]);
+
+  const perPullPriceValue = useMemo(() => parseNonNegativeNumber(perPull), [perPull]);
+  const bundleEvaluations = useMemo(
+    () => buildBundleEvaluations(perPullPriceValue, bundles),
+    [bundles, perPullPriceValue]
+  );
 
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel p-3 shadow-sm">
@@ -502,50 +605,100 @@ export function PtControlsPanel({
       />
 
       <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
-        {bundles.map((bundle, index) => (
-          <div
-            key={bundle.id}
-            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
-          >
-            <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-              <InlineNumberField
-                value={bundle.price}
-                onChange={(value) =>
-                  setBundles((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], price: value };
-                    return next;
-                  })
-                }
-                placeholder="3000"
-                className="w-[10ch]"
-              />
-              <span className="text-xs leading-none text-muted-foreground">ptで</span>
-              <InlineNumberField
-                value={bundle.pulls}
-                onChange={(value) =>
-                  setBundles((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], pulls: value };
-                    return next;
-                  })
-                }
-                placeholder="10"
-                min={1}
-                className="w-[8ch]"
-              />
-              <span className="text-xs leading-none text-muted-foreground">連</span>
+        {bundles.map((bundle, index) => {
+          const evaluation = bundleEvaluations.get(bundle.id) ?? {
+            discountPercent: null,
+            isLoss: false,
+            warnNotIncreasing: false,
+            warnDuplicatePrice: false
+          };
+          const discountPercent = evaluation.discountPercent;
+          const isLoss = evaluation.isLoss;
+          const percentLabel =
+            discountPercent != null ? formatPercentage(Math.abs(discountPercent)) : null;
+
+          const savingsLabel = discountPercent == null
+            ? null
+            : `${percentLabel}%${isLoss ? '損' : '得'}`;
+
+          return (
+            <div
+              key={bundle.id}
+              className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-1 py-2"
+            >
+            <div className="pt-controls-panel__bundle-fields flex flex-col gap-1 text-xs text-muted-foreground">
+              <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
+                <InlineNumberField
+                  value={bundle.price}
+                  onChange={(value) =>
+                    setBundles((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], price: value };
+                      return next;
+                    })
+                  }
+                  placeholder="3000"
+                  className={clsx(
+                    'w-[10ch]',
+                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                  )}
+                />
+                <span className="text-xs leading-none text-muted-foreground">ptで</span>
+                <InlineNumberField
+                  value={bundle.pulls}
+                  onChange={(value) =>
+                    setBundles((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], pulls: value };
+                      return next;
+                    })
+                  }
+                  placeholder="10"
+                  min={1}
+                  className={clsx(
+                    'w-[8ch]',
+                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                  )}
+                />
+                <span className="text-xs leading-none text-muted-foreground">連</span>
+                {savingsLabel ? (
+                  <span
+                    className={clsx(
+                      'ml-1 text-[11px] font-semibold',
+                      isLoss ? 'text-rose-400' : 'text-emerald-400'
+                    )}
+                  >
+                    {savingsLabel}
+                  </span>
+                ) : null}
+              </div>
+              {evaluation.warnNotIncreasing ? (
+                <span className="text-[11px] font-semibold text-amber-400">
+                  高ptのお得率は低ptのお得率を上回る必要があります
+                </span>
+              ) : null}
+              {evaluation.warnDuplicatePrice ? (
+                <span className="text-[11px] font-semibold text-amber-400">
+                  同じptが既に設定されています
+                </span>
+              ) : null}
+              {isLoss ? (
+                <span className="text-[11px] font-semibold text-rose-400">
+                  通常時より損になるように設定することは出来ません
+                </span>
+              ) : null}
             </div>
-            <RemoveButton
-              onClick={() =>
-                setBundles((prev) => {
-                  const next = prev.filter((entry) => entry.id !== bundle.id);
-                  return next;
-                })
-              }
-            />
-          </div>
-        ))}
+              <RemoveButton
+                onClick={() =>
+                  setBundles((prev) => {
+                    const next = prev.filter((entry) => entry.id !== bundle.id);
+                    return next;
+                  })
+                }
+              />
+            </div>
+          );
+        })}
       </div>
 
       <ControlsRow
