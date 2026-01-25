@@ -364,6 +364,50 @@ function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined)
   return normalizeBoolean(drawDialog.quickSendNewOnly, false);
 }
 
+function readCompleteGachaIncludeOutOfStockPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const stock = gacha.stock;
+  if (!isRecord(stock)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(stock, 'includeOutOfStockInComplete')) {
+    return null;
+  }
+
+  return normalizeBoolean(stock.includeOutOfStockInComplete, false);
+}
+
+function readGuaranteeOutOfStockItemPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const stock = gacha.stock;
+  if (!isRecord(stock)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(stock, 'allowOutOfStockGuaranteeItem')) {
+    return null;
+  }
+
+  return normalizeBoolean(stock.allowOutOfStockGuaranteeItem, false);
+}
+
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
   const nowIso = new Date().toISOString();
   if (!previous) {
@@ -566,6 +610,14 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getCompleteGachaIncludeOutOfStockPreference(): boolean | null {
+    return readCompleteGachaIncludeOutOfStockPreference(this.state);
+  }
+
+  getGuaranteeOutOfStockItemPreference(): boolean | null {
+    return readGuaranteeOutOfStockItemPreference(this.state);
+  }
+
   setLastSelectedDrawGachaId(
     nextId: string | null | undefined,
     options: UpdateOptions = { persist: 'debounced' }
@@ -675,6 +727,126 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
         } else if (nextGacha) {
           delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+      return nextState;
+    },
+    { persist: persistMode, emit }
+  );
+}
+
+  setCompleteGachaIncludeOutOfStockPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readCompleteGachaIncludeOutOfStockPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousStock = previousGacha && isRecord(previousGacha.stock) ? previousGacha.stock : undefined;
+
+        const nextStock = previousStock ? { ...previousStock } : undefined;
+        if (normalized !== null) {
+          const ensured = nextStock ?? {};
+          ensured.includeOutOfStockInComplete = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            stock: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextStock) {
+          delete nextStock.includeOutOfStockInComplete;
+        }
+
+        const hasStockEntries = Boolean(nextStock && Object.keys(nextStock).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasStockEntries && nextGacha) {
+          nextGacha['stock'] = nextStock as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['stock'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setGuaranteeOutOfStockItemPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readGuaranteeOutOfStockItemPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousStock = previousGacha && isRecord(previousGacha.stock) ? previousGacha.stock : undefined;
+
+        const nextStock = previousStock ? { ...previousStock } : undefined;
+        if (normalized !== null) {
+          const ensured = nextStock ?? {};
+          ensured.allowOutOfStockGuaranteeItem = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            stock: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextStock) {
+          delete nextStock.allowOutOfStockGuaranteeItem;
+        }
+
+        const hasStockEntries = Boolean(nextStock && Object.keys(nextStock).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasStockEntries && nextGacha) {
+          nextGacha['stock'] = nextStock as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['stock'];
         }
 
         const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);

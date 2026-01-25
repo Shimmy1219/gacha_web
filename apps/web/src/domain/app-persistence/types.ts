@@ -229,6 +229,11 @@ export interface UiPreferencesStateV3 {
       quickSendNewOnly?: boolean;
       [key: string]: unknown;
     };
+    stock?: {
+      includeOutOfStockInComplete?: boolean;
+      allowOutOfStockGuaranteeItem?: boolean;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   riagu?: Record<string, unknown>;

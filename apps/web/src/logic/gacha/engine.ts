@@ -123,7 +123,8 @@ function buildGuaranteedDraws(
   guarantees: NormalizedGuaranteeSetting[],
   itemMap: Map<string, GachaItemDefinition>,
   rng: () => number,
-  remainingStockById: Map<string, number>
+  remainingStockById: Map<string, number>,
+  allowOutOfStockGuaranteeItem: boolean
 ): { draws: ExecuteGachaDrawInstance[]; warnings: string[]; remainingRandomPulls: number } {
   if (!guarantees.length || plan.totalPulls <= 0) {
     return { draws: [], warnings: [], remainingRandomPulls: plan.randomPulls };
@@ -175,7 +176,13 @@ function buildGuaranteedDraws(
             `保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは指定したレアリティと一致しません。`
           );
         } else if (!isItemAvailable(candidate, remainingStockById)) {
-          warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは在庫切れです。`);
+          const canOverrideStock =
+            allowOutOfStockGuaranteeItem && typeof candidate.stockCount === 'number' && Number.isFinite(candidate.stockCount);
+          if (canOverrideStock) {
+            selected = candidate;
+          } else {
+            warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは在庫切れです。`);
+          }
         } else {
           selected = candidate;
         }
@@ -206,6 +213,8 @@ export function executeGacha({
   settings,
   points,
   completeExecutionsOverride,
+  includeOutOfStockInComplete = false,
+  allowOutOfStockGuaranteeItem = false,
   rng = Math.random
 }: ExecuteGachaArgs): ExecuteGachaResult {
   const plan = calculateDrawPlan({
@@ -238,7 +247,7 @@ export function executeGacha({
   if (plan.completeExecutions > 0) {
     for (let execution = 0; execution < plan.completeExecutions; execution += 1) {
       pool.items.forEach((item) => {
-        if (!isItemAvailable(item, remainingStockById)) {
+        if (!includeOutOfStockInComplete && !isItemAvailable(item, remainingStockById)) {
           return;
         }
         decrementRemainingStock(item, remainingStockById);
@@ -251,7 +260,15 @@ export function executeGacha({
     draws: guaranteeDraws,
     warnings: guaranteeWarnings,
     remainingRandomPulls
-  } = buildGuaranteedDraws(plan, pool, plan.normalizedSettings.guarantees, itemMap, rng, remainingStockById);
+  } = buildGuaranteedDraws(
+    plan,
+    pool,
+    plan.normalizedSettings.guarantees,
+    itemMap,
+    rng,
+    remainingStockById,
+    allowOutOfStockGuaranteeItem
+  );
 
   if (guaranteeDraws.length > 0) {
     draws.push(...guaranteeDraws);

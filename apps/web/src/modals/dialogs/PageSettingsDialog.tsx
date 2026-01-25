@@ -162,6 +162,16 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const completeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const completeOutOfStock = completeOutOfStockPreference ?? false;
+  const guaranteeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const guaranteeOutOfStock = guaranteeOutOfStockPreference ?? false;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -195,6 +205,20 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleCompleteOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setCompleteGachaIncludeOutOfStockPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleGuaranteeOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setGuaranteeOutOfStockItemPreference(enabled, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -562,6 +586,18 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 description="お渡し部屋に景品を送信する際、Newタグの付いた景品だけを対象にします。"
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
+              />
+              <SwitchField
+                label="コンプリートガチャの時に在庫切れのアイテムも排出する"
+                description="ONにするとコンプリートガチャ時に在庫切れのアイテムも排出します。在庫数をオーバーしますので、追加の発注が必要になります。"
+                checked={completeOutOfStock}
+                onChange={handleCompleteOutOfStockChange}
+              />
+              <SwitchField
+                label="天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出する"
+                description="ONにすると、天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出します。天井保証アイテムの候補が複数あるときは、在庫切れのアイテムは排出されません"
+                checked={guaranteeOutOfStock}
+                onChange={handleGuaranteeOutOfStockChange}
               />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">

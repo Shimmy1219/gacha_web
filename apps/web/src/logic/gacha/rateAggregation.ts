@@ -149,7 +149,8 @@ export function buildGachaPools({
   catalogState,
   rarityState,
   rarityFractionDigits,
-  inventoryCountsByItemId
+  inventoryCountsByItemId,
+  includeOutOfStockItems = false
 }: BuildGachaPoolsArgs): BuildGachaPoolsResult {
   const poolsByGachaId = new Map<string, GachaPoolDefinition>();
   const itemsById = new Map<string, GachaItemDefinition>();
@@ -213,7 +214,8 @@ export function buildGachaPools({
       }
 
       const remainingStock = remainingStockByItemId.get(snapshot.itemId) ?? null;
-      if (remainingStock === 0) {
+      const isOutOfStock = remainingStock === 0;
+      if (isOutOfStock && !includeOutOfStockItems) {
         return;
       }
 
@@ -223,7 +225,8 @@ export function buildGachaPools({
       const stats = rarityStats.get(snapshot.rarityId);
       const totalWeight = stats?.totalWeight ?? 0;
       const itemWeight = snapshot.pickupTarget ? 2 : 1;
-      const itemRate = rarityEmitRate && totalWeight > 0 ? (rarityEmitRate * itemWeight) / totalWeight : undefined;
+      const itemRate =
+        !isOutOfStock && rarityEmitRate && totalWeight > 0 ? (rarityEmitRate * itemWeight) / totalWeight : undefined;
       const ratePrecision = rarityFractionDigits?.get(snapshot.rarityId);
       const formattedRate = formatItemRateWithPrecision(itemRate, ratePrecision);
       const stockCount = typeof snapshot.stockCount === 'number' && Number.isFinite(snapshot.stockCount)
@@ -248,21 +251,23 @@ export function buildGachaPools({
       items.push(item);
       itemsById.set(item.itemId, item);
 
-      const group = rarityGroups.get(snapshot.rarityId);
-      if (group) {
-        group.items.push(item);
-        group.itemCount += 1;
-        group.totalWeight += itemWeight;
-      } else {
-        rarityGroups.set(snapshot.rarityId, {
-          rarityId: snapshot.rarityId,
-          label: item.rarityLabel,
-          color: item.rarityColor,
-          emitRate: rarityEmitRate,
-          itemCount: 1,
-          totalWeight: itemWeight,
-          items: [item]
-        });
+      if (!isOutOfStock) {
+        const group = rarityGroups.get(snapshot.rarityId);
+        if (group) {
+          group.items.push(item);
+          group.itemCount += 1;
+          group.totalWeight += itemWeight;
+        } else {
+          rarityGroups.set(snapshot.rarityId, {
+            rarityId: snapshot.rarityId,
+            label: item.rarityLabel,
+            color: item.rarityColor,
+            emitRate: rarityEmitRate,
+            itemCount: 1,
+            totalWeight: itemWeight,
+            items: [item]
+          });
+        }
       }
     });
 

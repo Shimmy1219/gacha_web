@@ -123,6 +123,8 @@ export interface ExecuteGachaArgs {
   points: number;
   completeExecutionsOverride?: number;
   rng?: () => number;
+  includeOutOfStockInComplete?: boolean;
+  allowOutOfStockGuaranteeItem?: boolean;
 }
 
 export interface ExecutedPullItem {
@@ -151,6 +153,7 @@ export interface BuildGachaPoolsArgs {
   rarityState: import('@domain/app-persistence').GachaRarityStateV3 | undefined;
   rarityFractionDigits?: Map<string, number>;
   inventoryCountsByItemId?: ItemInventoryCountMap;
+  includeOutOfStockItems?: boolean;
 }
 
 export interface BuildGachaPoolsResult {

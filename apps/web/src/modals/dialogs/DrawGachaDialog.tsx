@@ -42,6 +42,7 @@ import {
   executeGacha,
   inferRarityFractionDigits,
   normalizePtSetting,
+  resolveRemainingStock,
   type DrawPlan,
   type GachaPoolDefinition
 } from '../../logic/gacha';
@@ -62,6 +63,7 @@ interface GachaDefinition {
   id: string;
   label: string;
   pool: GachaPoolDefinition;
+  completeItemCount: number;
   items: Array<{
     itemId: string;
     name: string;
@@ -105,8 +107,8 @@ function resolvePlanForPulls({
   });
   if (normalized.complete && !disableComplete) {
     priceCandidates.push(normalized.complete.price);
-    if (gacha.pool.items.length > 0) {
-      unitPriceCandidates.push(normalized.complete.price / gacha.pool.items.length);
+    if (gacha.completeItemCount > 0) {
+      unitPriceCandidates.push(normalized.complete.price / gacha.completeItemCount);
     }
   }
 
@@ -117,7 +119,7 @@ function resolvePlanForPulls({
   let plan = calculateDrawPlan({
     points,
     settings: ptSetting,
-    totalItemTypes: gacha.pool.items.length,
+    totalItemTypes: gacha.completeItemCount,
     completeExecutionsOverride: completeExecutionsOverride ?? undefined
   });
 
@@ -127,7 +129,7 @@ function resolvePlanForPulls({
     plan = calculateDrawPlan({
       points,
       settings: ptSetting,
-      totalItemTypes: gacha.pool.items.length,
+      totalItemTypes: gacha.completeItemCount,
       completeExecutionsOverride: completeExecutionsOverride ?? undefined
     });
     safety += 1;
@@ -153,7 +155,9 @@ function buildGachaDefinitions(
   appState: GachaAppStateV3 | undefined,
   catalogState: GachaCatalogStateV4 | undefined,
   rarityState: GachaRarityStateV3 | undefined,
-  inventoryCountsByItemId: ReturnType<typeof buildItemInventoryCountMap>
+  inventoryCountsByItemId: ReturnType<typeof buildItemInventoryCountMap>,
+  includeOutOfStockItems: boolean,
+  includeOutOfStockInComplete: boolean
 ): { options: Array<SingleSelectOption<string>>; map: Map<string, GachaDefinition> } {
   const options: Array<SingleSelectOption<string>> = [];
   const map = new Map<string, GachaDefinition>();
@@ -167,7 +171,8 @@ function buildGachaDefinitions(
     catalogState,
     rarityState,
     rarityFractionDigits,
-    inventoryCountsByItemId
+    inventoryCountsByItemId,
+    includeOutOfStockItems
   });
 
   const catalogByGacha = catalogState.byGacha;
@@ -187,6 +192,9 @@ function buildGachaDefinitions(
       id: gachaId,
       label: appState?.meta?.[gachaId]?.displayName ?? gachaId,
       pool,
+      completeItemCount: includeOutOfStockInComplete
+        ? pool.items.length
+        : pool.items.filter((item) => item.remainingStock !== 0).length,
       items: pool.items.map((item) => ({
         itemId: item.itemId,
         name: item.name,
@@ -254,12 +262,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => buildItemInventoryCountMap(userInventoriesState?.byItemId),
     [userInventoriesState?.byItemId]
   );
-
-  const { options: gachaOptions, map: gachaMap } = useMemo(
-    () => buildGachaDefinitions(appState, catalogState, rarityState, inventoryCountsByItemId),
-    [appState, catalogState, inventoryCountsByItemId, rarityState]
-  );
-
   const lastPreferredGachaId = useMemo(
     () => uiPreferencesStore.getLastSelectedDrawGachaId() ?? undefined,
     [uiPreferencesState, uiPreferencesStore]
@@ -268,7 +270,31 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const completeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const includeOutOfStockInComplete = completeOutOfStockPreference ?? false;
+  const guaranteeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const allowOutOfStockGuaranteeItem = guaranteeOutOfStockPreference ?? false;
+  const includeOutOfStockItems = includeOutOfStockInComplete || allowOutOfStockGuaranteeItem;
   const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
+
+  const { options: gachaOptions, map: gachaMap } = useMemo(
+    () =>
+      buildGachaDefinitions(
+        appState,
+        catalogState,
+        rarityState,
+        inventoryCountsByItemId,
+        includeOutOfStockItems,
+        includeOutOfStockInComplete
+      ),
+    [appState, catalogState, includeOutOfStockInComplete, includeOutOfStockItems, inventoryCountsByItemId, rarityState]
+  );
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
     if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
@@ -351,6 +377,66 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   const selectedGacha = selectedGachaId ? gachaMap.get(selectedGachaId) : undefined;
   const selectedPtSetting = selectedGachaId ? ptSettingsState?.byGachaId?.[selectedGachaId] : undefined;
+  const hasGuaranteeOutOfStockBlocker = useMemo(() => {
+    if (!selectedGacha || allowOutOfStockGuaranteeItem) {
+      return false;
+    }
+
+    const guarantees = selectedPtSetting?.guarantees ?? [];
+    if (!guarantees.length) {
+      return false;
+    }
+
+    const catalog = catalogState?.byGacha?.[selectedGacha.id];
+    if (!catalog?.items) {
+      return false;
+    }
+
+    return guarantees.some((guarantee) => {
+      if (guarantee?.target?.type !== 'item') {
+        return false;
+      }
+
+      const itemId = guarantee?.target?.itemId;
+      if (!itemId) {
+        return false;
+      }
+
+      const snapshot = catalog.items[itemId];
+      if (!snapshot) {
+        return false;
+      }
+
+      if (typeof snapshot.stockCount !== 'number' || !Number.isFinite(snapshot.stockCount)) {
+        return false;
+      }
+
+      const remaining = resolveRemainingStock(itemId, snapshot.stockCount, inventoryCountsByItemId);
+      if (remaining !== 0) {
+        return false;
+      }
+
+      const rarityId = guarantee.rarityId ?? snapshot.rarityId;
+      const hasAlternative = Object.values(catalog.items).some((item) => {
+        if (!item || item.itemId === itemId) {
+          return false;
+        }
+        if (item.rarityId !== rarityId) {
+          return false;
+        }
+        const candidateRemaining = resolveRemainingStock(item.itemId, item.stockCount, inventoryCountsByItemId);
+        return candidateRemaining !== 0;
+      });
+
+      return !hasAlternative;
+    });
+  }, [
+    allowOutOfStockGuaranteeItem,
+    catalogState,
+    inventoryCountsByItemId,
+    selectedGacha,
+    selectedPtSetting?.guarantees
+  ]);
 
   useEffect(() => {
     setErrorMessage(null);
@@ -488,7 +574,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       plan: calculateDrawPlan({
         points: parsedPoints,
         settings: selectedPtSetting,
-        totalItemTypes: selectedGacha.pool.items.length,
+        totalItemTypes: selectedGacha.completeItemCount,
         completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined
       }),
       points: parsedPoints,
@@ -567,7 +653,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         pool: selectedGacha.pool,
         settings: selectedPtSetting,
         points: resolvedPoints,
-        completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined
+        completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined,
+        includeOutOfStockInComplete,
+        allowOutOfStockGuaranteeItem
       });
 
       if (executionResult.errors.length > 0) {
@@ -1911,9 +1999,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </div>
         ) : null}
         {!resultItems && !errorMessage ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            ガチャを実行すると、このモーダル内に結果が表示され、インベントリ履歴にも保存されます。
-          </p>
+          <div className="space-y-2 text-sm leading-relaxed">
+            <p className="text-muted-foreground">
+              ガチャを実行すると、このモーダル内に結果が表示され、インベントリ履歴にも保存されます。
+            </p>
+            {hasGuaranteeOutOfStockBlocker ? (
+              <p className="text-amber-600">
+                天井保証に設定されているアイテムが在庫切れです。
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </ModalBody>
       <ModalFooter>
@@ -1926,7 +2021,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             className="btn btn-primary"
             onClick={handleExecute}
             disabled={
-              isExecuting || !gachaOptions.length || !normalizedUserName || Boolean(planErrorMessage)
+              isExecuting ||
+              !gachaOptions.length ||
+              !normalizedUserName ||
+              Boolean(planErrorMessage) ||
+              hasGuaranteeOutOfStockBlocker
             }
           >
             <SparklesIcon className="h-5 w-5" />
