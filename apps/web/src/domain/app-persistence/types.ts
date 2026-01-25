@@ -55,6 +55,7 @@ export interface GachaCatalogItemV4 {
   originalPrize?: boolean;
   assets?: GachaCatalogItemAssetV4[];
   riagu?: boolean;
+  stockCount?: number;
   updatedAt?: string;
 }
 
@@ -226,6 +227,11 @@ export interface UiPreferencesStateV3 {
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;
+      [key: string]: unknown;
+    };
+    stock?: {
+      includeOutOfStockInComplete?: boolean;
+      allowOutOfStockGuaranteeItem?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;

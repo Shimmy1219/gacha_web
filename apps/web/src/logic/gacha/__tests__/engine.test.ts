@@ -220,6 +220,127 @@ describe('executeGacha', () => {
     expect(totalCount).toBe(5);
   });
 
+  test('complete purchases can include out-of-stock items when enabled', () => {
+    const outOfStock: GachaItemDefinition = {
+      itemId: 'limited-1',
+      name: 'Limited',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0.2,
+      itemRateDisplay: '20%',
+      pickupTarget: false,
+      drawWeight: 1,
+      stockCount: 1,
+      remainingStock: 0
+    };
+
+    const poolWithOutOfStock: GachaPoolDefinition = {
+      gachaId: 'sample',
+      items: [common1, outOfStock],
+      rarityGroups: new Map([
+        [
+          'common',
+          {
+            rarityId: 'common',
+            label: 'Common',
+            color: '#cccccc',
+            emitRate: 0.8,
+            itemCount: 1,
+            totalWeight: 1,
+            items: [common1]
+          }
+        ],
+        [
+          'rare',
+          {
+            rarityId: 'rare',
+            label: 'Rare',
+            color: '#ffaa00',
+            emitRate: 0.2,
+            itemCount: 0,
+            totalWeight: 0,
+            items: []
+          }
+        ]
+      ])
+    };
+
+    const settings: PtSettingV3 = { complete: { price: 100 } };
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool: poolWithOutOfStock,
+      settings,
+      points: 100,
+      includeOutOfStockInComplete: true
+    });
+
+    const limited = result.items.find((item) => item.itemId === 'limited-1');
+    expect(limited?.count).toBe(1);
+  });
+
+  test('guarantees out-of-stock items when override is enabled', () => {
+    const limited: GachaItemDefinition = {
+      itemId: 'limited-2',
+      name: 'Limited Two',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0.2,
+      itemRateDisplay: '20%',
+      pickupTarget: false,
+      drawWeight: 1,
+      stockCount: 1,
+      remainingStock: 0
+    };
+
+    const poolWithLimited: GachaPoolDefinition = {
+      gachaId: 'sample',
+      items: [rare, limited],
+      rarityGroups: new Map([
+        [
+          'rare',
+          {
+            rarityId: 'rare',
+            label: 'Rare',
+            color: '#ffaa00',
+            emitRate: 0.2,
+            itemCount: 1,
+            totalWeight: 1,
+            items: [rare]
+          }
+        ]
+      ])
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-limited',
+          rarityId: 'rare',
+          threshold: 1,
+          quantity: 1,
+          target: { type: 'item', itemId: 'limited-2' }
+        }
+      ]
+    };
+
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool: poolWithLimited,
+      settings,
+      points: 10,
+      allowOutOfStockGuaranteeItem: true
+    });
+
+    const limitedResult = result.items.find((item) => item.itemId === 'limited-2');
+    expect(limitedResult?.count).toBe(1);
+    expect(limitedResult?.guaranteedCount).toBe(1);
+  });
+
   test('supports legacy complate complete settings when executing gacha', () => {
     const settings = {
       complate: { price: 120 }
@@ -230,5 +351,51 @@ describe('executeGacha', () => {
     expect(result.errors).toHaveLength(0);
     expect(result.plan.completeExecutions).toBe(2);
     expect(result.plan.completePulls).toBe(pool.items.length * 2);
+  });
+
+  test('respects remaining stock limits during random draws', () => {
+    const limitedItem: GachaItemDefinition = {
+      itemId: 'limited-1',
+      name: 'Limited One',
+      rarityId: 'common',
+      rarityLabel: 'Common',
+      rarityColor: '#cccccc',
+      rarityEmitRate: 1,
+      itemRate: 1,
+      itemRateDisplay: '100%',
+      pickupTarget: false,
+      drawWeight: 1,
+      remainingStock: 1
+    };
+
+    const limitedPool: GachaPoolDefinition = {
+      gachaId: 'limited',
+      items: [limitedItem],
+      rarityGroups: new Map([
+        [
+          'common',
+          {
+            rarityId: 'common',
+            label: 'Common',
+            color: '#cccccc',
+            emitRate: 1,
+            itemCount: 1,
+            totalWeight: 1,
+            items: [limitedItem]
+          }
+        ]
+      ])
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 1, pulls: 1 }
+    };
+
+    const result = executeGacha({ gachaId: 'limited', pool: limitedPool, settings, points: 3 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].count).toBe(1);
+    expect(result.totalPulls).toBe(1);
+    expect(result.warnings).toContain('在庫不足のため、一部の抽選が実行できませんでした。');
   });
 });

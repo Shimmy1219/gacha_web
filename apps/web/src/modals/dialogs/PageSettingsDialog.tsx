@@ -21,6 +21,7 @@ import { useAppPersistence, useDomainStores } from '../../features/storage/AppPe
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
 import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
+import { clearAllDiscordUserStates } from '../../features/discord/discordUserStateStorage';
 import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
@@ -112,6 +113,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [isDeletingAllData, setIsDeletingAllData] = useState(false);
+  const [isResettingDiscordServerInfo, setIsResettingDiscordServerInfo] = useState(false);
   const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
   const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
@@ -160,6 +162,16 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const completeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const completeOutOfStock = completeOutOfStockPreference ?? false;
+  const guaranteeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const guaranteeOutOfStock = guaranteeOutOfStockPreference ?? false;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -193,6 +205,20 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleCompleteOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setCompleteGachaIncludeOutOfStockPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleGuaranteeOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setGuaranteeOutOfStockItemPreference(enabled, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -263,6 +289,28 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     userInventoriesStore,
     userProfilesStore
   ]);
+
+  const handleResetDiscordServerInfo = useCallback(() => {
+    if (isResettingDiscordServerInfo) {
+      return;
+    }
+
+    setIsResettingDiscordServerInfo(true);
+
+    try {
+      clearAllDiscordUserStates();
+      userProfilesStore.resetDiscordInfo({ persist: 'immediate' });
+    } catch (error) {
+      console.error('Failed to reset Discord server info', error);
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(
+          'Discordサーバー情報のリセットに失敗しました。ブラウザのストレージ設定をご確認の上、再度お試しください。'
+        );
+      }
+    } finally {
+      setIsResettingDiscordServerInfo(false);
+    }
+  }, [isResettingDiscordServerInfo, userProfilesStore]);
 
   const handleRequestDeleteAllData = useCallback(() => {
     if (isDeletingAllData) {
@@ -538,6 +586,18 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 description="お渡し部屋に景品を送信する際、Newタグの付いた景品だけを対象にします。"
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
+              />
+              <SwitchField
+                label="コンプリートガチャの時に在庫切れのアイテムも排出する"
+                description="ONにするとコンプリートガチャ時に在庫切れのアイテムも排出します。在庫数をオーバーしますので、追加の発注が必要になります。"
+                checked={completeOutOfStock}
+                onChange={handleCompleteOutOfStockChange}
+              />
+              <SwitchField
+                label="天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出する"
+                description="ONにすると、天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出します。天井保証アイテムの候補が複数あるときは、在庫切れのアイテムは排出されません"
+                checked={guaranteeOutOfStock}
+                onChange={handleGuaranteeOutOfStockChange}
               />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
@@ -954,6 +1014,35 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={confirmLogout}
                 onChange={setConfirmLogout}
               />
+              <div className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-surface-foreground">Discordサーバー情報のリセット</h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      登録したDiscordサーバーの情報（ギルド、メンバー）をリセットします。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm font-semibold text-surface-foreground transition hover:border-accent/40 hover:bg-panel-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent/60"
+                    onClick={handleResetDiscordServerInfo}
+                    disabled={isResettingDiscordServerInfo}
+                    aria-busy={isResettingDiscordServerInfo}
+                  >
+                    {isResettingDiscordServerInfo ? (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>リセットしています…</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                        <span>リセット</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
               <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-surface-foreground">全てのデータを削除</h3>

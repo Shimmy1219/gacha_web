@@ -41,6 +41,7 @@ export interface ItemCardModel {
   order: number;
   createdAt: string;
   updatedAt: string;
+  remainingStock?: number | null;
 }
 
 export interface ItemCardPreviewPayload {
@@ -91,6 +92,11 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
     maxWidth: 'fit-content',
     ...(rarityStyle ?? {})
   };
+  const remainingStock = model.remainingStock;
+  const hasRemainingStock = remainingStock !== null && remainingStock !== undefined;
+  const remainingLabel = hasRemainingStock
+    ? `残り${new Intl.NumberFormat('ja-JP').format(Math.max(0, remainingStock))}`
+    : '';
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (event.ctrlKey || event.metaKey) {
@@ -175,7 +181,14 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
         </div>
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
+            <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-surface-foreground">
+              <span className="truncate">{model.name}</span>
+              {hasRemainingStock ? (
+                <span className="shrink-0 px-1 text-[10px] font-semibold text-accent">
+                  {remainingLabel}
+                </span>
+              ) : null}
+            </h3>
             <span
               className={clsx(
                 'flex text-[11px] font-medium text-surface-foreground',
