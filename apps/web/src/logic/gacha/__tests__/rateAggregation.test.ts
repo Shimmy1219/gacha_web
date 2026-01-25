@@ -66,6 +66,67 @@ function buildTestStates({
   };
 }
 
+function buildMultiRarityStates({
+  gachaId = 'gacha-multi',
+  rarities,
+  itemsByRarity
+}: {
+  gachaId?: string;
+  rarities: Array<{ id: string; label: string; emitRate: number; sortOrder?: number }>;
+  itemsByRarity: Record<string, number>;
+}) {
+  const order: string[] = [];
+  const items: Record<string, import('@domain/app-persistence').GachaCatalogItemV4> = {};
+
+  Object.entries(itemsByRarity).forEach(([rarityId, count]) => {
+    for (let index = 0; index < count; index += 1) {
+      const itemId = `${rarityId}-item-${index + 1}`;
+      order.push(itemId);
+      items[itemId] = { itemId, name: itemId, rarityId };
+    }
+  });
+
+  const catalogState = {
+    version: 4,
+    updatedAt: baseTimestamp,
+    byGacha: {
+      [gachaId]: {
+        order,
+        items
+      }
+    }
+  } satisfies import('@domain/app-persistence').GachaCatalogStateV4;
+
+  const rarityState = {
+    version: 3,
+    updatedAt: baseTimestamp,
+    byGacha: {
+      [gachaId]: rarities.map((rarity) => rarity.id)
+    },
+    entities: Object.fromEntries(
+      rarities.map((rarity) => [
+        rarity.id,
+        {
+          id: rarity.id,
+          gachaId,
+          label: rarity.label,
+          emitRate: rarity.emitRate,
+          ...(typeof rarity.sortOrder === 'number' ? { sortOrder: rarity.sortOrder } : {})
+        }
+      ])
+    )
+  } satisfies import('@domain/app-persistence').GachaRarityStateV3;
+
+  const rarityFractionDigits = inferRarityFractionDigits(rarityState);
+
+  return {
+    gachaId,
+    catalogState,
+    rarityState,
+    rarityFractionDigits
+  };
+}
+
 describe('formatItemRateWithPrecision', () => {
   it('returns formatted rate without rounding when precision is omitted', () => {
     const result = formatItemRateWithPrecision(0.00123456789);
@@ -310,5 +371,60 @@ describe('buildGachaPools item rate distribution', () => {
 
     const pool = poolsByGachaId.get(gachaId);
     expect(pool?.items.map((item) => item.itemId)).toEqual(['item-2']);
+  });
+
+  it('redistributes missing rarity rates to the auto-adjusted rarity when items exist', () => {
+    const { gachaId, catalogState, rarityState, rarityFractionDigits } = buildMultiRarityStates({
+      rarities: [
+        { id: 'rare-a', label: 'A', emitRate: 0.8 },
+        { id: 'rare-b', label: 'B', emitRate: 0.2 }
+      ],
+      itemsByRarity: {
+        'rare-a': 2
+      }
+    });
+
+    const { poolsByGachaId } = buildGachaPools({
+      catalogState,
+      rarityState,
+      rarityFractionDigits
+    });
+
+    const pool = poolsByGachaId.get(gachaId);
+    expect(pool?.items).toHaveLength(2);
+    pool?.items.forEach((item) => {
+      expect(item.rarityId).toBe('rare-a');
+      expect(item.rarityEmitRate).toBeCloseTo(1, 12);
+      expect(item.itemRate).toBeCloseTo(0.5, 12);
+      expect(item.itemRateDisplay).toBe('50%');
+    });
+  });
+
+  it('falls back to the next highest emit rate rarity when the auto-adjusted rarity has no items', () => {
+    const { gachaId, catalogState, rarityState, rarityFractionDigits } = buildMultiRarityStates({
+      rarities: [
+        { id: 'rare-a', label: 'A', emitRate: 0.5 },
+        { id: 'rare-b', label: 'B', emitRate: 0.3 },
+        { id: 'rare-c', label: 'C', emitRate: 0.2 }
+      ],
+      itemsByRarity: {
+        'rare-b': 1,
+        'rare-c': 1
+      }
+    });
+
+    const { poolsByGachaId } = buildGachaPools({
+      catalogState,
+      rarityState,
+      rarityFractionDigits
+    });
+
+    const pool = poolsByGachaId.get(gachaId);
+    const ids = pool?.items.map((poolItem) => poolItem.rarityId) ?? [];
+    expect(ids).toEqual(['rare-b', 'rare-c']);
+    const rates = pool?.items.map((poolItem) => poolItem.itemRate) ?? [];
+    expect(rates[0]).toBeCloseTo(0.8, 12);
+    expect(rates[1]).toBeCloseTo(0.2, 12);
+    expect(pool?.items.map((poolItem) => poolItem.itemRateDisplay)).toEqual(['80%', '20%']);
   });
 });

@@ -31,6 +31,13 @@ export interface GachaPoolDefinition {
   rarityGroups: Map<string, GachaRarityGroup>;
 }
 
+export interface RarityRateRedistribution {
+  targetRarityId: string;
+  sourceRarityIds: string[];
+  totalMissingRate: number;
+  targetStrategy: 'auto-adjust' | 'next-highest';
+}
+
 export interface NormalizedPerPullSetting {
   price: number;
   pulls: number;
@@ -149,6 +156,7 @@ export interface BuildGachaPoolsArgs {
 export interface BuildGachaPoolsResult {
   poolsByGachaId: Map<string, GachaPoolDefinition>;
   itemsById: Map<string, GachaItemDefinition>;
+  rateRedistributionsByGachaId: Map<string, RarityRateRedistribution>;
 }
 
 export type ItemInventoryCountMap = Map<string, number> | Record<string, number> | undefined;

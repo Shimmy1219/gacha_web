@@ -2,12 +2,14 @@ import {
   MAX_RATE_FRACTION_DIGITS,
   formatRarityRate
 } from '../../features/rarity/utils/rarityRate';
+import { RATE_TOLERANCE, getAutoAdjustRarityId, sortRarityRows, type RarityRateRow } from '../rarityTable';
 import type {
   BuildGachaPoolsArgs,
   BuildGachaPoolsResult,
   GachaItemDefinition,
   GachaPoolDefinition,
-  GachaRarityGroup
+  GachaRarityGroup,
+  RarityRateRedistribution
 } from './types';
 import { resolveRemainingStock } from './stock';
 
@@ -81,6 +83,68 @@ export function inferRarityFractionDigits(
   return result;
 }
 
+function buildEffectiveRarityEmitRates(
+  gachaId: string,
+  rarityState: BuildGachaPoolsArgs['rarityState'],
+  rarityStats: Map<string, { itemCount: number; totalWeight: number }>
+): { rates: Map<string, number | undefined>; redistribution: RarityRateRedistribution | null } {
+  const rarityIds = rarityState?.byGacha?.[gachaId] ?? [];
+  if (rarityIds.length === 0) {
+    return { rates: new Map(), redistribution: null };
+  }
+
+  const entities = rarityState?.entities ?? {};
+  const rows: RarityRateRow[] = rarityIds.map((rarityId) => {
+    const entity = entities[rarityId];
+    return {
+      id: rarityId,
+      emitRate: typeof entity?.emitRate === 'number' ? entity.emitRate : undefined,
+      sortOrder: typeof entity?.sortOrder === 'number' ? entity.sortOrder : undefined,
+      label: entity?.label ?? ''
+    };
+  });
+
+  const sortedRows = sortRarityRows(rows);
+  const autoAdjustRarityId = getAutoAdjustRarityId(sortedRows);
+
+  const sourceRarityIds: string[] = [];
+  const missingRate = rows.reduce((sum, row) => {
+    const hasItems = (rarityStats.get(row.id)?.itemCount ?? 0) > 0;
+    if (hasItems) {
+      return sum;
+    }
+    const rate = row.emitRate ?? 0;
+    if (rate > 0) {
+      sourceRarityIds.push(row.id);
+    }
+    return sum + rate;
+  }, 0);
+
+  const availableRows = sortedRows.filter((row) => (rarityStats.get(row.id)?.itemCount ?? 0) > 0);
+  if (availableRows.length === 0) {
+    return { rates: new Map(rows.map((row) => [row.id, row.emitRate])), redistribution: null };
+  }
+
+  const canUseAutoAdjust = autoAdjustRarityId && availableRows.some((row) => row.id === autoAdjustRarityId);
+  const targetId = canUseAutoAdjust ? autoAdjustRarityId : availableRows[availableRows.length - 1]?.id ?? null;
+
+  const result = new Map<string, number | undefined>(rows.map((row) => [row.id, row.emitRate]));
+  let redistribution: RarityRateRedistribution | null = null;
+
+  if (targetId && missingRate > RATE_TOLERANCE) {
+    const current = result.get(targetId) ?? 0;
+    result.set(targetId, current + missingRate);
+    redistribution = {
+      targetRarityId: targetId,
+      sourceRarityIds,
+      totalMissingRate: missingRate,
+      targetStrategy: canUseAutoAdjust ? 'auto-adjust' : 'next-highest'
+    };
+  }
+
+  return { rates: result, redistribution };
+}
+
 export function buildGachaPools({
   catalogState,
   rarityState,
@@ -89,9 +153,10 @@ export function buildGachaPools({
 }: BuildGachaPoolsArgs): BuildGachaPoolsResult {
   const poolsByGachaId = new Map<string, GachaPoolDefinition>();
   const itemsById = new Map<string, GachaItemDefinition>();
+  const rateRedistributionsByGachaId = new Map<string, RarityRateRedistribution>();
 
   if (!catalogState?.byGacha) {
-    return { poolsByGachaId, itemsById };
+    return { poolsByGachaId, itemsById, rateRedistributionsByGachaId };
   }
 
   const rarityEntities = rarityState?.entities ?? {};
@@ -130,6 +195,14 @@ export function buildGachaPools({
       }
     });
 
+    const { rates: effectiveRarityEmitRates, redistribution } = buildEffectiveRarityEmitRates(
+      gachaId,
+      rarityState,
+      rarityStats
+    );
+    if (redistribution) {
+      rateRedistributionsByGachaId.set(gachaId, redistribution);
+    }
     const rarityGroups = new Map<string, GachaRarityGroup>();
     const items: GachaItemDefinition[] = [];
 
@@ -145,7 +218,8 @@ export function buildGachaPools({
       }
 
       const rarityEntity = rarityEntities[snapshot.rarityId];
-      const rarityEmitRate = typeof rarityEntity?.emitRate === 'number' ? rarityEntity.emitRate : undefined;
+      const baseEmitRate = typeof rarityEntity?.emitRate === 'number' ? rarityEntity.emitRate : undefined;
+      const rarityEmitRate = effectiveRarityEmitRates.get(snapshot.rarityId) ?? baseEmitRate;
       const stats = rarityStats.get(snapshot.rarityId);
       const totalWeight = stats?.totalWeight ?? 0;
       const itemWeight = snapshot.pickupTarget ? 2 : 1;
@@ -203,5 +277,5 @@ export function buildGachaPools({
     });
   });
 
-  return { poolsByGachaId, itemsById };
+  return { poolsByGachaId, itemsById, rateRedistributionsByGachaId };
 }

@@ -39,6 +39,7 @@ import {
   inferRarityFractionDigits,
   resolveRemainingStock
 } from '../../../../logic/gacha';
+import { formatRarityRate } from '../../../../features/rarity/utils/rarityRate';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -202,7 +203,7 @@ export function ItemsSection(): JSX.Element {
     [data?.userInventories?.byItemId]
   );
 
-  const { poolsByGachaId, itemsById } = useMemo(
+  const { poolsByGachaId, itemsById, rateRedistributionsByGachaId } = useMemo(
     () =>
       buildGachaPools({
         catalogState: data?.catalogState,
@@ -212,6 +213,35 @@ export function ItemsSection(): JSX.Element {
       }),
     [data?.catalogState, data?.rarityState, itemInventoryCounts, rarityFractionDigits]
   );
+
+  const rateRedistributionNotice = useMemo(() => {
+    if (!activeGachaId) {
+      return null;
+    }
+
+    const redistribution = rateRedistributionsByGachaId.get(activeGachaId);
+    if (!redistribution) {
+      return null;
+    }
+
+    const rarityEntities = data?.rarityState?.entities ?? {};
+    const targetLabel = rarityEntities[redistribution.targetRarityId]?.label ?? redistribution.targetRarityId;
+    const sourceLabels = redistribution.sourceRarityIds
+      .map((rarityId) => rarityEntities[rarityId]?.label ?? rarityId)
+      .filter((label) => Boolean(label));
+    const formattedRate = formatRarityRate(redistribution.totalMissingRate);
+    const rateLabel = formattedRate ? `${formattedRate}%` : '';
+    const sourceText =
+      sourceLabels.length > 0
+        ? `アイテムが存在しないレアリティ（${sourceLabels.join(' / ')}）の排出率${rateLabel}を`
+        : `アイテムが存在しないレアリティの排出率${rateLabel}を`;
+    const strategyNote =
+      redistribution.targetStrategy === 'next-highest'
+        ? '（自動調整対象のレアリティが存在しないため、次に排出率が高いレアリティへ加算）'
+        : '';
+
+    return `${sourceText}「${targetLabel}」に加算しています。${strategyNote}`;
+  }, [activeGachaId, data?.rarityState?.entities, rateRedistributionsByGachaId]);
 
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
@@ -1147,6 +1177,13 @@ export function ItemsSection(): JSX.Element {
                   ) : null}
                   {status === 'ready' && activeGachaId && items.length === 0 ? (
                     <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+                  ) : null}
+
+                  {rateRedistributionNotice ? (
+                    <div className="mb-3 ml-4 mr-2 rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                      <p className="font-semibold">排出率の再配分が発生しています</p>
+                      <p className="mt-1 text-amber-800">{rateRedistributionNotice}</p>
+                    </div>
                   ) : null}
 
                   {showAddCard || items.length > 0 ? (
