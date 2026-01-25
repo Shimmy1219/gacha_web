@@ -1,4 +1,4 @@
-import { ArrowDownTrayIcon, ArrowPathIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import type { ButtonHTMLAttributes } from 'react';
 
@@ -11,13 +11,13 @@ export function ReceiveSaveButton({ label = '保存', className, ...rest }: Rece
     <button
       type="button"
       {...rest}
+      aria-label={label}
       className={clsx(
-        'btn btn-primary inline-flex items-center gap-2 rounded-xl disabled:cursor-not-allowed disabled:opacity-60',
+        'btn btn-primary inline-flex items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-60',
         className
       )}
     >
-      <ArrowUpTrayIcon className="h-5 w-5" aria-hidden="true" />
-      <span>{label}</span>
+      <ArrowDownTrayIcon className="h-5 w-5" aria-hidden="true" />
     </button>
   );
 }

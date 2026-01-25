@@ -174,7 +174,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
           ) : null}
         </div>
         <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
-          <div className="space-y-1">
+          <div className="space-y-0">
             <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
             <span
               className={clsx(
