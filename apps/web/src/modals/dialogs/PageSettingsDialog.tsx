@@ -172,6 +172,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const guaranteeOutOfStock = guaranteeOutOfStockPreference ?? false;
+  const applyLowerThresholdGuaranteesPreference = useMemo(
+    () => uiPreferencesStore.getApplyLowerThresholdGuaranteesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -219,6 +224,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const handleGuaranteeOutOfStockChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setGuaranteeOutOfStockItemPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleApplyLowerThresholdGuaranteesChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setApplyLowerThresholdGuaranteesPreference(enabled, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -598,6 +610,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 description="ONにすると、天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出します。天井保証アイテムの候補が複数あるときは、在庫切れのアイテムは排出されません"
                 checked={guaranteeOutOfStock}
                 onChange={handleGuaranteeOutOfStockChange}
+              />
+              <SwitchField
+                label="上位連数の天井保証に達した時に下位連数の保証も適用する"
+                description="ONにすると、複数の天井保証が設定されている場合に下位の保証もすべて適用します。OFFの場合は、到達した中で最も高い連数の保証のみ適用します。"
+                checked={applyLowerThresholdGuarantees}
+                onChange={handleApplyLowerThresholdGuaranteesChange}
               />
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">

@@ -140,10 +140,6 @@ function buildGuaranteedDraws(
     }
 
     const group = pool.rarityGroups.get(guarantee.rarityId);
-    if (!group || group.items.length === 0) {
-      warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`);
-      return;
-    }
 
     const allocation = Math.min(Math.max(0, Math.floor(guarantee.quantity)), remainingRandomPulls);
     if (allocation <= 0) {
@@ -154,13 +150,36 @@ function buildGuaranteedDraws(
       warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な抽選回数が不足しています。`);
     }
 
-    const selectRandomFromGroup = (): GachaItemDefinition | undefined => {
-      const availableItems = group.items.filter((item) => isItemAvailable(item, remainingStockById));
-      if (availableItems.length === 0) {
-        return undefined;
+    const selectRandomFromGroup = (): { selected?: GachaItemDefinition; reason?: 'missing' | 'empty' } => {
+      const baseCandidates = group
+        ? group.items
+        : pool.items.filter((item) => item.rarityId === guarantee.rarityId);
+      const inStockCandidates = baseCandidates.filter((item) => isItemAvailable(item, remainingStockById));
+      if (inStockCandidates.length > 0) {
+        const distribution = buildWeightedDistribution(inStockCandidates);
+        return { selected: pickRandomItem(distribution, rng) ?? inStockCandidates[inStockCandidates.length - 1] };
       }
-      const distribution = buildWeightedDistribution(availableItems);
-      return pickRandomItem(distribution, rng) ?? availableItems[availableItems.length - 1];
+
+      const hasAnyRarityItems = pool.items.some((item) => item.rarityId === guarantee.rarityId);
+      if (!hasAnyRarityItems) {
+        return { reason: 'missing' };
+      }
+
+      if (!allowOutOfStockGuaranteeItem) {
+        return { reason: 'empty' };
+      }
+
+      const outOfStockCandidates = pool.items
+        .filter((item) => item.rarityId === guarantee.rarityId)
+        .filter((item) => !isItemAvailable(item, remainingStockById))
+        .filter((item) => typeof item.stockCount === 'number' && Number.isFinite(item.stockCount));
+
+      if (outOfStockCandidates.length === 0) {
+        return { reason: 'empty' };
+      }
+
+      const distribution = buildWeightedDistribution(outOfStockCandidates);
+      return { selected: pickRandomItem(distribution, rng) ?? outOfStockCandidates[outOfStockCandidates.length - 1] };
     };
 
     let allocated = 0;
@@ -189,11 +208,16 @@ function buildGuaranteedDraws(
       }
 
       if (!selected) {
-        selected = selectRandomFromGroup();
-        if (!selected) {
-          warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な在庫がありません。`);
+        const { selected: raritySelected, reason } = selectRandomFromGroup();
+        if (!raritySelected) {
+          warnings.push(
+            reason === 'missing'
+              ? `保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`
+              : `保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な在庫がありません。`
+          );
           break;
         }
+        selected = raritySelected;
       }
 
       decrementRemainingStock(selected, remainingStockById);
@@ -215,6 +239,7 @@ export function executeGacha({
   completeExecutionsOverride,
   includeOutOfStockInComplete = false,
   allowOutOfStockGuaranteeItem = false,
+  applyLowerThresholdGuarantees = true,
   rng = Math.random
 }: ExecuteGachaArgs): ExecuteGachaResult {
   const plan = calculateDrawPlan({
@@ -256,6 +281,18 @@ export function executeGacha({
     }
   }
 
+  const guarantees = plan.normalizedSettings.guarantees;
+  let guaranteesToApply = guarantees;
+  if (!applyLowerThresholdGuarantees) {
+    const applicable = guarantees.filter((guarantee) => plan.totalPulls >= guarantee.threshold);
+    if (!applicable.length) {
+      guaranteesToApply = [];
+    } else {
+      const maxThreshold = Math.max(...applicable.map((guarantee) => guarantee.threshold));
+      guaranteesToApply = guarantees.filter((guarantee) => guarantee.threshold === maxThreshold);
+    }
+  }
+
   const {
     draws: guaranteeDraws,
     warnings: guaranteeWarnings,
@@ -263,7 +300,7 @@ export function executeGacha({
   } = buildGuaranteedDraws(
     plan,
     pool,
-    plan.normalizedSettings.guarantees,
+    guaranteesToApply,
     itemMap,
     rng,
     remainingStockById,

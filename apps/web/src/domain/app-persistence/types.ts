@@ -234,6 +234,10 @@ export interface UiPreferencesStateV3 {
       allowOutOfStockGuaranteeItem?: boolean;
       [key: string]: unknown;
     };
+    guarantee?: {
+      applyLowerThresholdGuarantees?: boolean;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   riagu?: Record<string, unknown>;

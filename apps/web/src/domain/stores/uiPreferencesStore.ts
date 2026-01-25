@@ -408,6 +408,28 @@ function readGuaranteeOutOfStockItemPreference(state: UiPreferencesStateV3 | und
   return normalizeBoolean(stock.allowOutOfStockGuaranteeItem, false);
 }
 
+function readApplyLowerThresholdGuaranteesPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const guarantee = gacha.guarantee;
+  if (!isRecord(guarantee)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(guarantee, 'applyLowerThresholdGuarantees')) {
+    return null;
+  }
+
+  return normalizeBoolean(guarantee.applyLowerThresholdGuarantees, false);
+}
+
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
   const nowIso = new Date().toISOString();
   if (!previous) {
@@ -868,6 +890,70 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
 
   getUserFilterPreferences(): UserFilterPreferences {
     return normalizeUserFilterPreferences(this.state?.users && isRecord(this.state.users) ? this.state.users.filter : undefined);
+  }
+
+  getApplyLowerThresholdGuaranteesPreference(): boolean | null {
+    return readApplyLowerThresholdGuaranteesPreference(this.state);
+  }
+
+  setApplyLowerThresholdGuaranteesPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readApplyLowerThresholdGuaranteesPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousGuarantee = previousGacha && isRecord(previousGacha.guarantee) ? previousGacha.guarantee : undefined;
+
+        const nextGuarantee = previousGuarantee ? { ...previousGuarantee } : undefined;
+        if (normalized !== null) {
+          const ensured = nextGuarantee ?? {};
+          ensured.applyLowerThresholdGuarantees = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            guarantee: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextGuarantee) {
+          delete nextGuarantee.applyLowerThresholdGuarantees;
+        }
+
+        const hasGuaranteeEntries = Boolean(nextGuarantee && Object.keys(nextGuarantee).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasGuaranteeEntries && nextGacha) {
+          nextGacha['guarantee'] = nextGuarantee as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['guarantee'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
   }
 
   setUserFilterPreferences(

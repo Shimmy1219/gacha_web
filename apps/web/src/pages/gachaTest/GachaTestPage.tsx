@@ -169,6 +169,7 @@ interface SimulationRequest {
   rarityDigits: Map<string, number>;
   includeOutOfStockInComplete: boolean;
   allowOutOfStockGuaranteeItem: boolean;
+  applyLowerThresholdGuarantees: boolean;
 }
 
 function formatObservedRate(rate: number, rarityDigits: Map<string, number>, rarityId: string): string {
@@ -243,7 +244,8 @@ function simulateGacha({
   runCount,
   rarityDigits,
   includeOutOfStockInComplete,
-  allowOutOfStockGuaranteeItem
+  allowOutOfStockGuaranteeItem,
+  applyLowerThresholdGuarantees
 }: SimulationRequest): SimulationResult | SimulationError {
   const normalizedPulls = Math.max(1, Math.floor(pullsPerRun));
   const normalizedRuns = Math.max(1, Math.floor(runCount));
@@ -311,7 +313,8 @@ function simulateGacha({
       settings: ptSetting,
       points,
       includeOutOfStockInComplete,
-      allowOutOfStockGuaranteeItem
+      allowOutOfStockGuaranteeItem,
+      applyLowerThresholdGuarantees
     });
 
     if (result.errors.length > 0) {
@@ -452,6 +455,7 @@ interface GachaTestSectionProps {
   rarityDigits: Map<string, number>;
   includeOutOfStockInComplete: boolean;
   allowOutOfStockGuaranteeItem: boolean;
+  applyLowerThresholdGuarantees: boolean;
 }
 
 function GachaTestSection({
@@ -462,7 +466,8 @@ function GachaTestSection({
   ptSetting,
   rarityDigits,
   includeOutOfStockInComplete,
-  allowOutOfStockGuaranteeItem
+  allowOutOfStockGuaranteeItem,
+  applyLowerThresholdGuarantees
 }: GachaTestSectionProps): JSX.Element {
   const [pullsPerRun, setPullsPerRun] = useState(defaultPulls);
   const [runCount, setRunCount] = useState(defaultRuns);
@@ -493,7 +498,8 @@ function GachaTestSection({
         runCount,
         rarityDigits,
         includeOutOfStockInComplete,
-        allowOutOfStockGuaranteeItem
+        allowOutOfStockGuaranteeItem,
+        applyLowerThresholdGuarantees
       });
 
       if ('error' in simulation) {
@@ -512,7 +518,16 @@ function GachaTestSection({
     } finally {
       setIsRunning(false);
     }
-  }, [allowOutOfStockGuaranteeItem, gacha, includeOutOfStockInComplete, ptSetting, pullsPerRun, rarityDigits, runCount]);
+  }, [
+    allowOutOfStockGuaranteeItem,
+    applyLowerThresholdGuarantees,
+    gacha,
+    includeOutOfStockInComplete,
+    ptSetting,
+    pullsPerRun,
+    rarityDigits,
+    runCount
+  ]);
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((previous) => !previous);
@@ -759,6 +774,10 @@ export function GachaTestPage(): JSX.Element {
     () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference() ?? false,
     [uiPreferencesState, uiPreferencesStore]
   );
+  const applyLowerThresholdGuarantees = useMemo(
+    () => uiPreferencesStore.getApplyLowerThresholdGuaranteesPreference() ?? true,
+    [uiPreferencesState, uiPreferencesStore]
+  );
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => options[0]?.value);
   const selectedGacha = selectedGachaId ? map.get(selectedGachaId) : undefined;
@@ -802,6 +821,7 @@ export function GachaTestPage(): JSX.Element {
               rarityDigits={rarityDigits}
               includeOutOfStockInComplete={includeOutOfStockInComplete}
               allowOutOfStockGuaranteeItem={allowOutOfStockGuaranteeItem}
+              applyLowerThresholdGuarantees={applyLowerThresholdGuarantees}
             />
           ))}
         </div>
