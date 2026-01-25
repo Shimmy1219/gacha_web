@@ -277,6 +277,29 @@ function parsePositiveInteger(value: string): number | null {
   return parsed;
 }
 
+function formatPercentage(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function getBundleDiscountPercent(
+  perPullPrice: number | null,
+  bundlePrice: number | null,
+  pulls: number | null
+): number | null {
+  if (perPullPrice == null || bundlePrice == null || pulls == null) {
+    return null;
+  }
+  if (perPullPrice <= 0 || pulls <= 0) {
+    return null;
+  }
+  const normalTotal = perPullPrice * pulls;
+  if (!Number.isFinite(normalTotal) || normalTotal <= 0) {
+    return null;
+  }
+  return ((normalTotal - bundlePrice) / normalTotal) * 100;
+}
+
 function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSettingV3 | undefined {
   if (!setting) {
     return undefined;
@@ -393,15 +416,18 @@ export function PtControlsPanel({
     const nextComplete = settings?.complete?.price != null ? String(settings.complete.price) : '';
     setComplete((previous) => (previous === nextComplete ? previous : nextComplete));
 
-    const nextBundles = settings?.bundles
-      ? settings.bundles.map((bundle) =>
-          createBundleRow(bundle.id, {
-            price: String(bundle.price),
-            pulls: String(bundle.pulls)
-          })
-        )
-      : [];
-    setBundles((previous) => (areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles));
+    setBundles((previous) => {
+      if (!settings?.bundles) {
+        return previous.length > 0 ? previous : [];
+      }
+      const nextBundles = settings.bundles.map((bundle) =>
+        createBundleRow(bundle.id, {
+          price: String(bundle.price),
+          pulls: String(bundle.pulls)
+        })
+      );
+      return areBundleRowsEqual(previous, nextBundles) ? previous : nextBundles;
+    });
 
     const nextGuarantees = settings?.guarantees
       ? settings.guarantees.map((guarantee) => {
@@ -463,6 +489,47 @@ export function PtControlsPanel({
     });
   }, [perPull, complete, bundles, guarantees, emitSettingsChange]);
 
+  const perPullPriceValue = useMemo(() => parseNonNegativeNumber(perPull), [perPull]);
+  const bundleEvaluations = useMemo(() => {
+    const evaluations = new Map<
+      string,
+      { discountPercent: number | null; isLoss: boolean; warnNotIncreasing: boolean }
+    >();
+    const entries = bundles.map((bundle) => {
+      const price = parseNonNegativeNumber(bundle.price);
+      const pulls = parsePositiveInteger(bundle.pulls);
+      const discountPercent = getBundleDiscountPercent(perPullPriceValue, price, pulls);
+      return { id: bundle.id, price, discountPercent };
+    });
+
+    const sorted = entries
+      .filter((entry) => entry.price != null && entry.discountPercent != null)
+      .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
+
+    let maxDiscount = -Infinity;
+    const warnSet = new Set<string>();
+    sorted.forEach((entry) => {
+      if (entry.discountPercent != null) {
+        if (entry.discountPercent <= maxDiscount) {
+          warnSet.add(entry.id);
+        } else {
+          maxDiscount = entry.discountPercent;
+        }
+      }
+    });
+
+    entries.forEach((entry) => {
+      const discountPercent = entry.discountPercent ?? null;
+      evaluations.set(entry.id, {
+        discountPercent,
+        isLoss: discountPercent != null && discountPercent < 0,
+        warnNotIncreasing: warnSet.has(entry.id)
+      });
+    });
+
+    return evaluations;
+  }, [bundles, perPullPriceValue]);
+
   return (
     <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel p-3 shadow-sm">
       <ControlsRow label="1回の消費pt">
@@ -502,50 +569,87 @@ export function PtControlsPanel({
       />
 
       <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
-        {bundles.map((bundle, index) => (
-          <div
-            key={bundle.id}
-            className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
-          >
-            <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-              <InlineNumberField
-                value={bundle.price}
-                onChange={(value) =>
+        {bundles.map((bundle, index) => {
+          const evaluation = bundleEvaluations.get(bundle.id) ?? {
+            discountPercent: null,
+            isLoss: false,
+            warnNotIncreasing: false
+          };
+          const discountPercent = evaluation.discountPercent;
+          const isLoss = evaluation.isLoss;
+          const percentLabel =
+            discountPercent != null ? formatPercentage(Math.abs(discountPercent)) : null;
+
+          const savingsLabel = discountPercent == null
+            ? null
+            : `${percentLabel}%${isLoss ? '損' : 'お得'}`;
+
+          return (
+            <div
+              key={bundle.id}
+              className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-1 py-2"
+            >
+              <div className="pt-controls-panel__bundle-fields flex flex-nowrap items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                <InlineNumberField
+                  value={bundle.price}
+                  onChange={(value) =>
+                    setBundles((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], price: value };
+                      return next;
+                    })
+                  }
+                  placeholder="3000"
+                  className={clsx(
+                    'w-[10ch] px-1',
+                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                  )}
+                />
+                <span className="text-xs leading-none text-muted-foreground">ptで</span>
+                <InlineNumberField
+                  value={bundle.pulls}
+                  onChange={(value) =>
+                    setBundles((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], pulls: value };
+                      return next;
+                    })
+                  }
+                  placeholder="10"
+                  min={1}
+                  className={clsx(
+                    'w-[8ch] px-1',
+                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                  )}
+                />
+                <span className="text-xs leading-none text-muted-foreground">連</span>
+                {savingsLabel ? (
+                  <span
+                    className={clsx(
+                      'ml-1 text-[11px] font-semibold',
+                      isLoss ? 'text-rose-400' : 'text-emerald-400'
+                    )}
+                  >
+                    {savingsLabel}
+                  </span>
+                ) : null}
+                {evaluation.warnNotIncreasing ? (
+                  <span className="ml-1 text-[11px] font-semibold text-amber-400">
+                    お得率が増えていません
+                  </span>
+                ) : null}
+              </div>
+              <RemoveButton
+                onClick={() =>
                   setBundles((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], price: value };
+                    const next = prev.filter((entry) => entry.id !== bundle.id);
                     return next;
                   })
                 }
-                placeholder="3000"
-                className="w-[10ch]"
               />
-              <span className="text-xs leading-none text-muted-foreground">ptで</span>
-              <InlineNumberField
-                value={bundle.pulls}
-                onChange={(value) =>
-                  setBundles((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], pulls: value };
-                    return next;
-                  })
-                }
-                placeholder="10"
-                min={1}
-                className="w-[8ch]"
-              />
-              <span className="text-xs leading-none text-muted-foreground">連</span>
             </div>
-            <RemoveButton
-              onClick={() =>
-                setBundles((prev) => {
-                  const next = prev.filter((entry) => entry.id !== bundle.id);
-                  return next;
-                })
-              }
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <ControlsRow
