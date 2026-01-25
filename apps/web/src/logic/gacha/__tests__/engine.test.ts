@@ -118,6 +118,42 @@ describe('executeGacha', () => {
     expect(commonItemCounts).toEqual([1, 1]);
   });
 
+  test('can ignore lower threshold guarantees when disabled', () => {
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-common',
+          rarityId: 'common',
+          threshold: 1,
+          quantity: 1,
+          target: { type: 'rarity' }
+        },
+        {
+          id: 'g-rare',
+          rarityId: 'rare',
+          threshold: 3,
+          quantity: 1,
+          target: { type: 'rarity' }
+        }
+      ]
+    };
+
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool,
+      settings,
+      points: 30,
+      applyLowerThresholdGuarantees: false,
+      rng: () => 0
+    });
+
+    const guaranteedTotal = result.items.reduce((sum, item) => sum + item.guaranteedCount, 0);
+    const rareItem = result.items.find((item) => item.itemId === 'rare-1');
+    expect(guaranteedTotal).toBe(1);
+    expect(rareItem?.guaranteedCount).toBe(1);
+  });
+
   test('guarantees specific items when available', () => {
     const rareTwo: GachaItemDefinition = {
       itemId: 'rare-2',
@@ -337,6 +373,155 @@ describe('executeGacha', () => {
     });
 
     const limitedResult = result.items.find((item) => item.itemId === 'limited-2');
+    expect(limitedResult?.count).toBe(1);
+    expect(limitedResult?.guaranteedCount).toBe(1);
+  });
+
+  test('guarantees rarity even when rarity group is missing', () => {
+    const solo: GachaItemDefinition = {
+      itemId: 'rare-solo',
+      name: 'Rare Solo',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0.2,
+      itemRateDisplay: '20%',
+      pickupTarget: false,
+      drawWeight: 1,
+      remainingStock: 1
+    };
+
+    const poolWithMissingGroup: GachaPoolDefinition = {
+      gachaId: 'sample',
+      items: [solo],
+      rarityGroups: new Map()
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-rarity-solo',
+          rarityId: 'rare',
+          threshold: 1,
+          quantity: 1,
+          target: { type: 'rarity' }
+        }
+      ]
+    };
+
+    const rng = () => 0;
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool: poolWithMissingGroup,
+      settings,
+      points: 10,
+      rng
+    });
+
+    expect(result.warnings).toHaveLength(0);
+    const soloResult = result.items.find((item) => item.itemId === 'rare-solo');
+    expect(soloResult?.count).toBe(1);
+    expect(soloResult?.guaranteedCount).toBe(1);
+  });
+
+  test('guarantees rarity when only out-of-stock items exist and override is enabled', () => {
+    const limited: GachaItemDefinition = {
+      itemId: 'limited-4',
+      name: 'Limited Four',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0.2,
+      itemRateDisplay: '20%',
+      pickupTarget: false,
+      drawWeight: 1,
+      stockCount: 1,
+      remainingStock: 0
+    };
+
+    const poolWithOutOfStockOnly: GachaPoolDefinition = {
+      gachaId: 'sample',
+      items: [limited],
+      rarityGroups: new Map()
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-rarity',
+          rarityId: 'rare',
+          threshold: 1,
+          quantity: 1,
+          target: { type: 'rarity' }
+        }
+      ]
+    };
+
+    const rng = () => 0;
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool: poolWithOutOfStockOnly,
+      settings,
+      points: 10,
+      allowOutOfStockGuaranteeItem: true,
+      rng
+    });
+
+    expect(result.warnings).toHaveLength(0);
+    const limitedResult = result.items.find((item) => item.itemId === 'limited-4');
+    expect(limitedResult?.count).toBe(1);
+    expect(limitedResult?.guaranteedCount).toBe(1);
+  });
+
+  test('guarantees out-of-stock items even when rarity group is empty', () => {
+    const limited: GachaItemDefinition = {
+      itemId: 'limited-3',
+      name: 'Limited Three',
+      rarityId: 'rare',
+      rarityLabel: 'Rare',
+      rarityColor: '#ffaa00',
+      rarityEmitRate: 0.2,
+      itemRate: 0.2,
+      itemRateDisplay: '20%',
+      pickupTarget: false,
+      drawWeight: 1,
+      stockCount: 1,
+      remainingStock: 0
+    };
+
+    const poolWithOnlyOutOfStock: GachaPoolDefinition = {
+      gachaId: 'sample',
+      items: [limited],
+      rarityGroups: new Map()
+    };
+
+    const settings: PtSettingV3 = {
+      perPull: { price: 10, pulls: 1 },
+      guarantees: [
+        {
+          id: 'g-limited-only',
+          rarityId: 'rare',
+          threshold: 1,
+          quantity: 1,
+          target: { type: 'item', itemId: 'limited-3' }
+        }
+      ]
+    };
+
+    const result = executeGacha({
+      gachaId: 'sample',
+      pool: poolWithOnlyOutOfStock,
+      settings,
+      points: 10,
+      allowOutOfStockGuaranteeItem: true
+    });
+
+    expect(result.warnings).toHaveLength(0);
+    const limitedResult = result.items.find((item) => item.itemId === 'limited-3');
     expect(limitedResult?.count).toBe(1);
     expect(limitedResult?.guaranteedCount).toBe(1);
   });

@@ -280,6 +280,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [uiPreferencesState, uiPreferencesStore]
   );
   const allowOutOfStockGuaranteeItem = guaranteeOutOfStockPreference ?? false;
+  const applyLowerThresholdGuaranteesPreference = useMemo(
+    () => uiPreferencesStore.getApplyLowerThresholdGuaranteesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
   const includeOutOfStockItems = includeOutOfStockInComplete || allowOutOfStockGuaranteeItem;
   const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
 
@@ -655,7 +660,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         points: resolvedPoints,
         completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined,
         includeOutOfStockInComplete,
-        allowOutOfStockGuaranteeItem
+        allowOutOfStockGuaranteeItem,
+        applyLowerThresholdGuarantees
       });
 
       if (executionResult.errors.length > 0) {
@@ -908,9 +914,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }>;
     }
 
+    const eligibleThresholds = applyLowerThresholdGuarantees
+      ? null
+      : drawPlan.normalizedSettings.guarantees
+          .filter((guarantee) => drawPlan.totalPulls >= guarantee.threshold)
+          .map((guarantee) => guarantee.threshold);
+    const maxApplicableThreshold =
+      eligibleThresholds && eligibleThresholds.length > 0 ? Math.max(...eligibleThresholds) : null;
+
     return drawPlan.normalizedSettings.guarantees.map((guarantee) => {
       const rarity = selectedGacha.pool.rarityGroups.get(guarantee.rarityId);
-      const label = rarity?.label ?? guarantee.rarityId;
+      const rarityEntity = rarityState?.entities?.[guarantee.rarityId];
+      const label =
+        rarity?.label ??
+        (rarityEntity && (!rarityEntity.gachaId || rarityEntity.gachaId === selectedGacha.id)
+          ? rarityEntity.label
+          : null) ??
+        guarantee.rarityId;
       let targetLabel = 'レアリティ内からランダムに';
       if (guarantee.targetType === 'item' && guarantee.itemId) {
         const item = selectedGacha.pool.items.find((entry) => entry.itemId === guarantee.itemId);
@@ -921,7 +941,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         }
       }
       const description = `${label}: ${guarantee.threshold}連以上で${targetLabel}${guarantee.quantity}個保証`;
-      const applies = drawPlan.totalPulls >= guarantee.threshold;
+      const applies = applyLowerThresholdGuarantees
+        ? drawPlan.totalPulls >= guarantee.threshold
+        : maxApplicableThreshold != null && guarantee.threshold === maxApplicableThreshold;
       return {
         rarityId: guarantee.rarityId,
         threshold: guarantee.threshold,
@@ -929,7 +951,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         applies
       };
     });
-  }, [drawPlan, selectedGacha]);
+  }, [applyLowerThresholdGuarantees, drawPlan, rarityState, selectedGacha]);
 
   const shareContent = useMemo(() => {
     if (!resultItems || resultItems.length === 0) {

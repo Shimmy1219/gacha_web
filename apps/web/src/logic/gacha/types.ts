@@ -125,6 +125,7 @@ export interface ExecuteGachaArgs {
   rng?: () => number;
   includeOutOfStockInComplete?: boolean;
   allowOutOfStockGuaranteeItem?: boolean;
+  applyLowerThresholdGuarantees?: boolean;
 }
 
 export interface ExecutedPullItem {
