@@ -13,6 +13,7 @@ export interface ModalBaseProps<T = unknown> {
   onClose?: () => void;
   panelClassName?: string;
   panelPaddingClassName?: string;
+  showHeaderCloseButton?: boolean;
 }
 
 export interface ModalComponentProps<T = unknown> extends ModalBaseProps<T> {

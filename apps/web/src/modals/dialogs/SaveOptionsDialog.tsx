@@ -314,7 +314,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           push(PageSettingsDialog, {
             id: 'page-settings',
             title: 'ページ設定',
-            size: 'lg'
+            size: 'lg',
+            showHeaderCloseButton: true
           });
         }
       }
