@@ -77,6 +77,8 @@ export interface UserCardProps {
   discordAvatarUrl?: string | null;
 }
 
+const PANEL_CLOSE_DELAY_MS = 300;
+
 export function UserCard({
   userId,
   userName,
@@ -444,33 +446,89 @@ export function UserCard({
               'data-[state=closed]:grid-rows-[0fr]'
             )}
           >
-            <Disclosure.Panel
-              static
-              id={panelId}
-              className={clsx(
-                'overflow-hidden transition-opacity duration-300 ease-linear',
-                'group-data-[state=open]:opacity-100',
-                'group-data-[state=closed]:opacity-0'
-              )}
-            >
-              <div className="user-card__inventories space-y-4">
-                {inventories.map((inventory) => (
-                  <GachaInventoryCard
-                    key={inventory.inventoryId}
-                    inventory={inventory}
-                    showCounts={showCounts}
-                    userId={userId}
-                    userName={userName}
-                    catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
-                    rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
-                  />
-                ))}
-              </div>
-            </Disclosure.Panel>
+            <UserCardPanel
+              open={open}
+              panelId={panelId}
+              inventories={inventories}
+              showCounts={showCounts}
+              userId={userId}
+              userName={userName}
+              catalogItemsMap={catalogItemsMap}
+              rarityOptionsMap={rarityOptionsMap}
+            />
           </div>
         </article>
       )}
     </Disclosure>
+  );
+}
+
+interface UserCardPanelProps {
+  open: boolean;
+  panelId: string;
+  inventories: UserInventoryEntry[];
+  showCounts: boolean;
+  userId: UserId;
+  userName: string;
+  catalogItemsMap: Record<string, InventoryCatalogItemOption[]>;
+  rarityOptionsMap: Record<string, InventoryRarityOption[]>;
+}
+
+function UserCardPanel({
+  open,
+  panelId,
+  inventories,
+  showCounts,
+  userId,
+  userName,
+  catalogItemsMap,
+  rarityOptionsMap
+}: UserCardPanelProps): JSX.Element | null {
+  const [shouldRender, setShouldRender] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShouldRender(false);
+    }, PANEL_CLOSE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [open]);
+
+  if (!shouldRender) {
+    return null;
+  }
+
+  return (
+    <Disclosure.Panel
+      static
+      id={panelId}
+      className={clsx(
+        'overflow-hidden transition-opacity duration-300 ease-linear',
+        'group-data-[state=open]:opacity-100',
+        'group-data-[state=closed]:opacity-0'
+      )}
+    >
+      <div className="user-card__inventories space-y-4">
+        {inventories.map((inventory) => (
+          <GachaInventoryCard
+            key={inventory.inventoryId}
+            inventory={inventory}
+            showCounts={showCounts}
+            userId={userId}
+            userName={userName}
+            catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
+            rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
+          />
+        ))}
+      </div>
+    </Disclosure.Panel>
   );
 }
 
