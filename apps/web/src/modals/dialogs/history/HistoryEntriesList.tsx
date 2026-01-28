@@ -8,6 +8,8 @@ import { getRarityTextPresentation } from '../../../features/rarity/utils/rarity
 import { XLogoIcon } from '../../../components/icons/XLogoIcon';
 import { type ShareHandler } from '../../../hooks/useShare';
 import { type HistoryItemMetadata } from './historyUtils';
+import { WarningDialog } from '../WarningDialog';
+import { useModal } from '../../ModalProvider';
 
 const SOURCE_LABELS: Record<PullHistoryEntrySourceV1, string> = {
   insiteResult: 'ガチャ結果',
@@ -53,6 +55,7 @@ interface ItemEntryViewModel {
   raritySortOrder: number;
   isNew: boolean;
   hasOriginalPrizeMissing: boolean;
+  missingOriginalPrizeCount: number;
 }
 
 export interface HistoryEntriesListProps {
@@ -65,6 +68,13 @@ export interface HistoryEntriesListProps {
   shareHandlers: ShareHandler;
 }
 
+function formatOriginalPrizeWarningMessage(item: ItemEntryViewModel): string {
+  if (item.missingOriginalPrizeCount > 1) {
+    return `オリジナル景品「${item.itemLabel}」のうち${item.missingOriginalPrizeCount}件分にファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
+  }
+  return `オリジナル景品「${item.itemLabel}」にファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
+}
+
 export function HistoryEntriesList({
   entries,
   userName,
@@ -74,6 +84,8 @@ export function HistoryEntriesList({
   itemMetadata,
   shareHandlers
 }: HistoryEntriesListProps): JSX.Element {
+  const { push } = useModal();
+
   return (
     <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
       {entries.map((entry, index) => {
@@ -129,6 +141,7 @@ export function HistoryEntriesList({
             const raritySortOrder = metadata?.raritySortOrder ?? Number.NEGATIVE_INFINITY;
             const isOriginalPrize = metadata?.isOriginalPrize === true;
             const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
+            const missingOriginalPrizeCount = isOriginalPrize ? Math.max(0, count - assignedCount) : 0;
             const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
               typeof rarityColor === 'string' ? rarityColor : undefined
             );
@@ -142,7 +155,8 @@ export function HistoryEntriesList({
               rarityTextStyle,
               raritySortOrder,
               isNew: count > 0 && newItemSet.has(itemId),
-              hasOriginalPrizeMissing: isOriginalPrize && count > assignedCount
+              hasOriginalPrizeMissing: isOriginalPrize && missingOriginalPrizeCount > 0,
+              missingOriginalPrizeCount
             } satisfies ItemEntryViewModel;
           })
           .filter((value): value is ItemEntryViewModel => value !== null)
@@ -226,7 +240,25 @@ export function HistoryEntriesList({
                     </span>
                     <span className="flex items-center gap-1">
                       {item.hasOriginalPrizeMissing ? (
-                        <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" aria-label="未送信" />
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                          onClick={() => {
+                            push(WarningDialog, {
+                              id: `original-prize-warning-${item.itemId}`,
+                              title: 'オリジナル景品の警告',
+                              size: 'sm',
+                              payload: {
+                                message: formatOriginalPrizeWarningMessage(item),
+                                confirmLabel: '閉じる'
+                              }
+                            });
+                          }}
+                          aria-label={`オリジナル景品「${item.itemLabel}」の警告を表示`}
+                          title="オリジナル景品の警告を表示"
+                        >
+                          <ExclamationTriangleIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       ) : null}
                       <span
                         className={clsx(
