@@ -273,10 +273,11 @@ function buildHistoryEntries(
       return a.rarityLabel.localeCompare(b.rarityLabel, 'ja');
     });
 
+    const normalizedStatus = entry.status ?? 'new';
+    const missingByItems = items.length > 0 ? items.some((item) => item.hasOriginalPrizeMissing) : false;
     const hasOriginalPrizeMissing =
-      items.length > 0
-        ? items.some((item) => item.hasOriginalPrizeMissing)
-        : entry.hasOriginalPrizeMissing === true;
+      normalizedStatus !== 'new' &&
+      (missingByItems || (items.length === 0 && entry.hasOriginalPrizeMissing === true));
 
     result.push({
       id: entry.id,
