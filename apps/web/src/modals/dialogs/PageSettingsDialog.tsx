@@ -14,6 +14,7 @@ import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ConfirmDialog, ModalBody } from '..';
 import { type ModalComponent } from '../ModalTypes';
@@ -141,6 +142,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   } = useSiteTheme();
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
   const persistence = useAppPersistence();
+  const { data: discordSession } = useDiscordSession();
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -180,6 +182,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
+  const [ownerName, setOwnerName] = useState<string>(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    return prefs?.ownerName ?? '';
+  });
   const handleRestoreGacha = useCallback(
     (gachaId: string) => {
       appStateStore.restoreGacha(gachaId);
@@ -207,6 +213,35 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaName('');
   }, [appStateStore, editingGachaId, editingGachaName]);
 
+  useEffect(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    setOwnerName(prefs?.ownerName ?? '');
+  }, [discordSession?.loggedIn, discordSession?.user?.name, persistence]);
+
+  const persistOwnerName = useCallback(
+    (nextName: string) => {
+      const snapshot = persistence.loadSnapshot();
+      const current = snapshot.receivePrefs;
+      const normalized = nextName.trim();
+      const nextPrefs = {
+        ...current,
+        version: 3,
+        intro: current?.intro ?? { skipIntro: false },
+        ownerName: normalized.length > 0 ? normalized : null
+      };
+      persistence.saveReceivePrefsDebounced(nextPrefs);
+    },
+    [persistence]
+  );
+
+  const handleOwnerNameChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setOwnerName(value);
+      persistOwnerName(value);
+    },
+    [persistOwnerName]
+  );
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
@@ -1014,6 +1049,22 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               </p>
             </div>
             <div className="space-y-4">
+              <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+                <label htmlFor="owner-name" className="text-sm font-semibold text-surface-foreground">
+                  オーナー名
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  共有リンクの作成者として表示される名前です。Discordログイン時は自動で入力されます。
+                </p>
+                <input
+                  id="owner-name"
+                  type="text"
+                  value={ownerName}
+                  onChange={handleOwnerNameChange}
+                  placeholder="例: Shimmy配信"
+                  className="mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                />
+              </div>
               <SwitchField
                 label="Discordデバッグログを表示"
                 description="Discordログイン処理の詳細ログを画面下部に表示します。"

@@ -27,6 +27,7 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
@@ -291,6 +292,35 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     [openOriginalPrizeSettings, push, resolveZipSnapshot, selection, userId]
   );
 
+  const resolveOwnerName = useCallback(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    return prefs?.ownerName?.trim() ?? '';
+  }, [persistence]);
+
+  const ensureOwnerName = useCallback(() => {
+    const ownerName = resolveOwnerName();
+    if (ownerName) {
+      return ownerName;
+    }
+    push(ConfirmDialog, {
+      id: 'owner-name-warning',
+      title: 'オーナー名の設定',
+      size: 'sm',
+      payload: {
+        message: 'オーナー名が未設定です。共有リンクを作成する前にサイト設定でオーナー名を設定してください。',
+        confirmLabel: '設定を開く',
+        cancelLabel: '閉じる',
+        onConfirm: () => {
+          push(PageSettingsDialog, {
+            id: 'page-settings',
+            title: 'ページ設定',
+            size: 'lg'
+          });
+        }
+      }
+    });
+    return null;
+  }, [push, resolveOwnerName]);
   const linkDiscordProfile = useCallback(
     (params: {
       discordUserId: string;
@@ -499,12 +529,13 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
   };
 
-  const runZipUpload = useCallback(async () => {
+  const runZipUpload = useCallback(async (ownerName: string) => {
     const zip = await buildUserZipFromSelection({
       snapshot: resolveZipSnapshot(),
       selection,
       userId,
-      userName: receiverDisplayName
+      userName: receiverDisplayName,
+      ownerName
     });
 
     const uploadResponse = await uploadZip({
@@ -556,7 +587,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     userId
   ]);
 
-  const runUploadToShimmy = async () => {
+  const runUploadToShimmy = async (ownerName: string) => {
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
@@ -574,12 +605,13 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
     });
     try {
-      await runZipUpload();
+      await runZipUpload(ownerName);
       const zip = await buildUserZipFromSelection({
         snapshot: resolveZipSnapshot(),
         selection,
         userId,
-        userName: receiverDisplayName
+        userName: receiverDisplayName,
+        ownerName
       });
 
       const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
@@ -650,15 +682,19 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
     maybeWarnMissingOriginalPrize(() => {
-      void runUploadToShimmy();
+      void runUploadToShimmy(ownerName);
     });
   };
 
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const discordHelperText = isDiscordLoggedIn ? 'Discordに共有' : 'ログインが必要';
 
-  const runShareToDiscord = async () => {
+  const runShareToDiscord = async (ownerName: string) => {
     setErrorBanner(null);
     if (!isDiscordLoggedIn) {
       setErrorBanner('Discordにログインしてから共有してください。');
@@ -669,6 +705,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       return;
     }
     if (isProcessing || isUploading || isDiscordSharing) {
+      return;
+    }
+    if (!ownerName) {
       return;
     }
 
@@ -683,10 +722,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     let uploadData: SaveOptionsUploadResult | null = null;
     let pullIdsForStatus: string[] = [];
 
+    let originalPrizeMissingPullIds: string[] = [];
     try {
-      const { result, zip } = await runZipUpload();
+      const { result, zip } = await runZipUpload(ownerName);
       uploadData = result;
       pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
+      originalPrizeMissingPullIds = zip.originalPrizeMissingPullIds;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('Discord共有用ZIPアップロードがキャンセルされました');
@@ -897,7 +938,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
           pullHistoryStore.markPullOriginalPrizeMissing(
             pullIdsForStatus,
-            zip.originalPrizeMissingPullIds
+            originalPrizeMissingPullIds
           );
         }
 
@@ -980,7 +1021,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             pullHistoryStore.markPullStatus(pullIdsForStatus, 'discord_shared');
             pullHistoryStore.markPullOriginalPrizeMissing(
               pullIdsForStatus,
-              zip.originalPrizeMissingPullIds
+              originalPrizeMissingPullIds
             );
           }
           setUploadNotice({
@@ -1016,9 +1057,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     if (isProcessing || isUploading || isDiscordSharing) {
       return;
     }
-
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
     maybeWarnMissingOriginalPrize(() => {
-      void runShareToDiscord();
+      void runShareToDiscord(ownerName);
     });
   };
 

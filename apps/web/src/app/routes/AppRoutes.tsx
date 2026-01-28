@@ -4,6 +4,8 @@ import { GachaLayout, type GachaLayoutProps } from '../../layouts/GachaLayout';
 import { MarketingLayout } from '../../layouts/MarketingLayout';
 import { HomePage } from '../../pages/home/HomePage';
 import { ReceivePage } from '../../pages/receive/ReceivePage';
+import { ReceiveHistoryPage } from '../../pages/receive/ReceiveHistoryPage';
+import { ReceiveListPage } from '../../pages/receive/ReceiveListPage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
 import { GachaTestPage } from '../../pages/gachaTest/GachaTestPage';
 
@@ -52,7 +54,9 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
           )
         },
         { path: 'gacha/test', element: <GachaTestPage /> },
-        { path: 'receive', element: <ReceivePage /> }
+        { path: 'receive', element: <ReceivePage /> },
+        { path: 'receive/history', element: <ReceiveHistoryPage /> },
+        { path: 'receive/list', element: <ReceiveListPage /> }
       ]
     },
     { path: '*', element: <Navigate to="/home" replace /> }

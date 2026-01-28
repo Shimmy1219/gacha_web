@@ -270,6 +270,7 @@ export interface ReceivePrefsStateV3 {
     skipIntro: boolean;
     lastConfirmedAt?: string;
   };
+  ownerName?: string | null;
 }
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';

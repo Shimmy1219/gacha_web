@@ -9,7 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react'
 import clsx from 'clsx';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
-import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
+import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -552,6 +553,36 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const persistence = useAppPersistence();
   const isPullsMode = pointsInputMode === 'pulls';
   const completeExecutionsOverrideForPlan = isPullsMode ? 0 : completeExecutionsOverride;
+
+  const resolveOwnerName = useCallback(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    return prefs?.ownerName?.trim() ?? '';
+  }, [persistence]);
+
+  const ensureOwnerName = useCallback(() => {
+    const ownerName = resolveOwnerName();
+    if (ownerName) {
+      return ownerName;
+    }
+    push(ConfirmDialog, {
+      id: 'owner-name-warning',
+      title: 'オーナー名の設定',
+      size: 'sm',
+      payload: {
+        message: 'オーナー名が未設定です。共有リンクを作成する前にサイト設定でオーナー名を設定してください。',
+        confirmLabel: '設定を開く',
+        cancelLabel: '閉じる',
+        onConfirm: () => {
+          push(PageSettingsDialog, {
+            id: 'page-settings',
+            title: 'ページ設定',
+            size: 'lg'
+          });
+        }
+      }
+    });
+    return null;
+  }, [push, resolveOwnerName]);
 
   const planResolution = useMemo(() => {
     if (!selectedGacha) {
@@ -1157,6 +1188,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         throw new Error(message);
       }
 
+      const ownerName = ensureOwnerName();
+      if (!ownerName) {
+        return;
+      }
+
       setIsDiscordDelivering(true);
       setDiscordDeliveryStage('building-zip');
       setDiscordDeliveryError(null);
@@ -1183,6 +1219,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           selection,
           userId: targetUserId,
           userName: receiverDisplayName,
+          ownerName,
           itemIdFilter: filteredItemIds
         });
 

@@ -411,11 +411,11 @@ export function UserCard({
             <div className="user-card__actions flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
+                className="user-card__export-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-accent/70 bg-accent text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
                 onClick={() => onExport?.(userId)}
+                aria-label="保存"
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
-                保存
               </button>
               <button
                 type="button"
