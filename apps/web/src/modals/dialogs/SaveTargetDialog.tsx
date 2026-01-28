@@ -19,6 +19,8 @@ import type { SaveTargetSelection, SaveTargetSelectionMode } from '../../feature
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { SaveOptionsDialog } from './SaveOptionsDialog';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { WarningDialog } from './WarningDialog';
+import { useModal } from '../ModalProvider';
 
 interface SaveTargetDialogPayload {
   userId: string;
@@ -84,6 +86,25 @@ function getGachaDisplayName(gachaId: string, appMeta: AppMetaMap): string {
     return '未設定のガチャ';
   }
   return appMeta?.[gachaId]?.displayName ?? gachaId;
+}
+
+function formatMissingOriginalPrizeMessage(items: HistorySelectionItem[], gachaName: string): string {
+  const missingNames = Array.from(
+    new Set(
+      items
+        .filter((item) => item.hasOriginalPrizeMissing)
+        .map((item) => item.itemName || item.itemId)
+        .filter((name): name is string => Boolean(name))
+    )
+  );
+  const itemCount = missingNames.length;
+  if (itemCount === 0) {
+    return 'オリジナル景品のファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。';
+  }
+  const previewNames = missingNames.slice(0, 3).map((name) => `「${name}」`).join('、');
+  const suffix = itemCount > 3 ? `など${itemCount}件` : '';
+  const previewLabel = previewNames ? `対象: ${previewNames}${suffix}。` : '';
+  return `「${gachaName}」のオリジナル景品のうち${itemCount}件にファイルが割り当てられていません。${previewLabel}ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
 }
 
 function collectSnapshotItemIds(snapshot: UserInventorySnapshotV3 | undefined): Set<string> {
@@ -299,6 +320,7 @@ function buildHistoryEntries(
 }
 
 export function SaveTargetDialog({ payload, replace, close }: ModalComponentProps<SaveTargetDialogPayload>): JSX.Element {
+  const { push } = useModal();
   const { status, data, error } = useGachaLocalStorage();
   const [mode, setMode] = useState<SaveTargetSelectionMode>('all');
   const [selectedGachaIds, setSelectedGachaIds] = useState<string[]>([]);
@@ -687,6 +709,9 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                   const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
                   const missingOnlyActive = missingOnlyHistoryIds.includes(entry.id);
                   const newItemsSet = new Set(entry.newItems);
+                  const missingWarningMessage = entryHasOriginalPrizeMissing
+                    ? formatMissingOriginalPrizeMessage(entry.items, entry.gachaName)
+                    : '';
                   return (
                     <div
                       key={entry.id}
@@ -739,18 +764,36 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                             <span>ユーザーが新規に取得したものだけを保存</span>
                           </label>
                           {entryHasOriginalPrizeMissing ? (
-                            <label className="flex cursor-pointer items-center gap-2 text-surface-foreground/70">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4"
-                                checked={missingOnlyActive}
-                                onChange={() => toggleHistoryMissingOnly(entry.id)}
-                              />
-                              <span className="flex items-center gap-1">
-                                未送信分のみ保存
-                                <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" aria-hidden="true" />
-                              </span>
-                            </label>
+                            <div className="flex items-center gap-2 text-surface-foreground/70">
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  checked={missingOnlyActive}
+                                  onChange={() => toggleHistoryMissingOnly(entry.id)}
+                                />
+                                <span>未送信分のみ保存</span>
+                              </label>
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                                onClick={() => {
+                                  push(WarningDialog, {
+                                    id: `original-prize-warning-${entry.id}`,
+                                    title: 'オリジナル景品の警告',
+                                    size: 'sm',
+                                    payload: {
+                                      message: missingWarningMessage,
+                                      confirmLabel: '閉じる'
+                                    }
+                                  });
+                                }}
+                                aria-label="オリジナル景品の警告を表示"
+                                title="オリジナル景品の警告を表示"
+                              >
+                                <ExclamationTriangleIcon className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                         <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
