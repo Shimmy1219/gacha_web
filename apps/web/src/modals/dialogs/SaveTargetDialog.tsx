@@ -748,7 +748,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                               />
                               <span className="flex items-center gap-1">
                                 未送信分のみ保存
-                                <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" aria-hidden="true" />
+                                <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" aria-hidden="true" />
                               </span>
                             </label>
                           ) : null}
