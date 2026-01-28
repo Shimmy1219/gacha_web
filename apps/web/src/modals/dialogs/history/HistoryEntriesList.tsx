@@ -87,7 +87,7 @@ export function HistoryEntriesList({
   const { push } = useModal();
 
   return (
-    <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
+    <div className="space-y-3">
       {entries.map((entry, index) => {
         const entryKey = entry.id ?? `${entry.executedAt ?? 'unknown'}-${index}`;
         const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
