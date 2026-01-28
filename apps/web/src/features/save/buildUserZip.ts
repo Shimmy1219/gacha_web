@@ -1017,7 +1017,6 @@ export async function buildUserZipFromSelection({
     if (originalPrizeSelection.includedPullIds) {
       originalPrizeSelection.includedPullIds.forEach((id) => includedPullIds.add(id));
     }
-
     if (newItemsOnlyPullIds && newItemsOnlyPullIds.size > 0) {
       const allHistoryAggregation = aggregateHistoryItems(
         snapshot,

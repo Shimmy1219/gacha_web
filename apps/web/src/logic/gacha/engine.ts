@@ -43,12 +43,32 @@ function buildWeightedDistribution(
   return { items, weights, total };
 }
 
-function buildWeights(pool: GachaPoolDefinition): { items: GachaItemDefinition[]; weights: number[]; total: number } {
-  return buildWeightedDistribution(pool.items);
+function buildRemainingStockMap(items: GachaItemDefinition[]): Map<string, number> {
+  const map = new Map<string, number>();
+  items.forEach((item) => {
+    const remaining = item.remainingStock;
+    if (typeof remaining === 'number' && Number.isFinite(remaining)) {
+      map.set(item.itemId, Math.max(0, Math.floor(remaining)));
+    }
+  });
+  return map;
+}
+
+function isItemAvailable(item: GachaItemDefinition, remainingStockById: Map<string, number>): boolean {
+  const remaining = remainingStockById.get(item.itemId);
+  return remaining == null || remaining > 0;
+}
+
+function decrementRemainingStock(item: GachaItemDefinition, remainingStockById: Map<string, number>): void {
+  const remaining = remainingStockById.get(item.itemId);
+  if (remaining == null) {
+    return;
+  }
+  remainingStockById.set(item.itemId, Math.max(0, remaining - 1));
 }
 
 function pickRandomItem(
-  data: ReturnType<typeof buildWeights>,
+  data: { items: GachaItemDefinition[]; weights: number[]; total: number },
   rng: () => number
 ): GachaItemDefinition | undefined {
   if (!data.items.length || data.total <= 0) {
@@ -71,20 +91,26 @@ function pickRandomItem(
 function performRandomDraws(
   pool: GachaPoolDefinition,
   count: number,
-  rng: () => number
+  rng: () => number,
+  remainingStockById: Map<string, number>
 ): ExecuteGachaDrawInstance[] {
   if (count <= 0) {
     return [];
   }
 
-  const weights = buildWeights(pool);
   const draws: ExecuteGachaDrawInstance[] = [];
 
   for (let index = 0; index < count; index += 1) {
+    const availableItems = pool.items.filter((item) => isItemAvailable(item, remainingStockById));
+    if (availableItems.length === 0) {
+      break;
+    }
+    const weights = buildWeightedDistribution(availableItems);
     const item = pickRandomItem(weights, rng);
     if (!item) {
       break;
     }
+    decrementRemainingStock(item, remainingStockById);
     draws.push({ itemId: item.itemId, rarityId: item.rarityId, wasGuaranteed: false });
   }
 
@@ -96,7 +122,9 @@ function buildGuaranteedDraws(
   pool: GachaPoolDefinition,
   guarantees: NormalizedGuaranteeSetting[],
   itemMap: Map<string, GachaItemDefinition>,
-  rng: () => number
+  rng: () => number,
+  remainingStockById: Map<string, number>,
+  allowOutOfStockGuaranteeItem: boolean
 ): { draws: ExecuteGachaDrawInstance[]; warnings: string[]; remainingRandomPulls: number } {
   if (!guarantees.length || plan.totalPulls <= 0) {
     return { draws: [], warnings: [], remainingRandomPulls: plan.randomPulls };
@@ -112,10 +140,6 @@ function buildGuaranteedDraws(
     }
 
     const group = pool.rarityGroups.get(guarantee.rarityId);
-    if (!group || group.items.length === 0) {
-      warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`);
-      return;
-    }
 
     const allocation = Math.min(Math.max(0, Math.floor(guarantee.quantity)), remainingRandomPulls);
     if (allocation <= 0) {
@@ -126,11 +150,39 @@ function buildGuaranteedDraws(
       warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な抽選回数が不足しています。`);
     }
 
-    const selectRandomFromGroup = (): GachaItemDefinition => {
-      const distribution = buildWeightedDistribution(group.items);
-      return pickRandomItem(distribution, rng) ?? group.items[group.items.length - 1];
+    const selectRandomFromGroup = (): { selected?: GachaItemDefinition; reason?: 'missing' | 'empty' } => {
+      const baseCandidates = group
+        ? group.items
+        : pool.items.filter((item) => item.rarityId === guarantee.rarityId);
+      const inStockCandidates = baseCandidates.filter((item) => isItemAvailable(item, remainingStockById));
+      if (inStockCandidates.length > 0) {
+        const distribution = buildWeightedDistribution(inStockCandidates);
+        return { selected: pickRandomItem(distribution, rng) ?? inStockCandidates[inStockCandidates.length - 1] };
+      }
+
+      const hasAnyRarityItems = pool.items.some((item) => item.rarityId === guarantee.rarityId);
+      if (!hasAnyRarityItems) {
+        return { reason: 'missing' };
+      }
+
+      if (!allowOutOfStockGuaranteeItem) {
+        return { reason: 'empty' };
+      }
+
+      const outOfStockCandidates = pool.items
+        .filter((item) => item.rarityId === guarantee.rarityId)
+        .filter((item) => !isItemAvailable(item, remainingStockById))
+        .filter((item) => typeof item.stockCount === 'number' && Number.isFinite(item.stockCount));
+
+      if (outOfStockCandidates.length === 0) {
+        return { reason: 'empty' };
+      }
+
+      const distribution = buildWeightedDistribution(outOfStockCandidates);
+      return { selected: pickRandomItem(distribution, rng) ?? outOfStockCandidates[outOfStockCandidates.length - 1] };
     };
 
+    let allocated = 0;
     for (let index = 0; index < allocation; index += 1) {
       let selected: GachaItemDefinition | undefined;
 
@@ -142,19 +194,38 @@ function buildGuaranteedDraws(
           warnings.push(
             `保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは指定したレアリティと一致しません。`
           );
+        } else if (!isItemAvailable(candidate, remainingStockById)) {
+          const canOverrideStock =
+            allowOutOfStockGuaranteeItem && typeof candidate.stockCount === 'number' && Number.isFinite(candidate.stockCount);
+          if (canOverrideStock) {
+            selected = candidate;
+          } else {
+            warnings.push(`保証設定「${guarantee.id ?? guarantee.rarityId}」の対象アイテムは在庫切れです。`);
+          }
         } else {
           selected = candidate;
         }
       }
 
       if (!selected) {
-        selected = selectRandomFromGroup();
+        const { selected: raritySelected, reason } = selectRandomFromGroup();
+        if (!raritySelected) {
+          warnings.push(
+            reason === 'missing'
+              ? `保証設定「${guarantee.id ?? guarantee.rarityId}」に対応するアイテムが存在しません。`
+              : `保証設定「${guarantee.id ?? guarantee.rarityId}」に割り当て可能な在庫がありません。`
+          );
+          break;
+        }
+        selected = raritySelected;
       }
 
+      decrementRemainingStock(selected, remainingStockById);
       draws.push({ itemId: selected.itemId, rarityId: selected.rarityId, wasGuaranteed: true });
+      allocated += 1;
     }
 
-    remainingRandomPulls -= allocation;
+    remainingRandomPulls -= allocated;
   });
 
   return { draws, warnings, remainingRandomPulls };
@@ -165,14 +236,17 @@ export function executeGacha({
   pool,
   settings,
   points,
-  completeMode,
+  completeExecutionsOverride,
+  includeOutOfStockInComplete = false,
+  allowOutOfStockGuaranteeItem = false,
+  applyLowerThresholdGuarantees = true,
   rng = Math.random
 }: ExecuteGachaArgs): ExecuteGachaResult {
   const plan = calculateDrawPlan({
     points,
     settings,
     totalItemTypes: pool.items.length,
-    completeMode
+    completeExecutionsOverride
   });
 
   const warnings = [...plan.warnings];
@@ -192,16 +266,30 @@ export function executeGacha({
   }
 
   const itemMap = buildItemMap(pool);
+  const remainingStockById = buildRemainingStockMap(pool.items);
   const draws: ExecuteGachaDrawInstance[] = [];
 
   if (plan.completeExecutions > 0) {
-    const completeMode = plan.normalizedSettings.complete?.mode ?? 'repeat';
-    const guaranteedExecutions =
-      completeMode === 'frontload' ? Math.min(1, plan.completeExecutions) : plan.completeExecutions;
-    for (let execution = 0; execution < guaranteedExecutions; execution += 1) {
+    for (let execution = 0; execution < plan.completeExecutions; execution += 1) {
       pool.items.forEach((item) => {
+        if (!includeOutOfStockInComplete && !isItemAvailable(item, remainingStockById)) {
+          return;
+        }
+        decrementRemainingStock(item, remainingStockById);
         draws.push({ itemId: item.itemId, rarityId: item.rarityId, wasGuaranteed: false });
       });
+    }
+  }
+
+  const guarantees = plan.normalizedSettings.guarantees;
+  let guaranteesToApply = guarantees;
+  if (!applyLowerThresholdGuarantees) {
+    const applicable = guarantees.filter((guarantee) => plan.totalPulls >= guarantee.threshold);
+    if (!applicable.length) {
+      guaranteesToApply = [];
+    } else {
+      const maxThreshold = Math.max(...applicable.map((guarantee) => guarantee.threshold));
+      guaranteesToApply = guarantees.filter((guarantee) => guarantee.threshold === maxThreshold);
     }
   }
 
@@ -209,7 +297,15 @@ export function executeGacha({
     draws: guaranteeDraws,
     warnings: guaranteeWarnings,
     remainingRandomPulls
-  } = buildGuaranteedDraws(plan, pool, plan.normalizedSettings.guarantees, itemMap, rng);
+  } = buildGuaranteedDraws(
+    plan,
+    pool,
+    guaranteesToApply,
+    itemMap,
+    rng,
+    remainingStockById,
+    allowOutOfStockGuaranteeItem
+  );
 
   if (guaranteeDraws.length > 0) {
     draws.push(...guaranteeDraws);
@@ -219,8 +315,12 @@ export function executeGacha({
   }
 
   if (remainingRandomPulls > 0) {
-    const randomDraws = performRandomDraws(pool, remainingRandomPulls, rng);
+    const randomDraws = performRandomDraws(pool, remainingRandomPulls, rng, remainingStockById);
     draws.push(...randomDraws);
+  }
+
+  if (draws.length < plan.totalPulls) {
+    warnings.push('在庫不足のため、一部の抽選が実行できませんでした。');
   }
 
   const aggregated = new Map<string, ExecuteGachaResult['items'][number]>();
@@ -256,12 +356,14 @@ export function executeGacha({
     return a.name.localeCompare(b.name);
   });
 
+  const actualTotalPulls = draws.length;
+
   return {
     plan,
     items,
     pointsSpent: plan.pointsUsed,
     pointsRemainder: plan.pointsRemainder,
-    totalPulls: plan.totalPulls,
+    totalPulls: actualTotalPulls,
     completeExecutions: plan.completeExecutions,
     warnings,
     errors

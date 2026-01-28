@@ -768,7 +768,6 @@ function mergePtSettings(
   return {
     version: resolveVersion(base?.version, addition.version, 3),
     updatedAt: now,
-    completeMode: base?.completeMode ?? addition.completeMode,
     byGachaId: nextByGachaId
   };
 }

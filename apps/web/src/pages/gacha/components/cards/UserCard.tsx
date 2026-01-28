@@ -37,7 +37,7 @@ export interface UserInventoryEntryItem {
   itemName: string;
   rarity: RarityMeta;
   count: number;
-  isMissing: boolean;
+  isMissing?: boolean;
   isOriginalPrize?: boolean;
   originalPrizeInstances?: OriginalPrizeInstance[];
 }
@@ -701,7 +701,13 @@ function GachaInventoryCard({
         onSelect: handleDeleteInventory
       }
     ],
-    [handleDeleteInventory, handleOpenHistory, handleOpenOriginalPrizeSettings, handleToggleEditing, originalPrizeItems.length]
+    [
+      handleDeleteInventory,
+      handleOpenHistory,
+      handleOpenOriginalPrizeSettings,
+      handleToggleEditing,
+      originalPrizeItems.length
+    ]
   );
 
   const handleStartEdit = useCallback(

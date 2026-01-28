@@ -10,7 +10,13 @@ interface ConfirmDialogPayload {
 }
 
 export function ConfirmDialog({ payload, close }: ModalComponentProps<ConfirmDialogPayload>): JSX.Element {
-  const { message, confirmLabel = '確定', cancelLabel = 'キャンセル', onConfirm, onCancel } = payload ?? {};
+  const {
+    message,
+    confirmLabel = '確定',
+    cancelLabel = 'キャンセル',
+    onConfirm,
+    onCancel
+  } = payload ?? {};
 
   return (
     <>

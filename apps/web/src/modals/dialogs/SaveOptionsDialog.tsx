@@ -26,7 +26,7 @@ import {
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
+import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
@@ -321,7 +321,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
     return null;
   }, [push, resolveOwnerName]);
-
   const linkDiscordProfile = useCallback(
     (params: {
       discordUserId: string;

@@ -2,10 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { SingleSelectDropdown, type SingleSelectOption } from '../gacha/components/select/SingleSelectDropdown';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
-import { resolveCompleteModePreference, useStoreValue } from '@domain/stores';
+import { useStoreValue } from '@domain/stores';
 import type { PtSettingV3 } from '@domain/app-persistence';
 import {
   buildGachaPools,
+  buildItemInventoryCountMap,
   calculateDrawPlan,
   executeGacha,
   formatItemRateWithPrecision,
@@ -15,7 +16,6 @@ import {
   type GachaItemDefinition,
   type GachaPoolDefinition
 } from '../../logic/gacha';
-import type { CompleteDrawMode } from '../../logic/gacha/types';
 
 interface GachaDefinition {
   id: string;
@@ -24,6 +24,7 @@ interface GachaDefinition {
   items: GachaItemDefinition[];
   itemOrder: string[];
   rarityOrder: string[];
+  completeItemCount: number;
 }
 
 interface GachaDefinitionsResult {
@@ -33,15 +34,27 @@ interface GachaDefinitionsResult {
 }
 
 function useGachaDefinitions(): GachaDefinitionsResult {
-  const { appState: appStateStore, catalog: catalogStore, rarities: rarityStore } = useDomainStores();
+  const {
+    appState: appStateStore,
+    catalog: catalogStore,
+    rarities: rarityStore,
+    userInventories: userInventoriesStore,
+    uiPreferences: uiPreferencesStore
+  } = useDomainStores();
   const appState = useStoreValue(appStateStore);
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
+  const userInventoriesState = useStoreValue(userInventoriesStore);
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
 
   return useMemo(() => {
     const options: Array<SingleSelectOption<string>> = [];
     const map = new Map<string, GachaDefinition>();
     const rarityDigits = inferRarityFractionDigits(rarityState);
+    const inventoryCountsByItemId = buildItemInventoryCountMap(userInventoriesState?.byItemId);
+    const includeOutOfStockInComplete = uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference() ?? false;
+    const allowOutOfStockGuaranteeItem = uiPreferencesStore.getGuaranteeOutOfStockItemPreference() ?? false;
+    const includeOutOfStockItems = includeOutOfStockInComplete || allowOutOfStockGuaranteeItem;
 
     if (!catalogState?.byGacha) {
       return { options, map, rarityDigits };
@@ -50,7 +63,9 @@ function useGachaDefinitions(): GachaDefinitionsResult {
     const { poolsByGachaId } = buildGachaPools({
       catalogState,
       rarityState,
-      rarityFractionDigits: rarityDigits
+      rarityFractionDigits: rarityDigits,
+      inventoryCountsByItemId,
+      includeOutOfStockItems
     });
 
     const catalogByGacha = catalogState.byGacha;
@@ -74,6 +89,9 @@ function useGachaDefinitions(): GachaDefinitionsResult {
         label: appState?.meta?.[gachaId]?.displayName ?? gachaId,
         pool,
         items: pool.items.map((item) => ({ ...item })),
+        completeItemCount: includeOutOfStockInComplete
+          ? pool.items.length
+          : pool.items.filter((item) => item.remainingStock !== 0).length,
         itemOrder: Array.isArray(catalogSnapshot?.order)
           ? [...catalogSnapshot.order]
           : pool.items.map((item) => item.itemId),
@@ -92,7 +110,7 @@ function useGachaDefinitions(): GachaDefinitionsResult {
     Object.keys(catalogByGacha).forEach(appendGacha);
 
     return { options, map, rarityDigits };
-  }, [appState, catalogState, rarityState]);
+  }, [appState, catalogState, rarityState, uiPreferencesState, uiPreferencesStore, userInventoriesState?.byItemId]);
 }
 
 interface SimulationItemResult {
@@ -146,10 +164,12 @@ interface SimulationError {
 interface SimulationRequest {
   gacha: GachaDefinition;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
   pullsPerRun: number;
   runCount: number;
   rarityDigits: Map<string, number>;
+  includeOutOfStockInComplete: boolean;
+  allowOutOfStockGuaranteeItem: boolean;
+  applyLowerThresholdGuarantees: boolean;
 }
 
 function formatObservedRate(rate: number, rarityDigits: Map<string, number>, rarityId: string): string {
@@ -163,13 +183,11 @@ function formatObservedRate(rate: number, rarityDigits: Map<string, number>, rar
 function resolvePlanForPulls({
   pulls,
   gacha,
-  ptSetting,
-  completeMode
+  ptSetting
 }: {
   pulls: number;
   gacha: GachaDefinition;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
 }): { plan: DrawPlan; points: number } | SimulationError {
   const { normalized } = normalizePtSetting(ptSetting);
   const priceCandidates: number[] = [];
@@ -185,8 +203,8 @@ function resolvePlanForPulls({
   });
   if (normalized.complete) {
     priceCandidates.push(normalized.complete.price);
-    if (gacha.pool.items.length > 0) {
-      unitPriceCandidates.push(normalized.complete.price / gacha.pool.items.length);
+    if (gacha.completeItemCount > 0) {
+      unitPriceCandidates.push(normalized.complete.price / gacha.completeItemCount);
     }
   }
 
@@ -197,8 +215,7 @@ function resolvePlanForPulls({
   let plan = calculateDrawPlan({
     points,
     settings: ptSetting,
-    totalItemTypes: gacha.pool.items.length,
-    completeMode
+    totalItemTypes: gacha.completeItemCount
   });
 
   let safety = 0;
@@ -207,8 +224,7 @@ function resolvePlanForPulls({
     plan = calculateDrawPlan({
       points,
       settings: ptSetting,
-      totalItemTypes: gacha.pool.items.length,
-      completeMode
+      totalItemTypes: gacha.completeItemCount
     });
     safety += 1;
   }
@@ -224,18 +240,19 @@ function resolvePlanForPulls({
 function simulateGacha({
   gacha,
   ptSetting,
-  completeMode,
   pullsPerRun,
   runCount,
-  rarityDigits
+  rarityDigits,
+  includeOutOfStockInComplete,
+  allowOutOfStockGuaranteeItem,
+  applyLowerThresholdGuarantees
 }: SimulationRequest): SimulationResult | SimulationError {
   const normalizedPulls = Math.max(1, Math.floor(pullsPerRun));
   const normalizedRuns = Math.max(1, Math.floor(runCount));
   const planResolution = resolvePlanForPulls({
     pulls: normalizedPulls,
     gacha,
-    ptSetting,
-    completeMode
+    ptSetting
   });
 
   if ('error' in planResolution) {
@@ -295,7 +312,9 @@ function simulateGacha({
       pool: gacha.pool,
       settings: ptSetting,
       points,
-      completeMode
+      includeOutOfStockInComplete,
+      allowOutOfStockGuaranteeItem,
+      applyLowerThresholdGuarantees
     });
 
     if (result.errors.length > 0) {
@@ -433,8 +452,10 @@ interface GachaTestSectionProps {
   defaultRuns: number;
   gacha: GachaDefinition | undefined;
   ptSetting: PtSettingV3 | undefined;
-  completeMode: CompleteDrawMode;
   rarityDigits: Map<string, number>;
+  includeOutOfStockInComplete: boolean;
+  allowOutOfStockGuaranteeItem: boolean;
+  applyLowerThresholdGuarantees: boolean;
 }
 
 function GachaTestSection({
@@ -443,8 +464,10 @@ function GachaTestSection({
   defaultRuns,
   gacha,
   ptSetting,
-  completeMode,
-  rarityDigits
+  rarityDigits,
+  includeOutOfStockInComplete,
+  allowOutOfStockGuaranteeItem,
+  applyLowerThresholdGuarantees
 }: GachaTestSectionProps): JSX.Element {
   const [pullsPerRun, setPullsPerRun] = useState(defaultPulls);
   const [runCount, setRunCount] = useState(defaultRuns);
@@ -471,10 +494,12 @@ function GachaTestSection({
       const simulation = simulateGacha({
         gacha,
         ptSetting,
-        completeMode,
         pullsPerRun,
         runCount,
-        rarityDigits
+        rarityDigits,
+        includeOutOfStockInComplete,
+        allowOutOfStockGuaranteeItem,
+        applyLowerThresholdGuarantees
       });
 
       if ('error' in simulation) {
@@ -493,7 +518,16 @@ function GachaTestSection({
     } finally {
       setIsRunning(false);
     }
-  }, [completeMode, gacha, ptSetting, pullsPerRun, runCount, rarityDigits]);
+  }, [
+    allowOutOfStockGuaranteeItem,
+    applyLowerThresholdGuarantees,
+    gacha,
+    includeOutOfStockInComplete,
+    ptSetting,
+    pullsPerRun,
+    rarityDigits,
+    runCount
+  ]);
 
   const toggleExpanded = useCallback(() => {
     setIsExpanded((previous) => !previous);
@@ -728,10 +762,22 @@ const DEFAULT_SECTIONS = [
 ] as const;
 
 export function GachaTestPage(): JSX.Element {
-  const { ptControls: ptControlsStore } = useDomainStores();
+  const { ptControls: ptControlsStore, uiPreferences: uiPreferencesStore } = useDomainStores();
   const ptSettingsState = useStoreValue(ptControlsStore);
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const { options, map, rarityDigits } = useGachaDefinitions();
-  const completeMode = resolveCompleteModePreference(ptSettingsState);
+  const includeOutOfStockInComplete = useMemo(
+    () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference() ?? false,
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const allowOutOfStockGuaranteeItem = useMemo(
+    () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference() ?? false,
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const applyLowerThresholdGuarantees = useMemo(
+    () => uiPreferencesStore.getApplyLowerThresholdGuaranteesPreference() ?? true,
+    [uiPreferencesState, uiPreferencesStore]
+  );
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => options[0]?.value);
   const selectedGacha = selectedGachaId ? map.get(selectedGachaId) : undefined;
@@ -772,8 +818,10 @@ export function GachaTestPage(): JSX.Element {
               defaultRuns={section.runs}
               gacha={selectedGacha}
               ptSetting={selectedPtSetting}
-              completeMode={completeMode}
               rarityDigits={rarityDigits}
+              includeOutOfStockInComplete={includeOutOfStockInComplete}
+              allowOutOfStockGuaranteeItem={allowOutOfStockGuaranteeItem}
+              applyLowerThresholdGuarantees={applyLowerThresholdGuarantees}
             />
           ))}
         </div>

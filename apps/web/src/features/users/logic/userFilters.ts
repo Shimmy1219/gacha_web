@@ -356,15 +356,37 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
         return;
       }
 
-      const itemsByRarity = inventory.items ?? {};
-      const countsByRarity = inventory.counts ?? {};
-      const originalPrizeAssetsByItem = inventory.originalPrizeAssets ?? {};
       const gachaCatalog = catalogByGacha[inventory.gachaId];
       const catalogItems = gachaCatalog?.items ?? {};
       const catalogOrder = Array.isArray(gachaCatalog?.order) ? gachaCatalog.order : Object.keys(catalogItems);
       const catalogItemsByRarity = new Map<string, string[]>();
-      const originalPrizeItemIds = new Set<string>();
+      const catalogOrderSet = new Set<string>();
 
+      catalogOrder.forEach((itemId) => {
+        catalogOrderSet.add(itemId);
+        const item = catalogItems[itemId];
+        if (!item) {
+          return;
+        }
+        const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+        list.push(item.itemId);
+        catalogItemsByRarity.set(item.rarityId, list);
+      });
+
+      Object.values(catalogItems).forEach((item) => {
+        if (catalogOrderSet.has(item.itemId)) {
+          return;
+        }
+        const list = catalogItemsByRarity.get(item.rarityId) ?? [];
+        list.push(item.itemId);
+        catalogItemsByRarity.set(item.rarityId, list);
+      });
+
+      const itemsByRarity = inventory.items ?? {};
+      const countsByRarity = inventory.counts ?? {};
+      const originalPrizeAssetsByItem = inventory.originalPrizeAssets ?? {};
+
+      const originalPrizeItemIds = new Set<string>();
       Object.values(countsByRarity).forEach((record) => {
         Object.keys(record ?? {}).forEach((itemId) => {
           const catalogItem = catalogItems[itemId];
@@ -386,29 +408,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
         });
       });
 
-      if (showUnobtainedItems) {
-        const catalogOrderSet = new Set<string>();
-        catalogOrder.forEach((itemId) => {
-          catalogOrderSet.add(itemId);
-          const item = catalogItems[itemId];
-          if (!item) {
-            return;
-          }
-          const list = catalogItemsByRarity.get(item.rarityId) ?? [];
-          list.push(item.itemId);
-          catalogItemsByRarity.set(item.rarityId, list);
-        });
-
-        Object.values(catalogItems).forEach((item) => {
-          if (catalogOrderSet.has(item.itemId)) {
-            return;
-          }
-          const list = catalogItemsByRarity.get(item.rarityId) ?? [];
-          list.push(item.itemId);
-          catalogItemsByRarity.set(item.rarityId, list);
-        });
-      }
-
       const originalPrizeInstanceMap = buildOriginalPrizeInstanceMap({
         pullHistory,
         userId,
@@ -426,13 +425,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
 
       rarityIdSet.forEach((rarityId) => {
         const itemIds = itemsByRarity[rarityId];
-        const fallbackCounts = new Map<string, number>();
-        if (Array.isArray(itemIds)) {
-          itemIds.forEach((itemId) => {
-            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
-          });
-        }
-
         if (!matchesSelection(raritySelection, rarityId)) {
           return;
         }
@@ -442,14 +434,24 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           return;
         }
 
-        const explicitCounts = countsByRarity[rarityId] ?? {};
-        const catalogItemIds = showUnobtainedItems ? catalogItemsByRarity.get(rarityId) ?? [] : [];
-        const itemIdSet = new Set<string>(catalogItemIds);
+        const fallbackCounts = new Map<string, number>();
+        if (Array.isArray(itemIds)) {
+          itemIds.forEach((itemId) => {
+            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+          });
+        }
 
+        const explicitCounts = countsByRarity[rarityId] ?? {};
+        const catalogItemIds = catalogItemsByRarity.get(rarityId) ?? [];
+        const itemIdSet = new Set<string>();
+        if (showUnobtainedItems) {
+          catalogItemIds.forEach((itemId) => {
+            itemIdSet.add(itemId);
+          });
+        }
         Object.keys(explicitCounts).forEach((itemId) => {
           itemIdSet.add(itemId);
         });
-
         fallbackCounts.forEach((_count, itemId) => {
           itemIdSet.add(itemId);
         });
@@ -458,17 +460,18 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
           return;
         }
 
-        const orderedItemIds = (() => {
-          if (catalogItemIds.length > 0) {
-            const extra = Array.from(itemIdSet).filter((itemId) => !catalogItemIds.includes(itemId));
-            if (extra.length === 0) {
-              return [...catalogItemIds];
-            }
-            extra.sort((a, b) => a.localeCompare(b, 'ja'));
-            return [...catalogItemIds, ...extra];
+        const orderIndex = new Map<string, number>();
+        catalogItemIds.forEach((itemId, index) => {
+          orderIndex.set(itemId, index);
+        });
+        const orderedItemIds = Array.from(itemIdSet).sort((a, b) => {
+          const orderA = orderIndex.get(a) ?? Number.POSITIVE_INFINITY;
+          const orderB = orderIndex.get(b) ?? Number.POSITIVE_INFINITY;
+          if (orderA !== orderB) {
+            return orderA - orderB;
           }
-          return Array.from(itemIdSet).sort((a, b) => a.localeCompare(b, 'ja'));
-        })();
+          return a.localeCompare(b, 'ja');
+        });
 
         orderedItemIds.forEach((itemId) => {
           const catalogItem = catalogItems[itemId];

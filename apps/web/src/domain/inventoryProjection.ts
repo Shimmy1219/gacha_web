@@ -4,6 +4,7 @@ import {
   type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1,
+  type OriginalPrizeAssetV1,
   type UserInventoriesStateV3,
   type UserInventorySnapshotV3
 } from './app-persistence';

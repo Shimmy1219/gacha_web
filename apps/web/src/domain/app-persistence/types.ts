@@ -55,6 +55,7 @@ export interface GachaCatalogItemV4 {
   originalPrize?: boolean;
   assets?: GachaCatalogItemAssetV4[];
   riagu?: boolean;
+  stockCount?: number;
   updatedAt?: string;
 }
 
@@ -200,7 +201,6 @@ export interface PtSettingV3 {
   };
   complete?: {
     price: number;
-    mode?: 'repeat' | 'frontload';
   };
   bundles?: PtBundleV3[];
   guarantees?: PtGuaranteeV3[];
@@ -210,7 +210,6 @@ export interface PtSettingV3 {
 export interface PtSettingsStateV3 {
   version: number;
   updatedAt: string;
-  completeMode?: 'repeat' | 'frontload';
   byGachaId: Record<string, PtSettingV3>;
 }
 
@@ -228,6 +227,15 @@ export interface UiPreferencesStateV3 {
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;
+      [key: string]: unknown;
+    };
+    stock?: {
+      includeOutOfStockInComplete?: boolean;
+      allowOutOfStockGuaranteeItem?: boolean;
+      [key: string]: unknown;
+    };
+    guarantee?: {
+      applyLowerThresholdGuarantees?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;

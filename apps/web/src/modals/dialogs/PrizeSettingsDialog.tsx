@@ -38,6 +38,7 @@ export interface PrizeSettingsDialogPayload {
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
+  stockCount?: number | null;
   assets?: PrizeSettingsAsset[];
   rarityColor?: string;
   riaguPrice?: number;
@@ -51,6 +52,7 @@ export interface PrizeSettingsDialogPayload {
     completeTarget: boolean;
     originalPrize: boolean;
     riagu: boolean;
+    stockCount: number | null;
     assets: PrizeSettingsAsset[];
   }) => void;
   onDelete?: (data: { itemId: string; gachaId: string }) => void;
@@ -196,7 +198,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       complete: payload?.completeTarget ?? false,
       originalPrize: payload?.originalPrize ?? false,
       riagu: payload?.isRiagu ?? false,
-      assets: normalizeAssets(payload?.assets)
+      assets: normalizeAssets(payload?.assets),
+      stockCount:
+        typeof payload?.stockCount === 'number' && Number.isFinite(payload.stockCount)
+          ? Math.max(0, Math.floor(payload.stockCount))
+          : null
     }),
     [payload]
   );
@@ -208,6 +214,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [originalPrize, setOriginalPrize] = useState(initialState.originalPrize);
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [assetEntries, setAssetEntries] = useState<PrizeSettingsAsset[]>(initialState.assets);
+  const [stockCountInput, setStockCountInput] = useState<string>(
+    initialState.stockCount !== null ? String(initialState.stockCount) : ''
+  );
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const assetRequestIdRef = useRef(0);
@@ -386,7 +395,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     completeTarget !== initialState.complete ||
     originalPrize !== initialState.originalPrize ||
     riaguTarget !== initialState.riagu ||
-    !areAssetsEqual(assetEntries, initialState.assets);
+    !areAssetsEqual(assetEntries, initialState.assets) ||
+    stockCountInput !== (initialState.stockCount !== null ? String(initialState.stockCount) : '');
 
   const rarityColor = currentRarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
@@ -413,6 +423,17 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       completeTarget,
       originalPrize,
       riagu: riaguTarget,
+      stockCount: (() => {
+        const normalized = stockCountInput.trim();
+        if (!normalized) {
+          return null;
+        }
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) {
+          return null;
+        }
+        return Math.max(0, Math.floor(parsed));
+      })(),
       assets: originalPrize ? [] : normalizeAssets(assetEntries)
     });
 
@@ -668,6 +689,21 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             <div className="hidden rounded-2xl p-3 lg:block">{renderFileSelectionContent()}</div>
             <div className="rounded-2xl p-2">
               <div className="flex flex-col gap-3">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-surface-foreground">在庫数</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={stockCountInput}
+                    onChange={(event) => setStockCountInput(event.target.value)}
+                    className={INPUT_CLASSNAME}
+                    placeholder="未設定"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    空欄にすると在庫制限なしで排出されます。
+                  </span>
+                </label>
                 <SwitchField
                   label="ピックアップ対象"
                   description="同レアリティのアイテムより排出率が少し上がります"

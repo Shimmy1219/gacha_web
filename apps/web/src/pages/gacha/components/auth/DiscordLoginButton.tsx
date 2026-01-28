@@ -12,6 +12,7 @@ import { clsx } from 'clsx';
 
 import { useDiscordSession } from '../../../../features/discord/useDiscordSession';
 import { useAppPersistence } from '../../../../features/storage/AppPersistenceProvider';
+import { DISCORD_BOT_INVITE_URL } from '../../../../features/discord/discordInviteConfig';
 import { useModal, DiscordBotInviteDialog } from '../../../../modals';
 import {
   loadDiscordGuildSelection,
@@ -32,8 +33,6 @@ interface DiscordLoginButtonProps {
   className?: string;
 }
 
-const BOT_INVITE_URL =
-  'https://discord.com/oauth2/authorize?client_id=1421371141666377839&permissions=805317648&redirect_uri=https%3A%2F%2Fstg.shimmy3.com%2Fapi%2Fauth%2Fdiscord%2Fcallback&integration_type=0&scope=bot';
 
 export function DiscordLoginButton({
   placement = 'toolbar',
@@ -110,7 +109,7 @@ export function DiscordLoginButton({
       payload: {
         userId,
         userName,
-        inviteUrl: BOT_INVITE_URL,
+        inviteUrl: DISCORD_BOT_INVITE_URL,
         onGuildSelected: (selection) => {
           setGuildSelection(selection);
         }
