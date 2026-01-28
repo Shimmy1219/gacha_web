@@ -273,6 +273,11 @@ function buildHistoryEntries(
       return a.rarityLabel.localeCompare(b.rarityLabel, 'ja');
     });
 
+    const hasOriginalPrizeMissing =
+      items.length > 0
+        ? items.some((item) => item.hasOriginalPrizeMissing)
+        : entry.hasOriginalPrizeMissing === true;
+
     result.push({
       id: entry.id,
       gachaId: entry.gachaId,
@@ -280,7 +285,7 @@ function buildHistoryEntries(
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
       status: entry.status,
-      hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing,
+      hasOriginalPrizeMissing,
       itemTypeCount: normalizedItems.length,
       items,
       rarityGroups,
@@ -324,11 +329,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
     [appMeta, catalogState, data?.pullHistory, payload.userId, rarityState]
   );
   const historyMissingEntryIds = useMemo(() => {
-    return new Set(
-      historyEntries
-        .filter((entry) => entry.hasOriginalPrizeMissing || entry.items.some((item) => item.hasOriginalPrizeMissing))
-        .map((entry) => entry.id)
-    );
+    return new Set(historyEntries.filter((entry) => entry.hasOriginalPrizeMissing).map((entry) => entry.id));
   }, [historyEntries]);
 
   useEffect(() => {
