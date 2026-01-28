@@ -242,7 +242,7 @@ export function HistoryEntriesList({
                       {item.hasOriginalPrizeMissing ? (
                         <button
                           type="button"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
                           onClick={() => {
                             push(WarningDialog, {
                               id: `original-prize-warning-${item.itemId}`,
