@@ -25,3 +25,4 @@ export * from './SaveTargetDialog';
 export * from './StartWizardDialog';
 export * from './UserDiscordProfileDialog';
 export * from './UserHistoryDialog';
+export * from './WarningDialog';
