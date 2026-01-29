@@ -121,6 +121,76 @@ interface EncryptedRecord {
   - 説明: 「保存データの復号に失敗したため、安全のため削除しました。ギルド情報を再取得します。」
   - ボタン: 「再取得する」（Discordギルド情報の再取得API/フローを起動）
 
+## 詳細設計（クライアント）
+### モジュール構成
+- `discordEncryptedStorage`（新規）
+  - 鍵の生成/取得/永続化
+  - 暗号化/復号の実装
+  - `records` store への保存/読み込み/削除
+  - 復号失敗イベントの発火
+- `discordEncryptedStorageCache`（新規 or 既存ストレージ層に内包）
+  - 取得済みデータのメモリキャッシュ
+  - 読み込みAPIはキャッシュ優先で即時応答
+- `DiscordStorageRecoveryDialog`（新規モーダル）
+  - 復号失敗時に再取得導線を提供
+
+### 暗号化ストレージAPI（案）
+```ts
+type DecryptFailureReason = 'invalid' | 'missing-key' | 'corrupted';
+
+interface DecryptFailureEvent {
+  key: string;
+  reason: DecryptFailureReason;
+}
+
+interface DiscordEncryptedStorage {
+  initialize(): Promise<void>;
+  load<T>(key: string): Promise<T | null>;
+  save<T>(key: string, value: T): Promise<void>;
+  remove(key: string): Promise<void>;
+  clearAll(): Promise<void>;
+  onDecryptFailure(listener: (event: DecryptFailureEvent) => void): () => void;
+}
+```
+
+### キャッシュ戦略
+- `initialize()` 時に `records` のうち `discord.*` を一括ロードしてメモリに保持
+- 既存の `loadDiscordGuildSelection` など **同期呼び出し箇所はキャッシュ参照**に置き換える
+- キャッシュが未初期化の場合は `null` を返し、UIは `useEffect` で初期化完了後に再取得する
+
+### 復号失敗時の挙動（詳細）
+1. 復号失敗を検知
+2. 対象レコードを削除
+3. `onDecryptFailure` を発火
+4. UI層が `DiscordStorageRecoveryDialog` を表示
+5. 「再取得する」選択で以下のどちらかを実行
+   - ギルド選択が無い状態として扱い、既存の「お渡し鯖の設定」モーダルを開く
+   - もしくは専用の再取得フロー（今後追加）に遷移
+
+### 既存ストレージ関数の置き換え方針
+- `discordUserStateStorage.ts` などは以下の方針で差し替える
+  - `load*` は **キャッシュ**を参照（同期）
+  - `save/update` はキャッシュ更新 + 非同期保存
+  - `clear` はキャッシュ削除 + 非同期削除
+
+### IndexedDBストア設計（詳細）
+- DB名: `discord-secure-cache`
+- store: `keys`
+  - key: `discord:encryption-key:v1`
+  - value: `CryptoKey`（非抽出）
+- store: `records`
+  - keyPath: `key`
+  - value: `EncryptedRecord`
+
+### 互換移行（詳細）
+- 初期化時に `localStorage` を走査（`discord.*`）
+- JSON parse 成功 → 暗号化保存 → `localStorage` 削除
+- 暗号化保存に失敗した場合は **削除しない**（復旧可能性を残す）
+
+## サーバーサイド変更
+- **原則なし**（鍵は端末生成のためAPI不要）
+- 追加API/DB変更は不要
+
 ## 実装対象（想定）
 - `apps/web/src/features/discord/discordUserStateStorage.ts`
 - `apps/web/src/features/discord/discordMemberCacheStorage.ts`
@@ -134,7 +204,7 @@ interface EncryptedRecord {
 - 復号失敗時に安全に削除される
 - 復号失敗時に再取得モーダルが表示される
 - ログアウトで暗号化ストレージが消える
-- 鍵ローテーション時に復号不能データが削除され、再取得導線が表示される
+- 鍵喪失時に復号不能データが削除され、再取得導線が表示される
 
 ## メリット / デメリット
 ### メリット
