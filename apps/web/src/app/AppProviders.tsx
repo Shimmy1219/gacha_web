@@ -8,6 +8,7 @@ import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
 import { AppPersistenceProvider } from '../features/storage/AppPersistenceProvider';
 import { SiteThemeProvider } from '../features/theme/SiteThemeProvider';
 import { HapticsProvider } from '../features/haptics/HapticsProvider';
+import { DiscordInfoStoreGate } from '../features/discord/DiscordInfoStoreGate';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   const [queryClient] = useState(
@@ -32,7 +33,9 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
           <SiteThemeProvider>
             <HapticsProvider>
               <ModalProvider>
-                <ToolbarStateProvider>{children}</ToolbarStateProvider>
+                <DiscordInfoStoreGate>
+                  <ToolbarStateProvider>{children}</ToolbarStateProvider>
+                </DiscordInfoStoreGate>
               </ModalProvider>
             </HapticsProvider>
           </SiteThemeProvider>

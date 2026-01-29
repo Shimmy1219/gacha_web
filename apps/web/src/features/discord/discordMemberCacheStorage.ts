@@ -1,4 +1,5 @@
 import { loadDiscordUserState, updateDiscordUserState } from './discordUserStateStorage';
+import { getDiscordInfoStore } from './discordInfoStore';
 
 export interface DiscordGuildMemberSummary {
   id: string;
@@ -307,8 +308,7 @@ export function mergeDiscordMemberGiftChannels(
   if (
     !discordUserId ||
     !guildId ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window === 'undefined'
   ) {
     return null;
   }
@@ -371,21 +371,21 @@ function loadLegacyDiscordMemberCache(
   discordUserId: string,
   guildId: string
 ): DiscordMemberCacheEntry | null {
-  const storageKey = `${LEGACY_STORAGE_PREFIX}::${discordUserId}::${guildId}`;
   try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) {
+    const raw = getDiscordInfoStore().getJson<Record<string, unknown>>(
+      `${LEGACY_STORAGE_PREFIX}::${discordUserId}::${guildId}`
+    );
+    if (!raw || typeof raw !== 'object') {
       return null;
     }
-    const parsed = JSON.parse(raw);
-    if (!isRecord(parsed) || !Array.isArray(parsed.members)) {
+    if (!isRecord(raw) || !Array.isArray(raw.members)) {
       return null;
     }
-    const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null;
+    const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : null;
     if (!updatedAt) {
       return null;
     }
-    const members = normalizeDiscordGuildMembers(parsed.members);
+    const members = normalizeDiscordGuildMembers(raw.members);
     if (members.length === 0) {
       return null;
     }
@@ -413,7 +413,7 @@ function migrateLegacyMemberCache(
 
   if (result?.memberCache && isRecord(result.memberCache[entry.guildId])) {
     try {
-      window.localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::${entry.guildId}`);
+      void getDiscordInfoStore().remove(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::${entry.guildId}`);
     } catch (error) {
       console.warn('Failed to remove legacy Discord member cache entry from localStorage', error);
     }
@@ -430,8 +430,7 @@ export function loadDiscordMemberCache(
   if (
     !discordUserId ||
     !guildId ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window === 'undefined'
   ) {
     return null;
   }
@@ -466,8 +465,7 @@ export function saveDiscordMemberCache(
   if (
     !discordUserId ||
     !guildId ||
-    typeof window === 'undefined' ||
-    typeof window.localStorage === 'undefined'
+    typeof window === 'undefined'
   ) {
     return null;
   }
@@ -503,7 +501,7 @@ export function clearDiscordMemberCache(
   discordUserId: string | undefined | null,
   guildId?: string
 ): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -533,12 +531,7 @@ export function clearDiscordMemberCache(
 
   if (!guildId) {
     try {
-      for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-        const key = window.localStorage.key(index);
-        if (key && key.startsWith(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::`)) {
-          window.localStorage.removeItem(key);
-        }
-      }
+      void getDiscordInfoStore().removeByPrefix(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::`);
     } catch (error) {
       console.warn('Failed to clear legacy Discord member cache entries from localStorage', error);
     }
@@ -546,7 +539,7 @@ export function clearDiscordMemberCache(
   }
 
   try {
-    window.localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::${guildId}`);
+    void getDiscordInfoStore().remove(`${LEGACY_STORAGE_PREFIX}::${discordUserId}::${guildId}`);
   } catch (error) {
     console.warn('Failed to clear legacy Discord member cache entry from localStorage', error);
   }

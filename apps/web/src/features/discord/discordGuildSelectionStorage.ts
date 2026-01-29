@@ -7,6 +7,7 @@ import {
   loadDiscordUserState,
   updateDiscordUserState
 } from './discordUserStateStorage';
+import { getDiscordInfoStore } from './discordInfoStore';
 
 export interface DiscordGuildCategorySelection {
   id: string;
@@ -90,12 +91,13 @@ function sanitizeGuildSelection(candidate: unknown): DiscordGuildSelection | nul
 
 function loadLegacyDiscordGuildSelection(discordUserId: string): DiscordGuildSelection | null {
   try {
-    const raw = window.localStorage.getItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
-    if (!raw) {
+    const raw = getDiscordInfoStore().getJson<Record<string, unknown>>(
+      `${LEGACY_STORAGE_PREFIX}::${discordUserId}`
+    );
+    if (!raw || typeof raw !== 'object') {
       return null;
     }
-    const parsed = JSON.parse(raw);
-    return sanitizeGuildSelection(parsed);
+    return sanitizeGuildSelection(raw);
   } catch (error) {
     console.warn('Failed to read legacy Discord guild selection from localStorage', error);
     return null;
@@ -113,7 +115,7 @@ function migrateLegacyDiscordGuildSelection(
 
   if (result?.selection) {
     try {
-      window.localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
+      void getDiscordInfoStore().remove(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
     } catch (error) {
       console.warn('Failed to remove legacy Discord guild selection from localStorage', error);
     }
@@ -133,7 +135,7 @@ export class DiscordGuildSelectionMissingError extends Error {
 export function loadDiscordGuildSelection(
   discordUserId: string | undefined | null
 ): DiscordGuildSelection | null {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || typeof window === 'undefined') {
     return null;
   }
 
@@ -155,7 +157,7 @@ export function saveDiscordGuildSelection(
   discordUserId: string | undefined | null,
   selection: DiscordGuildSelection
 ): void {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || typeof window === 'undefined') {
     return;
   }
 
@@ -189,7 +191,7 @@ export function saveDiscordGuildSelection(
   const persistedSelection = loadDiscordGuildSelection(discordUserId);
   if (persistedSelection?.guildId === normalizedSelection.guildId) {
     try {
-      window.localStorage.removeItem(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
+      void getDiscordInfoStore().remove(`${LEGACY_STORAGE_PREFIX}::${discordUserId}`);
     } catch (error) {
       console.warn('Failed to remove legacy Discord guild selection after saving', error);
     }
@@ -201,7 +203,7 @@ export function updateDiscordGuildSelectionMemberCacheTimestamp(
   guildId: string | undefined | null,
   updatedAt: string | null | undefined
 ): void {
-  if (!discordUserId || !guildId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || !guildId || typeof window === 'undefined') {
     return;
   }
 
@@ -241,28 +243,14 @@ export function requireDiscordGuildSelection(
 }
 
 export function clearAllDiscordGuildSelections(): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-      const key = window.localStorage.key(index);
-      if (!key) {
-        continue;
-      }
-      if (key.startsWith(`${DISCORD_USER_STATE_STORAGE_PREFIX}::`)) {
-        window.localStorage.removeItem(key);
-        continue;
-      }
-      if (key.startsWith(`${LEGACY_STORAGE_PREFIX}::`)) {
-        window.localStorage.removeItem(key);
-        continue;
-      }
-      if (key.startsWith(`${LEGACY_MEMBER_CACHE_PREFIX}::`)) {
-        window.localStorage.removeItem(key);
-      }
-    }
+    void getDiscordInfoStore().removeByPrefix(`${DISCORD_USER_STATE_STORAGE_PREFIX}::`);
+    void getDiscordInfoStore().removeByPrefix(`${LEGACY_STORAGE_PREFIX}::`);
+    void getDiscordInfoStore().removeByPrefix(`${LEGACY_MEMBER_CACHE_PREFIX}::`);
   } catch (error) {
     console.error('Failed to clear Discord guild selections from storage', error);
   }

@@ -1,9 +1,14 @@
+import {
+  DISCORD_USER_STATE_STORAGE_PREFIX,
+  getDiscordInfoStore
+} from './discordInfoStore';
+
 export interface DiscordUserStateSnapshot {
   selection?: unknown;
   memberCache?: Record<string, unknown> | undefined;
 }
 
-export const DISCORD_USER_STATE_STORAGE_PREFIX = 'discord.userState';
+export { DISCORD_USER_STATE_STORAGE_PREFIX };
 
 function getStorageKey(discordUserId: string): string {
   return `${DISCORD_USER_STATE_STORAGE_PREFIX}::${discordUserId}`;
@@ -55,12 +60,12 @@ function normalizeDiscordUserState(
 export function loadDiscordUserState(
   discordUserId: string | undefined | null
 ): DiscordUserStateSnapshot | null {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || typeof window === 'undefined') {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(getStorageKey(discordUserId));
+    const raw = getDiscordInfoStore().getRaw(getStorageKey(discordUserId));
     if (!raw) {
       return null;
     }
@@ -88,7 +93,7 @@ export function updateDiscordUserState(
   discordUserId: string | undefined | null,
   mutator: (state: DiscordUserStateSnapshot) => DiscordUserStateSnapshot | void | null
 ): DiscordUserStateSnapshot | null {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || typeof window === 'undefined') {
     return null;
   }
 
@@ -104,10 +109,10 @@ export function updateDiscordUserState(
   try {
     const storageKey = getStorageKey(discordUserId);
     if (!normalized) {
-      window.localStorage.removeItem(storageKey);
+      void getDiscordInfoStore().remove(storageKey);
       return null;
     }
-    window.localStorage.setItem(storageKey, JSON.stringify(normalized));
+    void getDiscordInfoStore().saveJson(storageKey, normalized);
     return normalized;
   } catch (error) {
     console.warn('Failed to persist Discord user state to localStorage', error);
@@ -116,29 +121,24 @@ export function updateDiscordUserState(
 }
 
 export function clearDiscordUserState(discordUserId: string | undefined | null): void {
-  if (!discordUserId || typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (!discordUserId || typeof window === 'undefined') {
     return;
   }
 
   try {
-    window.localStorage.removeItem(getStorageKey(discordUserId));
+    void getDiscordInfoStore().remove(getStorageKey(discordUserId));
   } catch (error) {
     console.warn('Failed to clear Discord user state from localStorage', error);
   }
 }
 
 export function clearAllDiscordUserStates(): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+  if (typeof window === 'undefined') {
     return;
   }
 
   try {
-    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
-      const key = window.localStorage.key(index);
-      if (key && key.startsWith(DISCORD_USER_STATE_STORAGE_PREFIX)) {
-        window.localStorage.removeItem(key);
-      }
-    }
+    void getDiscordInfoStore().removeByPrefix(DISCORD_USER_STATE_STORAGE_PREFIX);
   } catch (error) {
     console.warn('Failed to clear Discord user state entries from localStorage', error);
   }
