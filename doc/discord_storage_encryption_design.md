@@ -122,6 +122,30 @@ interface EncryptedRecord {
   - ボタン: 「再取得する」（Discordギルド情報の再取得API/フローを起動）
 
 ## 詳細設計（クライアント）
+### 影響範囲の棚卸（現状）
+#### localStorage の直接アクセス（Discord関連）
+- `apps/web/src/features/discord/discordUserStateStorage.ts`
+  - `loadDiscordUserState` / `updateDiscordUserState` / `clearDiscordUserState` / `clearAllDiscordUserStates`
+  - キー: `discord.userState::${discordUserId}`
+- `apps/web/src/features/discord/discordMemberCacheStorage.ts`
+  - 旧フォーマット読み取り・削除（`discord.memberCache::${discordUserId}::${guildId}`）
+  - `discordUserStateStorage` 経由で新フォーマットの読み書きを実施
+- `apps/web/src/features/discord/discordGuildSelectionStorage.ts`
+  - 旧フォーマット読み取り・削除（`discord.guildSelection::${discordUserId}`）
+  - `discordUserStateStorage` 経由で新フォーマットの読み書きを実施
+- `apps/web/src/features/discord/useDiscordSession.ts`
+  - `discord:pwa:pending_state` の読み書き/削除（PWAログインstate）
+
+#### 読み書き呼び出し元（主な箇所）
+- ギルド選択: `DiscordBotInviteDialog`, `DiscordPrivateChannelCategoryDialog`, `DiscordLoginButton`, `UserDiscordProfileDialog`
+- メンバーキャッシュ: `DiscordMemberPickerDialog`, `DiscordBotInviteDialog`
+- ギルド必須チェック: `openDiscordShareDialog`, `SaveOptionsDialog`, `DrawGachaDialog`
+- クリア操作: `PageSettingsDialog`
+
+#### まとめ
+- Discord関連の永続化は **単一のストレージファイルには集約されていない**。
+- 実際の localStorage 書き込みは **`discordUserStateStorage.ts` / `discordMemberCacheStorage.ts` / `discordGuildSelectionStorage.ts` / `useDiscordSession.ts` の4箇所**。
+- 暗号化ストレージへ移行する場合は、上記4箇所の **読み書き実装を置き換えることが影響範囲の中心**。
 ### モジュール構成
 - `discordEncryptedStorage`（新規）
   - 鍵の生成/取得/永続化
