@@ -31,6 +31,7 @@ import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import { resolveSafeUrl } from '../../utils/safeUrl';
 import {
   applyLegacyAssetsToInstances,
   alignOriginalPrizeInstances,
@@ -376,6 +377,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   useEffect(() => {
     setCopied(false);
   }, [uploadResult?.url]);
+
+  const safeUploadUrl = useMemo(
+    () => resolveSafeUrl(uploadResult?.url, { allowedProtocols: ['http:', 'https:'] }),
+    [uploadResult?.url]
+  );
 
   useEffect(() => {
     return () => {
@@ -1136,14 +1142,23 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
               直近の共有リンク
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),auto] sm:items-center">
-              <a
-                href={uploadResult.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
-              >
-                {uploadResult.label ?? uploadResult.url}
-              </a>
+              {safeUploadUrl ? (
+                <a
+                  href={safeUploadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-surface-foreground"
+                >
+                  {uploadResult.label ?? uploadResult.url}
+                </a>
+              ) : (
+                <span
+                  className="truncate rounded-xl border border-border/60 bg-surface-alt px-3 py-2 font-mono text-xs text-muted-foreground/80"
+                  aria-disabled="true"
+                >
+                  {uploadResult.label ?? uploadResult.url}
+                </span>
+              )}
               <button type="button" className="btn btn-muted" onClick={() => handleCopyUrl(uploadResult.url)}>
                 {copied ? 'コピーしました' : 'URLをコピー'}
               </button>
