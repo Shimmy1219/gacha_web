@@ -149,6 +149,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             src={objectUrl}
             className="receive-item-card-text-preview h-full w-full rounded-xl border border-border/60 bg-surface/70 md:rounded-2xl"
             title={item.filename}
+            sandbox=""
           />
         );
       default:
