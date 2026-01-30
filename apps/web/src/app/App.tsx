@@ -268,7 +268,7 @@ export function App(): JSX.Element {
       title: 'サイト設定',
       description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
       size: 'xl',
-      panelClassName: 'overflow-hidden',
+      panelClassName: 'page-settings-modal overflow-hidden',
       panelPaddingClassName: 'p-2 lg:p-6',
       showHeaderCloseButton: true
     });

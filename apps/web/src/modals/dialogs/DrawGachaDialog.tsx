@@ -577,7 +577,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             id: 'page-settings',
             title: 'ページ設定',
             size: 'lg',
-            panelClassName: 'overflow-hidden',
+            panelClassName: 'page-settings-modal overflow-hidden',
             showHeaderCloseButton: true
           });
         }
