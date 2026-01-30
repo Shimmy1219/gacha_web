@@ -1173,7 +1173,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
           className={clsx(
-            'm-2 w-full shrink-0 p-2 lg:m-0 lg:p-0',
+            'm-2 w-[calc(100%-1rem)] shrink-0 p-2 lg:m-0 lg:w-full lg:p-0',
             isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
             activeView === 'menu' ? 'block' : 'hidden',
             'lg:block'
