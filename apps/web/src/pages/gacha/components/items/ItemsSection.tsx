@@ -25,7 +25,6 @@ import { PrizeSettingsDialog } from '../../../../modals/dialogs/PrizeSettingsDia
 import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
-import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 import { type GachaCatalogItemV4, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
@@ -106,7 +105,6 @@ export function ItemsSection(): JSX.Element {
     []
   );
   const { isMobile } = useResponsiveDashboard();
-  const { triggerConfirmation, triggerError } = useHaptics();
   const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
     `repeat(${defaultColumnCount}, minmax(100px,181px))`

@@ -446,8 +446,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const totalSteps = 3;
   const canProceedToAssets = rarities.length > 0;
   const canProceedToPt = !isProcessingAssets;
-  const highestRarity = sortedRarities[sortedRarities.length - 1] ?? sortedRarities[0] ?? null;
-
   const rarityCount = rarities.length;
 
   const canDeleteRarityRow = useCallback(

@@ -61,7 +61,7 @@ export function createDomainStores(persistence: AppPersistence): DomainStores {
     }
   };
 
-  const snapshot = hydrateStores(stores, () => persistence.loadSnapshot());
+  hydrateStores(stores, () => persistence.loadSnapshot());
 
   console.info('【デバッグ】domain-storesを初期化しました', {
     インスタンスID: domainStoreInstanceId,

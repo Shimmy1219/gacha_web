@@ -462,6 +462,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [uiPreferencesState, uiPreferencesStore]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
+  const activeMenuItem = useMemo(
+    () => menuItems.find((item) => item.id === activeMenu) ?? menuItems[0],
+    [activeMenu, menuItems]
+  );
 
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
@@ -1166,10 +1170,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
       }}
     >
-      <div className="flex flex-1 flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8">
         <nav
           className={clsx(
-            'w-full shrink-0',
+            'w-full shrink-0 rounded-2xl border border-border/50 bg-panel/70 p-2 shadow-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none',
             isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
             activeView === 'menu' ? 'block' : 'hidden',
             'lg:block'
@@ -1184,10 +1188,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                     type="button"
                     onClick={() => handleMenuSelect(item.id)}
                     className={clsx(
-                      'w-full rounded-xl border px-4 py-3 text-left transition',
+                      'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
                       isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground'
-                        : 'border-transparent text-muted-foreground hover:border-border/60 hover:bg-panel-muted/70'
+                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
+                        : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
                     )}
                   >
                     <div className="flex items-center justify-between gap-4">
@@ -1209,21 +1213,24 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         </nav>
         <div
           className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm',
+            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
             isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
           )}
           style={{ maxHeight: viewportLimit ?? undefined }}
         >
           {!isLargeLayout ? (
-            <div className="mb-4 flex items-center">
+            <div className="mb-5 flex items-center justify-between rounded-2xl border border-border/50 bg-panel-contrast/70 px-3 py-2 shadow-sm lg:hidden">
               <button
                 type="button"
                 onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground lg:hidden"
+                className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <span aria-hidden="true">〈</span>
                 <span>メニューに戻る</span>
               </button>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                {activeMenuItem?.label ?? ''}
+              </span>
             </div>
           ) : null}
           {renderMenuContent()}

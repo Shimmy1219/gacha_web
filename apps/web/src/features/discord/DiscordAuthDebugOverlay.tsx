@@ -11,7 +11,6 @@ function formatTimestamp(timestamp: number): string {
       second: '2-digit'
     }).format(timestamp);
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Failed to format timestamp for Discord auth log', error);
     return new Date(timestamp).toLocaleTimeString();
   }
@@ -28,7 +27,7 @@ function formatDetails(details?: unknown): string | undefined {
 
   try {
     return JSON.stringify(details, null, 2);
-  } catch (error) {
+  } catch {
     return String(details);
   }
 }
@@ -109,7 +108,6 @@ export function DiscordAuthDebugOverlay({ className }: DiscordAuthDebugOverlayPr
       setCopyStatus('copied');
     } catch (error) {
       setCopyStatus('failed');
-      // eslint-disable-next-line no-console
       console.error('Failed to copy Discord auth logs', error);
     }
   };

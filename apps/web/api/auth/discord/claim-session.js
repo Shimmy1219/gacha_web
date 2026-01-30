@@ -19,7 +19,7 @@ function parseStateFromBody(body) {
   if (typeof body === 'string') {
     try {
       return parseStateFromBody(JSON.parse(body));
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -182,7 +182,7 @@ function constantTimeCompareDigests(a, b) {
       return false;
     }
     return crypto.timingSafeEqual(aBuf, bBuf);
-  } catch (error) {
+  } catch {
     return false;
   }
 }
