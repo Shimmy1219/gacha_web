@@ -315,6 +315,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             id: 'page-settings',
             title: 'ページ設定',
             size: 'lg',
+            panelClassName: 'overflow-hidden',
             showHeaderCloseButton: true
           });
         }
