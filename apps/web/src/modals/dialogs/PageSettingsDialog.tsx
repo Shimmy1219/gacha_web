@@ -1170,7 +1170,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
       }}
     >
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8">
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:bg-transparent">
         <nav
           className={clsx(
             'w-full shrink-0 rounded-2xl border border-border/50 bg-panel/70 p-2 shadow-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none',
