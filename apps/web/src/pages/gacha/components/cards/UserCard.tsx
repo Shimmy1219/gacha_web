@@ -111,6 +111,8 @@ export function UserCard({
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
   const panelId = `user-card-panel-${userId}`;
+  const INTERACTIVE_SELECTOR =
+    'button, a, input, textarea, select, summary, details, [role="button"], [data-card-toggle-exclude="true"]';
 
   useEffect(() => {
     if (!isEditingName) {
@@ -171,6 +173,26 @@ export function UserCard({
     const rect = event.currentTarget.getBoundingClientRect();
     setUserMenuAnchor({ x: rect.left, y: rect.bottom + 8 });
   }, []);
+
+  const handleCardClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (isEditingName) {
+        return;
+      }
+      if (event.defaultPrevented) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if (target.closest(INTERACTIVE_SELECTOR)) {
+        return;
+      }
+      toggleButtonRef.current?.click();
+    },
+    [INTERACTIVE_SELECTOR, isEditingName]
+  );
 
   const handleCloseUserMenu = useCallback(() => {
     setUserMenuAnchor(null);
@@ -317,7 +339,10 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+        <article
+          className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5"
+          onClick={handleCardClick}
+        >
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <Disclosure.Button
