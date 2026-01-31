@@ -687,7 +687,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
 
           <div className="space-y-1">
             <div className="hidden rounded-2xl p-3 lg:block">{renderFileSelectionContent()}</div>
-            <div className="rounded-2xl p-2">
+            <div className="rounded-2xl">
               <div className="flex flex-col gap-3">
                 <label className="space-y-2">
                   <span className="text-sm font-medium text-surface-foreground">在庫数</span>
