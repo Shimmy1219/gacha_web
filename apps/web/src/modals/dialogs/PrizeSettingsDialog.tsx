@@ -146,7 +146,7 @@ function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps)
   const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明';
 
   return (
-    <div className="flex w-full items-center gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
+    <div className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
       <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-border/20">
         {previewUrl ? (
           isImagePreview ? (
@@ -162,7 +162,7 @@ function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps)
           <PhotoIcon className="h-6 w-6 text-muted-foreground" />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-hidden">
         <p className="truncate text-xs font-semibold text-surface-foreground">
           {preview.name ?? asset.assetId}
         </p>
@@ -554,7 +554,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           ) : null}
         </div>
         {assetEntries.length > 0 ? (
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 w-full max-w-full space-y-2 overflow-hidden">
             {assetEntries.map((asset, index) => (
               <AssetPreviewItem
                 key={asset.assetId}
@@ -638,7 +638,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <div className="rounded-2xl">
               <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
               <div className="mt-3 flex flex-col gap-4 lg:items-center lg:text-center">
@@ -687,7 +687,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="min-w-0 space-y-1">
             <div className="hidden rounded-2xl p-3 lg:block">{renderFileSelectionContent()}</div>
             <div className="rounded-2xl">
               <div className="flex flex-col gap-3">
