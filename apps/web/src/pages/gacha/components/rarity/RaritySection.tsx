@@ -338,8 +338,11 @@ export function RaritySection(): JSX.Element {
         className="rarity-section__gacha-tabs"
       />
 
-      <div className="rarity-section__scroll section-scroll flex-1">
-        <div className="rarity-section__scroll-content space-y-4">
+      <div className="rarity-section__scroll section-scroll flex-1 tab-panel-viewport">
+        <div
+          key={activeGachaId ?? 'rarity-empty'}
+          className={clsx('rarity-section__scroll-content space-y-4', panelAnimationClass)}
+        >
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
@@ -353,25 +356,17 @@ export function RaritySection(): JSX.Element {
           {status === 'ready' && activeGachaId && rarityRows.length === 0 ? (
             <p className="text-sm text-muted-foreground">選択中のガチャにレアリティが登録されていません。</p>
           ) : null}
-
-          <div className="tab-panel-viewport">
-            <div
-              key={activeGachaId ?? 'rarity-empty'}
-              className={panelAnimationClass}
-            >
-              {shouldRenderTable ? (
-                <RarityTable
-                  rows={tableRows}
-                  onLabelChange={handleLabelChange}
-                  onColorChange={handleColorChange}
-                  onEmitRateChange={handleEmitRateInputChange}
-                  onEmitRateCommit={handleEmitRateInputCommit}
-                  onDelete={handleDeleteRarity}
-                  onAdd={handleAddRarity}
-                />
-              ) : null}
-            </div>
-          </div>
+          {shouldRenderTable ? (
+            <RarityTable
+              rows={tableRows}
+              onLabelChange={handleLabelChange}
+              onColorChange={handleColorChange}
+              onEmitRateChange={handleEmitRateInputChange}
+              onEmitRateCommit={handleEmitRateInputCommit}
+              onDelete={handleDeleteRarity}
+              onAdd={handleAddRarity}
+            />
+          ) : null}
         </div>
       </div>
     </SectionContainer>
