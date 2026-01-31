@@ -666,8 +666,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                     )}
                   </div>
                   <div className="flex w-full flex-1 flex-col gap-3 text-left lg:mt-4 lg:w-auto lg:items-center lg:text-center">
-                    <div className="space-y-1">
-                      <p className="break-words text-sm font-semibold text-surface-foreground">
+                    <div className="min-w-0 space-y-1">
+                      <p className="break-all text-sm font-semibold text-surface-foreground">
                         {name || '未設定'}
                       </p>
                       <span
