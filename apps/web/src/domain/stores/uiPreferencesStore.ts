@@ -71,6 +71,19 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function normalizeOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return null;
+}
+
 function normalizeKeyword(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -220,6 +233,50 @@ function readDashboardDesktopLayoutFromState(
     return null;
   }
   return normalizeDashboardDesktopLayout(dashboard.desktop);
+}
+
+function readUserCardOpenState(state: UiPreferencesStateV3 | undefined, userId: string): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const users = state.users;
+  if (!isRecord(users)) {
+    return null;
+  }
+
+  const cards = users.cards;
+  if (!isRecord(cards)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(cards, userId)) {
+    return null;
+  }
+
+  return normalizeOptionalBoolean(cards[userId]);
+}
+
+function readRiaguCardOpenState(state: UiPreferencesStateV3 | undefined, cardId: string): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const riagu = state.riagu;
+  if (!isRecord(riagu)) {
+    return null;
+  }
+
+  const cards = riagu.cards;
+  if (!isRecord(cards)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(cards, cardId)) {
+    return null;
+  }
+
+  return normalizeOptionalBoolean(cards[cardId]);
 }
 
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
@@ -890,6 +947,100 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
 
   getUserFilterPreferences(): UserFilterPreferences {
     return normalizeUserFilterPreferences(this.state?.users && isRecord(this.state.users) ? this.state.users.filter : undefined);
+  }
+
+  getUserCardOpenState(userId: string): boolean | null {
+    const trimmed = userId.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return readUserCardOpenState(this.state, trimmed);
+  }
+
+  setUserCardOpenState(
+    userId: string,
+    open: boolean,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const trimmed = userId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readUserCardOpenState(previous, trimmed);
+        if (current === open) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousUsers = base.users && isRecord(base.users) ? base.users : {};
+        const previousCards = previousUsers.cards && isRecord(previousUsers.cards) ? previousUsers.cards : {};
+
+        return {
+          ...base,
+          users: {
+            ...previousUsers,
+            cards: {
+              ...previousCards,
+              [trimmed]: open
+            }
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getRiaguCardOpenState(cardId: string): boolean | null {
+    const trimmed = cardId.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return readRiaguCardOpenState(this.state, trimmed);
+  }
+
+  setRiaguCardOpenState(
+    cardId: string,
+    open: boolean,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const trimmed = cardId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readRiaguCardOpenState(previous, trimmed);
+        if (current === open) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousRiagu = base.riagu && isRecord(base.riagu) ? base.riagu : {};
+        const previousCards = previousRiagu.cards && isRecord(previousRiagu.cards) ? previousRiagu.cards : {};
+
+        return {
+          ...base,
+          riagu: {
+            ...previousRiagu,
+            cards: {
+              ...previousCards,
+              [trimmed]: open
+            }
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
   }
 
   getApplyLowerThresholdGuaranteesPreference(): boolean | null {
