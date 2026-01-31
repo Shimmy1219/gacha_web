@@ -462,10 +462,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [uiPreferencesState, uiPreferencesStore]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
-  const activeMenuItem = useMemo(
-    () => menuItems.find((item) => item.id === activeMenu) ?? menuItems[0],
-    [activeMenu, menuItems]
-  );
 
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
@@ -1219,18 +1215,15 @@ export const PageSettingsDialog: ModalComponent = (props) => {
           style={{ maxHeight: viewportLimit ?? undefined }}
         >
           {!isLargeLayout ? (
-            <div className="mb-5 flex items-center justify-between rounded-2xl border border-border/50 bg-panel-contrast/70 px-3 py-2 shadow-sm lg:hidden">
+            <div className="mb-4 flex items-center lg:hidden">
               <button
                 type="button"
                 onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <span aria-hidden="true">〈</span>
                 <span>メニューに戻る</span>
               </button>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                {activeMenuItem?.label ?? ''}
-              </span>
             </div>
           ) : null}
           {renderMenuContent()}
