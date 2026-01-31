@@ -570,6 +570,8 @@
   width: 100%;
   max-width: 100%;
   table-layout: auto;
+  border-radius: 1rem;
+  overflow: hidden;
 }
 
 .rarity-section__col-label {
