@@ -20,6 +20,7 @@ import {
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
 import { DISCORD_BOT_INVITE_URL } from '../../features/discord/discordInviteConfig';
+import { resolveSafeUrl } from '../../utils/safeUrl';
 
 interface DiscordBotInviteDialogPayload {
   userId: string;
@@ -54,6 +55,7 @@ export function DiscordBotInviteDialog({
 }: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
   const inviteUrl = payload?.inviteUrl ?? DISCORD_BOT_INVITE_URL;
+  const safeInviteUrl = useMemo(() => resolveSafeUrl(inviteUrl, { allowedProtocols: ['https:'] }), [inviteUrl]);
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
   const [submitStage, setSubmitStage] = useState<'idle' | 'members' | 'channels'>('idle');
@@ -213,15 +215,25 @@ export function DiscordBotInviteDialog({
             </p>
           </header>
           <div>
-            <a
-              href={inviteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-discord-hover"
-            >
-              <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
-              Botを招待する
-            </a>
+            {safeInviteUrl ? (
+              <a
+                href={safeInviteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-discord-hover"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+                Botを招待する
+              </a>
+            ) : (
+              <span
+                className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary/60 px-4 py-2 text-sm font-semibold text-white/70"
+                aria-disabled="true"
+              >
+                <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
+                Botを招待する
+              </span>
+            )}
             <p className="mt-3 text-xs text-muted-foreground">
               招待先のギルドを選択し、権限を確認して承認してください。完了後、下の「ギルド一覧を再取得」から反映を確認できます。
             </p>

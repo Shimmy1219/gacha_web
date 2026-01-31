@@ -17,6 +17,7 @@ import { useAppPersistence, useDomainStores } from '../../features/storage/AppPe
 import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
+import { resolveSafeUrl } from '../../utils/safeUrl';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
@@ -1034,6 +1035,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     normalizedUserName,
     resultItems
   ]);
+  const safeTweetUrl = useMemo(
+    () => (shareContent ? resolveSafeUrl(shareContent.tweetUrl, { allowedProtocols: ['https:'] }) : null),
+    [shareContent?.tweetUrl]
+  );
 
   const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
@@ -2001,17 +2006,28 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果を共有</span>
                   </button>
-                  <a
-                    href={shareContent.tweetUrl}
-                    className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Xで共有"
-                    aria-label="Xで共有"
-                  >
-                    <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                    <span className="sr-only">Xで共有</span>
-                  </a>
+                  {safeTweetUrl ? (
+                    <a
+                      href={safeTweetUrl}
+                      className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Xで共有"
+                      aria-label="Xで共有"
+                    >
+                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                      <span className="sr-only">Xで共有</span>
+                    </a>
+                  ) : (
+                    <span
+                      className="btn aspect-square h-8 w-8 border-none bg-[#000000]/60 p-1.5 text-white/70 !min-h-0"
+                      aria-disabled="true"
+                      title="Xで共有"
+                    >
+                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                      <span className="sr-only">Xで共有</span>
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
