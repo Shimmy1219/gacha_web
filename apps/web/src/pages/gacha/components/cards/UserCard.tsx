@@ -26,6 +26,7 @@ import {
 } from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
+import { useStoreValue } from '@domain/stores';
 import type { OriginalPrizeInstance } from '@domain/originalPrize';
 
 export type UserId = string;
@@ -98,8 +99,10 @@ export function UserCard({
   const {
     userProfiles: userProfilesStore,
     userInventories: userInventoriesStore,
-    pullHistory: pullHistoryStore
+    pullHistory: pullHistoryStore,
+    uiPreferences
   } = useDomainStores();
+  const uiPreferencesState = useStoreValue(uiPreferences);
   const [userMenuAnchor, setUserMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(userName);
@@ -136,6 +139,11 @@ export function UserCard({
   const avatarAssetId = discordAvatarAssetId ?? null;
   const avatarPreview = useAssetPreview(avatarAssetId);
   const avatarSrc = avatarPreview.url ?? (discordAvatarUrl ?? null);
+  const persistedOpenState = useMemo(
+    () => uiPreferences.getUserCardOpenState(userId),
+    [uiPreferences, uiPreferencesState, userId]
+  );
+  const resolvedDefaultOpen = persistedOpenState ?? expandedByDefault ?? false;
   const avatarFallback = useMemo(() => {
     const source = normalizedDiscordDisplayName || userName;
     if (!source) {
@@ -307,7 +315,7 @@ export function UserCard({
   );
 
   return (
-    <Disclosure defaultOpen={expandedByDefault}>
+    <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
         <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
           <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
@@ -320,6 +328,9 @@ export function UserCard({
                   open && 'text-accent'
                 )}
                 aria-label="ユーザー詳細の表示を切り替える"
+                onClick={() => {
+                  uiPreferences.setUserCardOpenState(userId, !open, { persist: 'debounced' });
+                }}
               >
                 <ChevronRightIcon
                   className={clsx(

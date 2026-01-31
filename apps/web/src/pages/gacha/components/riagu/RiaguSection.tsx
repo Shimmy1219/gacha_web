@@ -1,6 +1,6 @@
 import { Disclosure } from '@headlessui/react';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
@@ -10,6 +10,8 @@ import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
 import { useModal, RiaguConfigDialog } from '../../../../modals';
+import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
 
 interface RiaguDisplayEntry {
   id: string;
@@ -59,6 +61,12 @@ export function RiaguSection(): JSX.Element {
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
   const confirmDeleteGacha = useGachaDeletion();
   const { push } = useModal();
+  const { uiPreferences } = useDomainStores();
+  const uiPreferencesState = useStoreValue(uiPreferences);
+  const getDefaultOpenState = useCallback(
+    (cardId: string) => uiPreferences.getRiaguCardOpenState(cardId) ?? true,
+    [uiPreferences, uiPreferencesState]
+  );
 
   const { entriesByGacha, riaguGachaIds, totalEntryCount } = useMemo(() => {
     const grouped: RiaguEntriesByGacha = {};
@@ -247,7 +255,7 @@ export function RiaguSection(): JSX.Element {
                     const { className, style } = getRarityTextPresentation(entry.rarityColor);
                     const panelId = `riagu-card-panel-${entry.id}`;
                     return (
-                      <Disclosure key={entry.id} defaultOpen>
+                      <Disclosure key={entry.id} defaultOpen={getDefaultOpenState(entry.id)}>
                         {({ open }) => (
                           <article
                             className={clsx(
@@ -260,6 +268,9 @@ export function RiaguSection(): JSX.Element {
                                 type="button"
                                 className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                                 aria-label="リアグ当選者の表示を切り替える"
+                                onClick={() => {
+                                  uiPreferences.setRiaguCardOpenState(entry.id, !open, { persist: 'debounced' });
+                                }}
                               >
                                 <div className="riagu-card__meta-heading flex min-w-0 items-center gap-3">
                                   <ItemPreview
