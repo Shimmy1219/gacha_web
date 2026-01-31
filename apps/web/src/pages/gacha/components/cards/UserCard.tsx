@@ -982,8 +982,10 @@ function GachaInventoryCard({
                         )}
                         onSubmit={handleSubmitDraft}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{item.itemName}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="max-w-full truncate text-xs text-muted-foreground">
+                            {item.itemName}
+                          </span>
                           <input
                             type="number"
                             min={0}
@@ -1020,7 +1022,7 @@ function GachaInventoryCard({
                       key={`${inventory.inventoryId}-${editorKey}`}
                       type="button"
                       className={clsx(
-                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition',
+                        'user-card__item-chip inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border px-3 py-1 text-xs transition',
                         item.isMissing
                           ? 'border-dashed border-border/40 bg-surface/10 text-muted-foreground/60 opacity-60'
                           : 'border-border/60 bg-muted text-surface-foreground',
@@ -1033,7 +1035,7 @@ function GachaInventoryCard({
                       onClick={() => item.rarity.rarityId && handleStartEdit(rarityId, item.itemId, item.count)}
                       disabled={!isEditing || !item.rarity.rarityId}
                     >
-                      <span>{item.itemName}</span>
+                      <span className="max-w-full truncate">{item.itemName}</span>
                       {showCounts && item.count > 1 ? (
                         <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
                       ) : null}
