@@ -578,7 +578,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   return (
     <>
       <ModalBody className="rounded-2xl p-2">
-        <div className="flex flex-row items-end gap-4 lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <label className="flex-1 min-w-0 space-y-2">
             <span className="block text-sm font-medium text-surface-foreground">対象アイテム</span>
             <input
@@ -589,7 +589,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               placeholder="煌めく星屑ブレスレット"
             />
           </label>
-          <div className="flex min-w-[11rem] shrink-0 flex-col gap-2 lg:max-w-[14rem]">
+          <div className="flex w-full shrink-0 flex-col gap-2 lg:w-auto lg:min-w-[11rem] lg:max-w-[14rem]">
             <span className="text-sm font-medium text-surface-foreground">レアリティ</span>
             <SingleSelectDropdown<string>
               value={rarityId}
@@ -678,9 +678,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                         {currentRarityLabel}
                       </span>
                     </div>
-                    <div className="space-y-2 lg:hidden">{renderFileSelectionContent()}</div>
                   </div>
                 </div>
+                <div className="mt-4 space-y-2 lg:hidden">{renderFileSelectionContent()}</div>
               </div>
             </div>
           </div>
