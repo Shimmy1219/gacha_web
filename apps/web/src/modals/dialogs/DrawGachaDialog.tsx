@@ -1693,35 +1693,41 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               </div>
               {pointsInputMode === 'points' ? (
                 <>
-                  <label className="block text-xs font-semibold text-muted-foreground" htmlFor={pointsInputId}>
-                    ポイント
-                  </label>
-                  <input
-                    id={pointsInputId}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={pointsInput}
-                    onChange={(event) => setPointsInput(event.currentTarget.value)}
-                    className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
-                    placeholder="100"
-                  />
+                  <div className="relative">
+                    <input
+                      id={pointsInputId}
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={pointsInput}
+                      onChange={(event) => setPointsInput(event.currentTarget.value)}
+                      className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 pr-9 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+                      placeholder="100"
+                      aria-label="ポイント"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70">
+                      pt
+                    </span>
+                  </div>
                 </>
               ) : (
                 <>
-                  <label className="block text-xs font-semibold text-muted-foreground" htmlFor={pullsInputId}>
-                    連数
-                  </label>
-                  <input
-                    id={pullsInputId}
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={pullsInput}
-                    onChange={(event) => setPullsInput(event.currentTarget.value)}
-                    className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
-                    placeholder="10"
-                  />
+                  <div className="relative">
+                    <input
+                      id={pullsInputId}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={pullsInput}
+                      onChange={(event) => setPullsInput(event.currentTarget.value)}
+                      className="w-full rounded-xl border border-border/60 bg-surface-alt px-3 py-2 pr-9 text-sm text-surface-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/40"
+                      placeholder="10"
+                      aria-label="連数"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70">
+                      連
+                    </span>
+                  </div>
                 </>
               )}
               <div className="flex flex-wrap gap-2">
