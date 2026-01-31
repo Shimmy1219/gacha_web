@@ -339,11 +339,11 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article
-          className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5"
-          onClick={handleCardClick}
-        >
-          <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+          <header
+            className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap"
+            onClick={handleCardClick}
+          >
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <Disclosure.Button
                 ref={toggleButtonRef}
