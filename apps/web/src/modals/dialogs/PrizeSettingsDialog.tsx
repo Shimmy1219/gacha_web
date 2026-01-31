@@ -146,7 +146,7 @@ function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps)
   const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明';
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
+    <div className="flex w-full items-center gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
       <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-border/20">
         {previewUrl ? (
           isImagePreview ? (
