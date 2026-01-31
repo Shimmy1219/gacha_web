@@ -1658,6 +1658,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               onChange={handleGachaChange}
               placeholder="ガチャを選択"
               fallbackToFirstOption={false}
+              classNames={{ root: 'w-full', button: 'w-full' }}
             />
           </div>
           {gachaOptions.length === 0 ? (
