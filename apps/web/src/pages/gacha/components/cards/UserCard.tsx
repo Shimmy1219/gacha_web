@@ -956,7 +956,7 @@ function GachaInventoryCard({
           return (
             <div
               key={rarityId}
-              className="user-card__rarity-row grid grid-cols-[minmax(5rem,auto),1fr] items-start gap-2"
+              className="user-card__rarity-row grid min-w-0 grid-cols-[minmax(5rem,auto),1fr] items-start gap-2"
             >
               <div className="user-card__rarity-label flex items-center gap-2">
                 <span className={clsx('user-card__rarity-name text-sm font-semibold', className)} style={style}>
@@ -968,7 +968,7 @@ function GachaInventoryCard({
                   </span>
                 ) : null}
               </div>
-              <div className="user-card__rarity-items flex flex-wrap items-start gap-2">
+              <div className="user-card__rarity-items flex min-w-0 flex-wrap items-start gap-2">
                 {group.items.map((item) => {
                   const editorKey = `edit:${rarityId}:${item.itemId}`;
                   const isActive = activeEditor === editorKey && draftMode === 'edit';
@@ -1035,7 +1035,7 @@ function GachaInventoryCard({
                       onClick={() => item.rarity.rarityId && handleStartEdit(rarityId, item.itemId, item.count)}
                       disabled={!isEditing || !item.rarity.rarityId}
                     >
-                      <span className="max-w-full truncate">{item.itemName}</span>
+                      <span className="block max-w-full truncate">{item.itemName}</span>
                       {showCounts && item.count > 1 ? (
                         <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
                       ) : null}
