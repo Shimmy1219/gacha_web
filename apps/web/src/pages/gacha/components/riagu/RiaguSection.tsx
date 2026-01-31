@@ -248,8 +248,8 @@ export function RiaguSection(): JSX.Element {
                         className="riagu-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5 shadow-sm"
                       >
                         <header className="riagu-card__header flex items-start justify-between gap-3">
-                          <div className="riagu-card__meta flex flex-1 flex-col gap-3">
-                            <div className="riagu-card__meta-heading flex items-center gap-3">
+                          <div className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3">
+                            <div className="riagu-card__meta-heading flex min-w-0 items-center gap-3">
                               <ItemPreview
                                 assetId={entry.assetId}
                                 previewAssetId={entry.thumbnailAssetId}
@@ -259,7 +259,7 @@ export function RiaguSection(): JSX.Element {
                                 className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
                                 emptyLabel="noImage"
                               />
-                              <div className="riagu-card__meta-text flex-1 space-y-2">
+                              <div className="riagu-card__meta-text min-w-0 flex-1 space-y-2">
                                 <span className="riagu-card__rarity inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
                                   <span
                                     className={clsx('inventory-history-dialog__rarity-badge__label', className)}
@@ -268,7 +268,9 @@ export function RiaguSection(): JSX.Element {
                                     {entry.rarityLabel}
                                   </span>
                                 </span>
-                                <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
+                                <h3 className="riagu-card__title truncate text-base font-semibold text-surface-foreground">
+                                  {entry.itemName}
+                                </h3>
                               </div>
                             </div>
                             <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
