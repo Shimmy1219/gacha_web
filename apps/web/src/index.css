@@ -570,7 +570,7 @@
   width: 100%;
   max-width: 100%;
   table-layout: auto;
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   overflow: hidden;
 }
 
