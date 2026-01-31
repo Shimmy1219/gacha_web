@@ -361,7 +361,7 @@ export const createDiscordEncryptedStorage = (options?: {
       try {
         const value = await decryptRecord(record, key);
         results.set(record.key, value);
-      } catch (error) {
+      } catch {
         await backend!.deleteRecord(record.key);
         emitFailure({ key: record.key, reason: 'corrupted' });
       }

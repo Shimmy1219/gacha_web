@@ -89,7 +89,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
   const rarityTextStyle: CSSProperties = {
     display: 'inline-block',
-    maxWidth: 'fit-content',
+    maxWidth: '100%',
     ...(rarityStyle ?? {})
   };
   const remainingStock = model.remainingStock;
@@ -97,6 +97,9 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const remainingLabel = hasRemainingStock
     ? `残り${new Intl.NumberFormat('ja-JP').format(Math.max(0, remainingStock))}`
     : '';
+  const remainingBadge = hasRemainingStock ? (
+    <span className="shrink-0 px-1 text-[10px] font-semibold text-accent">{remainingLabel}</span>
+  ) : null;
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (event.ctrlKey || event.metaKey) {
@@ -179,15 +182,11 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             </span>
           ) : null}
         </div>
-        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
+        <div className={clsx('flex min-w-0 flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
-            <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-surface-foreground">
-              <span className="truncate">{model.name}</span>
-              {hasRemainingStock ? (
-                <span className="shrink-0 px-1 text-[10px] font-semibold text-accent">
-                  {remainingLabel}
-                </span>
-              ) : null}
+            <h3 className="flex min-w-0 items-center justify-between gap-2 overflow-hidden text-sm font-semibold text-surface-foreground">
+              <span className="min-w-0 max-w-full truncate">{model.name}</span>
+              {!isMobile ? remainingBadge : null}
             </h3>
             <span
               className={clsx(
@@ -195,7 +194,14 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
                 isMobile ? 'flex-col gap-1' : 'items-baseline justify-between gap-2'
               )}
             >
-              {rarityLabel}
+              {isMobile ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  {rarityLabel}
+                  {remainingBadge}
+                </span>
+              ) : (
+                rarityLabel
+              )}
               <span
                 className={clsx(
                   'text-[10px] font-normal text-muted-foreground tabular-nums',

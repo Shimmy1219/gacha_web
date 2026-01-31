@@ -1,6 +1,5 @@
 import {
   type GachaCatalogStateV4,
-  type OriginalPrizeAssetV1,
   type PullHistoryEntrySourceV1,
   type PullHistoryEntryV1,
   type PullHistoryStateV1,

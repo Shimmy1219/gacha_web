@@ -577,6 +577,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             id: 'page-settings',
             title: 'ページ設定',
             size: 'lg',
+            panelClassName: 'page-settings-modal overflow-hidden',
             showHeaderCloseButton: true
           });
         }
@@ -1923,9 +1924,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                         {item.rarityLabel}
                       </span>
                     </span>
-                    <span className="flex-1 font-medium">
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <span>{item.name}</span>
+                    <span className="flex-1 min-w-0 overflow-hidden font-medium">
+                      <span className="inline-flex w-full min-w-0 items-center gap-2">
+                        <span className="block min-w-0 flex-1 truncate">{item.name}</span>
                         {item.isNew ? (
                           <span className="inline-flex h-5 items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-semibold leading-none text-emerald-700">
                             new

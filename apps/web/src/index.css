@@ -248,6 +248,16 @@
     background: rgb(var(--color-accent) / 1);
   }
 
+  @media (max-width: 1023px) {
+    .page-settings-modal .modal-header > div {
+      margin-left: 16px;
+    }
+
+    .page-settings-modal .modal-header > div > h2 {
+      margin-top: 16px;
+    }
+  }
+
   .inventory-history-dialog__rarity-badge {
     @apply transition-colors;
     min-width: 3rem;

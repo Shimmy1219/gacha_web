@@ -228,9 +228,9 @@ export function HistoryEntriesList({
                         </span>
                       </span>
                     ) : null}
-                    <span className="flex-1 font-medium">
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <span>{item.itemLabel}</span>
+                    <span className="flex-1 min-w-0 overflow-hidden font-medium">
+                      <span className="inline-flex w-full min-w-0 items-center gap-2">
+                        <span className="block min-w-0 flex-1 truncate">{item.itemLabel}</span>
                         {item.isNew ? (
                           <span className="inline-flex h-5 items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-semibold leading-none text-emerald-700">
                             new

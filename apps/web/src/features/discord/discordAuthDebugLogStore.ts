@@ -25,7 +25,6 @@ function notifySubscribers(): void {
     try {
       listener();
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('DiscordAuthDebugLogStore listener error', error);
     }
   });
