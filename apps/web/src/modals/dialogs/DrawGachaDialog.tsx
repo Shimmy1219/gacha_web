@@ -1751,11 +1751,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   </button>
                 ))}
               </div>
-              {pointsInputMode === 'pulls' ? (
-                <p className="text-xs text-muted-foreground">
-                  必要ポイント: {Number.isFinite(resolvedPoints) ? `${formatNumber(resolvedPoints)} pt` : '計算中'}
-                </p>
-              ) : null}
             </div>
             <div className="space-y-2">
               <label className="space-y-2">
