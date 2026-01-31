@@ -182,10 +182,10 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             </span>
           ) : null}
         </div>
-          <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
+        <div className={clsx('flex min-w-0 flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
-            <h3 className="flex min-w-0 items-center justify-between gap-2 text-sm font-semibold text-surface-foreground">
-              <span className="min-w-0 truncate">{model.name}</span>
+            <h3 className="flex min-w-0 items-center justify-between gap-2 overflow-hidden text-sm font-semibold text-surface-foreground">
+              <span className="min-w-0 max-w-full truncate">{model.name}</span>
               {!isMobile ? remainingBadge : null}
             </h3>
             <span
