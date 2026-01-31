@@ -1,6 +1,7 @@
-import { calculateDrawPlan } from './pointCalculator';
+import { calculateDrawPlan, normalizePtSetting } from './pointCalculator';
 import type {
   DrawPlan,
+  ExecuteGachaByPullsArgs,
   ExecuteGachaArgs,
   ExecuteGachaDrawInstance,
   ExecuteGachaResult,
@@ -231,24 +232,21 @@ function buildGuaranteedDraws(
   return { draws, warnings, remainingRandomPulls };
 }
 
-export function executeGacha({
-  gachaId: _gachaId,
+function executeGachaWithPlan({
   pool,
-  settings,
-  points,
-  completeExecutionsOverride,
+  plan,
   includeOutOfStockInComplete = false,
   allowOutOfStockGuaranteeItem = false,
   applyLowerThresholdGuarantees = true,
   rng = Math.random
-}: ExecuteGachaArgs): ExecuteGachaResult {
-  const plan = calculateDrawPlan({
-    points,
-    settings,
-    totalItemTypes: pool.items.length,
-    completeExecutionsOverride
-  });
-
+}: {
+  pool: GachaPoolDefinition;
+  plan: DrawPlan;
+  includeOutOfStockInComplete?: boolean;
+  allowOutOfStockGuaranteeItem?: boolean;
+  applyLowerThresholdGuarantees?: boolean;
+  rng?: () => number;
+}): ExecuteGachaResult {
   const warnings = [...plan.warnings];
   const errors = [...plan.errors];
 
@@ -259,7 +257,7 @@ export function executeGacha({
       pointsSpent: 0,
       pointsRemainder: plan.pointsRemainder,
       totalPulls: 0,
-      completeExecutions: 0,
+      completeExecutions: plan.completeExecutions,
       warnings,
       errors
     };
@@ -368,4 +366,76 @@ export function executeGacha({
     warnings,
     errors
   };
+}
+
+export function executeGacha({
+  gachaId: _gachaId,
+  pool,
+  settings,
+  points,
+  completeExecutionsOverride,
+  includeOutOfStockInComplete = false,
+  allowOutOfStockGuaranteeItem = false,
+  applyLowerThresholdGuarantees = true,
+  rng = Math.random
+}: ExecuteGachaArgs): ExecuteGachaResult {
+  const plan = calculateDrawPlan({
+    points,
+    settings,
+    totalItemTypes: pool.items.length,
+    completeExecutionsOverride
+  });
+
+  return executeGachaWithPlan({
+    pool,
+    plan,
+    includeOutOfStockInComplete,
+    allowOutOfStockGuaranteeItem,
+    applyLowerThresholdGuarantees,
+    rng
+  });
+}
+
+export function executeGachaByPulls({
+  gachaId: _gachaId,
+  pool,
+  settings,
+  pulls,
+  includeOutOfStockInComplete = false,
+  allowOutOfStockGuaranteeItem = false,
+  applyLowerThresholdGuarantees = true,
+  rng = Math.random
+}: ExecuteGachaByPullsArgs): ExecuteGachaResult {
+  const { normalized, warnings } = normalizePtSetting(settings);
+  const errors: string[] = [];
+  const sanitizedPulls = Number.isFinite(pulls) ? Math.floor(pulls) : NaN;
+
+  if (!Number.isFinite(pulls) || Number.isNaN(pulls)) {
+    errors.push('連数の入力値が無効です。');
+  } else if (sanitizedPulls <= 0) {
+    errors.push('1連以上を入力してください。');
+  }
+
+  const plan: DrawPlan = {
+    completeExecutions: 0,
+    completePulls: 0,
+    randomPulls: Number.isFinite(sanitizedPulls) ? Math.max(0, sanitizedPulls) : 0,
+    totalPulls: Number.isFinite(sanitizedPulls) ? Math.max(0, sanitizedPulls) : 0,
+    pointsUsed: 0,
+    pointsRemainder: 0,
+    bundleApplications: [],
+    perPullPurchases: null,
+    errors,
+    warnings: [...warnings],
+    normalizedSettings: normalized
+  };
+
+  return executeGachaWithPlan({
+    pool,
+    plan,
+    includeOutOfStockInComplete,
+    allowOutOfStockGuaranteeItem,
+    applyLowerThresholdGuarantees,
+    rng
+  });
 }

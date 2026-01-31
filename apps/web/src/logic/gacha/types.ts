@@ -128,6 +128,17 @@ export interface ExecuteGachaArgs {
   applyLowerThresholdGuarantees?: boolean;
 }
 
+export interface ExecuteGachaByPullsArgs {
+  gachaId: string;
+  pool: GachaPoolDefinition;
+  settings: PtSettingV3 | undefined;
+  pulls: number;
+  rng?: () => number;
+  includeOutOfStockInComplete?: boolean;
+  allowOutOfStockGuaranteeItem?: boolean;
+  applyLowerThresholdGuarantees?: boolean;
+}
+
 export interface ExecutedPullItem {
   itemId: string;
   rarityId: string;

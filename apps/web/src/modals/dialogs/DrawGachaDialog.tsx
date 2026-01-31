@@ -42,6 +42,7 @@ import {
   buildItemInventoryCountMap,
   calculateDrawPlan,
   executeGacha,
+  executeGachaByPulls,
   inferRarityFractionDigits,
   normalizePtSetting,
   resolveRemainingStock,
@@ -336,6 +337,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [lastGachaLabel, setLastGachaLabel] = useState<string | undefined>(undefined);
   const [lastPointsSpent, setLastPointsSpent] = useState<number | null>(null);
   const [lastPointsRemainder, setLastPointsRemainder] = useState<number | null>(null);
+  const [lastUsedManualPulls, setLastUsedManualPulls] = useState(false);
   const [lastExecutionWarnings, setLastExecutionWarnings] = useState<string[]>([]);
   const [lastPlan, setLastPlan] = useState<DrawPlan | null>(null);
   const [lastTotalPulls, setLastTotalPulls] = useState<number | null>(null);
@@ -451,6 +453,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setLastPullId(null);
     setLastPointsSpent(null);
     setLastPointsRemainder(null);
+    setLastUsedManualPulls(false);
     setLastExecutionWarnings([]);
     setLastPlan(null);
     setLastTotalPulls(null);
@@ -481,6 +484,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     const value = Number(pullsInput);
     return Number.isFinite(value) ? value : NaN;
   }, [pullsInput]);
+  const requestedPulls = useMemo(
+    () => (Number.isFinite(parsedPulls) ? Math.floor(parsedPulls) : null),
+    [parsedPulls]
+  );
 
   const adjustPointsInput = useCallback((delta: number) => {
     const current = Number(pointsInput);
@@ -632,14 +639,39 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const drawPlan = planResolution.plan;
   const resolvedPoints = planResolution.points;
   const planErrorMessage = planResolution.error;
-
-  const handleExecute = async () => {
-    if (isExecuting) {
-      return;
+  const pullsMismatch =
+    isPullsMode && requestedPulls != null && drawPlan != null && drawPlan.totalPulls !== requestedPulls;
+  const displayPlan = useMemo(() => {
+    if (!drawPlan || !isPullsMode || requestedPulls == null) {
+      return drawPlan;
     }
-    triggerSelection();
-    setIsExecuting(true);
-    try {
+    const sanitized = Math.max(0, requestedPulls);
+    return {
+      ...drawPlan,
+      completeExecutions: 0,
+      completePulls: 0,
+      randomPulls: sanitized,
+      totalPulls: sanitized
+    };
+  }, [drawPlan, isPullsMode, requestedPulls]);
+  const showUnknownPoints = pullsMismatch;
+  const displayPulls = useMemo(() => {
+    if (!displayPlan) {
+      return null;
+    }
+    if (isPullsMode && requestedPulls != null) {
+      return Math.max(0, requestedPulls);
+    }
+    return displayPlan.totalPulls;
+  }, [displayPlan, isPullsMode, requestedPulls]);
+
+  const executeGachaDraw = useCallback(
+    async ({ bypassPullsMismatchWarning = false }: { bypassPullsMismatchWarning?: boolean } = {}) => {
+      if (isExecuting) {
+        return;
+      }
+      triggerSelection();
+
       setErrorMessage(null);
       setLastPullId(null);
       setDiscordDeliveryError(null);
@@ -687,127 +719,189 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return;
       }
 
-      const executionResult = executeGacha({
-        gachaId: selectedGacha.id,
-        pool: selectedGacha.pool,
-        settings: selectedPtSetting,
-        points: resolvedPoints,
-        completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined,
-        includeOutOfStockInComplete,
-        allowOutOfStockGuaranteeItem,
-        applyLowerThresholdGuarantees
-      });
-
-      if (executionResult.errors.length > 0) {
-        setErrorMessage(executionResult.errors[0]);
-        setResultItems(null);
-        setLastTotalPulls(null);
-        setLastUserName('');
-        triggerError();
+      if (!bypassPullsMismatchWarning && pullsMismatch && requestedPulls != null) {
+        push(ConfirmDialog, {
+          id: 'draw-pulls-mismatch-warning',
+          title: '警告',
+          size: 'sm',
+          payload: {
+            message: `お得バンドルをどう組み合わせても、${formatNumber(
+              requestedPulls
+            )}連になることはありませんがこのまま進みますか？`,
+            confirmLabel: 'このまま進む',
+            cancelLabel: 'キャンセル',
+            onConfirm: () => {
+              void executeGachaDraw({ bypassPullsMismatchWarning: true });
+            }
+          }
+        });
         return;
       }
 
-      if (!executionResult.items.length) {
-        setErrorMessage('ガチャ結果を生成できませんでした。');
-        setResultItems(null);
-        setLastTotalPulls(null);
-        setLastUserName('');
-        triggerError();
-        return;
-      }
+      const useManualPulls = pullsMismatch && requestedPulls != null;
 
-      const itemsForStore: GachaResultPayload['items'] = executionResult.items.map((item) => ({
-        itemId: item.itemId,
-        rarityId: item.rarityId,
-        count: item.count
-      }));
+      setIsExecuting(true);
+      try {
+        const executionResult = useManualPulls
+          ? executeGachaByPulls({
+              gachaId: selectedGacha.id,
+              pool: selectedGacha.pool,
+              settings: selectedPtSetting,
+              pulls: requestedPulls ?? 0,
+              includeOutOfStockInComplete,
+              allowOutOfStockGuaranteeItem,
+              applyLowerThresholdGuarantees
+            })
+          : executeGacha({
+              gachaId: selectedGacha.id,
+              pool: selectedGacha.pool,
+              settings: selectedPtSetting,
+              points: resolvedPoints,
+              completeExecutionsOverride: completeExecutionsOverrideForPlan ?? undefined,
+              includeOutOfStockInComplete,
+              allowOutOfStockGuaranteeItem,
+              applyLowerThresholdGuarantees
+            });
 
-      const executedAt = new Date().toISOString();
-      const userId = normalizedUserName ? userProfiles.ensureProfile(normalizedUserName) : undefined;
-      const inventoryByItemId = userId ? (userInventoriesState?.byItemId ?? {}) : null;
+        if (executionResult.errors.length > 0) {
+          setErrorMessage(executionResult.errors[0]);
+          setResultItems(null);
+          setLastTotalPulls(null);
+          setLastUserName('');
+          triggerError();
+          return;
+        }
 
-      const aggregatedItems: DrawGachaDialogResultItem[] = executionResult.items.map((item) => {
-        const existingEntries = inventoryByItemId?.[item.itemId] ?? [];
-        const alreadyOwned = userId
-          ? existingEntries.some(
-              (entry) =>
-                entry.userId === userId &&
-                entry.gachaId === selectedGacha.id &&
-                entry.count > 0
-            )
-          : false;
+        if (!executionResult.items.length) {
+          setErrorMessage('ガチャ結果を生成できませんでした。');
+          setResultItems(null);
+          setLastTotalPulls(null);
+          setLastUserName('');
+          triggerError();
+          return;
+        }
 
-        return {
+        const itemsForStore: GachaResultPayload['items'] = executionResult.items.map((item) => ({
           itemId: item.itemId,
-          name: item.name,
           rarityId: item.rarityId,
-          rarityLabel: item.rarityLabel,
-          rarityColor: item.rarityColor,
-          count: item.count,
-          guaranteedCount: item.guaranteedCount > 0 ? item.guaranteedCount : undefined,
-          isNew: userId ? !alreadyOwned : false
+          count: item.count
+        }));
+
+        const executedAt = new Date().toISOString();
+        const userId = normalizedUserName ? userProfiles.ensureProfile(normalizedUserName) : undefined;
+        const inventoryByItemId = userId ? (userInventoriesState?.byItemId ?? {}) : null;
+
+        const aggregatedItems: DrawGachaDialogResultItem[] = executionResult.items.map((item) => {
+          const existingEntries = inventoryByItemId?.[item.itemId] ?? [];
+          const alreadyOwned = userId
+            ? existingEntries.some(
+                (entry) =>
+                  entry.userId === userId &&
+                  entry.gachaId === selectedGacha.id &&
+                  entry.count > 0
+              )
+            : false;
+
+          return {
+            itemId: item.itemId,
+            name: item.name,
+            rarityId: item.rarityId,
+            rarityLabel: item.rarityLabel,
+            rarityColor: item.rarityColor,
+            count: item.count,
+            guaranteedCount: item.guaranteedCount > 0 ? item.guaranteedCount : undefined,
+            isNew: userId ? !alreadyOwned : false
+          };
+        });
+
+        const newItemIds = Array.from(
+          new Set(aggregatedItems.filter((item) => item.isNew).map((item) => item.itemId))
+        );
+
+        const payload: GachaResultPayload = {
+          gachaId: selectedGacha.id,
+          userId,
+          executedAt,
+          pullCount: executionResult.totalPulls,
+          currencyUsed: useManualPulls ? undefined : executionResult.pointsSpent,
+          items: itemsForStore,
+          newItems: newItemIds.length > 0 ? newItemIds : undefined
         };
-      });
 
-      const newItemIds = Array.from(
-        new Set(aggregatedItems.filter((item) => item.isNew).map((item) => item.itemId))
-      );
+        console.info('【デバッグ】ガチャを引きました', {
+          ガチャID: selectedGacha.id,
+          ユーザーID: userId ?? '未指定',
+          実行日時: executedAt,
+          連続回数: executionResult.totalPulls,
+          消費ポイント: useManualPulls ? '???' : executionResult.pointsSpent,
+          抽選アイテム数: itemsForStore.length
+        });
 
-      const payload: GachaResultPayload = {
-        gachaId: selectedGacha.id,
-        userId,
-        executedAt,
-        pullCount: executionResult.totalPulls,
-        currencyUsed: executionResult.pointsSpent,
-        items: itemsForStore,
-        newItems: newItemIds.length > 0 ? newItemIds : undefined
-      };
+        const pullId = pullHistory.recordGachaResult(payload);
+        if (!pullId) {
+          setErrorMessage('ガチャ結果の保存に失敗しました。');
+          setResultItems(null);
+          setLastTotalPulls(null);
+          setLastUserName('');
+          return;
+        }
 
-      console.info('【デバッグ】ガチャを引きました', {
-        ガチャID: selectedGacha.id,
-        ユーザーID: userId ?? '未指定',
-        実行日時: executedAt,
-        連続回数: executionResult.totalPulls,
-        消費ポイント: executionResult.pointsSpent,
-        抽選アイテム数: itemsForStore.length
-      });
-
-      const pullId = pullHistory.recordGachaResult(payload);
-      if (!pullId) {
-        setErrorMessage('ガチャ結果の保存に失敗しました。');
+        setResultItems(aggregatedItems);
+        setLastPullId(pullId);
+        setLastExecutedAt(executedAt);
+        setLastGachaLabel(selectedGacha.label);
+        setLastPointsSpent(useManualPulls ? null : executionResult.pointsSpent);
+        setLastPointsRemainder(useManualPulls ? null : executionResult.pointsRemainder);
+        setLastUsedManualPulls(useManualPulls);
+        setLastExecutionWarnings(executionResult.warnings);
+        setLastPlan(executionResult.plan);
+        setLastTotalPulls(executionResult.totalPulls);
+        setLastUserName(normalizedUserName);
+        setLastUserId(userId ?? null);
+        triggerConfirmation();
+      } catch (error) {
+        console.error('ガチャ実行中にエラーが発生しました', error);
+        setErrorMessage('ガチャの実行中にエラーが発生しました。');
         setResultItems(null);
         setLastTotalPulls(null);
         setLastUserName('');
-        return;
+        setLastPointsSpent(null);
+        setLastPointsRemainder(null);
+        setLastUsedManualPulls(false);
+        setLastExecutionWarnings([]);
+        setLastPlan(null);
+        setLastUserId(null);
+        triggerError();
+      } finally {
+        setIsExecuting(false);
       }
+    },
+    [
+      allowOutOfStockGuaranteeItem,
+      applyLowerThresholdGuarantees,
+      completeExecutionsOverrideForPlan,
+      drawPlan,
+      includeOutOfStockInComplete,
+      isExecuting,
+      normalizedUserName,
+      planErrorMessage,
+      pullHistory,
+      pullsMismatch,
+      push,
+      requestedPulls,
+      resolvedPoints,
+      selectedGacha,
+      selectedPtSetting,
+      triggerConfirmation,
+      triggerError,
+      triggerSelection,
+      userInventoriesState?.byItemId,
+      userProfiles
+    ]
+  );
 
-      setResultItems(aggregatedItems);
-      setLastPullId(pullId);
-      setLastExecutedAt(executedAt);
-      setLastGachaLabel(selectedGacha.label);
-      setLastPointsSpent(executionResult.pointsSpent);
-      setLastPointsRemainder(executionResult.pointsRemainder);
-      setLastExecutionWarnings(executionResult.warnings);
-      setLastPlan(executionResult.plan);
-      setLastTotalPulls(executionResult.totalPulls);
-      setLastUserName(normalizedUserName);
-      setLastUserId(userId ?? null);
-      triggerConfirmation();
-    } catch (error) {
-      console.error('ガチャ実行中にエラーが発生しました', error);
-      setErrorMessage('ガチャの実行中にエラーが発生しました。');
-      setResultItems(null);
-      setLastTotalPulls(null);
-      setLastUserName('');
-      setLastPointsSpent(null);
-      setLastPointsRemainder(null);
-      setLastExecutionWarnings([]);
-      setLastPlan(null);
-      setLastUserId(null);
-      triggerError();
-    } finally {
-      setIsExecuting(false);
-    }
+  const handleExecute = () => {
+    void executeGachaDraw();
   };
 
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
@@ -867,8 +961,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     });
     return items;
   }, [itemOrderIndex, rarityOrderIndex, resultItems]);
-  const planWarnings = drawPlan?.warnings ?? [];
-  const normalizedCompleteSetting = drawPlan?.normalizedSettings.complete;
+  const planWarnings = displayPlan?.warnings ?? [];
+  const normalizedCompleteSetting = displayPlan?.normalizedSettings.complete;
   const maxCompleteExecutions = useMemo(() => {
     if (isPullsMode || !normalizedCompleteSetting || !Number.isFinite(resolvedPoints)) {
       return 0;
@@ -888,10 +982,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     if (completeExecutionsOverride != null && Number.isFinite(completeExecutionsOverride)) {
       return Math.min(maxCompleteExecutions, Math.max(0, Math.floor(completeExecutionsOverride)));
     }
-    return drawPlan?.completeExecutions ?? 0;
+    return displayPlan?.completeExecutions ?? 0;
   }, [
     completeExecutionsOverride,
-    drawPlan,
+    displayPlan,
     isPullsMode,
     maxCompleteExecutions,
     normalizedCompleteSetting
@@ -939,7 +1033,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [currentCompleteExecutions, isPullsMode, maxCompleteExecutions, normalizedCompleteSetting]
   );
   const guaranteeSummaries = useMemo(() => {
-    if (!drawPlan || !selectedGacha) {
+    if (!displayPlan || !selectedGacha) {
       return [] as Array<{
         rarityId: string;
         threshold: number;
@@ -950,13 +1044,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     const eligibleThresholds = applyLowerThresholdGuarantees
       ? null
-      : drawPlan.normalizedSettings.guarantees
-          .filter((guarantee) => drawPlan.totalPulls >= guarantee.threshold)
+      : displayPlan.normalizedSettings.guarantees
+          .filter((guarantee) => displayPlan.totalPulls >= guarantee.threshold)
           .map((guarantee) => guarantee.threshold);
     const maxApplicableThreshold =
       eligibleThresholds && eligibleThresholds.length > 0 ? Math.max(...eligibleThresholds) : null;
 
-    return drawPlan.normalizedSettings.guarantees.map((guarantee) => {
+    return displayPlan.normalizedSettings.guarantees.map((guarantee) => {
       const rarity = selectedGacha.pool.rarityGroups.get(guarantee.rarityId);
       const rarityEntity = rarityState?.entities?.[guarantee.rarityId];
       const label =
@@ -976,7 +1070,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
       const description = `${label}: ${guarantee.threshold}連以上で${targetLabel}${guarantee.quantity}個保証`;
       const applies = applyLowerThresholdGuarantees
-        ? drawPlan.totalPulls >= guarantee.threshold
+        ? displayPlan.totalPulls >= guarantee.threshold
         : maxApplicableThreshold != null && guarantee.threshold === maxApplicableThreshold;
       return {
         rarityId: guarantee.rarityId,
@@ -985,7 +1079,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         applies
       };
     });
-  }, [applyLowerThresholdGuarantees, drawPlan, rarityState, selectedGacha]);
+  }, [applyLowerThresholdGuarantees, displayPlan, rarityState, selectedGacha]);
 
   const shareContent = useMemo(() => {
     if (!resultItems || resultItems.length === 0) {
@@ -1798,16 +1892,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               ) : null}
             </div>
           </div>
-          {selectedGacha && drawPlan ? (
+          {selectedGacha && displayPlan ? (
             <div className="space-y-2 rounded-xl border border-border/60 bg-surface-alt p-3 text-xs text-muted-foreground">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   消費:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.pointsUsed)} pt
+                    {showUnknownPoints ? '??? pt' : `${formatNumber(displayPlan.pointsUsed)} pt`}
                   </span>
                 </span>
-                {normalizedCompleteSetting ? (
+                {normalizedCompleteSetting && !showUnknownPoints ? (
                   <span>
                     内、コンプリート排出分
                     <span className="ml-1 font-mono text-surface-foreground">
@@ -1820,7 +1914,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 <span>
                   連数:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber(drawPlan.totalPulls)} 連
+                    {displayPulls != null ? `${formatNumber(displayPulls)} 連` : '-'}
                   </span>
                 </span>
               </div>
@@ -1958,9 +2052,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 <div>
                   消費ポイント:
                   <span className="ml-1 font-mono text-surface-foreground">
-                    {formatNumber((lastPointsSpent ?? lastPlan?.pointsUsed) ?? 0)} pt
+                    {lastUsedManualPulls
+                      ? '??? pt'
+                      : `${formatNumber((lastPointsSpent ?? lastPlan?.pointsUsed) ?? 0)} pt`}
                   </span>
-                  {lastPointsRemainder != null || lastPlan?.pointsRemainder != null ? (
+                  {!lastUsedManualPulls && (lastPointsRemainder != null || lastPlan?.pointsRemainder != null) ? (
                     <span className="ml-2">
                       残り:
                       <span className="ml-1 font-mono text-surface-foreground">
