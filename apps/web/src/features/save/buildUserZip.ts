@@ -659,10 +659,10 @@ function aggregateInventoryItems(
           warnings,
           seenAssets,
           (type, { gachaId, itemId: warningItemId, itemName }) => {
-            const id = gachaId ?? 'unknown';
+            const label = context.gachaName || gachaId || 'unknown';
             return type === 'missingItem'
-              ? `カタログ情報が見つかりません: ${id} / ${warningItemId}`
-              : `ファイルが未設定: ${id} / ${itemName ?? warningItemId}`;
+              ? `カタログ情報が見つかりません: ${label} / ${warningItemId}`
+              : `ファイルが未設定: ${label} / ${itemName ?? warningItemId}`;
           }
         );
 
@@ -750,10 +750,10 @@ function aggregateHistoryItems(
           warnings,
           resolvedSeenAssets,
           (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
-            const id = warningGachaId ?? 'unknown';
+            const label = context.gachaName || warningGachaId || 'unknown';
             return type === 'missingItem'
-              ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
-              : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
+              ? `履歴に対応する景品が見つかりません: ${label} / ${warningItemId}`
+              : `履歴の景品にファイルが設定されていません: ${label} / ${itemName ?? warningItemId}`;
           }
         );
 
