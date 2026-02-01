@@ -1223,6 +1223,7 @@ export async function buildUserZipFromSelection({
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
   const itemMetadataMap: Record<string, ZipItemMetadata> | null = includeMetadata ? {} : null;
+  const fileNameCounters = new Map<string, number>();
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -1236,7 +1237,12 @@ export async function buildUserZipFromSelection({
     }
 
     const fileExtension = inferAssetExtension(asset);
-    const fileName = `${item.assetId}${fileExtension}`;
+    const baseName = sanitizePathComponent(item.itemName ?? 'item') || 'item';
+    const counterKey = `${sanitizedGachaName}::${baseName}`;
+    const nextIndex = (fileNameCounters.get(counterKey) ?? 0) + 1;
+    fileNameCounters.set(counterKey, nextIndex);
+    const suffix = nextIndex > 1 ? `_${nextIndex}` : '';
+    const fileName = `${baseName}${suffix}${fileExtension}`;
 
     gachaDir.file(fileName, asset.blob, {
       binary: true,
