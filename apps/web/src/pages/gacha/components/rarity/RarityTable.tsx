@@ -112,12 +112,12 @@ export function RarityTable({
         </colgroup>
         <thead className="rarity-section__table-head bg-panel-contrast/90 text-xs uppercase tracking-[0.3em] text-muted-foreground">
           <tr>
-            <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 font-semibold">
+            <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 text-center font-semibold">
               レアリティ
             </th>
-            <th className="rarity-section__column rarity-section__column-color py-2.5 font-semibold">カラー</th>
-            <th className="rarity-section__column rarity-section__column-rate py-2.5 font-semibold">排出率</th>
-            <th className="rarity-section__column rarity-section__column-actions py-2.5" />
+            <th className="rarity-section__column rarity-section__column-color py-2.5 text-center font-semibold">カラー</th>
+            <th className="rarity-section__column rarity-section__column-rate py-2.5 text-center font-semibold">排出率</th>
+            <th className="rarity-section__column rarity-section__column-actions py-2.5 text-center" />
           </tr>
         </thead>
         <tbody className="rarity-section__table-body divide-y divide-border/40 bg-panel-muted">

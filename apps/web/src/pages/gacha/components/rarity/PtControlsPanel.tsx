@@ -567,7 +567,7 @@ export function PtControlsPanel({
   );
 
   return (
-    <div className="pt-controls-panel flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel p-3 shadow-sm">
+    <>
       <ControlsRow label="1回の消費pt">
         <InlineNumberField
           value={perPull}
@@ -813,6 +813,6 @@ export function PtControlsPanel({
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
