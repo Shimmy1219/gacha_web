@@ -92,9 +92,12 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
 
   return (
     <>
-      <ModalBody className="rounded-2xl bg-surface/20 p-6">
-        <p className="text-sm text-muted-foreground">
-          対象アイテム: <span className="font-medium text-surface-foreground">{payload?.itemName ?? '-'}</span>
+      <ModalBody className="rounded-2xl bg-surface/20 p-0 md:pr-0">
+        <p className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <span className="shrink-0">対象アイテム:</span>
+          <span className="min-w-0 flex-1 truncate font-medium text-surface-foreground">
+            {payload?.itemName ?? '-'}
+          </span>
         </p>
         <div className="space-y-4">
           <label className="space-y-2">
