@@ -1178,9 +1178,9 @@ export function ItemsSection(): JSX.Element {
                   ) : null}
 
                   {rateRedistributionNotice ? (
-                    <div className="mb-3 ml-4 mr-2 rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                    <div className="mb-3 ml-4 mr-4 rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 sm:mr-2 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-100">
                       <p className="font-semibold">排出率の再配分が発生しています</p>
-                      <p className="mt-1 text-amber-800">{rateRedistributionNotice}</p>
+                      <p className="mt-1 text-amber-800 dark:text-amber-200">{rateRedistributionNotice}</p>
                     </div>
                   ) : null}
 
