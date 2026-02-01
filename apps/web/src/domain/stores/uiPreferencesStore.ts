@@ -34,6 +34,7 @@ export const DASHBOARD_DESKTOP_LAYOUT_VALUES = ['grid', 'sidebar'] as const;
 export type DashboardDesktopLayout = (typeof DASHBOARD_DESKTOP_LAYOUT_VALUES)[number];
 const DASHBOARD_DESKTOP_LAYOUT_SET = new Set<string>(DASHBOARD_DESKTOP_LAYOUT_VALUES);
 export const DEFAULT_DASHBOARD_DESKTOP_LAYOUT: DashboardDesktopLayout = 'grid';
+export const DEFAULT_GACHA_OWNER_SHARE_RATE = 0.15;
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -98,6 +99,28 @@ function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeGachaOwnerShareRate(value: unknown): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+    return null;
+  }
+
+  let normalized = numeric;
+  if (normalized > 1) {
+    normalized = normalized <= 100 ? normalized / 100 : 1;
+  }
+
+  if (normalized < 0) {
+    normalized = 0;
+  }
+
+  return normalized;
 }
 
 function normalizeHexColor(value: unknown): string | null {
@@ -397,6 +420,23 @@ function readDrawDialogLastSelectedGachaId(
   }
 
   return normalizeDrawDialogLastSelectedGachaId(drawDialog.lastSelectedGachaId);
+}
+
+function readGachaOwnerShareRatePreference(state: UiPreferencesStateV3 | undefined): number | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(gacha, 'ownerShareRate')) {
+    return null;
+  }
+
+  return normalizeGachaOwnerShareRate(gacha.ownerShareRate);
 }
 
 function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
@@ -711,6 +751,10 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getGachaOwnerShareRatePreference(): number | null {
+    return readGachaOwnerShareRatePreference(this.state);
+  }
+
   getExcludeRiaguImagesPreference(): boolean | null {
     return readExcludeRiaguImagesPreference(this.state);
   }
@@ -832,6 +876,56 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
         } else if (nextGacha) {
           delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setGachaOwnerShareRatePreference(
+    nextValue: number | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeGachaOwnerShareRate(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readGachaOwnerShareRatePreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+
+        if (normalized != null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              ownerShareRate: normalized
+            }
+          };
+        }
+
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+        if (nextGacha) {
+          delete nextGacha.ownerShareRate;
         }
 
         const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);

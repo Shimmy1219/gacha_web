@@ -27,7 +27,10 @@ import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarSt
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
-import type { DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
+import {
+  DEFAULT_GACHA_OWNER_SHARE_RATE,
+  type DashboardDesktopLayout
+} from '@domain/stores/uiPreferencesStore';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -99,6 +102,14 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewBackground: string;
   previewForeground: string;
 }>;
+
+function formatOwnerShareRateInput(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+  const percent = Math.round(value * 1000) / 10;
+  return Number.isFinite(percent) ? String(percent).replace(/\.0$/, '') : '';
+}
 
 const REM_IN_PIXELS = 16;
 const BASE_MODAL_MIN_HEIGHT_REM = 28;
@@ -184,6 +195,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
+  const gachaOwnerShareRatePreference = useMemo(
+    () => uiPreferencesStore.getGachaOwnerShareRatePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const gachaOwnerShareRate = gachaOwnerShareRatePreference ?? DEFAULT_GACHA_OWNER_SHARE_RATE;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -191,6 +207,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     const prefs = persistence.loadSnapshot().receivePrefs;
     return prefs?.ownerName ?? '';
   });
+  const [ownerShareRateInput, setOwnerShareRateInput] = useState<string>(() =>
+    formatOwnerShareRateInput(gachaOwnerShareRate)
+  );
   const handleRestoreGacha = useCallback(
     (gachaId: string) => {
       appStateStore.restoreGacha(gachaId);
@@ -208,6 +227,45 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaId(null);
     setEditingGachaName('');
   }, []);
+
+  const handleOwnerShareRateChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setOwnerShareRateInput(event.target.value);
+  }, []);
+
+  const handleOwnerShareRateCommit = useCallback(() => {
+    const trimmed = ownerShareRateInput.trim();
+    if (!trimmed) {
+      uiPreferencesStore.setGachaOwnerShareRatePreference(null, { persist: 'immediate' });
+      setOwnerShareRateInput(formatOwnerShareRateInput(DEFAULT_GACHA_OWNER_SHARE_RATE));
+      return;
+    }
+
+    const normalizedInput = trimmed.replace('%', '');
+    const numeric = Number(normalizedInput);
+    if (!Number.isFinite(numeric)) {
+      setOwnerShareRateInput(formatOwnerShareRateInput(gachaOwnerShareRate));
+      return;
+    }
+
+    const clamped = Math.min(Math.max(numeric, 0), 100);
+    const normalized = clamped / 100;
+    uiPreferencesStore.setGachaOwnerShareRatePreference(normalized, { persist: 'immediate' });
+    setOwnerShareRateInput(formatOwnerShareRateInput(normalized));
+  }, [gachaOwnerShareRate, ownerShareRateInput, uiPreferencesStore]);
+
+  const handleOwnerShareRateKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleOwnerShareRateCommit();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOwnerShareRateInput(formatOwnerShareRateInput(gachaOwnerShareRate));
+      }
+    },
+    [gachaOwnerShareRate, handleOwnerShareRateCommit]
+  );
   const handleCommitEditingGacha = useCallback(() => {
     if (!editingGachaId) {
       return;
@@ -472,6 +530,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setDesktopLayout(uiPreferencesStore.getDashboardDesktopLayout());
   }, [uiPreferencesState, uiPreferencesStore]);
 
+  useEffect(() => {
+    const nextValue = formatOwnerShareRateInput(gachaOwnerShareRate);
+    setOwnerShareRateInput((previous) => (previous === nextValue ? previous : nextValue));
+  }, [gachaOwnerShareRate]);
+
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
   useEffect(() => {
@@ -669,6 +732,30 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={applyLowerThresholdGuarantees}
                 onChange={handleApplyLowerThresholdGuaranteesChange}
               />
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+              <label htmlFor="gacha-owner-share-rate" className="text-sm font-semibold text-surface-foreground">
+                取り分率
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ガチャ売上のうち、オーナーに入る割合を設定します。
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  id="gacha-owner-share-rate"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={ownerShareRateInput}
+                  onChange={handleOwnerShareRateChange}
+                  onBlur={handleOwnerShareRateCommit}
+                  onKeyDown={handleOwnerShareRateKeyDown}
+                  className="w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  inputMode="decimal"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
               <div className="space-y-1">
