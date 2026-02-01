@@ -114,9 +114,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const {
     userProfiles: userProfilesStore,
     pullHistory: pullHistoryStore,
-    uiPreferences: uiPreferencesStore
+    uiPreferences: uiPreferencesStore,
+    userInventories: userInventoriesStore
   } = useDomainStores();
   const userProfilesState = useStoreValue(userProfilesStore);
+  const userInventoriesState = useStoreValue(userInventoriesStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const excludeRiaguImagesPreference = useMemo(
     () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
@@ -250,11 +252,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
   const resolveZipSnapshot = useCallback(() => {
     const latestPullHistory = pullHistoryStore.getState();
-    if (latestPullHistory) {
-      return { ...snapshot, pullHistory: latestPullHistory };
+    const latestUserInventories = userInventoriesStore.getState();
+    if (latestPullHistory || latestUserInventories) {
+      return {
+        ...snapshot,
+        ...(latestPullHistory ? { pullHistory: latestPullHistory } : {}),
+        ...(latestUserInventories ? { userInventories: latestUserInventories } : {})
+      };
     }
     return snapshot;
-  }, [pullHistoryStore, snapshot]);
+  }, [pullHistoryStore, snapshot, userInventoriesStore]);
 
   const openOriginalPrizeSettings = useCallback(
     (items: OriginalPrizeMissingItem[]) => {
@@ -541,7 +548,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     snapshot.catalogState?.byGacha,
     snapshot.pullHistory?.pulls,
     snapshot.rarityState?.entities,
-    userId
+    userId,
+    userInventoriesState
   ]);
 
   const handleCopyUrl = async (url: string) => {
