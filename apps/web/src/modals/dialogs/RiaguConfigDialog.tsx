@@ -101,7 +101,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
         </p>
         <div className="space-y-4">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-surface-foreground">原価（円）</span>
+            <span className="text-sm font-medium text-surface-foreground">発注価格（円）</span>
             <input
               type="number"
               min={0}

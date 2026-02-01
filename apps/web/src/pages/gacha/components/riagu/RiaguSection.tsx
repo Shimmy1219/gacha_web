@@ -329,7 +329,7 @@ export function RiaguSection(): JSX.Element {
                                     <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
                                       <div className="riagu-card__summary-item space-y-1">
                                         <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                          原価
+                                        発注価格
                                         </dt>
                                         <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
                                           {formatCurrency(entry.unitCost)}
