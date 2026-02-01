@@ -39,6 +39,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
+  const [showProfitDetails, setShowProfitDetails] = useState(false);
   const gachaOwnerShareRate = useMemo(
     () => uiPreferencesStore.getGachaOwnerShareRatePreference() ?? DEFAULT_GACHA_OWNER_SHARE_RATE,
     [uiPreferencesState, uiPreferencesStore]
@@ -258,22 +259,31 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               </span>
             ) : null}
           </div>
-          <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
-            <div>1回の消費pt: {perPullLabel}</div>
-            <div>配信アプリからの還元率: {shareRateLabel}</div>
-            <div className="my-1 h-px bg-border/60" />
-            <div>ガチャ1回当たりの還元額: {revenuePerDrawLabel}</div>
-            <div>排出率: {itemRateLabel}</div>
-            <div>発注価格: {orderPriceLabel}</div>
-            <div className="my-1 h-px bg-border/60" />
-            <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
-            <div>ガチャ1回当たりの利益: {profitPerDrawLabel}</div>
-            <div>
-              計算式: (ガチャ1回当たりの還元額 - ガチャ1回当たりの期待原価) / ガチャ1回当たりの還元額
+          {!showProfitDetails ? (
+            <button
+              type="button"
+              className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
+              onClick={() => setShowProfitDetails(true)}
+            >
+              詳細を表示
+            </button>
+          ) : null}
+          {showProfitDetails ? (
+            <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
+              <div>1回の消費pt: {perPullLabel}</div>
+              <div>配信アプリからの還元率: {shareRateLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>ガチャ1回当たりの還元額: {revenuePerDrawLabel}</div>
+              <div>排出率: {itemRateLabel}</div>
+              <div>発注価格: {orderPriceLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
+              <div>ガチャ1回当たりの利益: {profitPerDrawLabel}</div>
+              <div>計算式: ガチャ1回当たりの利益 / ガチャ1回当たりの還元額</div>
             </div>
-          </div>
+          ) : null}
           <p className="mt-2 text-[11px] text-muted-foreground">
-            これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
+            ※これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
           </p>
         </div>
         <div className="mt-4 space-y-4">
