@@ -23,6 +23,10 @@ interface SelectedAsset {
   isRiagu: boolean;
 }
 
+export type ZipSelectedAsset = SelectedAsset;
+
+export type ZipSelectedAsset = SelectedAsset;
+
 export interface OriginalPrizeMissingItem {
   gachaId: string | undefined;
   gachaName: string;
@@ -79,6 +83,26 @@ interface BuildParams {
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
   excludeRiaguImages?: boolean;
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
 }
 
 type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
@@ -994,7 +1018,7 @@ function buildCatalogSummary(
   return summaries;
 }
 
-export async function buildUserZipFromSelection({
+export function buildZipSelectionPlan({
   snapshot,
   selection,
   userId,
@@ -1003,14 +1027,13 @@ export async function buildUserZipFromSelection({
   includeMetadata = true,
   itemIdFilter,
   excludeRiaguImages
-}: BuildParams): Promise<ZipBuildResult> {
+}: BuildParams): ZipSelectionPlan {
   ensureBrowserEnvironment();
 
   const warnings = new Set<string>();
   const seenAssets = new Set<string>();
 
   const catalogState = snapshot.catalogState;
-  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
   const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
@@ -1031,6 +1054,7 @@ export async function buildUserZipFromSelection({
   let includedPullIds: Set<string> = new Set();
   let metadataAssets: SelectedAsset[] = [];
   let omittedAssetIds: Set<string> = new Set();
+
   if (selection.mode === 'history') {
     const newItemsOnlyPullIds =
       selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
@@ -1118,6 +1142,58 @@ export async function buildUserZipFromSelection({
   if (shouldExcludeRiaguImages && collected.length > 0) {
     collected = collected.filter((item) => !item.isRiagu);
   }
+
+  if (shouldExcludeRiaguImages && metadataAssets.length > 0) {
+    metadataAssets = metadataAssets.filter((item) => !item.isRiagu);
+  }
+
+  if (shouldExcludeRiaguImages && omittedAssetIds.size > 0) {
+    const allowed = new Set(metadataAssets.map((item) => item.assetId));
+    omittedAssetIds = new Set(Array.from(omittedAssetIds).filter((assetId) => allowed.has(assetId)));
+  }
+
+  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+
+  return {
+    assets: collected,
+    metadataAssets,
+    omittedAssetIds,
+    includedPullIds,
+    historySelectionDetails,
+    warnings,
+    originalPrizeMissingPullIds
+  };
+}
+
+export async function buildUserZipFromSelection({
+  snapshot,
+  selection,
+  userId,
+  userName,
+  ownerName,
+  includeMetadata = true,
+  itemIdFilter,
+  excludeRiaguImages
+}: BuildParams): Promise<ZipBuildResult> {
+  const plan = buildZipSelectionPlan({
+    snapshot,
+    selection,
+    userId,
+    userName,
+    ownerName,
+    includeMetadata,
+    itemIdFilter,
+    excludeRiaguImages
+  });
+
+  const { warnings } = plan;
+  const collected = plan.assets;
+  const metadataAssets = plan.metadataAssets;
+  const omittedAssetIds = plan.omittedAssetIds;
+  const includedPullIds = plan.includedPullIds;
+  const historySelectionDetails = plan.historySelectionDetails;
+  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
+  const catalogState = snapshot.catalogState;
 
   const canProceedWithoutAssets = includeMetadata && metadataAssets.length > 0;
 
@@ -1283,7 +1359,7 @@ export async function buildUserZipFromSelection({
   const blob = await zip.generateAsync({ type: 'blob' });
   const timestamp = formatTimestamp(new Date());
   const fileName = sanitizeFileName(userName || userId, timestamp);
-  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+  const originalPrizeMissingPullIds = plan.originalPrizeMissingPullIds;
 
   return {
     blob,

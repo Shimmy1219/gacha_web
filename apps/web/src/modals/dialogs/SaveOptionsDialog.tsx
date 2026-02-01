@@ -14,9 +14,11 @@ import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 
 import { useStoreValue } from '@domain/stores';
 import {
+  buildZipSelectionPlan,
   buildUserZipFromSelection,
   findOriginalPrizeMissingItems,
-  type OriginalPrizeMissingItem
+  type OriginalPrizeMissingItem,
+  type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
 import { useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
@@ -450,163 +452,73 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   }, [snapshot.appState?.meta]);
 
   const selectionSummary = useMemo(() => {
-    if (selection.mode === 'all') {
-      const inventories = Object.values(snapshot.userInventories?.inventories?.[userId] ?? {});
-      const lines: string[] = [];
+    const buildSections = (assets: ZipSelectedAsset[]) => {
+      const sections = new Map<
+        string,
+        { gachaId: string; gachaName: string; items: Map<string, { count: number; line: string }> }
+      >();
 
-      inventories.forEach((inventory) => {
-        if (!inventory) {
-          return;
+      assets.forEach((asset) => {
+        const gachaId = asset.gachaId ?? 'unknown';
+        const gachaName = gachaNameMap.get(gachaId) ?? asset.gachaName ?? gachaId;
+        const catalogItem = snapshot.catalogState?.byGacha?.[gachaId]?.items?.[asset.itemId];
+        const rarityId = catalogItem?.rarityId ?? asset.rarityId ?? '未分類';
+        const rarityLabel = snapshot.rarityState?.entities?.[rarityId]?.label ?? rarityId;
+        const itemName = catalogItem?.name ?? asset.itemName ?? asset.itemId;
+
+        const flags: string[] = [];
+        if (catalogItem?.riagu) {
+          flags.push('リアグ');
         }
-        const catalogGacha = snapshot.catalogState?.byGacha?.[inventory.gachaId];
-        const gachaName = gachaNameMap.get(inventory.gachaId) ?? inventory.gachaId;
-        const countsByRarity = inventory.counts ?? {};
-        const itemsByRarity = inventory.items ?? {};
-        const itemMap = new Map<string, { count: number; rarityId: string; itemName: string; flags: string[] }>();
-
-        Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
-          if (!Array.isArray(itemIds) || itemIds.length === 0) {
-            return;
-          }
-          const fallbackCounts = new Map<string, number>();
-          itemIds.forEach((itemId) => {
-            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
-          });
-          const explicitCounts = countsByRarity[rarityId] ?? {};
-          const itemIdSet = new Set<string>([...Object.keys(explicitCounts), ...fallbackCounts.keys()]);
-
-          itemIdSet.forEach((itemId) => {
-            const explicitCount = explicitCounts[itemId];
-            const totalCount = typeof explicitCount === 'number' && explicitCount > 0
-              ? explicitCount
-              : fallbackCounts.get(itemId) ?? 0;
-            if (totalCount <= 0) {
-              return;
-            }
-
-            const catalogItem = catalogGacha?.items?.[itemId];
-            const itemName = catalogItem?.name ?? itemId;
-            const resolvedRarityId = catalogItem?.rarityId ?? rarityId ?? '未分類';
-            const flags: string[] = [];
-            if (catalogItem?.riagu) {
-              flags.push('リアグ');
-            }
-            if (catalogItem?.originalPrize) {
-              flags.push('オリジナル景品');
-            }
-
-            const entry = itemMap.get(itemId);
-            if (entry) {
-              entry.count += totalCount;
-              return;
-            }
-            itemMap.set(itemId, { count: totalCount, rarityId: resolvedRarityId, itemName, flags });
-          });
-        });
-
-        if (itemMap.size === 0) {
-          return;
+        if (catalogItem?.originalPrize) {
+          flags.push('オリジナル景品');
         }
 
-        lines.push(gachaName);
-        const items = Array.from(itemMap.values()).sort((a, b) => {
-          const labelA = snapshot.rarityState?.entities?.[a.rarityId]?.label ?? a.rarityId;
-          const labelB = snapshot.rarityState?.entities?.[b.rarityId]?.label ?? b.rarityId;
-          if (labelA !== labelB) {
-            return labelA.localeCompare(labelB, 'ja');
-          }
-          return a.itemName.localeCompare(b.itemName, 'ja');
+        const flagLabel = flags.length > 0 ? `（${flags.join('・')}）` : '';
+        const line = `${rarityLabel} ${itemName}：1枚${flagLabel}`;
+
+        const section = sections.get(gachaId) ?? {
+          gachaId,
+          gachaName,
+          items: new Map<string, { count: number; line: string }>()
+        };
+
+        const itemKey = `${rarityLabel}:${itemName}:${flagLabel}`;
+        const existing = section.items.get(itemKey);
+        if (existing) {
+          existing.count += 1;
+          existing.line = `${rarityLabel} ${itemName}：${existing.count}枚${flagLabel}`;
+        } else {
+          section.items.set(itemKey, { count: 1, line });
+        }
+
+        sections.set(gachaId, section);
+      });
+
+      return Array.from(sections.values())
+        .sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'))
+        .map((section) => {
+          const items = Array.from(section.items.values())
+            .sort((a, b) => a.line.localeCompare(b.line, 'ja'))
+            .map((entry) => entry.line);
+          return { gachaName: section.gachaName, items };
         });
-        items.forEach((entry) => {
-          const rarityLabel = snapshot.rarityState?.entities?.[entry.rarityId]?.label ?? entry.rarityId;
-          const flagLabel = entry.flags.length > 0 ? `（${entry.flags.join('・')}）` : '';
-          lines.push(`${rarityLabel} ${entry.itemName}：${entry.count}枚${flagLabel}`);
-        });
+    };
+
+    if (selection.mode === 'all' || selection.mode === 'gacha') {
+      const plan = buildZipSelectionPlan({
+        snapshot: resolveZipSnapshot(),
+        selection,
+        userId,
+        userName: receiverDisplayName,
+        includeMetadata: true,
+        excludeRiaguImages
       });
 
       return {
         description: '保存対象の景品一覧です。',
-        details: lines
-      };
-    }
-    if (selection.mode === 'gacha') {
-      const inventories = Object.values(snapshot.userInventories?.inventories?.[userId] ?? {});
-      const gachaFilter = new Set(selection.gachaIds);
-      const lines: string[] = [];
-
-      inventories.forEach((inventory) => {
-        if (!inventory || !gachaFilter.has(inventory.gachaId)) {
-          return;
-        }
-        const catalogGacha = snapshot.catalogState?.byGacha?.[inventory.gachaId];
-        const gachaName = gachaNameMap.get(inventory.gachaId) ?? inventory.gachaId;
-        const countsByRarity = inventory.counts ?? {};
-        const itemsByRarity = inventory.items ?? {};
-        const itemMap = new Map<string, { count: number; rarityId: string; itemName: string; flags: string[] }>();
-
-        Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
-          if (!Array.isArray(itemIds) || itemIds.length === 0) {
-            return;
-          }
-          const fallbackCounts = new Map<string, number>();
-          itemIds.forEach((itemId) => {
-            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
-          });
-          const explicitCounts = countsByRarity[rarityId] ?? {};
-          const itemIdSet = new Set<string>([...Object.keys(explicitCounts), ...fallbackCounts.keys()]);
-
-          itemIdSet.forEach((itemId) => {
-            const explicitCount = explicitCounts[itemId];
-            const totalCount = typeof explicitCount === 'number' && explicitCount > 0
-              ? explicitCount
-              : fallbackCounts.get(itemId) ?? 0;
-            if (totalCount <= 0) {
-              return;
-            }
-
-            const catalogItem = catalogGacha?.items?.[itemId];
-            const itemName = catalogItem?.name ?? itemId;
-            const resolvedRarityId = catalogItem?.rarityId ?? rarityId ?? '未分類';
-            const flags: string[] = [];
-            if (catalogItem?.riagu) {
-              flags.push('リアグ');
-            }
-            if (catalogItem?.originalPrize) {
-              flags.push('オリジナル景品');
-            }
-
-            const entry = itemMap.get(itemId);
-            if (entry) {
-              entry.count += totalCount;
-              return;
-            }
-            itemMap.set(itemId, { count: totalCount, rarityId: resolvedRarityId, itemName, flags });
-          });
-        });
-
-        if (itemMap.size === 0) {
-          return;
-        }
-
-        lines.push(gachaName);
-        const items = Array.from(itemMap.values()).sort((a, b) => {
-          const labelA = snapshot.rarityState?.entities?.[a.rarityId]?.label ?? a.rarityId;
-          const labelB = snapshot.rarityState?.entities?.[b.rarityId]?.label ?? b.rarityId;
-          if (labelA !== labelB) {
-            return labelA.localeCompare(labelB, 'ja');
-          }
-          return a.itemName.localeCompare(b.itemName, 'ja');
-        });
-        items.forEach((entry) => {
-          const rarityLabel = snapshot.rarityState?.entities?.[entry.rarityId]?.label ?? entry.rarityId;
-          const flagLabel = entry.flags.length > 0 ? `（${entry.flags.join('・')}）` : '';
-          lines.push(`${rarityLabel} ${entry.itemName}：${entry.count}枚${flagLabel}`);
-        });
-      });
-
-      return {
-        description: '保存対象の景品一覧です。',
-        details: lines
+        sections: buildSections(plan.assets),
+        details: []
       };
     }
     const history = snapshot.pullHistory?.pulls ?? {};
@@ -617,15 +529,18 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
     return {
       description: `選択した履歴 ${selection.pullIds.length} 件に含まれる景品を保存します。`,
+      sections: [],
       details
     };
   }, [
-    selection,
-    snapshot.userInventories?.inventories,
-    snapshot.pullHistory?.pulls,
-    snapshot.catalogState?.byGacha,
-    snapshot.rarityState?.entities,
+    excludeRiaguImages,
     gachaNameMap,
+    receiverDisplayName,
+    resolveZipSnapshot,
+    selection,
+    snapshot.catalogState?.byGacha,
+    snapshot.pullHistory?.pulls,
+    snapshot.rarityState?.entities,
     userId
   ]);
 
@@ -1260,12 +1175,26 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象の概要</div>
           <div className="text-sm text-surface-foreground">{selectionSummary.description}</div>
-          {selectionSummary.details.length > 0 ? (
-            <ul className="list-inside list-disc space-y-1 text-xs text-muted-foreground">
-              {selectionSummary.details.map((line, index) => (
-                <li key={`${line}-${index}`}>{line}</li>
+          {selectionSummary.sections.length > 0 ? (
+            <div className="space-y-3 text-xs text-muted-foreground">
+              {selectionSummary.sections.map((section, sectionIndex) => (
+                <div key={`${section.gachaName}-${sectionIndex}`} className="space-y-1">
+                  <div className="text-sm font-semibold text-surface-foreground">{section.gachaName}</div>
+                  <div className="space-y-0.5">
+                    {section.items.map((line, lineIndex) => (
+                      <div key={`${line}-${lineIndex}`}>{line}</div>
+                    ))}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
+          ) : null}
+          {selectionSummary.sections.length === 0 && selectionSummary.details.length > 0 ? (
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {selectionSummary.details.map((line, index) => (
+                <div key={`${line}-${index}`}>{line}</div>
+              ))}
+            </div>
           ) : null}
         </div>
 
