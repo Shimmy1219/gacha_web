@@ -149,6 +149,10 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   const revenuePerDrawLabel = revenuePerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw)}円` : '—';
   const expectedCostPerDrawLabel =
     expectedCostPerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(expectedCostPerDraw)}円` : '—';
+  const profitPerDrawLabel =
+    revenuePerDraw != null && expectedCostPerDraw != null
+      ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw - expectedCostPerDraw)}円`
+      : '算出不可';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -258,12 +262,14 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             <div>1回の消費pt: {perPullLabel}</div>
             <div>配信アプリからの還元率: {shareRateLabel}</div>
             <div className="my-1 h-px bg-border/60" />
-            <div>ガチャ1回当たりの利益: {revenuePerDrawLabel}</div>
+            <div>ガチャ1回当たりの還元額: {revenuePerDrawLabel}</div>
             <div>排出率: {itemRateLabel}</div>
-            <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
             <div>発注価格: {orderPriceLabel}</div>
+            <div className="my-1 h-px bg-border/60" />
+            <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
+            <div>ガチャ1回当たりの利益: {profitPerDrawLabel}</div>
             <div>
-              計算式: (ガチャ1回当たりの利益 - ガチャ1回当たりの期待原価) / ガチャ1回当たりの利益
+              計算式: (ガチャ1回当たりの還元額 - ガチャ1回当たりの期待原価) / ガチャ1回当たりの還元額
             </div>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
