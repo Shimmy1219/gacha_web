@@ -478,6 +478,42 @@ function collectOriginalPrizeSelection(params: {
   const assignedCounts = new Map<string, number>();
   const assignmentKeys = new Set<string>();
 
+  Object.values(inventoriesForUser ?? {}).forEach((inventory) => {
+    if (!inventory) {
+      return;
+    }
+    if (gachaFilter && !gachaFilter.has(inventory.gachaId)) {
+      return;
+    }
+
+    Object.entries(inventory.originalPrizeAssets ?? {}).forEach(([itemId, assetEntries]) => {
+      if (itemIdFilter && !itemIdFilter.has(itemId)) {
+        return;
+      }
+      const key = `${inventory.gachaId}:${itemId}`;
+      const required = requiredCounts.get(key);
+      if (!required || !Array.isArray(assetEntries)) {
+        return;
+      }
+
+      assetEntries.forEach((asset) => {
+        if (!asset?.assetId) {
+          return;
+        }
+        if (seenAssets.has(asset.assetId)) {
+          return;
+        }
+        seenAssets.add(asset.assetId);
+        assignedCounts.set(key, (assignedCounts.get(key) ?? 0) + 1);
+        assets.push({
+          ...required.item,
+          assetId: asset.assetId,
+          count: 1
+        });
+      });
+    });
+  });
+
   Object.values(history?.pulls ?? {}).forEach((entry) => {
     if (!entry || normalizeUserId(entry.userId) !== normalizedUserId) {
       return;
