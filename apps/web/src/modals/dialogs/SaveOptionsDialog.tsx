@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
+import { RarityLabel } from '../../components/RarityLabel';
 
 import { useStoreValue } from '@domain/stores';
 import {
@@ -462,7 +463,20 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     const buildSections = (assets: ZipSelectedAsset[]) => {
       const sections = new Map<
         string,
-        { gachaId: string; gachaName: string; items: Map<string, { count: number; line: string }> }
+        {
+          gachaId: string;
+          gachaName: string;
+          items: Map<
+            string,
+            {
+              count: number;
+              rarityLabel: string;
+              rarityColor: string | null;
+              itemName: string;
+              flagsLabel: string;
+            }
+          >;
+        }
       >();
 
       assets.forEach((asset) => {
@@ -470,7 +484,9 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         const gachaName = gachaNameMap.get(gachaId) ?? asset.gachaName ?? gachaId;
         const catalogItem = snapshot.catalogState?.byGacha?.[gachaId]?.items?.[asset.itemId];
         const rarityId = catalogItem?.rarityId ?? asset.rarityId ?? '未分類';
-        const rarityLabel = snapshot.rarityState?.entities?.[rarityId]?.label ?? rarityId;
+        const rarityEntity = snapshot.rarityState?.entities?.[rarityId];
+        const rarityLabel = rarityEntity?.label ?? rarityId;
+        const rarityColor = rarityEntity?.color ?? null;
         const itemName = catalogItem?.name ?? asset.itemName ?? asset.itemId;
 
         const flags: string[] = [];
@@ -481,8 +497,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           flags.push('オリジナル景品');
         }
 
-        const flagLabel = flags.length > 0 ? `（${flags.join('・')}）` : '';
-        const line = `${rarityLabel} ${itemName}：1枚${flagLabel}`;
+        const flagsLabel = flags.length > 0 ? `（${flags.join('・')}）` : '';
 
         const section = sections.get(gachaId) ?? {
           gachaId,
@@ -490,13 +505,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           items: new Map<string, { count: number; line: string }>()
         };
 
-        const itemKey = `${rarityLabel}:${itemName}:${flagLabel}`;
+        const itemKey = `${rarityLabel}:${itemName}:${flagsLabel}`;
         const existing = section.items.get(itemKey);
         if (existing) {
           existing.count += 1;
-          existing.line = `${rarityLabel} ${itemName}：${existing.count}枚${flagLabel}`;
         } else {
-          section.items.set(itemKey, { count: 1, line });
+          section.items.set(itemKey, { count: 1, rarityLabel, rarityColor, itemName, flagsLabel });
         }
 
         sections.set(gachaId, section);
@@ -505,11 +519,14 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       return Array.from(sections.values())
         .sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'))
         .map((section) => {
-          const items = Array.from(section.items.values())
-            .sort((a, b) => a.line.localeCompare(b.line, 'ja'))
-            .map((entry) => entry.line);
-          return { gachaName: section.gachaName, items };
+        const items = Array.from(section.items.values()).sort((a, b) => {
+          if (a.rarityLabel !== b.rarityLabel) {
+            return a.rarityLabel.localeCompare(b.rarityLabel, 'ja');
+          }
+          return a.itemName.localeCompare(b.itemName, 'ja');
         });
+        return { gachaName: section.gachaName, items };
+      });
     };
 
     if (selection.mode === 'all' || selection.mode === 'gacha') {
@@ -523,7 +540,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       });
 
       return {
-        description: '保存対象の景品一覧です。',
         sections: buildSections(plan.assets),
         details: []
       };
@@ -1181,8 +1197,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       {uploadNoticePortal}
       <ModalBody className="space-y-6">
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象の概要</div>
-          <div className="text-sm text-surface-foreground">{selectionSummary.description}</div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象一覧</div>
           {selectionSummary.sections.length > 0 ? (
             <div className="space-y-3 text-xs text-muted-foreground">
               {selectionSummary.sections.map((section, sectionIndex) => (
@@ -1190,7 +1205,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
                   <div className="text-sm font-semibold text-surface-foreground">{section.gachaName}</div>
                   <div className="space-y-0.5">
                     {section.items.map((line, lineIndex) => (
-                      <div key={`${line}-${lineIndex}`}>{line}</div>
+                      <div key={`${line.itemName}-${lineIndex}`} className="flex flex-wrap items-center gap-2">
+                        <RarityLabel
+                          label={line.rarityLabel}
+                          color={line.rarityColor}
+                          className="text-xs font-semibold"
+                          truncate={false}
+                        />
+                        <span className="text-xs text-surface-foreground">{line.itemName}</span>
+                        <span className="text-xs text-muted-foreground">：{line.count}枚{line.flagsLabel}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
