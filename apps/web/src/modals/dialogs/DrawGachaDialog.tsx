@@ -273,10 +273,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const excludeRiaguImagesPreference = useMemo(
+    () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
   const completeOutOfStockPreference = useMemo(
     () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const excludeRiaguImages = excludeRiaguImagesPreference ?? false;
   const includeOutOfStockInComplete = completeOutOfStockPreference ?? false;
   const guaranteeOutOfStockPreference = useMemo(
     () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference(),
@@ -1321,7 +1326,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           userId: targetUserId,
           userName: receiverDisplayName,
           ownerName,
-          itemIdFilter: filteredItemIds
+          itemIdFilter: filteredItemIds,
+          excludeRiaguImages
         });
 
         setDiscordDeliveryStage('uploading');
@@ -1554,7 +1560,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       uploadZip,
       staffDiscordName,
       pullHistory,
-      userProfiles
+      userProfiles,
+      excludeRiaguImages
     ]
   );
 

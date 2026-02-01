@@ -23,6 +23,10 @@ interface SelectedAsset {
   isRiagu: boolean;
 }
 
+export type ZipSelectedAsset = SelectedAsset;
+
+export type ZipSelectedAsset = SelectedAsset;
+
 export interface OriginalPrizeMissingItem {
   gachaId: string | undefined;
   gachaName: string;
@@ -78,6 +82,27 @@ interface BuildParams {
   ownerName?: string;
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
+  excludeRiaguImages?: boolean;
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
 }
 
 type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
@@ -477,6 +502,42 @@ function collectOriginalPrizeSelection(params: {
   const assignedCounts = new Map<string, number>();
   const assignmentKeys = new Set<string>();
 
+  Object.values(inventoriesForUser ?? {}).forEach((inventory) => {
+    if (!inventory) {
+      return;
+    }
+    if (gachaFilter && !gachaFilter.has(inventory.gachaId)) {
+      return;
+    }
+
+    Object.entries(inventory.originalPrizeAssets ?? {}).forEach(([itemId, assetEntries]) => {
+      if (itemIdFilter && !itemIdFilter.has(itemId)) {
+        return;
+      }
+      const key = `${inventory.gachaId}:${itemId}`;
+      const required = requiredCounts.get(key);
+      if (!required || !Array.isArray(assetEntries)) {
+        return;
+      }
+
+      assetEntries.forEach((asset) => {
+        if (!asset?.assetId) {
+          return;
+        }
+        if (seenAssets.has(asset.assetId)) {
+          return;
+        }
+        seenAssets.add(asset.assetId);
+        assignedCounts.set(key, (assignedCounts.get(key) ?? 0) + 1);
+        assets.push({
+          ...required.item,
+          assetId: asset.assetId,
+          count: 1
+        });
+      });
+    });
+  });
+
   Object.values(history?.pulls ?? {}).forEach((entry) => {
     if (!entry || normalizeUserId(entry.userId) !== normalizedUserId) {
       return;
@@ -622,10 +683,10 @@ function aggregateInventoryItems(
           warnings,
           seenAssets,
           (type, { gachaId, itemId: warningItemId, itemName }) => {
-            const id = gachaId ?? 'unknown';
+            const label = context.gachaName || gachaId || 'unknown';
             return type === 'missingItem'
-              ? `カタログ情報が見つかりません: ${id} / ${warningItemId}`
-              : `ファイルが未設定: ${id} / ${itemName ?? warningItemId}`;
+              ? `カタログ情報が見つかりません: ${label} / ${warningItemId}`
+              : `ファイルが未設定: ${label} / ${itemName ?? warningItemId}`;
           }
         );
 
@@ -713,10 +774,10 @@ function aggregateHistoryItems(
           warnings,
           resolvedSeenAssets,
           (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
-            const id = warningGachaId ?? 'unknown';
+            const label = context.gachaName || warningGachaId || 'unknown';
             return type === 'missingItem'
-              ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
-              : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
+              ? `履歴に対応する景品が見つかりません: ${label} / ${warningItemId}`
+              : `履歴の景品にファイルが設定されていません: ${label} / ${itemName ?? warningItemId}`;
           }
         );
 
@@ -957,25 +1018,26 @@ function buildCatalogSummary(
   return summaries;
 }
 
-export async function buildUserZipFromSelection({
+export function buildZipSelectionPlan({
   snapshot,
   selection,
   userId,
   userName,
   ownerName,
   includeMetadata = true,
-  itemIdFilter
-}: BuildParams): Promise<ZipBuildResult> {
+  itemIdFilter,
+  excludeRiaguImages
+}: BuildParams): ZipSelectionPlan {
   ensureBrowserEnvironment();
 
   const warnings = new Set<string>();
   const seenAssets = new Set<string>();
 
   const catalogState = snapshot.catalogState;
-  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
   const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
+  const shouldExcludeRiaguImages = excludeRiaguImages === true;
 
   const originalPrizeSelection = collectOriginalPrizeSelection({
     snapshot,
@@ -992,6 +1054,7 @@ export async function buildUserZipFromSelection({
   let includedPullIds: Set<string> = new Set();
   let metadataAssets: SelectedAsset[] = [];
   let omittedAssetIds: Set<string> = new Set();
+
   if (selection.mode === 'history') {
     const newItemsOnlyPullIds =
       selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
@@ -1076,7 +1139,65 @@ export async function buildUserZipFromSelection({
     metadataAssets = Array.from(metadataEntries.values());
   }
 
-  if (collected.length === 0) {
+  if (shouldExcludeRiaguImages && collected.length > 0) {
+    collected = collected.filter((item) => !item.isRiagu);
+  }
+
+  if (shouldExcludeRiaguImages && metadataAssets.length > 0) {
+    metadataAssets = metadataAssets.filter((item) => !item.isRiagu);
+  }
+
+  if (shouldExcludeRiaguImages && omittedAssetIds.size > 0) {
+    const allowed = new Set(metadataAssets.map((item) => item.assetId));
+    omittedAssetIds = new Set(Array.from(omittedAssetIds).filter((assetId) => allowed.has(assetId)));
+  }
+
+  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+
+  return {
+    assets: collected,
+    metadataAssets,
+    omittedAssetIds,
+    includedPullIds,
+    historySelectionDetails,
+    warnings,
+    originalPrizeMissingPullIds
+  };
+}
+
+export async function buildUserZipFromSelection({
+  snapshot,
+  selection,
+  userId,
+  userName,
+  ownerName,
+  includeMetadata = true,
+  itemIdFilter,
+  excludeRiaguImages
+}: BuildParams): Promise<ZipBuildResult> {
+  const plan = buildZipSelectionPlan({
+    snapshot,
+    selection,
+    userId,
+    userName,
+    ownerName,
+    includeMetadata,
+    itemIdFilter,
+    excludeRiaguImages
+  });
+
+  const { warnings } = plan;
+  const collected = plan.assets;
+  const metadataAssets = plan.metadataAssets;
+  const omittedAssetIds = plan.omittedAssetIds;
+  const includedPullIds = plan.includedPullIds;
+  const historySelectionDetails = plan.historySelectionDetails;
+  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
+  const catalogState = snapshot.catalogState;
+
+  const canProceedWithoutAssets = includeMetadata && metadataAssets.length > 0;
+
+  if (collected.length === 0 && !canProceedWithoutAssets) {
     throw new Error('保存できる景品が見つかりませんでした');
   }
 
@@ -1095,13 +1216,14 @@ export async function buildUserZipFromSelection({
     return Boolean(record?.asset?.blob);
   });
 
-  if (availableRecords.length === 0) {
+  if (availableRecords.length === 0 && !canProceedWithoutAssets) {
     throw new Error('ファイルデータを読み込めませんでした');
   }
 
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
   const itemMetadataMap: Record<string, ZipItemMetadata> | null = includeMetadata ? {} : null;
+  const fileNameCounters = new Map<string, number>();
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -1115,7 +1237,12 @@ export async function buildUserZipFromSelection({
     }
 
     const fileExtension = inferAssetExtension(asset);
-    const fileName = `${item.assetId}${fileExtension}`;
+    const baseName = sanitizePathComponent(item.itemName ?? 'item') || 'item';
+    const counterKey = `${sanitizedGachaName}::${baseName}`;
+    const nextIndex = (fileNameCounters.get(counterKey) ?? 0) + 1;
+    fileNameCounters.set(counterKey, nextIndex);
+    const suffix = nextIndex > 1 ? `_${nextIndex}` : '';
+    const fileName = `${baseName}${suffix}${fileExtension}`;
 
     gachaDir.file(fileName, asset.blob, {
       binary: true,
@@ -1238,7 +1365,7 @@ export async function buildUserZipFromSelection({
   const blob = await zip.generateAsync({ type: 'blob' });
   const timestamp = formatTimestamp(new Date());
   const fileName = sanitizeFileName(userName || userId, timestamp);
-  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+  const originalPrizeMissingPullIds = plan.originalPrizeMissingPullIds;
 
   return {
     blob,

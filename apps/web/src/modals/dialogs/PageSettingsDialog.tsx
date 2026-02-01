@@ -164,6 +164,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const excludeRiaguImagesPreference = useMemo(
+    () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const excludeRiaguImages = excludeRiaguImagesPreference ?? false;
   const completeOutOfStockPreference = useMemo(
     () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -245,6 +250,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleExcludeRiaguImagesChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setExcludeRiaguImagesPreference(enabled, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -633,6 +644,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 description="お渡し部屋に景品を送信する際、Newタグの付いた景品だけを対象にします。"
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
+              />
+              <SwitchField
+                label="リアグに登録した画像は送信・保存されないようにする"
+                description="ONにすると保存オプションやクイック送信でリアグ対象の画像を含めません。"
+                checked={excludeRiaguImages}
+                onChange={handleExcludeRiaguImagesChange}
               />
               <SwitchField
                 label="コンプリートガチャの時に在庫切れのアイテムも排出する"

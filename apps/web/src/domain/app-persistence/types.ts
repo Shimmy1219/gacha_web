@@ -238,6 +238,10 @@ export interface UiPreferencesStateV3 {
       applyLowerThresholdGuarantees?: boolean;
       [key: string]: unknown;
     };
+    share?: {
+      excludeRiaguImages?: boolean;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
   riagu?: Record<string, unknown>;
