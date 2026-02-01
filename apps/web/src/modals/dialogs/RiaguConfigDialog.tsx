@@ -18,6 +18,8 @@ export interface RiaguConfigDialogPayload {
 
 const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
+const ONE_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
+const TWO_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
   const {
@@ -78,36 +80,34 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     }
     return numeric < 0 ? null : numeric;
   }, [price]);
+  const isOutOfStock = itemMetrics.remainingStock === 0;
+  const revenuePerDraw = useMemo(() => {
+    if (perPullPrice == null || perPullPrice <= 0 || gachaOwnerShareRate <= 0) {
+      return null;
+    }
+    const value = perPullPrice * gachaOwnerShareRate;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [gachaOwnerShareRate, perPullPrice]);
+  const expectedCostPerDraw = useMemo(() => {
+    if (isOutOfStock) {
+      return null;
+    }
+    if (parsedPrice == null || itemMetrics.itemRate == null) {
+      return null;
+    }
+    const value = itemMetrics.itemRate * parsedPrice;
+    return Number.isFinite(value) ? value : null;
+  }, [isOutOfStock, itemMetrics.itemRate, parsedPrice]);
   const profitEvaluation = useMemo(() => {
-    const isOutOfStock = itemMetrics.remainingStock === 0;
     if (isOutOfStock) {
       return { status: 'unavailable' as const, percent: null, isOutOfStock: true };
     }
 
-    if (parsedPrice == null || perPullPrice == null || perPullPrice <= 0) {
+    if (revenuePerDraw == null || expectedCostPerDraw == null) {
       return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
     }
 
-    if (gachaOwnerShareRate <= 0) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const itemRate = itemMetrics.itemRate;
-    if (itemRate == null) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const revenuePerDraw = perPullPrice * gachaOwnerShareRate;
-    if (!Number.isFinite(revenuePerDraw) || revenuePerDraw <= 0) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const expectedCost = itemRate * parsedPrice;
-    if (!Number.isFinite(expectedCost)) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const margin = (revenuePerDraw - expectedCost) / revenuePerDraw;
+    const margin = (revenuePerDraw - expectedCostPerDraw) / revenuePerDraw;
     if (!Number.isFinite(margin)) {
       return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
     }
@@ -116,7 +116,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     const percent = Object.is(rawPercent, -0) ? 0 : rawPercent;
     const status = percent < 0 ? 'loss' : percent > 0 ? 'profit' : 'even';
     return { status, percent, isOutOfStock: false };
-  }, [gachaOwnerShareRate, itemMetrics, parsedPrice, perPullPrice]);
+  }, [expectedCostPerDraw, isOutOfStock, revenuePerDraw]);
   const profitValueLabel =
     profitEvaluation.percent == null ? '算出不可' : `${profitEvaluation.percent.toFixed(1)}%`;
   const profitStatusLabel =
@@ -133,7 +133,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       : profitEvaluation.status === 'loss'
         ? 'text-rose-400'
         : 'text-muted-foreground';
-  const perPullLabel = perPullPrice != null ? `${perPullPrice}pt` : '—';
+  const perPullLabel = perPullPrice != null ? `${ONE_DECIMAL_FORMATTER.format(perPullPrice)}pt` : '—';
   const shareRateLabel =
     gachaOwnerShareRate != null && Number.isFinite(gachaOwnerShareRate)
       ? `${(Math.round(gachaOwnerShareRate * 1000) / 10).toFixed(1).replace(/\.0$/, '')}%`
@@ -142,12 +142,13 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     if (itemMetrics.itemRate == null || !Number.isFinite(itemMetrics.itemRate)) {
       return '—';
     }
-    const decimal = Math.round(itemMetrics.itemRate * 1_000_000) / 1_000_000;
-    const percent = Math.round(itemMetrics.itemRate * 10_000) / 100;
-    const percentLabel = `${percent.toFixed(2).replace(/\.0+$/, '')}%`;
-    return `${decimal} (${percentLabel})`;
+    const percent = itemMetrics.itemRate * 100;
+    return `${TWO_DECIMAL_FORMATTER.format(percent)}%`;
   }, [itemMetrics.itemRate]);
-  const orderPriceLabel = parsedPrice != null ? `${parsedPrice}円` : '—';
+  const orderPriceLabel = parsedPrice != null ? `${ONE_DECIMAL_FORMATTER.format(parsedPrice)}円` : '—';
+  const revenuePerDrawLabel = revenuePerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw)}円` : '—';
+  const expectedCostPerDrawLabel =
+    expectedCostPerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(expectedCostPerDraw)}円` : '—';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -254,11 +255,16 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             ) : null}
           </div>
           <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
-            <div>1回の消費pt (C): {perPullLabel}</div>
-            <div>取り分率 (R): {shareRateLabel}</div>
-            <div>排出率 (P): {itemRateLabel}</div>
-            <div>発注価格 (A): {orderPriceLabel}</div>
-            <div>計算式: (C×R - P×A) / (C×R)</div>
+            <div>1回の消費pt: {perPullLabel}</div>
+            <div>配信アプリからの還元率: {shareRateLabel}</div>
+            <div className="my-1 h-px bg-border/60" />
+            <div>ガチャ1回当たりの利益: {revenuePerDrawLabel}</div>
+            <div>排出率: {itemRateLabel}</div>
+            <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
+            <div>発注価格: {orderPriceLabel}</div>
+            <div>
+              計算式: (ガチャ1回当たりの利益 - ガチャ1回当たりの期待原価) / ガチャ1回当たりの利益
+            </div>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
             これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。

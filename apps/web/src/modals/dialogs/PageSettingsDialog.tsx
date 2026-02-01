@@ -735,7 +735,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
             </div>
             <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
               <label htmlFor="gacha-owner-share-rate" className="text-sm font-semibold text-surface-foreground">
-                取り分率
+                配信アプリからの還元率
               </label>
               <p className="mt-1 text-xs text-muted-foreground">
                 ガチャ売上のうち、オーナーに入る割合を設定します。
