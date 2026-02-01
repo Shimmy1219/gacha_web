@@ -109,9 +109,18 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
-  const { userProfiles: userProfilesStore } = useDomainStores();
+  const {
+    userProfiles: userProfilesStore,
+    pullHistory: pullHistoryStore,
+    uiPreferences: uiPreferencesStore
+  } = useDomainStores();
   const userProfilesState = useStoreValue(userProfilesStore);
-  const { pullHistory: pullHistoryStore } = useDomainStores();
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
+  const excludeRiaguImagesPreference = useMemo(
+    () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const excludeRiaguImages = excludeRiaguImagesPreference ?? false;
   const { data: discordSession } = useDiscordSession();
   const discordUserId = discordSession?.user?.id;
 
@@ -492,7 +501,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         selection,
         userId,
         userName: receiverDisplayName,
-        includeMetadata: false
+        includeMetadata: false,
+        excludeRiaguImages
       });
 
       const pullIdsForStatus = resolvePullIdsForStatus(result.pullIds);
@@ -543,7 +553,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       selection,
       userId,
       userName: receiverDisplayName,
-      ownerName
+      ownerName,
+      excludeRiaguImages
     });
 
     const uploadResponse = await uploadZip({
@@ -592,7 +603,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     resolveZipSnapshot,
     selection,
     uploadZip,
-    userId
+    userId,
+    excludeRiaguImages
   ]);
 
   const runUploadToShimmy = async (ownerName: string) => {
@@ -619,7 +631,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         selection,
         userId,
         userName: receiverDisplayName,
-        ownerName
+        ownerName,
+        excludeRiaguImages
       });
 
       const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);

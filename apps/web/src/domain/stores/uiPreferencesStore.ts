@@ -421,6 +421,28 @@ function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined)
   return normalizeBoolean(drawDialog.quickSendNewOnly, false);
 }
 
+function readExcludeRiaguImagesPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const share = gacha.share;
+  if (!isRecord(share)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(share, 'excludeRiaguImages')) {
+    return null;
+  }
+
+  return normalizeBoolean(share.excludeRiaguImages, false);
+}
+
 function readCompleteGachaIncludeOutOfStockPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
   if (!state) {
     return null;
@@ -689,6 +711,10 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getExcludeRiaguImagesPreference(): boolean | null {
+    return readExcludeRiaguImagesPreference(this.state);
+  }
+
   getCompleteGachaIncludeOutOfStockPreference(): boolean | null {
     return readCompleteGachaIncludeOutOfStockPreference(this.state);
   }
@@ -819,11 +845,71 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           delete nextState.gacha;
         }
 
-      return nextState;
-    },
-    { persist: persistMode, emit }
-  );
-}
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setExcludeRiaguImagesPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readExcludeRiaguImagesPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousShare = previousGacha && isRecord(previousGacha.share) ? previousGacha.share : undefined;
+
+        const nextShare = previousShare ? { ...previousShare } : undefined;
+        if (normalized !== null) {
+          const ensured = nextShare ?? {};
+          ensured.excludeRiaguImages = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            share: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextShare) {
+          delete nextShare.excludeRiaguImages;
+        }
+
+        const hasShareEntries = Boolean(nextShare && Object.keys(nextShare).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasShareEntries && nextGacha) {
+          nextGacha['share'] = nextShare as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['share'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
 
   setCompleteGachaIncludeOutOfStockPreference(
     nextValue: boolean | null | undefined,

@@ -78,6 +78,7 @@ interface BuildParams {
   ownerName?: string;
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
+  excludeRiaguImages?: boolean;
 }
 
 type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
@@ -964,7 +965,8 @@ export async function buildUserZipFromSelection({
   userName,
   ownerName,
   includeMetadata = true,
-  itemIdFilter
+  itemIdFilter,
+  excludeRiaguImages
 }: BuildParams): Promise<ZipBuildResult> {
   ensureBrowserEnvironment();
 
@@ -976,6 +978,7 @@ export async function buildUserZipFromSelection({
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
   const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
+  const shouldExcludeRiaguImages = excludeRiaguImages === true;
 
   const originalPrizeSelection = collectOriginalPrizeSelection({
     snapshot,
@@ -1076,7 +1079,13 @@ export async function buildUserZipFromSelection({
     metadataAssets = Array.from(metadataEntries.values());
   }
 
-  if (collected.length === 0) {
+  if (shouldExcludeRiaguImages && collected.length > 0) {
+    collected = collected.filter((item) => !item.isRiagu);
+  }
+
+  const canProceedWithoutAssets = includeMetadata && metadataAssets.length > 0;
+
+  if (collected.length === 0 && !canProceedWithoutAssets) {
     throw new Error('保存できる景品が見つかりませんでした');
   }
 
@@ -1095,7 +1104,7 @@ export async function buildUserZipFromSelection({
     return Boolean(record?.asset?.blob);
   });
 
-  if (availableRecords.length === 0) {
+  if (availableRecords.length === 0 && !canProceedWithoutAssets) {
     throw new Error('ファイルデータを読み込めませんでした');
   }
 
