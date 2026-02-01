@@ -451,17 +451,162 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
   const selectionSummary = useMemo(() => {
     if (selection.mode === 'all') {
-      const gachaCount = Object.keys(snapshot.userInventories?.inventories?.[userId] ?? {}).length;
+      const inventories = Object.values(snapshot.userInventories?.inventories?.[userId] ?? {});
+      const lines: string[] = [];
+
+      inventories.forEach((inventory) => {
+        if (!inventory) {
+          return;
+        }
+        const catalogGacha = snapshot.catalogState?.byGacha?.[inventory.gachaId];
+        const gachaName = gachaNameMap.get(inventory.gachaId) ?? inventory.gachaId;
+        const countsByRarity = inventory.counts ?? {};
+        const itemsByRarity = inventory.items ?? {};
+        const itemMap = new Map<string, { count: number; rarityId: string; itemName: string; flags: string[] }>();
+
+        Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
+          if (!Array.isArray(itemIds) || itemIds.length === 0) {
+            return;
+          }
+          const fallbackCounts = new Map<string, number>();
+          itemIds.forEach((itemId) => {
+            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+          });
+          const explicitCounts = countsByRarity[rarityId] ?? {};
+          const itemIdSet = new Set<string>([...Object.keys(explicitCounts), ...fallbackCounts.keys()]);
+
+          itemIdSet.forEach((itemId) => {
+            const explicitCount = explicitCounts[itemId];
+            const totalCount = typeof explicitCount === 'number' && explicitCount > 0
+              ? explicitCount
+              : fallbackCounts.get(itemId) ?? 0;
+            if (totalCount <= 0) {
+              return;
+            }
+
+            const catalogItem = catalogGacha?.items?.[itemId];
+            const itemName = catalogItem?.name ?? itemId;
+            const resolvedRarityId = catalogItem?.rarityId ?? rarityId ?? '未分類';
+            const flags: string[] = [];
+            if (catalogItem?.riagu) {
+              flags.push('リアグ');
+            }
+            if (catalogItem?.originalPrize) {
+              flags.push('オリジナル景品');
+            }
+
+            const entry = itemMap.get(itemId);
+            if (entry) {
+              entry.count += totalCount;
+              return;
+            }
+            itemMap.set(itemId, { count: totalCount, rarityId: resolvedRarityId, itemName, flags });
+          });
+        });
+
+        if (itemMap.size === 0) {
+          return;
+        }
+
+        lines.push(gachaName);
+        const items = Array.from(itemMap.values()).sort((a, b) => {
+          const labelA = snapshot.rarityState?.entities?.[a.rarityId]?.label ?? a.rarityId;
+          const labelB = snapshot.rarityState?.entities?.[b.rarityId]?.label ?? b.rarityId;
+          if (labelA !== labelB) {
+            return labelA.localeCompare(labelB, 'ja');
+          }
+          return a.itemName.localeCompare(b.itemName, 'ja');
+        });
+        items.forEach((entry) => {
+          const rarityLabel = snapshot.rarityState?.entities?.[entry.rarityId]?.label ?? entry.rarityId;
+          const flagLabel = entry.flags.length > 0 ? `（${entry.flags.join('・')}）` : '';
+          lines.push(`${rarityLabel} ${entry.itemName}：${entry.count}枚${flagLabel}`);
+        });
+      });
+
       return {
-        description: '全てのガチャ景品をまとめて保存します。',
-        details: [`保存対象ガチャ数: ${gachaCount}`]
+        description: '保存対象の景品一覧です。',
+        details: lines
       };
     }
     if (selection.mode === 'gacha') {
-      const names = selection.gachaIds.map((id) => gachaNameMap.get(id) ?? id);
+      const inventories = Object.values(snapshot.userInventories?.inventories?.[userId] ?? {});
+      const gachaFilter = new Set(selection.gachaIds);
+      const lines: string[] = [];
+
+      inventories.forEach((inventory) => {
+        if (!inventory || !gachaFilter.has(inventory.gachaId)) {
+          return;
+        }
+        const catalogGacha = snapshot.catalogState?.byGacha?.[inventory.gachaId];
+        const gachaName = gachaNameMap.get(inventory.gachaId) ?? inventory.gachaId;
+        const countsByRarity = inventory.counts ?? {};
+        const itemsByRarity = inventory.items ?? {};
+        const itemMap = new Map<string, { count: number; rarityId: string; itemName: string; flags: string[] }>();
+
+        Object.entries(itemsByRarity).forEach(([rarityId, itemIds]) => {
+          if (!Array.isArray(itemIds) || itemIds.length === 0) {
+            return;
+          }
+          const fallbackCounts = new Map<string, number>();
+          itemIds.forEach((itemId) => {
+            fallbackCounts.set(itemId, (fallbackCounts.get(itemId) ?? 0) + 1);
+          });
+          const explicitCounts = countsByRarity[rarityId] ?? {};
+          const itemIdSet = new Set<string>([...Object.keys(explicitCounts), ...fallbackCounts.keys()]);
+
+          itemIdSet.forEach((itemId) => {
+            const explicitCount = explicitCounts[itemId];
+            const totalCount = typeof explicitCount === 'number' && explicitCount > 0
+              ? explicitCount
+              : fallbackCounts.get(itemId) ?? 0;
+            if (totalCount <= 0) {
+              return;
+            }
+
+            const catalogItem = catalogGacha?.items?.[itemId];
+            const itemName = catalogItem?.name ?? itemId;
+            const resolvedRarityId = catalogItem?.rarityId ?? rarityId ?? '未分類';
+            const flags: string[] = [];
+            if (catalogItem?.riagu) {
+              flags.push('リアグ');
+            }
+            if (catalogItem?.originalPrize) {
+              flags.push('オリジナル景品');
+            }
+
+            const entry = itemMap.get(itemId);
+            if (entry) {
+              entry.count += totalCount;
+              return;
+            }
+            itemMap.set(itemId, { count: totalCount, rarityId: resolvedRarityId, itemName, flags });
+          });
+        });
+
+        if (itemMap.size === 0) {
+          return;
+        }
+
+        lines.push(gachaName);
+        const items = Array.from(itemMap.values()).sort((a, b) => {
+          const labelA = snapshot.rarityState?.entities?.[a.rarityId]?.label ?? a.rarityId;
+          const labelB = snapshot.rarityState?.entities?.[b.rarityId]?.label ?? b.rarityId;
+          if (labelA !== labelB) {
+            return labelA.localeCompare(labelB, 'ja');
+          }
+          return a.itemName.localeCompare(b.itemName, 'ja');
+        });
+        items.forEach((entry) => {
+          const rarityLabel = snapshot.rarityState?.entities?.[entry.rarityId]?.label ?? entry.rarityId;
+          const flagLabel = entry.flags.length > 0 ? `（${entry.flags.join('・')}）` : '';
+          lines.push(`${rarityLabel} ${entry.itemName}：${entry.count}枚${flagLabel}`);
+        });
+      });
+
       return {
-        description: `選択したガチャ ${selection.gachaIds.length} 件を保存します。`,
-        details: names
+        description: '保存対象の景品一覧です。',
+        details: lines
       };
     }
     const history = snapshot.pullHistory?.pulls ?? {};
@@ -474,7 +619,15 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       description: `選択した履歴 ${selection.pullIds.length} 件に含まれる景品を保存します。`,
       details
     };
-  }, [selection, snapshot.userInventories?.inventories, snapshot.pullHistory?.pulls, gachaNameMap, userId]);
+  }, [
+    selection,
+    snapshot.userInventories?.inventories,
+    snapshot.pullHistory?.pulls,
+    snapshot.catalogState?.byGacha,
+    snapshot.rarityState?.entities,
+    gachaNameMap,
+    userId
+  ]);
 
   const handleCopyUrl = async (url: string) => {
     try {
