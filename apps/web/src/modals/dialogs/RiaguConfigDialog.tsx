@@ -133,6 +133,21 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       : profitEvaluation.status === 'loss'
         ? 'text-rose-400'
         : 'text-muted-foreground';
+  const perPullLabel = perPullPrice != null ? `${perPullPrice}pt` : '—';
+  const shareRateLabel =
+    gachaOwnerShareRate != null && Number.isFinite(gachaOwnerShareRate)
+      ? `${(Math.round(gachaOwnerShareRate * 1000) / 10).toFixed(1).replace(/\.0$/, '')}%`
+      : '—';
+  const itemRateLabel = useMemo(() => {
+    if (itemMetrics.itemRate == null || !Number.isFinite(itemMetrics.itemRate)) {
+      return '—';
+    }
+    const decimal = Math.round(itemMetrics.itemRate * 1_000_000) / 1_000_000;
+    const percent = Math.round(itemMetrics.itemRate * 10_000) / 100;
+    const percentLabel = `${percent.toFixed(2).replace(/\.0+$/, '')}%`;
+    return `${decimal} (${percentLabel})`;
+  }, [itemMetrics.itemRate]);
+  const orderPriceLabel = parsedPrice != null ? `${parsedPrice}円` : '—';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -224,6 +239,32 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="300"
             />
           </label>
+        </div>
+        <div className="mt-4 rounded-xl border border-border/60 bg-panel/50 p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">利益率</span>
+            <span className={clsx('text-sm font-semibold', profitToneClass)}>{profitValueLabel}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className={clsx('text-xs font-semibold', profitToneClass)}>{profitStatusLabel}</span>
+            {profitEvaluation.isOutOfStock ? (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                在庫切れ
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
+            <div>1回の消費pt (C): {perPullLabel}</div>
+            <div>取り分率 (R): {shareRateLabel}</div>
+            <div>排出率 (P): {itemRateLabel}</div>
+            <div>発注価格 (A): {orderPriceLabel}</div>
+            <div>計算式: (C×R - P×A) / (C×R)</div>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
+          </p>
+        </div>
+        <div className="mt-4 space-y-4">
           <label className="space-y-2">
             <span className="text-sm font-medium text-surface-foreground">リアルグッズタイプ</span>
             <input
@@ -235,27 +276,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             />
           </label>
         </div>
-        <div className="mt-4 rounded-xl border border-border/60 bg-panel/50 p-3 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">利益率（取り分基準）</span>
-            <span className={clsx('text-sm font-semibold', profitToneClass)}>{profitValueLabel}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={clsx('text-xs font-semibold', profitToneClass)}>{profitStatusLabel}</span>
-            {profitEvaluation.isOutOfStock ? (
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                在庫切れ
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            税金や送料、手数料によっては赤字になる場合があります。
-          </p>
-        </div>
       </ModalBody>
-      <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
-        リアグ情報はガチャの保存オプションに含まれ、共有ZIPにも出力されます。
-      </p>
       <ModalFooter>
         <button type="button" className="btn btn-primary" onClick={handleSave}>
           保存する
