@@ -286,16 +286,17 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               <div>発注価格: {orderPriceLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
-              <div>ガチャ1回当たりの利益: {profitPerDrawLabel}</div>
-              <div>計算式: ガチャ1回当たりの利益 / ガチャ1回当たりの還元額</div>
+              <div>以上よりガチャ1回当たりの利益: {profitPerDrawLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>利益率: ガチャ1回当たりの利益 / ガチャ1回当たりの還元額: {profitValueLabel}</div>
             </div>
           ) : null}
           <p className="mt-2 text-[11px] text-muted-foreground">
             ※これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
           </p>
           <div className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-            <p>・「期待原価」は当該アイテム分のみです。他の景品コストは含まれないため、ガチャ全体の利益率ではありません。</p>
-            <p>・バンドル/コンプ/保証(天井)による実質単価・期待原価は反映していません。</p>
+            <p>※「期待原価」「利益」「利益率」は当該アイテム分のみです。ガチャ全体の利益率ではありません。</p>
+            <p>※お得バンドル/コンプガチャ/天井保証による実質単価・期待原価は反映していません。</p>
           </div>
         </div>
         <div className="mt-4 space-y-4">
