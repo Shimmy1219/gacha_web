@@ -1,10 +1,9 @@
 import { ClipboardIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { type CSSProperties } from 'react';
 
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 import { type PullHistoryEntrySourceV1, type PullHistoryEntryV1 } from '@domain/app-persistence';
-import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
+import { RarityLabel } from '../../../components/RarityLabel';
 import { XLogoIcon } from '../../../components/icons/XLogoIcon';
 import { type ShareHandler } from '../../../hooks/useShare';
 import { resolveSafeUrl } from '../../../utils/safeUrl';
@@ -51,8 +50,7 @@ interface ItemEntryViewModel {
   itemLabel: string;
   count: number;
   rarityLabel?: string;
-  rarityTextClassName?: string;
-  rarityTextStyle?: CSSProperties;
+  rarityColor?: string | null;
   raritySortOrder: number;
   isNew: boolean;
   hasOriginalPrizeMissing: boolean;
@@ -143,17 +141,13 @@ export function HistoryEntriesList({
             const isOriginalPrize = metadata?.isOriginalPrize === true;
             const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
             const missingOriginalPrizeCount = isOriginalPrize ? Math.max(0, count - assignedCount) : 0;
-            const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
-              typeof rarityColor === 'string' ? rarityColor : undefined
-            );
 
             return {
               itemId,
               count,
               itemLabel: metadata?.name ?? itemId,
               rarityLabel,
-              rarityTextClassName,
-              rarityTextStyle,
+              rarityColor: typeof rarityColor === 'string' ? rarityColor : null,
               raritySortOrder,
               isNew: count > 0 && newItemSet.has(itemId),
               hasOriginalPrizeMissing: isOriginalPrize && missingOriginalPrizeCount > 0,
@@ -221,13 +215,8 @@ export function HistoryEntriesList({
                 {itemEntries.map((item) => (
                   <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
                     {item.rarityLabel ? (
-                      <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
-                        <span
-                          className={clsx('inventory-history-dialog__rarity-badge__label', item.rarityTextClassName)}
-                          style={item.rarityTextStyle}
-                        >
-                          {item.rarityLabel}
-                        </span>
+                      <span className="inline-flex min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                        <RarityLabel label={item.rarityLabel} color={item.rarityColor} />
                       </span>
                     ) : null}
                     <span className="flex-1 min-w-0 overflow-hidden font-medium">
