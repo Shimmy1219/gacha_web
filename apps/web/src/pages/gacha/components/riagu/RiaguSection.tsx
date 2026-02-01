@@ -282,9 +282,14 @@ export function RiaguSection(): JSX.Element {
                                     emptyLabel="noImage"
                                   />
                                   <div className="riagu-card__meta-text min-w-0 flex-1 space-y-2">
-                                    <span className="riagu-card__rarity inline-flex min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
-                                      <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
-                                    </span>
+                                    <div className="riagu-card__meta-tags flex items-center gap-2">
+                                      <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                                        <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
+                                      </span>
+                                      <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
+                                        {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                                      </div>
+                                    </div>
                                     <h3 className="riagu-card__title truncate text-base font-semibold text-surface-foreground">
                                       {entry.itemName}
                                     </h3>
@@ -317,31 +322,26 @@ export function RiaguSection(): JSX.Element {
                                   </div>
                                 </dl>
                               </Disclosure.Button>
-                              <div className="riagu-card__aside flex flex-col items-end gap-2">
-                                <div className="riagu-card__type chip text-xs text-muted-foreground">
-                                  {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    push(RiaguConfigDialog, {
-                                      id: `${entry.itemId}-riagu`,
-                                      title: 'リアルグッズ設定',
-                                      size: 'sm',
-                                      payload: {
-                                        gachaId: entry.gachaId,
-                                        itemId: entry.itemId,
-                                        itemName: entry.itemName,
-                                        defaultPrice: entry.unitCost,
-                                        defaultType: entry.typeLabel
-                                      }
-                                    })
-                                  }
-                                  className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                                >
-                                  リアグ設定
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  push(RiaguConfigDialog, {
+                                    id: `${entry.itemId}-riagu`,
+                                    title: 'リアルグッズ設定',
+                                    size: 'sm',
+                                    payload: {
+                                      gachaId: entry.gachaId,
+                                      itemId: entry.itemId,
+                                      itemName: entry.itemName,
+                                      defaultPrice: entry.unitCost,
+                                      defaultType: entry.typeLabel
+                                    }
+                                  })
+                                }
+                                className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                              >
+                                リアグ設定
+                              </button>
                             </header>
                             <div
                               data-state={open ? 'open' : 'closed'}
