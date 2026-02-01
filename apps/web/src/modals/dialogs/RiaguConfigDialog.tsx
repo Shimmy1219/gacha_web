@@ -267,7 +267,15 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             >
               詳細を表示
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
+              onClick={() => setShowProfitDetails(false)}
+            >
+              詳細を閉じる
+            </button>
+          )}
           {showProfitDetails ? (
             <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
               <div>1回の消費pt: {perPullLabel}</div>
@@ -285,6 +293,10 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
           <p className="mt-2 text-[11px] text-muted-foreground">
             ※これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
           </p>
+          <div className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+            <p>・「期待原価」は当該アイテム分のみです。他の景品コストは含まれないため、ガチャ全体の利益率ではありません。</p>
+            <p>・バンドル/コンプ/保証(天井)による実質単価・期待原価は反映していません。</p>
+          </div>
         </div>
         <div className="mt-4 space-y-4">
           <label className="space-y-2">
