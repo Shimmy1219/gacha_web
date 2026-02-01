@@ -327,7 +327,7 @@ export function RaritySection(): JSX.Element {
     <SectionContainer
       id="rarity"
       title="レアリティ設定"
-      description="排出率・カラー・順序を編集し、RarityStoreと同期します。排出率は10^-10%まで対応しています。"
+      description="排出率は10^-10%まで対応しています。"
       contentClassName="rarity-section__content"
     >
       <GachaTabs

@@ -192,6 +192,26 @@
     box-shadow: inset 0 10px 12px -10px rgb(var(--color-overlay) / 0.9);
   }
 
+  .items-section__rate-redistribution {
+    border-color: rgb(251 191 36 / 0.4);
+    background-color: rgb(245 158 11 / 0.15);
+    color: rgb(254 243 199);
+  }
+
+  .items-section__rate-redistribution-message {
+    color: rgb(253 230 138);
+  }
+
+  :root[data-site-theme-scheme='light'] .items-section__rate-redistribution {
+    border-color: rgb(253 230 138 / 0.7);
+    background-color: rgb(255 251 235 / 0.8);
+    color: rgb(120 53 15);
+  }
+
+  :root[data-site-theme-scheme='light'] .items-section__rate-redistribution-message {
+    color: rgb(146 64 14);
+  }
+
   .section-scroll.section-scroll--no-scrollbar {
     padding-right: 0;
   }
