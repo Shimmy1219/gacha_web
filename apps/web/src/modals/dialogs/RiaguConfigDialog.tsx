@@ -346,11 +346,11 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="アクリルスタンド / 缶バッジ など"
             />
           </label>
-          {typeSuggestions.length > 0 ? (
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-muted-foreground">候補</p>
-              <div className="flex flex-wrap gap-2">
-                {typeSuggestions.map((suggestion) => {
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground">候補</p>
+            <div className="flex max-h-[64px] min-h-[64px] flex-wrap content-start gap-2 overflow-hidden">
+              {typeSuggestions.length > 0 ? (
+                typeSuggestions.map((suggestion) => {
                   const normalizedKeys = [suggestion.label, ...(suggestion.aliases ?? [])].map(normalizeSuggestionText);
                   const isSelected = normalizedKeys.includes(normalizedTypeInput);
                   return (
@@ -367,12 +367,12 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
                       {suggestion.label}
                     </button>
                   );
-                })}
-              </div>
+                })
+              ) : normalizedTypeInput ? (
+                <p className="text-xs text-muted-foreground">一致する候補はありません。</p>
+              ) : null}
             </div>
-          ) : normalizedTypeInput ? (
-            <p className="text-xs text-muted-foreground">一致する候補はありません。</p>
-          ) : null}
+          </div>
         </div>
       </ModalBody>
       <ModalFooter>
