@@ -31,6 +31,17 @@
 - idは画面内で一意を保証し、重複が起こる繰り返し要素ではidではなくclass名を使用する
 - class名は既存規則に合わせて一貫性を保ち、汎用的すぎる名前（例: container, button, text）は避ける
 - 新規実装時だけでなく既存要素を編集する際も、未付与の要素があれば同時に命名を補完する
+- 既存実装に合わせ、class名は必ずkebab-caseで記述し、`block__element--modifier`（BEM準拠）を基本形にする
+- セクションのルートは `SectionContainer` の `id` と対応させる（例: `id="rarity"`, `id="items"`, `id="riagu"`）
+- セクション配下は `*-section__*` で統一する（例: `rarity-section__content`, `items-section__tabs`, `riagu-section__scroll-content`）
+- カード/テーブル/パネルなどの複合UIは独立ブロックを切る（例: `riagu-card__*`, `rarity-section__table-*`, `pt-controls-panel__*`）
+- タブUIは既存共通命名を優先する（`gacha-tabs`, `gacha-tab__*`, 状態は `gacha-tab--active` / `gacha-tab--inactive`）
+- モーダルは共通枠クラス（`modal-root`, `modal-panel`, `modal-header`, `modal-body`, `modal-footer`）を前提に、ダイアログ固有要素へ `*-dialog__*` もしくは既存接頭辞（例: `start-wizard__*`, `save-options__*`, `prize-settings__*`）を付ける
+- ボタン/チップは共通トークンを維持しつつ固有名を併記する（例: `btn btn-primary ... + <feature>__action-button`, `chip ... + <feature>__tag`）
+- `className` 文字列では「固有classを先頭、その後にTailwindユーティリティ」を基本順序にする（CSS検索性維持のため）
+- 入力やトリガーの `id` は `<feature>-<role>-<kind>` 形式のkebab-caseを使う（例: `items-sort-select`）
+- 動的に紐づく `id` は `<feature>-<element>-${entityId}` 形式で付与する（例: `riagu-card-panel-${entry.id}`）
+- 状態表現は `--modifier` または `data-*` を併用する（例: `--active`, `--inactive`, `data-state`, `data-selected`）
 
 ## テスト規律
 - テストをスキップせず、問題があれば修正する
