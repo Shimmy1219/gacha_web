@@ -272,7 +272,7 @@ export function RiaguSection(): JSX.Element {
                                   <div className="riagu-card__meta-heading flex min-w-0 items-start gap-3">
                                     <Disclosure.Button
                                       type="button"
-                                      className="riagu-card__meta-trigger flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                      className="riagu-card__meta-trigger flex shrink-0 items-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                                       aria-label="リアグ当選者の表示を切り替える"
                                       onClick={handleToggle}
                                     >
@@ -285,40 +285,56 @@ export function RiaguSection(): JSX.Element {
                                         className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
                                         emptyLabel="noImage"
                                       />
-                                      <div className="riagu-card__meta-text min-w-0 flex-1 space-y-2">
-                                        <div className="riagu-card__meta-tags flex flex-col items-start gap-1">
-                                          <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
-                                            {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                                    </Disclosure.Button>
+                                    <div className="riagu-card__meta-text min-w-0 flex-1">
+                                      <div className="riagu-card__meta-row flex min-w-0 items-start gap-3">
+                                        <Disclosure.Button
+                                          type="button"
+                                          className="riagu-card__meta-trigger flex min-w-0 flex-1 items-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                          aria-label="リアグ当選者の表示を切り替える"
+                                          onClick={handleToggle}
+                                        >
+                                          <div className="riagu-card__meta-tags flex flex-col items-start gap-1">
+                                            <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
+                                              {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                                            </div>
+                                            <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                                              <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
+                                            </span>
                                           </div>
-                                          <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
-                                            <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
-                                          </span>
-                                        </div>
-                                        <h3 className="riagu-card__title truncate text-base font-semibold text-surface-foreground">
+                                        </Disclosure.Button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            push(RiaguConfigDialog, {
+                                              id: `${entry.itemId}-riagu`,
+                                              title: 'リアルグッズ設定',
+                                              size: 'sm',
+                                              payload: {
+                                                gachaId: entry.gachaId,
+                                                itemId: entry.itemId,
+                                                itemName: entry.itemName,
+                                                defaultPrice: entry.unitCost,
+                                                defaultType: entry.typeLabel
+                                              }
+                                            })
+                                          }
+                                          className="riagu-card__action inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        >
+                                          リアグ設定
+                                        </button>
+                                      </div>
+                                      <Disclosure.Button
+                                        type="button"
+                                        className="riagu-card__title-trigger w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        aria-label="リアグ当選者の表示を切り替える"
+                                        onClick={handleToggle}
+                                      >
+                                        <h3 className="riagu-card__title m-0 truncate text-base font-semibold text-surface-foreground">
                                           {entry.itemName}
                                         </h3>
-                                      </div>
-                                    </Disclosure.Button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        push(RiaguConfigDialog, {
-                                          id: `${entry.itemId}-riagu`,
-                                          title: 'リアルグッズ設定',
-                                          size: 'sm',
-                                          payload: {
-                                            gachaId: entry.gachaId,
-                                            itemId: entry.itemId,
-                                            itemName: entry.itemName,
-                                            defaultPrice: entry.unitCost,
-                                            defaultType: entry.typeLabel
-                                          }
-                                        })
-                                      }
-                                      className="riagu-card__action inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                                    >
-                                      リアグ設定
-                                    </button>
+                                      </Disclosure.Button>
+                                    </div>
                                   </div>
                                   <Disclosure.Button
                                     type="button"
