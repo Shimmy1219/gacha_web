@@ -269,10 +269,10 @@ export function RiaguSection(): JSX.Element {
                             >
                               <header className="riagu-card__header flex flex-col gap-3">
                                 <div className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3 text-left">
-                                  <div className="riagu-card__meta-heading flex min-w-0 items-center gap-3">
+                                  <div className="riagu-card__meta-heading flex min-w-0 items-start gap-3">
                                     <Disclosure.Button
                                       type="button"
-                                      className="riagu-card__meta-trigger flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                      className="riagu-card__meta-trigger flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                                       aria-label="リアグ当選者の表示を切り替える"
                                       onClick={handleToggle}
                                     >
@@ -286,13 +286,13 @@ export function RiaguSection(): JSX.Element {
                                         emptyLabel="noImage"
                                       />
                                       <div className="riagu-card__meta-text min-w-0 flex-1 space-y-2">
-                                        <div className="riagu-card__meta-tags flex items-center gap-2">
-                                          <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
-                                            <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
-                                          </span>
+                                        <div className="riagu-card__meta-tags flex flex-col items-start gap-1">
                                           <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
                                             {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
                                           </div>
+                                          <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                                            <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
+                                          </span>
                                         </div>
                                         <h3 className="riagu-card__title truncate text-base font-semibold text-surface-foreground">
                                           {entry.itemName}
