@@ -255,106 +255,135 @@ export function RiaguSection(): JSX.Element {
                     const panelId = `riagu-card-panel-${entry.id}`;
                     return (
                       <Disclosure key={entry.id} defaultOpen={getDefaultOpenState(entry.id)}>
-                        {({ open }) => (
-                          <article
-                            className={clsx(
-                              'riagu-card rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5 shadow-sm',
-                              open ? 'space-y-4' : 'space-y-0'
-                            )}
-                          >
-                            <header className="riagu-card__header flex items-start justify-between gap-3">
-                              <Disclosure.Button
-                                type="button"
-                                className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                                aria-label="リアグ当選者の表示を切り替える"
-                                onClick={() => {
-                                  uiPreferences.setRiaguCardOpenState(entry.id, !open, { persist: 'debounced' });
-                                }}
-                              >
-                                <div className="riagu-card__meta-heading flex min-w-0 items-center gap-3">
-                                  <ItemPreview
-                                    assetId={entry.assetId}
-                                    previewAssetId={entry.thumbnailAssetId}
-                                    fallbackUrl={entry.thumbnailUrl}
-                                    alt={`${entry.itemName}のプレビュー`}
-                                    kindHint="image"
-                                    className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
-                                    emptyLabel="noImage"
-                                  />
-                                  <div className="riagu-card__meta-text min-w-0 flex-1 space-y-2">
-                                    <span className="riagu-card__rarity inline-flex min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
-                                      <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
-                                    </span>
-                                    <h3 className="riagu-card__title truncate text-base font-semibold text-surface-foreground">
-                                      {entry.itemName}
-                                    </h3>
-                                  </div>
-                                </div>
-                                <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
-                                  <div className="riagu-card__summary-item space-y-1">
-                                    <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                      原価
-                                    </dt>
-                                    <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                      {formatCurrency(entry.unitCost)}
-                                    </dd>
-                                  </div>
-                                  <div className="riagu-card__summary-item space-y-1">
-                                    <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                      必要個数
-                                    </dt>
-                                    <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                      {formatQuantity(entry.requiredQuantity)}
-                                    </dd>
-                                  </div>
-                                  <div className="riagu-card__summary-item space-y-1">
-                                    <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                      合計金額
-                                    </dt>
-                                    <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                      {formatCurrency(entry.totalCost)}
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </Disclosure.Button>
-                              <div className="riagu-card__aside flex flex-col items-end gap-2">
-                                <div className="riagu-card__type chip text-xs text-muted-foreground">
-                                  {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    push(RiaguConfigDialog, {
-                                      id: `${entry.itemId}-riagu`,
-                                      title: 'リアルグッズ設定',
-                                      size: 'sm',
-                                      payload: {
-                                        gachaId: entry.gachaId,
-                                        itemId: entry.itemId,
-                                        itemName: entry.itemName,
-                                        defaultPrice: entry.unitCost,
-                                        defaultType: entry.typeLabel
-                                      }
-                                    })
-                                  }
-                                  className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                                >
-                                  リアグ設定
-                                </button>
-                              </div>
-                            </header>
-                            <div
-                              data-state={open ? 'open' : 'closed'}
+                        {({ open }) => {
+                          const handleToggle = () => {
+                            uiPreferences.setRiaguCardOpenState(entry.id, !open, { persist: 'debounced' });
+                          };
+
+                          return (
+                            <article
                               className={clsx(
-                                'riagu-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
-                                'data-[state=open]:grid-rows-[1fr]',
-                                'data-[state=closed]:grid-rows-[0fr]'
+                                'riagu-card rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-3 shadow-sm',
+                                open ? 'space-y-4' : 'space-y-0'
                               )}
                             >
-                              <RiaguCardWinners open={open} panelId={panelId} winners={entry.winners} />
-                            </div>
-                          </article>
-                        )}
+                              <header className="riagu-card__header flex flex-col gap-3">
+                                <div className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3 text-left">
+                                  <div className="riagu-card__meta-heading flex min-w-0 items-start gap-3">
+                                    <Disclosure.Button
+                                      type="button"
+                                      className="riagu-card__meta-trigger flex shrink-0 items-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                      aria-label="リアグ当選者の表示を切り替える"
+                                      onClick={handleToggle}
+                                    >
+                                      <ItemPreview
+                                        assetId={entry.assetId}
+                                        previewAssetId={entry.thumbnailAssetId}
+                                        fallbackUrl={entry.thumbnailUrl}
+                                        alt={`${entry.itemName}のプレビュー`}
+                                        kindHint="image"
+                                        className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
+                                        emptyLabel="noImage"
+                                      />
+                                    </Disclosure.Button>
+                                    <div className="riagu-card__meta-text min-w-0 flex-1">
+                                      <div className="riagu-card__meta-row flex min-w-0 items-start gap-3">
+                                        <Disclosure.Button
+                                          type="button"
+                                          className="riagu-card__meta-trigger flex min-w-0 flex-1 items-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                          aria-label="リアグ当選者の表示を切り替える"
+                                          onClick={handleToggle}
+                                        >
+                                          <div className="riagu-card__meta-tags flex flex-col items-start gap-1">
+                                            <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
+                                              {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                                            </div>
+                                            <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                                              <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
+                                            </span>
+                                          </div>
+                                        </Disclosure.Button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            push(RiaguConfigDialog, {
+                                              id: `${entry.itemId}-riagu`,
+                                              title: 'リアルグッズ設定',
+                                              size: 'sm',
+                                              payload: {
+                                                gachaId: entry.gachaId,
+                                                itemId: entry.itemId,
+                                                itemName: entry.itemName,
+                                                defaultPrice: entry.unitCost,
+                                                defaultType: entry.typeLabel
+                                              }
+                                            })
+                                          }
+                                          className="riagu-card__action inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        >
+                                          リアグ設定
+                                        </button>
+                                      </div>
+                                      <Disclosure.Button
+                                        type="button"
+                                        className="riagu-card__title-trigger w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        aria-label="リアグ当選者の表示を切り替える"
+                                        onClick={handleToggle}
+                                      >
+                                        <h3 className="riagu-card__title flex min-w-0 items-center justify-between gap-2 overflow-hidden text-sm font-semibold text-surface-foreground">
+                                          <span className="min-w-0 max-w-full truncate">{entry.itemName}</span>
+                                        </h3>
+                                      </Disclosure.Button>
+                                    </div>
+                                  </div>
+                                  <Disclosure.Button
+                                    type="button"
+                                    className="riagu-card__summary-trigger text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                    aria-label="リアグ当選者の表示を切り替える"
+                                    onClick={handleToggle}
+                                  >
+                                    <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                        発注価格
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatCurrency(entry.unitCost)}
+                                        </dd>
+                                      </div>
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                          必要個数
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatQuantity(entry.requiredQuantity)}
+                                        </dd>
+                                      </div>
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                          合計金額
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatCurrency(entry.totalCost)}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                  </Disclosure.Button>
+                                </div>
+                              </header>
+                              <div
+                                data-state={open ? 'open' : 'closed'}
+                                className={clsx(
+                                  'riagu-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+                                  'data-[state=open]:grid-rows-[1fr]',
+                                  'data-[state=closed]:grid-rows-[0fr]'
+                                )}
+                              >
+                                <RiaguCardWinners open={open} panelId={panelId} winners={entry.winners} />
+                              </div>
+                            </article>
+                          );
+                        }}
                       </Disclosure>
                     );
                   })}

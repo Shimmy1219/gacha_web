@@ -224,6 +224,7 @@ export interface UiPreferencesStateV3 {
   toolbar?: Record<string, unknown>;
   users?: Record<string, unknown>;
   gacha?: {
+    ownerShareRate?: number;
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;

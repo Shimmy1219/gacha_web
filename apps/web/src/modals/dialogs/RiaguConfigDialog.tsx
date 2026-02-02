@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { clsx } from 'clsx';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
+import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../logic/gacha';
+import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
+import { REAL_GOODS_TYPE_SUGGESTIONS } from './riaguTypeSuggestions';
 
 export interface RiaguConfigDialogPayload {
   gachaId: string;
@@ -14,13 +19,177 @@ export interface RiaguConfigDialogPayload {
 
 const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
+const ONE_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
+const TWO_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
+const KANJI_REPLACEMENTS: Array<[string, string]> = [
+  ['下敷き', 'したじき'],
+  ['巾着', 'きんちゃく'],
+  ['帽子', 'ぼうし'],
+  ['靴下', 'くつした'],
+  ['抱き枕', 'だきまくら'],
+  ['箸', 'はし'],
+  ['食器', 'しょっき'],
+  ['色紙', 'しきし'],
+  ['缶', 'かん']
+];
+
+const normalizeSuggestionText = (value: string) => {
+  const lowered = value.trim().toLowerCase();
+  const replaced = KANJI_REPLACEMENTS.reduce((accumulator, [target, replacement]) => {
+    if (!accumulator.includes(target)) {
+      return accumulator;
+    }
+    return accumulator.replaceAll(target, replacement);
+  }, lowered);
+  const kanaConverted = replaced.replace(/[\u30a1-\u30f6]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0x60)
+  );
+  return kanaConverted.replace(/[\s/／・]/g, '').replace(/[-‐‑–—]/g, '');
+};
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
-  const { riagu: riaguStore } = useDomainStores();
+  const {
+    riagu: riaguStore,
+    ptControls: ptControlsStore,
+    catalog: catalogStore,
+    rarities: rarityStore,
+    userInventories: userInventoriesStore,
+    uiPreferences: uiPreferencesStore
+  } = useDomainStores();
+  const ptSettingsState = useStoreValue(ptControlsStore);
+  const catalogState = useStoreValue(catalogStore);
+  const rarityState = useStoreValue(rarityStore);
+  const userInventoriesState = useStoreValue(userInventoriesStore);
+  const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const [price, setPrice] = useState<string>(
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
+  const [showProfitDetails, setShowProfitDetails] = useState(false);
+  const normalizedTypeInput = useMemo(() => normalizeSuggestionText(type), [type]);
+  const typeSuggestions = useMemo(() => {
+    if (!normalizedTypeInput) {
+      return REAL_GOODS_TYPE_SUGGESTIONS;
+    }
+    return REAL_GOODS_TYPE_SUGGESTIONS.filter((suggestion) => {
+      const keys = [suggestion.label, ...(suggestion.aliases ?? [])];
+      return keys.some((key) => normalizeSuggestionText(key).includes(normalizedTypeInput));
+    });
+  }, [normalizedTypeInput]);
+  const gachaOwnerShareRate = useMemo(
+    () => uiPreferencesStore.getGachaOwnerShareRatePreference() ?? DEFAULT_GACHA_OWNER_SHARE_RATE,
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const perPullPrice = useMemo(() => {
+    const gachaId = payload?.gachaId;
+    if (!gachaId) {
+      return null;
+    }
+    const setting = ptSettingsState?.byGachaId?.[gachaId];
+    const { normalized } = normalizePtSetting(setting);
+    return normalized.perPull?.unitPrice ?? null;
+  }, [payload?.gachaId, ptSettingsState]);
+  const itemMetrics = useMemo(() => {
+    if (!payload?.itemId) {
+      return { itemRate: null, remainingStock: null };
+    }
+    const inventoryCounts = buildItemInventoryCountMap(userInventoriesState?.byItemId);
+    const { itemsById } = buildGachaPools({
+      catalogState,
+      rarityState,
+      inventoryCountsByItemId: inventoryCounts,
+      includeOutOfStockItems: true
+    });
+    const item = itemsById.get(payload.itemId);
+    const itemRate = typeof item?.itemRate === 'number' && Number.isFinite(item.itemRate) ? item.itemRate : null;
+    const remainingStock =
+      typeof item?.remainingStock === 'number' && Number.isFinite(item.remainingStock) ? item.remainingStock : null;
+    return { itemRate, remainingStock };
+  }, [catalogState, payload?.itemId, rarityState, userInventoriesState?.byItemId]);
+  const parsedPrice = useMemo(() => {
+    const trimmed = price.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+    return numeric < 0 ? null : numeric;
+  }, [price]);
+  const isOutOfStock = itemMetrics.remainingStock === 0;
+  const revenuePerDraw = useMemo(() => {
+    if (perPullPrice == null || perPullPrice <= 0 || gachaOwnerShareRate <= 0) {
+      return null;
+    }
+    const value = perPullPrice * gachaOwnerShareRate;
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [gachaOwnerShareRate, perPullPrice]);
+  const expectedCostPerDraw = useMemo(() => {
+    if (isOutOfStock) {
+      return null;
+    }
+    if (parsedPrice == null || itemMetrics.itemRate == null) {
+      return null;
+    }
+    const value = itemMetrics.itemRate * parsedPrice;
+    return Number.isFinite(value) ? value : null;
+  }, [isOutOfStock, itemMetrics.itemRate, parsedPrice]);
+  const profitEvaluation = useMemo(() => {
+    if (isOutOfStock) {
+      return { status: 'unavailable' as const, percent: null, isOutOfStock: true };
+    }
+
+    if (revenuePerDraw == null || expectedCostPerDraw == null) {
+      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
+    }
+
+    const margin = (revenuePerDraw - expectedCostPerDraw) / revenuePerDraw;
+    if (!Number.isFinite(margin)) {
+      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
+    }
+
+    const rawPercent = Math.round(margin * 1000) / 10;
+    const percent = Object.is(rawPercent, -0) ? 0 : rawPercent;
+    const status = percent < 0 ? 'loss' : percent > 0 ? 'profit' : 'even';
+    return { status, percent, isOutOfStock: false };
+  }, [expectedCostPerDraw, isOutOfStock, revenuePerDraw]);
+  const profitValueLabel =
+    profitEvaluation.percent == null ? '算出不可' : `${profitEvaluation.percent.toFixed(1)}%`;
+  const profitStatusLabel =
+    profitEvaluation.status === 'profit'
+      ? '黒字'
+      : profitEvaluation.status === 'loss'
+        ? '赤字'
+        : profitEvaluation.status === 'even'
+          ? '利益なし'
+          : '算出不可';
+  const profitToneClass =
+    profitEvaluation.status === 'profit'
+      ? 'text-emerald-400'
+      : profitEvaluation.status === 'loss'
+        ? 'text-rose-400'
+        : 'text-muted-foreground';
+  const perPullLabel = perPullPrice != null ? `${ONE_DECIMAL_FORMATTER.format(perPullPrice)}pt` : '—';
+  const shareRateLabel =
+    gachaOwnerShareRate != null && Number.isFinite(gachaOwnerShareRate)
+      ? `${(Math.round(gachaOwnerShareRate * 1000) / 10).toFixed(1).replace(/\.0$/, '')}%`
+      : '—';
+  const itemRateLabel = useMemo(() => {
+    if (itemMetrics.itemRate == null || !Number.isFinite(itemMetrics.itemRate)) {
+      return '—';
+    }
+    const percent = itemMetrics.itemRate * 100;
+    return `${TWO_DECIMAL_FORMATTER.format(percent)}%`;
+  }, [itemMetrics.itemRate]);
+  const orderPriceLabel = parsedPrice != null ? `${ONE_DECIMAL_FORMATTER.format(parsedPrice)}円` : '—';
+  const revenuePerDrawLabel = revenuePerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw)}円` : '—';
+  const expectedCostPerDrawLabel =
+    expectedCostPerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(expectedCostPerDraw)}円` : '—';
+  const profitPerDrawLabel =
+    revenuePerDraw != null && expectedCostPerDraw != null
+      ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw - expectedCostPerDraw)}円`
+      : '算出不可';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -92,13 +261,16 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
 
   return (
     <>
-      <ModalBody className="rounded-2xl bg-surface/20 p-6">
-        <p className="text-sm text-muted-foreground">
-          対象アイテム: <span className="font-medium text-surface-foreground">{payload?.itemName ?? '-'}</span>
+      <ModalBody className="rounded-2xl bg-surface/20 p-0 md:pr-0">
+        <p className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <span className="shrink-0">対象アイテム:</span>
+          <span className="min-w-0 flex-1 truncate font-medium text-surface-foreground">
+            {payload?.itemName ?? '-'}
+          </span>
         </p>
         <div className="space-y-4">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-surface-foreground">原価（円）</span>
+            <span className="text-sm font-medium text-surface-foreground">発注価格（円）</span>
             <input
               type="number"
               min={0}
@@ -109,6 +281,61 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="300"
             />
           </label>
+        </div>
+        <div className="mt-4 rounded-xl border border-border/60 bg-panel/50 p-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">利益率</span>
+            <span className={clsx('text-sm font-semibold', profitToneClass)}>{profitValueLabel}</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className={clsx('text-xs font-semibold', profitToneClass)}>{profitStatusLabel}</span>
+            {profitEvaluation.isOutOfStock ? (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                在庫切れ
+              </span>
+            ) : null}
+          </div>
+          {!showProfitDetails ? (
+            <button
+              type="button"
+              className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
+              onClick={() => setShowProfitDetails(true)}
+            >
+              詳細を表示
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
+              onClick={() => setShowProfitDetails(false)}
+            >
+              詳細を閉じる
+            </button>
+          )}
+          {showProfitDetails ? (
+            <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
+              <div>1回の消費pt: {perPullLabel}</div>
+              <div>配信アプリからの還元率: {shareRateLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>ガチャ1回当たりの還元額: {revenuePerDrawLabel}</div>
+              <div>排出率: {itemRateLabel}</div>
+              <div>発注価格: {orderPriceLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
+              <div>以上よりガチャ1回当たりの利益: {profitPerDrawLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>利益率: ガチャ1回当たりの利益 / ガチャ1回当たりの還元額: {profitValueLabel}</div>
+            </div>
+          ) : null}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            ※これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
+          </p>
+          <div className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+            <p>※「期待原価」「利益」「利益率」は当該アイテム分のみです。ガチャ全体の利益率ではありません。</p>
+            <p>※お得バンドル/コンプガチャ/天井保証による実質単価・期待原価は反映していません。</p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-4">
           <label className="space-y-2">
             <span className="text-sm font-medium text-surface-foreground">リアルグッズタイプ</span>
             <input
@@ -119,11 +346,35 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="アクリルスタンド / 缶バッジ など"
             />
           </label>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground">候補</p>
+            <div className="flex max-h-[64px] min-h-[64px] flex-wrap content-start gap-2 overflow-hidden">
+              {typeSuggestions.length > 0 ? (
+                typeSuggestions.map((suggestion) => {
+                  const normalizedKeys = [suggestion.label, ...(suggestion.aliases ?? [])].map(normalizeSuggestionText);
+                  const isSelected = normalizedKeys.includes(normalizedTypeInput);
+                  return (
+                    <button
+                      key={suggestion.label}
+                      type="button"
+                      onClick={() => setType(suggestion.label)}
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 ${
+                        isSelected
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border/60 text-muted-foreground hover:border-accent hover:text-accent'
+                      }`}
+                    >
+                      {suggestion.label}
+                    </button>
+                  );
+                })
+              ) : normalizedTypeInput ? (
+                <p className="text-xs text-muted-foreground">一致する候補はありません。</p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </ModalBody>
-      <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
-        リアグ情報はガチャの保存オプションに含まれ、共有ZIPにも出力されます。
-      </p>
       <ModalFooter>
         <button type="button" className="btn btn-primary" onClick={handleSave}>
           保存する
