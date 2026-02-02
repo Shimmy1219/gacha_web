@@ -47,6 +47,14 @@ const normalizeSuggestionText = (value: string) => {
   return kanaConverted.replace(/[\s/／・]/g, '').replace(/[-‐‑–—]/g, '');
 };
 
+function formatDecimal(value: number, maximumFractionDigits: number): string {
+  const formatted = new Intl.NumberFormat('ja-JP', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits
+  }).format(value);
+  return formatted.replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
+}
+
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
   const {
     riagu: riaguStore,
@@ -182,13 +190,13 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     const formattedRate = formatRarityRate(itemMetrics.itemRate);
     return formattedRate ? `${formattedRate}%` : '—';
   }, [itemMetrics.itemRate]);
-  const orderPriceLabel = parsedPrice != null ? `${ONE_DECIMAL_FORMATTER.format(parsedPrice)}円` : '—';
-  const revenuePerDrawLabel = revenuePerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw)}円` : '—';
+  const orderPriceLabel = parsedPrice != null ? `${formatDecimal(parsedPrice, 12)}円` : '—';
+  const revenuePerDrawLabel = revenuePerDraw != null ? `${formatDecimal(revenuePerDraw, 12)}円` : '—';
   const expectedCostPerDrawLabel =
-    expectedCostPerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(expectedCostPerDraw)}円` : '—';
+    expectedCostPerDraw != null ? `${formatDecimal(expectedCostPerDraw, 12)}円` : '—';
   const profitPerDrawLabel =
     revenuePerDraw != null && expectedCostPerDraw != null
-      ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw - expectedCostPerDraw)}円`
+      ? `${formatDecimal(revenuePerDraw - expectedCostPerDraw, 12)}円`
       : '算出不可';
 
   useEffect(() => {
