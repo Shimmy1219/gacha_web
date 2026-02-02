@@ -50,5 +50,11 @@
         { "key": "Content-Type", "value": "application/manifest+json; charset=utf-8" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/receive-cleanup",
+      "schedule": "0 15 * * *"
+    }
   ]
 }
