@@ -20,6 +20,22 @@ const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
 const ONE_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
 const TWO_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
+const REAL_GOODS_TYPE_SUGGESTIONS = [
+  {
+    label: '缶バッチ',
+    searchKeys: ['缶バッチ', '缶バッジ', 'かんばっち', 'かんばっじ']
+  },
+  {
+    label: 'アクリルキーホルダー',
+    searchKeys: ['アクリルキーホルダー', 'アクキー', 'あくりるきーほるだー', 'あくきー']
+  },
+  {
+    label: 'アクリルパネル',
+    searchKeys: ['アクリルパネル', 'あくりるぱねる']
+  }
+];
+
+const normalizeSuggestionText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, '');
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
   const {
@@ -40,6 +56,15 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
   const [showProfitDetails, setShowProfitDetails] = useState(false);
+  const normalizedTypeInput = useMemo(() => normalizeSuggestionText(type), [type]);
+  const typeSuggestions = useMemo(() => {
+    if (!normalizedTypeInput) {
+      return REAL_GOODS_TYPE_SUGGESTIONS;
+    }
+    return REAL_GOODS_TYPE_SUGGESTIONS.filter((suggestion) =>
+      suggestion.searchKeys.some((key) => normalizeSuggestionText(key).includes(normalizedTypeInput))
+    );
+  }, [normalizedTypeInput]);
   const gachaOwnerShareRate = useMemo(
     () => uiPreferencesStore.getGachaOwnerShareRatePreference() ?? DEFAULT_GACHA_OWNER_SHARE_RATE,
     [uiPreferencesState, uiPreferencesStore]
@@ -310,6 +335,32 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               placeholder="アクリルスタンド / 缶バッジ など"
             />
           </label>
+          {typeSuggestions.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground">候補</p>
+              <div className="flex flex-wrap gap-2">
+                {typeSuggestions.map((suggestion) => {
+                  const isSelected = normalizedTypeInput === normalizeSuggestionText(suggestion.label);
+                  return (
+                    <button
+                      key={suggestion.label}
+                      type="button"
+                      onClick={() => setType(suggestion.label)}
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 ${
+                        isSelected
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border/60 text-muted-foreground hover:border-accent hover:text-accent'
+                      }`}
+                    >
+                      {suggestion.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : normalizedTypeInput ? (
+            <p className="text-xs text-muted-foreground">一致する候補はありません。</p>
+          ) : null}
         </div>
       </ModalBody>
       <ModalFooter>
