@@ -8,8 +8,7 @@ import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from 
 import {
   calculateExpectedCostPerDraw,
   calculateProfitAmount,
-  calculateRevenuePerDraw,
-  evaluateProfitMargin
+  calculateRevenuePerDraw
 } from '../../logic/riaguProfit';
 import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
 import { formatRarityRate } from '../../features/rarity/utils/rarityRate';
@@ -79,7 +78,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
-  const [showProfitDetails, setShowProfitDetails] = useState(false);
+  const [showCostDetails, setShowCostDetails] = useState(false);
   const normalizedTypeInput = useMemo(() => normalizeSuggestionText(type), [type]);
   const typeSuggestions = useMemo(() => {
     if (!normalizedTypeInput) {
@@ -143,31 +142,19 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       isOutOfStock
     });
   }, [isOutOfStock, itemMetrics.itemRate, parsedPrice]);
-  const profitEvaluation = useMemo(
-    () =>
-      evaluateProfitMargin({
-        revenueAmount: revenuePerDraw,
-        costAmount: expectedCostPerDraw,
-        isOutOfStock
-      }),
-    [expectedCostPerDraw, isOutOfStock, revenuePerDraw]
-  );
-  const profitValueLabel =
-    profitEvaluation.percent == null ? '算出不可' : `${profitEvaluation.percent.toFixed(1)}%`;
-  const profitStatusLabel =
-    profitEvaluation.status === 'profit'
-      ? '黒字'
-      : profitEvaluation.status === 'loss'
-        ? '赤字'
-        : profitEvaluation.status === 'even'
-          ? '利益なし'
-          : '算出不可';
-  const profitToneClass =
-    profitEvaluation.status === 'profit'
-      ? 'text-emerald-400'
-      : profitEvaluation.status === 'loss'
-        ? 'text-rose-400'
-        : 'text-muted-foreground';
+  const costContributionPercent = useMemo(() => {
+    if (isOutOfStock || revenuePerDraw == null || expectedCostPerDraw == null || revenuePerDraw <= 0) {
+      return null;
+    }
+    const value = (expectedCostPerDraw / revenuePerDraw) * 100;
+    return Number.isFinite(value) ? value : null;
+  }, [expectedCostPerDraw, isOutOfStock, revenuePerDraw]);
+  const costContributionLabel =
+    costContributionPercent != null ? `${formatDecimal(costContributionPercent, 10)}%` : '算出不可';
+  const costContributionToneClass =
+    costContributionPercent == null ? 'text-muted-foreground' : 'text-amber-300';
+  const costImpactLabel =
+    costContributionPercent != null ? `全体利益率への影響: -${formatDecimal(costContributionPercent, 10)}pt` : '算出不可';
   const perPullLabel = perPullPrice != null ? `${ONE_DECIMAL_FORMATTER.format(perPullPrice)}pt` : '—';
   const shareRateLabel =
     gachaOwnerShareRate != null && Number.isFinite(gachaOwnerShareRate)
@@ -190,6 +177,24 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   );
   const profitPerDrawLabel =
     profitPerDraw != null ? `${formatDecimal(profitPerDraw, 12)}円` : '算出不可';
+  const breakEvenUnitCost = useMemo(() => {
+    if (isOutOfStock || revenuePerDraw == null || itemMetrics.itemRate == null || itemMetrics.itemRate <= 0) {
+      return null;
+    }
+    const value = revenuePerDraw / itemMetrics.itemRate;
+    return Number.isFinite(value) ? value : null;
+  }, [isOutOfStock, itemMetrics.itemRate, revenuePerDraw]);
+  const breakEvenUnitCostLabel = breakEvenUnitCost != null ? `${formatDecimal(breakEvenUnitCost, 12)}円` : '算出不可';
+  const unitCostHeadroom = useMemo(() => {
+    if (breakEvenUnitCost == null || parsedPrice == null) {
+      return null;
+    }
+    const value = breakEvenUnitCost - parsedPrice;
+    return Number.isFinite(value) ? value : null;
+  }, [breakEvenUnitCost, parsedPrice]);
+  const unitCostHeadroomLabel = unitCostHeadroom != null ? `${formatDecimal(unitCostHeadroom, 12)}円` : '算出不可';
+  const unitCostHeadroomToneClass =
+    unitCostHeadroom == null ? 'text-muted-foreground' : unitCostHeadroom >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -284,22 +289,22 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
         </div>
         <div className="mt-4 rounded-xl border border-border/60 bg-panel/50 p-3 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">利益率</span>
-            <span className={clsx('text-sm font-semibold', profitToneClass)}>{profitValueLabel}</span>
+            <span className="text-xs font-semibold text-muted-foreground">原価寄与率</span>
+            <span className={clsx('text-sm font-semibold', costContributionToneClass)}>{costContributionLabel}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={clsx('text-xs font-semibold', profitToneClass)}>{profitStatusLabel}</span>
-            {profitEvaluation.isOutOfStock ? (
+            <span className={clsx('text-xs font-semibold', costContributionToneClass)}>{costImpactLabel}</span>
+            {isOutOfStock ? (
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                 在庫切れ
               </span>
             ) : null}
           </div>
-          {!showProfitDetails ? (
+          {!showCostDetails ? (
             <button
               type="button"
               className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
-              onClick={() => setShowProfitDetails(true)}
+              onClick={() => setShowCostDetails(true)}
             >
               詳細を表示
             </button>
@@ -307,12 +312,12 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             <button
               type="button"
               className="mt-2 text-xs font-semibold text-accent transition hover:text-accent/80"
-              onClick={() => setShowProfitDetails(false)}
+              onClick={() => setShowCostDetails(false)}
             >
               詳細を閉じる
             </button>
           )}
-          {showProfitDetails ? (
+          {showCostDetails ? (
             <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
               <div>1回の消費pt: {perPullLabel}</div>
               <div>配信アプリからの還元率: {shareRateLabel}</div>
@@ -322,16 +327,19 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               <div>発注価格: {orderPriceLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
-              <div>以上よりガチャ1回当たりの利益: {profitPerDrawLabel}</div>
+              <div>原価寄与率: ガチャ1回当たりの期待原価 / ガチャ1回当たりの還元額: {costContributionLabel}</div>
               <div className="my-1 h-px bg-border/60" />
-              <div>利益率: ガチャ1回当たりの利益 / ガチャ1回当たりの還元額: {profitValueLabel}</div>
+              <div>損益分岐単価: {breakEvenUnitCostLabel}</div>
+              <div className={clsx(unitCostHeadroomToneClass)}>単価余力（損益分岐単価 - 発注価格）: {unitCostHeadroomLabel}</div>
+              <div className="my-1 h-px bg-border/60" />
+              <div>参考: ガチャ1回当たりの推定利益: {profitPerDrawLabel}</div>
             </div>
           ) : null}
           <p className="mt-2 text-[11px] text-muted-foreground">
-            ※これは黒字・赤字を確約するものではありません。黒字表示でも、税金や送料、手数料によっては赤字になる場合があります。
+            ※これは収支を確約するものではありません。税金や送料、手数料などの追加コストは反映していません。
           </p>
           <div className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-            <p>※「期待原価」「利益」「利益率」は当該アイテム分のみです。ガチャ全体の利益率ではありません。</p>
+            <p>※「期待原価」「原価寄与率」「損益分岐単価」は当該アイテム分のみです。</p>
             <p>※お得バンドル/コンプガチャ/天井保証による実質単価・期待原価は反映していません。</p>
           </div>
         </div>
