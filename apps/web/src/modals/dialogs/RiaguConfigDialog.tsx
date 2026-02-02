@@ -6,6 +6,7 @@ import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../logic/gacha';
 import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
+import { formatRarityRate } from '../../features/rarity/utils/rarityRate';
 import { REAL_GOODS_TYPE_SUGGESTIONS } from './riaguTypeSuggestions';
 
 export interface RiaguConfigDialogPayload {
@@ -20,7 +21,6 @@ export interface RiaguConfigDialogPayload {
 const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
 const ONE_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
-const TWO_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
 const KANJI_REPLACEMENTS: Array<[string, string]> = [
   ['下敷き', 'したじき'],
   ['巾着', 'きんちゃく'],
@@ -179,8 +179,8 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     if (itemMetrics.itemRate == null || !Number.isFinite(itemMetrics.itemRate)) {
       return '—';
     }
-    const percent = itemMetrics.itemRate * 100;
-    return `${TWO_DECIMAL_FORMATTER.format(percent)}%`;
+    const formattedRate = formatRarityRate(itemMetrics.itemRate);
+    return formattedRate ? `${formattedRate}%` : '—';
   }, [itemMetrics.itemRate]);
   const orderPriceLabel = parsedPrice != null ? `${ONE_DECIMAL_FORMATTER.format(parsedPrice)}円` : '—';
   const revenuePerDrawLabel = revenuePerDraw != null ? `${ONE_DECIMAL_FORMATTER.format(revenuePerDraw)}円` : '—';
