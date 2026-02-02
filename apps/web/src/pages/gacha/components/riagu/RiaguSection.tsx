@@ -77,19 +77,6 @@ function resolveProfitStatus(percent: number | null): ProfitStatus {
   return 'even';
 }
 
-function formatProfitStatus(status: ProfitStatus): string {
-  if (status === 'profit') {
-    return '黒字';
-  }
-  if (status === 'loss') {
-    return '赤字';
-  }
-  if (status === 'even') {
-    return '利益なし';
-  }
-  return '算出不可';
-}
-
 function formatMarginPercent(value: number | null): string {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return '算出不可';
@@ -489,9 +476,6 @@ export function RiaguSection(): JSX.Element {
                         <h3 className="riagu-summary-card__title text-sm font-semibold text-surface-foreground">
                           リアグ収支サマリー
                         </h3>
-                        <span className="riagu-summary-card__gacha chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
-                          {activeGachaLabel || '選択中ガチャ'}
-                        </span>
                       </div>
                       <button
                         type="button"
@@ -503,25 +487,7 @@ export function RiaguSection(): JSX.Element {
                         {isSummaryDetailsOpen ? '詳細を閉じる' : '詳細を表示'}
                       </button>
                     </header>
-                    <div className="riagu-summary-card__status-row mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span
-                        className={clsx(
-                          'riagu-summary-card__status chip h-5 px-2 py-0',
-                          resolveProfitToneClass(summaryMetrics.estimatedStatus)
-                        )}
-                      >
-                        推定: {formatProfitStatus(summaryMetrics.estimatedStatus)}
-                      </span>
-                      <span
-                        className={clsx(
-                          'riagu-summary-card__status chip h-5 px-2 py-0',
-                          resolveProfitToneClass(summaryMetrics.actualStatus)
-                        )}
-                      >
-                        実質: {formatProfitStatus(summaryMetrics.actualStatus)}
-                      </span>
-                    </div>
-                    <dl className="riagu-summary-card__metrics mt-3 grid grid-cols-2 gap-2 text-[11px] leading-snug text-muted-foreground">
+                    <dl className="riagu-summary-card__metrics mt-2 grid grid-cols-2 gap-2 text-[11px] leading-snug text-muted-foreground">
                       <div className="riagu-summary-card__metric space-y-1 rounded-xl border border-border/40 bg-panel/40 p-2">
                         <dt className="riagu-summary-card__metric-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
                           推定利益率
@@ -600,12 +566,13 @@ export function RiaguSection(): JSX.Element {
                             排出率不明アイテム: {formatQuantity(summaryMetrics.missingRateCount)}件
                           </div>
                         </div>
+                        <div className="riagu-summary-card__separator h-px bg-border/60" />
+                        <div className="riagu-summary-card__notes space-y-1">
+                          <p className="riagu-summary-card__note">※推定利益率は現在の排出率・単価設定に基づく期待値です。</p>
+                          <p className="riagu-summary-card__note">※実質利益率は履歴の獲得ptを還元率で円換算して算出しています。</p>
+                          <p className="riagu-summary-card__note">※税金・送料・手数料・外部コストは含みません。</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="riagu-summary-card__notes mt-3 space-y-1 text-[11px] text-muted-foreground">
-                      <p className="riagu-summary-card__note">※推定利益率は現在の排出率・単価設定に基づく期待値です。</p>
-                      <p className="riagu-summary-card__note">※実質利益率は履歴の獲得ptを還元率で円換算して算出しています。</p>
-                      <p className="riagu-summary-card__note">※税金・送料・手数料・外部コストは含みません。</p>
                     </div>
                   </article>
                   {activeEntries.map((entry) => {
