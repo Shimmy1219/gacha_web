@@ -11,6 +11,13 @@ import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDelet
 import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
 import { useModal, RiaguConfigDialog } from '../../../../modals';
 import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../../../logic/gacha';
+import {
+  calculateExpectedCostPerDraw,
+  calculateProfitAmount,
+  calculateRevenuePerDraw,
+  evaluateProfitMargin,
+  type RiaguProfitStatus
+} from '../../../../logic/riaguProfit';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
 import { useStoreValue } from '@domain/stores';
@@ -34,18 +41,17 @@ interface RiaguDisplayEntry {
 }
 
 type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
-type ProfitStatus = 'profit' | 'loss' | 'even' | 'unavailable';
 
 interface RiaguSummaryMetrics {
   estimatedMarginPercent: number | null;
   estimatedRevenuePerDraw: number | null;
   estimatedExpectedCostPerDraw: number | null;
   estimatedProfitPerDraw: number | null;
-  estimatedStatus: ProfitStatus;
+  estimatedStatus: RiaguProfitStatus;
   actualMarginPercent: number | null;
   actualRevenueAmount: number | null;
   actualProfitAmount: number | null;
-  actualStatus: ProfitStatus;
+  actualStatus: RiaguProfitStatus;
   totalEarnedPt: number;
   totalOrderCost: number;
   missingCurrencyHistoryCount: number;
@@ -64,19 +70,6 @@ const numberFormatter = new Intl.NumberFormat('ja-JP');
 
 const RIAGU_PANEL_CLOSE_DELAY_MS = 300;
 
-function resolveProfitStatus(percent: number | null): ProfitStatus {
-  if (percent == null || Number.isNaN(percent) || !Number.isFinite(percent)) {
-    return 'unavailable';
-  }
-  if (percent > 0) {
-    return 'profit';
-  }
-  if (percent < 0) {
-    return 'loss';
-  }
-  return 'even';
-}
-
 function formatMarginPercent(value: number | null): string {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return '算出不可';
@@ -84,11 +77,19 @@ function formatMarginPercent(value: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
-function formatCurrencyAmount(value: number | null | undefined, fallback = '算出不可'): string {
+function formatCurrencyAmount(
+  value: number | null | undefined,
+  fallback = '算出不可',
+  maximumFractionDigits = 0
+): string {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return fallback;
   }
-  return currencyFormatter.format(value);
+  return new Intl.NumberFormat('ja-JP', {
+    style: 'currency',
+    currency: 'JPY',
+    maximumFractionDigits
+  }).format(value);
 }
 
 function formatShareRate(value: number | null | undefined): string {
@@ -105,12 +106,7 @@ function formatPoints(value: number): string {
   return `${numberFormatter.format(value)}pt`;
 }
 
-function roundMarginPercent(value: number): number {
-  const rounded = Math.round(value * 1000) / 10;
-  return Object.is(rounded, -0) ? 0 : rounded;
-}
-
-function resolveProfitToneClass(status: ProfitStatus): string {
+function resolveProfitToneClass(status: RiaguProfitStatus): string {
   if (status === 'profit') {
     return 'text-emerald-400';
   }
@@ -349,7 +345,7 @@ export function RiaguSection(): JSX.Element {
     let outOfStockCount = 0;
     let missingRateCount = 0;
     let estimatedExpectedCostPerDrawRaw = 0;
-    let hasEstimatedCostTerm = false;
+    let estimatedTermCount = 0;
 
     activeEntries.forEach((entry) => {
       const hasUnitCost = typeof entry.unitCost === 'number' && Number.isFinite(entry.unitCost);
@@ -374,25 +370,25 @@ export function RiaguSection(): JSX.Element {
         return;
       }
 
-      const unitCost = entry.unitCost as number;
-      estimatedExpectedCostPerDrawRaw += itemMetrics.itemRate * unitCost;
-      hasEstimatedCostTerm = true;
+      const expectedCostTerm = calculateExpectedCostPerDraw({
+        itemRate: itemMetrics.itemRate,
+        unitCost: entry.unitCost,
+        isOutOfStock: itemMetrics.remainingStock === 0
+      });
+      if (expectedCostTerm == null) {
+        return;
+      }
+      estimatedExpectedCostPerDrawRaw += expectedCostTerm;
+      estimatedTermCount += 1;
     });
 
-    const estimatedRevenuePerDraw =
-      perPullPrice != null && perPullPrice > 0 && gachaOwnerShareRate > 0 ? perPullPrice * gachaOwnerShareRate : null;
-    const estimatedExpectedCostPerDraw = hasEstimatedCostTerm ? estimatedExpectedCostPerDrawRaw : null;
-    const estimatedProfitPerDraw =
-      estimatedRevenuePerDraw != null && estimatedExpectedCostPerDraw != null
-        ? estimatedRevenuePerDraw - estimatedExpectedCostPerDraw
-        : null;
-    let estimatedMarginPercent: number | null = null;
-    if (estimatedRevenuePerDraw != null && estimatedExpectedCostPerDraw != null && estimatedRevenuePerDraw > 0) {
-      const margin = (estimatedRevenuePerDraw - estimatedExpectedCostPerDraw) / estimatedRevenuePerDraw;
-      if (Number.isFinite(margin)) {
-        estimatedMarginPercent = roundMarginPercent(margin);
-      }
-    }
+    const estimatedRevenuePerDraw = calculateRevenuePerDraw(perPullPrice, gachaOwnerShareRate);
+    const estimatedExpectedCostPerDraw = estimatedTermCount > 0 ? estimatedExpectedCostPerDrawRaw : null;
+    const estimatedProfitPerDraw = calculateProfitAmount(estimatedRevenuePerDraw, estimatedExpectedCostPerDraw);
+    const estimatedEvaluation = evaluateProfitMargin({
+      revenueAmount: estimatedRevenuePerDraw,
+      costAmount: estimatedExpectedCostPerDraw
+    });
 
     let totalEarnedPt = 0;
     let missingCurrencyHistoryCount = 0;
@@ -405,26 +401,23 @@ export function RiaguSection(): JSX.Element {
       }
     });
 
-    const actualRevenueAmount =
-      Number.isFinite(gachaOwnerShareRate) && gachaOwnerShareRate > 0 ? totalEarnedPt * gachaOwnerShareRate : null;
-    const actualProfitAmount = actualRevenueAmount != null ? actualRevenueAmount - totalOrderCost : null;
-    const actualMarginPercent =
-      actualRevenueAmount != null && actualProfitAmount != null && actualRevenueAmount > 0
-        ? roundMarginPercent(actualProfitAmount / actualRevenueAmount)
-        : actualRevenueAmount === 0 && totalOrderCost === 0
-          ? 0
-          : null;
+    const actualRevenueAmount = calculateRevenuePerDraw(totalEarnedPt, gachaOwnerShareRate);
+    const actualProfitAmount = calculateProfitAmount(actualRevenueAmount, totalOrderCost);
+    const actualEvaluation = evaluateProfitMargin({
+      revenueAmount: actualRevenueAmount,
+      costAmount: totalOrderCost
+    });
 
     return {
-      estimatedMarginPercent,
+      estimatedMarginPercent: estimatedEvaluation.percent,
       estimatedRevenuePerDraw,
       estimatedExpectedCostPerDraw,
       estimatedProfitPerDraw,
-      estimatedStatus: resolveProfitStatus(estimatedMarginPercent),
-      actualMarginPercent,
+      estimatedStatus: estimatedEvaluation.status,
+      actualMarginPercent: actualEvaluation.percent,
       actualRevenueAmount,
       actualProfitAmount,
-      actualStatus: resolveProfitStatus(actualMarginPercent),
+      actualStatus: actualEvaluation.status,
       totalEarnedPt,
       totalOrderCost,
       missingCurrencyHistoryCount,
@@ -542,13 +535,21 @@ export function RiaguSection(): JSX.Element {
                     >
                       <div className="riagu-summary-card__details min-h-0 space-y-2 overflow-hidden rounded-xl border border-border/40 bg-panel/40 p-2 text-[11px] text-muted-foreground">
                         <div className="riagu-summary-card__detail-group grid gap-1">
-                          <div className="riagu-summary-card__detail-item">1回あたり還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw)}</div>
                           <div className="riagu-summary-card__detail-item">
-                            1回あたり期待原価(リアグ合算): {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw)}
+                            1回あたり還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
                           </div>
-                          <div className="riagu-summary-card__detail-item">1回あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw)}</div>
-                          <div className="riagu-summary-card__detail-item">実質売上(還元後): {formatCurrencyAmount(summaryMetrics.actualRevenueAmount)}</div>
-                          <div className="riagu-summary-card__detail-item">実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount)}</div>
+                          <div className="riagu-summary-card__detail-item">
+                            1回あたり期待原価(リアグ合算): {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                          </div>
+                          <div className="riagu-summary-card__detail-item">
+                            1回あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                          </div>
+                          <div className="riagu-summary-card__detail-item">
+                            実質売上(還元後): {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
+                          </div>
+                          <div className="riagu-summary-card__detail-item">
+                            実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount, '算出不可', 12)}
+                          </div>
                         </div>
                         <div className="riagu-summary-card__separator h-px bg-border/60" />
                         <div className="riagu-summary-card__detail-group grid gap-1">

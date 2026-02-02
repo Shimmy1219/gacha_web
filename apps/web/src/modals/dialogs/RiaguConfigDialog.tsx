@@ -5,6 +5,12 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../logic/gacha';
+import {
+  calculateExpectedCostPerDraw,
+  calculateProfitAmount,
+  calculateRevenuePerDraw,
+  evaluateProfitMargin
+} from '../../logic/riaguProfit';
 import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
 import { formatRarityRate } from '../../features/rarity/utils/rarityRate';
 import { REAL_GOODS_TYPE_SUGGESTIONS } from './riaguTypeSuggestions';
@@ -126,42 +132,26 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     return numeric < 0 ? null : numeric;
   }, [price]);
   const isOutOfStock = itemMetrics.remainingStock === 0;
-  const revenuePerDraw = useMemo(() => {
-    if (perPullPrice == null || perPullPrice <= 0 || gachaOwnerShareRate <= 0) {
-      return null;
-    }
-    const value = perPullPrice * gachaOwnerShareRate;
-    return Number.isFinite(value) && value > 0 ? value : null;
-  }, [gachaOwnerShareRate, perPullPrice]);
+  const revenuePerDraw = useMemo(
+    () => calculateRevenuePerDraw(perPullPrice, gachaOwnerShareRate),
+    [gachaOwnerShareRate, perPullPrice]
+  );
   const expectedCostPerDraw = useMemo(() => {
-    if (isOutOfStock) {
-      return null;
-    }
-    if (parsedPrice == null || itemMetrics.itemRate == null) {
-      return null;
-    }
-    const value = itemMetrics.itemRate * parsedPrice;
-    return Number.isFinite(value) ? value : null;
+    return calculateExpectedCostPerDraw({
+      itemRate: itemMetrics.itemRate,
+      unitCost: parsedPrice,
+      isOutOfStock
+    });
   }, [isOutOfStock, itemMetrics.itemRate, parsedPrice]);
-  const profitEvaluation = useMemo(() => {
-    if (isOutOfStock) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: true };
-    }
-
-    if (revenuePerDraw == null || expectedCostPerDraw == null) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const margin = (revenuePerDraw - expectedCostPerDraw) / revenuePerDraw;
-    if (!Number.isFinite(margin)) {
-      return { status: 'unavailable' as const, percent: null, isOutOfStock: false };
-    }
-
-    const rawPercent = Math.round(margin * 1000) / 10;
-    const percent = Object.is(rawPercent, -0) ? 0 : rawPercent;
-    const status = percent < 0 ? 'loss' : percent > 0 ? 'profit' : 'even';
-    return { status, percent, isOutOfStock: false };
-  }, [expectedCostPerDraw, isOutOfStock, revenuePerDraw]);
+  const profitEvaluation = useMemo(
+    () =>
+      evaluateProfitMargin({
+        revenueAmount: revenuePerDraw,
+        costAmount: expectedCostPerDraw,
+        isOutOfStock
+      }),
+    [expectedCostPerDraw, isOutOfStock, revenuePerDraw]
+  );
   const profitValueLabel =
     profitEvaluation.percent == null ? '算出不可' : `${profitEvaluation.percent.toFixed(1)}%`;
   const profitStatusLabel =
@@ -194,10 +184,12 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   const revenuePerDrawLabel = revenuePerDraw != null ? `${formatDecimal(revenuePerDraw, 12)}円` : '—';
   const expectedCostPerDrawLabel =
     expectedCostPerDraw != null ? `${formatDecimal(expectedCostPerDraw, 12)}円` : '—';
+  const profitPerDraw = useMemo(
+    () => calculateProfitAmount(revenuePerDraw, expectedCostPerDraw),
+    [expectedCostPerDraw, revenuePerDraw]
+  );
   const profitPerDrawLabel =
-    revenuePerDraw != null && expectedCostPerDraw != null
-      ? `${formatDecimal(revenuePerDraw - expectedCostPerDraw, 12)}円`
-      : '算出不可';
+    profitPerDraw != null ? `${formatDecimal(profitPerDraw, 12)}円` : '算出不可';
 
   useEffect(() => {
     const itemId = payload?.itemId;
