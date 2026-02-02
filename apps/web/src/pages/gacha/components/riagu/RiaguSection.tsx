@@ -330,9 +330,9 @@ export function RiaguSection(): JSX.Element {
                                         aria-label="リアグ当選者の表示を切り替える"
                                         onClick={handleToggle}
                                       >
-                                        <h3 className="riagu-card__title m-0 truncate text-base font-semibold text-surface-foreground">
+                                        <span className="riagu-card__title block truncate text-[20px] font-semibold text-surface-foreground">
                                           {entry.itemName}
-                                        </h3>
+                                        </span>
                                       </Disclosure.Button>
                                     </div>
                                   </div>
