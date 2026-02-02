@@ -6,6 +6,7 @@ import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../logic/gacha';
 import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
+import { REAL_GOODS_TYPE_SUGGESTIONS } from './riaguTypeSuggestions';
 
 export interface RiaguConfigDialogPayload {
   gachaId: string;
@@ -20,22 +21,31 @@ const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
 const ONE_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 1 });
 const TWO_DECIMAL_FORMATTER = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
-const REAL_GOODS_TYPE_SUGGESTIONS = [
-  {
-    label: '缶バッチ',
-    searchKeys: ['缶バッチ', '缶バッジ', 'かんばっち', 'かんばっじ']
-  },
-  {
-    label: 'アクリルキーホルダー',
-    searchKeys: ['アクリルキーホルダー', 'アクキー', 'あくりるきーほるだー', 'あくきー']
-  },
-  {
-    label: 'アクリルパネル',
-    searchKeys: ['アクリルパネル', 'あくりるぱねる']
-  }
+const KANJI_REPLACEMENTS: Array<[string, string]> = [
+  ['下敷き', 'したじき'],
+  ['巾着', 'きんちゃく'],
+  ['帽子', 'ぼうし'],
+  ['靴下', 'くつした'],
+  ['抱き枕', 'だきまくら'],
+  ['箸', 'はし'],
+  ['食器', 'しょっき'],
+  ['色紙', 'しきし'],
+  ['缶', 'かん']
 ];
 
-const normalizeSuggestionText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, '');
+const normalizeSuggestionText = (value: string) => {
+  const lowered = value.trim().toLowerCase();
+  const replaced = KANJI_REPLACEMENTS.reduce((accumulator, [target, replacement]) => {
+    if (!accumulator.includes(target)) {
+      return accumulator;
+    }
+    return accumulator.replaceAll(target, replacement);
+  }, lowered);
+  const kanaConverted = replaced.replace(/[\u30a1-\u30f6]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0x60)
+  );
+  return kanaConverted.replace(/[\s/／・]/g, '').replace(/[-‐‑–—]/g, '');
+};
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
   const {
@@ -61,9 +71,10 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     if (!normalizedTypeInput) {
       return REAL_GOODS_TYPE_SUGGESTIONS;
     }
-    return REAL_GOODS_TYPE_SUGGESTIONS.filter((suggestion) =>
-      suggestion.searchKeys.some((key) => normalizeSuggestionText(key).includes(normalizedTypeInput))
-    );
+    return REAL_GOODS_TYPE_SUGGESTIONS.filter((suggestion) => {
+      const keys = [suggestion.label, ...(suggestion.aliases ?? [])];
+      return keys.some((key) => normalizeSuggestionText(key).includes(normalizedTypeInput));
+    });
   }, [normalizedTypeInput]);
   const gachaOwnerShareRate = useMemo(
     () => uiPreferencesStore.getGachaOwnerShareRatePreference() ?? DEFAULT_GACHA_OWNER_SHARE_RATE,
@@ -340,7 +351,8 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               <p className="text-xs font-semibold text-muted-foreground">候補</p>
               <div className="flex flex-wrap gap-2">
                 {typeSuggestions.map((suggestion) => {
-                  const isSelected = normalizedTypeInput === normalizeSuggestionText(suggestion.label);
+                  const normalizedKeys = [suggestion.label, ...(suggestion.aliases ?? [])].map(normalizeSuggestionText);
+                  const isSelected = normalizedKeys.includes(normalizedTypeInput);
                   return (
                     <button
                       key={suggestion.label}
