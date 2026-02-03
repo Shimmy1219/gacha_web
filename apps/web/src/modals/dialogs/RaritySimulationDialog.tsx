@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import { RarityLabel } from '../../components/RarityLabel';
 import {
   simulateRarityProbabilities,
   type RaritySimulationInput
@@ -64,7 +65,7 @@ export function RaritySimulationDialog({
       <ModalBody className="rarity-simulation-dialog__body space-y-5">
         <div className="rarity-simulation-dialog__overview rounded-2xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-muted-foreground">
           <p className="rarity-simulation-dialog__overview-text">
-            現在のレアリティ排出率を使って、N連で「1個以上出る確率」と「ちょうどM個出る確率」を表示します。
+            現在のレアリティ排出率を使って、連数ごとの「ちょうど指定個数出る確率」を表示します。
           </p>
         </div>
 
@@ -74,7 +75,7 @@ export function RaritySimulationDialog({
             htmlFor="rarity-simulation-draw-count-input"
           >
             <span className="rarity-simulation-dialog__control-label text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              N連
+              連数
             </span>
             <input
               id="rarity-simulation-draw-count-input"
@@ -93,7 +94,7 @@ export function RaritySimulationDialog({
             htmlFor="rarity-simulation-target-count-input"
           >
             <span className="rarity-simulation-dialog__control-label text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              M個
+              同時に出る個数
             </span>
             <input
               id="rarity-simulation-target-count-input"
@@ -118,9 +119,6 @@ export function RaritySimulationDialog({
                 <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--base px-4 py-3 text-right font-semibold">
                   単発排出率
                 </th>
-                <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--atleast px-4 py-3 text-right font-semibold">
-                  {drawCount}連で1個以上
-                </th>
                 <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--exact px-4 py-3 text-right font-semibold">
                   {drawCount}連で{targetCount}個
                 </th>
@@ -130,20 +128,14 @@ export function RaritySimulationDialog({
               {simulatedRows.map((row) => (
                 <tr key={row.id} className="rarity-simulation-dialog__table-row">
                   <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--label px-4 py-3 text-left text-surface-foreground">
-                    <div className="rarity-simulation-dialog__rarity-label-group inline-flex items-center gap-2">
-                      <span
-                        className="rarity-simulation-dialog__rarity-color-dot h-2.5 w-2.5 rounded-full border border-border/80"
-                        style={{ backgroundColor: row.color }}
-                        aria-hidden="true"
-                      />
-                      <span className="rarity-simulation-dialog__rarity-label-text font-medium">{row.label || row.id}</span>
-                    </div>
+                    <RarityLabel
+                      label={row.label || row.id}
+                      color={row.color}
+                      className="rarity-simulation-dialog__rarity-label-text font-medium"
+                    />
                   </td>
                   <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--base px-4 py-3 text-right text-muted-foreground">
                     {formatPercent(row.emitRate)}
-                  </td>
-                  <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--atleast px-4 py-3 text-right text-surface-foreground">
-                    {formatPercent(row.atLeastOneRate)}
                   </td>
                   <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--exact px-4 py-3 text-right text-surface-foreground">
                     {formatPercent(row.exactCountRate)}
@@ -154,7 +146,7 @@ export function RaritySimulationDialog({
                 <tr className="rarity-simulation-dialog__table-row rarity-simulation-dialog__table-row--empty">
                   <td
                     className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--empty px-4 py-6 text-center text-sm text-muted-foreground"
-                    colSpan={4}
+                    colSpan={3}
                   >
                     シミュレーション対象のレアリティがありません。
                   </td>
