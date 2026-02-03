@@ -7,8 +7,7 @@ export interface RaritySimulationInput {
 
 export interface SimulatedRarityProbability extends RaritySimulationInput {
   emitRate: number;
-  atLeastOneRate: number;
-  exactCountRate: number;
+  atLeastCountRate: number;
 }
 
 interface SimulateRarityProbabilitiesParams {
@@ -29,16 +28,6 @@ function clampProbability(value: number): number {
     return 0;
   }
   return Math.min(Math.max(value, 0), 1);
-}
-
-function calculateAtLeastOneRate(rate: number, drawCount: number): number {
-  if (drawCount <= 0 || rate <= 0) {
-    return 0;
-  }
-  if (rate >= 1) {
-    return 1;
-  }
-  return clampProbability(-Math.expm1(drawCount * Math.log1p(-rate)));
 }
 
 function calculateExactCountRate(rate: number, drawCount: number, targetCount: number): number {
@@ -66,6 +55,31 @@ function calculateExactCountRate(rate: number, drawCount: number, targetCount: n
   return clampProbability(probability);
 }
 
+function calculateAtLeastCountRate(rate: number, drawCount: number, targetCount: number): number {
+  if (targetCount <= 0) {
+    return 1;
+  }
+  if (targetCount > drawCount) {
+    return 0;
+  }
+  if (drawCount === 0) {
+    return 0;
+  }
+  if (rate <= 0) {
+    return 0;
+  }
+  if (rate >= 1) {
+    return 1;
+  }
+
+  let cumulative = 0;
+  for (let count = 0; count < targetCount; count += 1) {
+    cumulative += calculateExactCountRate(rate, drawCount, count);
+  }
+
+  return clampProbability(1 - cumulative);
+}
+
 export function simulateRarityProbabilities({
   rarities,
   drawCount,
@@ -79,8 +93,7 @@ export function simulateRarityProbabilities({
     return {
       ...rarity,
       emitRate: normalizedRate,
-      atLeastOneRate: calculateAtLeastOneRate(normalizedRate, normalizedDrawCount),
-      exactCountRate: calculateExactCountRate(normalizedRate, normalizedDrawCount, normalizedTargetCount)
+      atLeastCountRate: calculateAtLeastCountRate(normalizedRate, normalizedDrawCount, normalizedTargetCount)
     };
   });
 }

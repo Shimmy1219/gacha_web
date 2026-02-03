@@ -65,7 +65,7 @@ export function RaritySimulationDialog({
       <ModalBody className="rarity-simulation-dialog__body space-y-5">
         <div className="rarity-simulation-dialog__overview rounded-2xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-muted-foreground">
           <p className="rarity-simulation-dialog__overview-text">
-            現在のレアリティ排出率を使って、連数ごとの「ちょうど指定個数出る確率」を表示します。
+            現在のレアリティ排出率を使って、連数ごとの「指定個数以上出る確率」を表示します。
           </p>
         </div>
 
@@ -120,7 +120,7 @@ export function RaritySimulationDialog({
                   単発排出率
                 </th>
                 <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--exact px-4 py-3 text-right font-semibold">
-                  {drawCount}連で{targetCount}個
+                  {drawCount}連で{targetCount}個以上
                 </th>
               </tr>
             </thead>
@@ -138,7 +138,7 @@ export function RaritySimulationDialog({
                     {formatPercent(row.emitRate)}
                   </td>
                   <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--exact px-4 py-3 text-right text-surface-foreground">
-                    {formatPercent(row.exactCountRate)}
+                    {formatPercent(row.atLeastCountRate)}
                   </td>
                 </tr>
               ))}
