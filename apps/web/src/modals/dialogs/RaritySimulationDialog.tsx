@@ -120,17 +120,22 @@ export function RaritySimulationDialog({
           </div>
         </div>
 
-        <div className="rarity-simulation-dialog__table-wrapper overflow-x-auto rounded-2xl border border-border/60 bg-panel">
-          <table className="rarity-simulation-dialog__table w-full table-fixed border-separate border-spacing-0 text-sm">
-            <thead className="rarity-simulation-dialog__table-head bg-panel-contrast/90 text-xs text-muted-foreground">
+        <div className="rarity-simulation-dialog__table-wrapper overflow-hidden rounded-2xl border border-border/60 bg-panel">
+          <table className="rarity-simulation-dialog__table w-full table-fixed border-separate border-spacing-0 text-xs sm:text-sm">
+            <colgroup>
+              <col className="rarity-simulation-dialog__table-col rarity-simulation-dialog__table-col--label w-[30%]" />
+              <col className="rarity-simulation-dialog__table-col rarity-simulation-dialog__table-col--base w-[20%]" />
+              <col className="rarity-simulation-dialog__table-col rarity-simulation-dialog__table-col--exact w-[50%]" />
+            </colgroup>
+            <thead className="rarity-simulation-dialog__table-head bg-panel-contrast/90 text-[11px] text-muted-foreground sm:text-xs">
               <tr className="rarity-simulation-dialog__table-head-row">
                 <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--label px-3 py-2.5 text-left font-semibold">
                   レアリティ
                 </th>
-                <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--base px-3 py-2.5 text-right font-semibold">
+                <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--base px-2 py-2.5 text-center font-semibold">
                   単発排出率
                 </th>
-                <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--exact px-3 py-2.5 text-right font-semibold">
+                <th className="rarity-simulation-dialog__table-head-cell rarity-simulation-dialog__table-head-cell--exact px-2 py-2.5 text-right font-semibold whitespace-normal break-all">
                   {drawCount}連で{targetCount}個以上
                 </th>
               </tr>
@@ -145,10 +150,10 @@ export function RaritySimulationDialog({
                       className="rarity-simulation-dialog__rarity-label-text font-medium"
                     />
                   </td>
-                  <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--base px-3 py-2.5 text-right text-muted-foreground">
+                  <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--base px-2 py-2.5 text-center text-muted-foreground">
                     {formatPercent(row.emitRate)}
                   </td>
-                  <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--exact px-3 py-2.5 text-right text-surface-foreground">
+                  <td className="rarity-simulation-dialog__table-cell rarity-simulation-dialog__table-cell--exact px-2 py-2.5 text-right text-surface-foreground break-all leading-tight">
                     {formatPercent(row.atLeastCountRate)}
                   </td>
                 </tr>
