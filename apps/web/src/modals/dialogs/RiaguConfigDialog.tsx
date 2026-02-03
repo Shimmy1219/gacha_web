@@ -213,18 +213,8 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     if (parsedPrice < breakEvenUnitCost) {
       return { label: '適正価格', toneClass: 'text-emerald-400' };
     }
-    return { label: '赤字', toneClass: 'text-rose-400' };
+    return { label: '目安超過', toneClass: 'text-amber-300' };
   }, [breakEvenUnitCost, parsedPrice]);
-  const unitCostHeadroom = useMemo(() => {
-    if (breakEvenUnitCost == null || parsedPrice == null) {
-      return null;
-    }
-    const value = breakEvenUnitCost - parsedPrice;
-    return Number.isFinite(value) ? value : null;
-  }, [breakEvenUnitCost, parsedPrice]);
-  const unitCostHeadroomLabel = unitCostHeadroom != null ? `${formatDecimal(unitCostHeadroom, 12)}円` : '算出不可';
-  const unitCostHeadroomToneClass =
-    unitCostHeadroom == null ? 'text-muted-foreground' : unitCostHeadroom >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -309,7 +299,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             <input
               type="number"
               min={0}
-              step={10}
+              step="any"
               value={price}
               onChange={(event) => setPrice(event.target.value)}
               className={INPUT_CLASSNAME}
@@ -323,7 +313,6 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
             <span className={clsx('text-sm font-semibold', breakEvenStatus.toneClass)}>{breakEvenStatus.label}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">適正価格未満: 適正価格 / 適正価格以上: 赤字</span>
             {isOutOfStock ? (
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                 在庫切れ
@@ -364,7 +353,6 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               </div>
               <div className="my-1 h-px bg-border/60" />
               <div>損益分岐単価（リアグ全体排出率で配分）: {breakEvenUnitCostLabel}</div>
-              <div className={clsx(unitCostHeadroomToneClass)}>単価余力（損益分岐単価 - 発注価格）: {unitCostHeadroomLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>参考: ガチャ1回当たりの推定利益: {profitPerDrawLabel}</div>
             </div>
