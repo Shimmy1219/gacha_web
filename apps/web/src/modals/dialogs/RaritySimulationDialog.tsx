@@ -45,9 +45,17 @@ export function RaritySimulationDialog({
   const [targetCount, setTargetCount] = useState(() =>
     sanitizeTargetCount(payload?.defaultTargetCount ?? DEFAULT_TARGET_COUNT, drawCount)
   );
+  const [drawCountInput, setDrawCountInput] = useState(() => String(drawCount));
+  const [targetCountInput, setTargetCountInput] = useState(() => String(targetCount));
 
   useEffect(() => {
-    setTargetCount((current) => sanitizeTargetCount(current, drawCount));
+    setTargetCount((current) => {
+      const clamped = sanitizeTargetCount(current, drawCount);
+      if (clamped !== current) {
+        setTargetCountInput(String(clamped));
+      }
+      return clamped;
+    });
   }, [drawCount]);
 
   const simulatedRows = useMemo(
@@ -84,8 +92,16 @@ export function RaritySimulationDialog({
               min={1}
               max={MAX_DRAW_COUNT}
               step={1}
-              value={drawCount}
-              onChange={(event) => setDrawCount(sanitizeDrawCount(Number(event.target.value)))}
+              value={drawCountInput}
+              onChange={(event) => setDrawCountInput(event.target.value)}
+              onBlur={() => {
+                const normalizedDrawCount = sanitizeDrawCount(Number(drawCountInput));
+                const normalizedTargetCount = sanitizeTargetCount(targetCount, normalizedDrawCount);
+                setDrawCount(normalizedDrawCount);
+                setTargetCount(normalizedTargetCount);
+                setDrawCountInput(String(normalizedDrawCount));
+                setTargetCountInput(String(normalizedTargetCount));
+              }}
             />
           </label>
 
@@ -103,8 +119,13 @@ export function RaritySimulationDialog({
               min={0}
               max={drawCount}
               step={1}
-              value={targetCount}
-              onChange={(event) => setTargetCount(sanitizeTargetCount(Number(event.target.value), drawCount))}
+              value={targetCountInput}
+              onChange={(event) => setTargetCountInput(event.target.value)}
+              onBlur={() => {
+                const normalizedTargetCount = sanitizeTargetCount(Number(targetCountInput), drawCount);
+                setTargetCount(normalizedTargetCount);
+                setTargetCountInput(String(normalizedTargetCount));
+              }}
             />
           </label>
         </div>
