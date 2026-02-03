@@ -72,6 +72,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   const ptSettingsState = useStoreValue(ptControlsStore);
   const catalogState = useStoreValue(catalogStore);
   const rarityState = useStoreValue(rarityStore);
+  const riaguState = useStoreValue(riaguStore);
   const userInventoriesState = useStoreValue(userInventoriesStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const [price, setPrice] = useState<string>(
@@ -142,19 +143,39 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       isOutOfStock
     });
   }, [isOutOfStock, itemMetrics.itemRate, parsedPrice]);
-  const costContributionPercent = useMemo(() => {
-    if (isOutOfStock || revenuePerDraw == null || expectedCostPerDraw == null || revenuePerDraw <= 0) {
-      return null;
+  const riaguRateSummary = useMemo(() => {
+    const gachaId = payload?.gachaId;
+    const itemId = payload?.itemId;
+    if (!gachaId || !itemId) {
+      return { selectedItemRate: null, totalRiaguRate: null };
     }
-    const value = (expectedCostPerDraw / revenuePerDraw) * 100;
-    return Number.isFinite(value) ? value : null;
-  }, [expectedCostPerDraw, isOutOfStock, revenuePerDraw]);
-  const costContributionLabel =
-    costContributionPercent != null ? `${formatDecimal(costContributionPercent, 10)}%` : '算出不可';
-  const costContributionToneClass =
-    costContributionPercent == null ? 'text-muted-foreground' : 'text-amber-300';
-  const costImpactLabel =
-    costContributionPercent != null ? `全体利益率への影響: -${formatDecimal(costContributionPercent, 10)}pt` : '算出不可';
+    const inventoryCounts = buildItemInventoryCountMap(userInventoriesState?.byItemId);
+    const { itemsById } = buildGachaPools({
+      catalogState,
+      rarityState,
+      inventoryCountsByItemId: inventoryCounts,
+      includeOutOfStockItems: true
+    });
+    const selectedItem = itemsById.get(itemId);
+    const selectedItemRate =
+      typeof selectedItem?.itemRate === 'number' && Number.isFinite(selectedItem.itemRate) ? selectedItem.itemRate : null;
+    const cards = Object.values(riaguState?.riaguCards ?? {});
+    let totalRiaguRate = 0;
+    cards.forEach((card) => {
+      if (card?.gachaId !== gachaId) {
+        return;
+      }
+      const item = itemsById.get(card.itemId);
+      if (!item || typeof item.itemRate !== 'number' || !Number.isFinite(item.itemRate) || item.itemRate <= 0) {
+        return;
+      }
+      totalRiaguRate += item.itemRate;
+    });
+    return {
+      selectedItemRate,
+      totalRiaguRate: totalRiaguRate > 0 ? totalRiaguRate : null
+    };
+  }, [catalogState, payload?.gachaId, payload?.itemId, rarityState, riaguState?.riaguCards, userInventoriesState?.byItemId]);
   const perPullLabel = perPullPrice != null ? `${ONE_DECIMAL_FORMATTER.format(perPullPrice)}pt` : '—';
   const shareRateLabel =
     gachaOwnerShareRate != null && Number.isFinite(gachaOwnerShareRate)
@@ -178,13 +199,22 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   const profitPerDrawLabel =
     profitPerDraw != null ? `${formatDecimal(profitPerDraw, 12)}円` : '算出不可';
   const breakEvenUnitCost = useMemo(() => {
-    if (isOutOfStock || revenuePerDraw == null || itemMetrics.itemRate == null || itemMetrics.itemRate <= 0) {
+    if (isOutOfStock || revenuePerDraw == null || riaguRateSummary.totalRiaguRate == null || riaguRateSummary.totalRiaguRate <= 0) {
       return null;
     }
-    const value = revenuePerDraw / itemMetrics.itemRate;
+    const value = revenuePerDraw / riaguRateSummary.totalRiaguRate;
     return Number.isFinite(value) ? value : null;
-  }, [isOutOfStock, itemMetrics.itemRate, revenuePerDraw]);
+  }, [isOutOfStock, revenuePerDraw, riaguRateSummary.totalRiaguRate]);
   const breakEvenUnitCostLabel = breakEvenUnitCost != null ? `${formatDecimal(breakEvenUnitCost, 12)}円` : '算出不可';
+  const breakEvenStatus = useMemo(() => {
+    if (parsedPrice == null || breakEvenUnitCost == null) {
+      return { label: '算出不可', toneClass: 'text-muted-foreground' };
+    }
+    if (parsedPrice < breakEvenUnitCost) {
+      return { label: '適正価格', toneClass: 'text-emerald-400' };
+    }
+    return { label: '赤字', toneClass: 'text-rose-400' };
+  }, [breakEvenUnitCost, parsedPrice]);
   const unitCostHeadroom = useMemo(() => {
     if (breakEvenUnitCost == null || parsedPrice == null) {
       return null;
@@ -289,11 +319,11 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
         </div>
         <div className="mt-4 rounded-xl border border-border/60 bg-panel/50 p-3 text-xs">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">原価寄与率</span>
-            <span className={clsx('text-sm font-semibold', costContributionToneClass)}>{costContributionLabel}</span>
+            <span className="text-xs font-semibold text-muted-foreground">適正価格判定</span>
+            <span className={clsx('text-sm font-semibold', breakEvenStatus.toneClass)}>{breakEvenStatus.label}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={clsx('text-xs font-semibold', costContributionToneClass)}>{costImpactLabel}</span>
+            <span className="text-xs font-semibold text-muted-foreground">適正価格未満: 適正価格 / 適正価格以上: 赤字</span>
             {isOutOfStock ? (
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                 在庫切れ
@@ -327,9 +357,13 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               <div>発注価格: {orderPriceLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
-              <div>原価寄与率: ガチャ1回当たりの期待原価 / ガチャ1回当たりの還元額: {costContributionLabel}</div>
+              <div>
+                リアグ全体排出率に対する対象アイテム排出率: {riaguRateSummary.selectedItemRate != null && riaguRateSummary.totalRiaguRate != null
+                  ? `${formatDecimal((riaguRateSummary.selectedItemRate / riaguRateSummary.totalRiaguRate) * 100, 10)}%`
+                  : '算出不可'}
+              </div>
               <div className="my-1 h-px bg-border/60" />
-              <div>損益分岐単価: {breakEvenUnitCostLabel}</div>
+              <div>損益分岐単価（リアグ全体排出率で配分）: {breakEvenUnitCostLabel}</div>
               <div className={clsx(unitCostHeadroomToneClass)}>単価余力（損益分岐単価 - 発注価格）: {unitCostHeadroomLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>参考: ガチャ1回当たりの推定利益: {profitPerDrawLabel}</div>
