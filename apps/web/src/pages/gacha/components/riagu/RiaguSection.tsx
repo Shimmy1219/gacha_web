@@ -574,13 +574,13 @@ export function RiaguSection(): JSX.Element {
                             配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            ガチャ1回当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
+                            ガチャ1連当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            ガチャ1回あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                            ガチャ1連あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            ガチャ1回あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                            ガチャ1連あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
                             還元後売り上げ: {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
