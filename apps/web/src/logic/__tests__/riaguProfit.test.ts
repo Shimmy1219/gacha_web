@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  calculateInverseRateWeightedBreakEven,
   calculateExpectedCostPerDraw,
   calculateProfitAmount,
   calculateRevenuePerDraw,
@@ -59,5 +60,15 @@ describe('riaguProfit', () => {
   it('calculates profit amount when both values are available', () => {
     expect(calculateProfitAmount(12, 7)).toBe(5);
     expect(calculateProfitAmount(null, 7)).toBeNull();
+  });
+
+  it('calculates inverse-rate weighted break-even unit cost', () => {
+    const result = calculateInverseRateWeightedBreakEven({
+      revenuePerDraw: 1.5,
+      selectedItemRate: 0.005,
+      allRiaguItemRates: [0.005, 0.005, 0.01]
+    });
+    expect(result.weightShare).toBeCloseTo(0.4, 12);
+    expect(result.breakEvenUnitCost).toBeCloseTo(120, 12);
   });
 });

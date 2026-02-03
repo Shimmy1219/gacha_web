@@ -6,6 +6,7 @@ import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../logic/gacha';
 import {
+  calculateInverseRateWeightedBreakEven,
   calculateExpectedCostPerDraw,
   calculateProfitAmount,
   calculateRevenuePerDraw
@@ -147,7 +148,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     const gachaId = payload?.gachaId;
     const itemId = payload?.itemId;
     if (!gachaId || !itemId) {
-      return { selectedItemRate: null, totalRiaguRate: null };
+      return { selectedItemRate: null, riaguItemRates: [] as number[] };
     }
     const inventoryCounts = buildItemInventoryCountMap(userInventoriesState?.byItemId);
     const { itemsById } = buildGachaPools({
@@ -160,7 +161,7 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     const selectedItemRate =
       typeof selectedItem?.itemRate === 'number' && Number.isFinite(selectedItem.itemRate) ? selectedItem.itemRate : null;
     const cards = Object.values(riaguState?.riaguCards ?? {});
-    let totalRiaguRate = 0;
+    const riaguItemRates: number[] = [];
     cards.forEach((card) => {
       if (card?.gachaId !== gachaId) {
         return;
@@ -169,11 +170,11 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
       if (!item || typeof item.itemRate !== 'number' || !Number.isFinite(item.itemRate) || item.itemRate <= 0) {
         return;
       }
-      totalRiaguRate += item.itemRate;
+      riaguItemRates.push(item.itemRate);
     });
     return {
       selectedItemRate,
-      totalRiaguRate: totalRiaguRate > 0 ? totalRiaguRate : null
+      riaguItemRates
     };
   }, [catalogState, payload?.gachaId, payload?.itemId, rarityState, riaguState?.riaguCards, userInventoriesState?.byItemId]);
   const perPullLabel = perPullPrice != null ? `${ONE_DECIMAL_FORMATTER.format(perPullPrice)}pt` : '—';
@@ -198,13 +199,17 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
   );
   const profitPerDrawLabel =
     profitPerDraw != null ? `${formatDecimal(profitPerDraw, 12)}円` : '算出不可';
-  const breakEvenUnitCost = useMemo(() => {
-    if (isOutOfStock || revenuePerDraw == null || riaguRateSummary.totalRiaguRate == null || riaguRateSummary.totalRiaguRate <= 0) {
-      return null;
+  const breakEvenComputation = useMemo(() => {
+    if (isOutOfStock) {
+      return { breakEvenUnitCost: null, weightShare: null };
     }
-    const value = revenuePerDraw / riaguRateSummary.totalRiaguRate;
-    return Number.isFinite(value) ? value : null;
-  }, [isOutOfStock, revenuePerDraw, riaguRateSummary.totalRiaguRate]);
+    return calculateInverseRateWeightedBreakEven({
+      revenuePerDraw,
+      selectedItemRate: riaguRateSummary.selectedItemRate,
+      allRiaguItemRates: riaguRateSummary.riaguItemRates
+    });
+  }, [isOutOfStock, revenuePerDraw, riaguRateSummary.riaguItemRates, riaguRateSummary.selectedItemRate]);
+  const breakEvenUnitCost = breakEvenComputation.breakEvenUnitCost;
   const breakEvenUnitCostLabel = breakEvenUnitCost != null ? `${formatDecimal(breakEvenUnitCost, 12)}円` : '算出不可';
   const breakEvenStatus = useMemo(() => {
     if (parsedPrice == null || breakEvenUnitCost == null) {
@@ -347,12 +352,12 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
               <div className="my-1 h-px bg-border/60" />
               <div>ガチャ1回当たりの期待原価: {expectedCostPerDrawLabel}</div>
               <div>
-                リアグ全体排出率に対する対象アイテム排出率: {riaguRateSummary.selectedItemRate != null && riaguRateSummary.totalRiaguRate != null
-                  ? `${formatDecimal((riaguRateSummary.selectedItemRate / riaguRateSummary.totalRiaguRate) * 100, 10)}%`
+                逆数重み配分率（排出率ベース）: {breakEvenComputation.weightShare != null
+                  ? `${formatDecimal(breakEvenComputation.weightShare * 100, 10)}%`
                   : '算出不可'}
               </div>
               <div className="my-1 h-px bg-border/60" />
-              <div>損益分岐単価（リアグ全体排出率で配分）: {breakEvenUnitCostLabel}</div>
+              <div>損益分岐単価（逆数重み配分）: {breakEvenUnitCostLabel}</div>
               <div className="my-1 h-px bg-border/60" />
               <div>参考: ガチャ1回当たりの推定利益: {profitPerDrawLabel}</div>
             </div>
