@@ -786,6 +786,23 @@ export function PtControlsPanel({
                     })
                   }
                   fallbackToFirstOption={false}
+                  classNames={{
+                    root: 'pt-controls-panel__guarantee-target-select relative',
+                    button:
+                      'pt-controls-panel__guarantee-target-button inline-flex min-w-[8rem] items-center justify-between gap-2 rounded-xl border border-border/60 bg-panel-contrast px-3 py-2 text-xs font-semibold text-surface-foreground transition hover:bg-panel-contrast/90',
+                    buttonOpen: 'border-accent text-accent',
+                    buttonClosed: 'hover:border-accent/70',
+                    icon: 'pt-controls-panel__guarantee-target-icon h-4 w-4 transition-transform',
+                    iconOpen: 'rotate-180',
+                    menu:
+                      'pt-controls-panel__guarantee-target-options absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 text-xs shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+                    option:
+                      'pt-controls-panel__guarantee-target-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition',
+                    optionActive: 'bg-accent/10 text-surface-foreground',
+                    optionInactive: 'text-muted-foreground hover:bg-panel-muted/80',
+                    optionLabel: 'pt-controls-panel__guarantee-target-option-label flex-1 text-left',
+                    checkIcon: 'pt-controls-panel__guarantee-target-check h-4 w-4 transition text-accent'
+                  }}
                 />
                 <span className="text-xs leading-none text-muted-foreground">を</span>
                 <InlineNumberField
