@@ -571,16 +571,19 @@ export function RiaguSection(): JSX.Element {
                       <div className="riagu-summary-card__details min-h-0 space-y-2 overflow-hidden rounded-xl border border-border/40 bg-panel/40 p-2 text-[11px] text-muted-foreground">
                         <div className="riagu-summary-card__detail-group grid gap-1">
                           <div className="riagu-summary-card__detail-item">
-                            1回あたり還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
+                            配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            1回あたり期待原価(リアグ合算): {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                            ガチャ1回当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            1回あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                            ガチャ1回あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
-                            実質売上(還元後): {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
+                            ガチャ1回あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                          </div>
+                          <div className="riagu-summary-card__detail-item">
+                            還元後売り上げ: {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
                           </div>
                           <div className="riagu-summary-card__detail-item">
                             実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount, '算出不可', 12)}
@@ -588,7 +591,6 @@ export function RiaguSection(): JSX.Element {
                         </div>
                         <div className="riagu-summary-card__separator h-px bg-border/60" />
                         <div className="riagu-summary-card__detail-group grid gap-1">
-                          <div className="riagu-summary-card__detail-item">配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}</div>
                           <div className="riagu-summary-card__detail-item">
                             pt未記録履歴: {formatQuantity(summaryMetrics.missingCurrencyHistoryCount)}件
                           </div>
