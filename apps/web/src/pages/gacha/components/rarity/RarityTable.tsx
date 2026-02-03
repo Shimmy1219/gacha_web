@@ -212,14 +212,23 @@ export function RarityTable({
           })}
           <tr className="rarity-section__add-row">
             <td className="rarity-section__cell px-1 py-3" colSpan={4}>
-              <button
-                type="button"
-                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={onAdd}
-                disabled={!onAdd}
-              >
-                追加
-              </button>
+              <div className="rarity-section__add-actions flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={onAdd}
+                  disabled={!onAdd}
+                >
+                  追加
+                </button>
+                <button
+                  type="button"
+                  className="rarity-section__simulation-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled
+                >
+                  実質排出率のシミュレーション
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
