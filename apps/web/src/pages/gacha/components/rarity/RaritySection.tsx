@@ -15,6 +15,7 @@ import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDelet
 import { PtControlsPanel } from './PtControlsPanel';
 import { RarityInUseDialog } from '../../../../modals/dialogs/RarityInUseDialog';
 import { RarityRateErrorDialog } from '../../../../modals/dialogs/RarityRateErrorDialog';
+import { RaritySimulationDialog } from '../../../../modals/dialogs/RaritySimulationDialog';
 import { formatRarityRate } from '../../../../features/rarity/utils/rarityRate';
 import { getAutoAdjustRarityId, sortRarityRows, type RarityRateRow } from '../../../../logic/rarityTable';
 import {
@@ -226,6 +227,29 @@ export function RaritySection(): JSX.Element {
     }
   }, [activeGachaId, rarityRows, rarityStore]);
 
+  const handleOpenSimulation = useCallback(() => {
+    if (!activeGachaId) {
+      return;
+    }
+
+    push(RaritySimulationDialog, {
+      id: `rarity-simulation-${activeGachaId}`,
+      title: '実質排出率のシミュレーション',
+      description: '現在の排出率から、指定連数での実質排出率をシミュレートします。',
+      size: 'md',
+      payload: {
+        rarities: sortedRarityRows.map((rarity) => ({
+          id: rarity.id,
+          label: rarity.label,
+          color: rarity.color,
+          emitRate: rarity.emitRate
+        })),
+        defaultDrawCount: 10,
+        defaultTargetCount: 1
+      }
+    });
+  }, [activeGachaId, push, sortedRarityRows]);
+
   const { emitRateInputs, handleEmitRateInputChange, handleEmitRateInputCommit } =
     useRarityTableController({
       rows: rarityRows,
@@ -365,6 +389,7 @@ export function RaritySection(): JSX.Element {
               onEmitRateCommit={handleEmitRateInputCommit}
               onDelete={handleDeleteRarity}
               onAdd={handleAddRarity}
+              onSimulation={handleOpenSimulation}
             />
           ) : null}
         </div>
