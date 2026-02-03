@@ -73,11 +73,11 @@ export function RaritySimulationDialog({
       <ModalBody className="rarity-simulation-dialog__body space-y-5">
         <div className="rarity-simulation-dialog__overview rounded-2xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-muted-foreground">
           <p className="rarity-simulation-dialog__overview-text">
-            現在のレアリティ排出率を使って、連数ごとの「指定個数以上出る確率」を表示します。
+            現在の排出率から、指定連数での実質排出率をシミュレートします。
           </p>
         </div>
 
-        <div className="rarity-simulation-dialog__controls grid gap-3 md:grid-cols-2">
+        <div className="rarity-simulation-dialog__controls flex flex-col gap-3">
           <label
             className="rarity-simulation-dialog__control rarity-simulation-dialog__control--draw flex flex-col gap-2 rounded-2xl border border-border/60 bg-panel-contrast px-4 py-3"
             htmlFor="rarity-simulation-draw-count-input"
@@ -87,7 +87,7 @@ export function RaritySimulationDialog({
             </span>
             <input
               id="rarity-simulation-draw-count-input"
-              className="rarity-simulation-dialog__control-input w-full rounded-xl border border-border/70 bg-panel px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+              className="rarity-simulation-dialog__control-input w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30"
               type="number"
               min={1}
               max={MAX_DRAW_COUNT}
@@ -114,7 +114,7 @@ export function RaritySimulationDialog({
             </span>
             <input
               id="rarity-simulation-target-count-input"
-              className="rarity-simulation-dialog__control-input w-full rounded-xl border border-border/70 bg-panel px-3 py-2 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+              className="rarity-simulation-dialog__control-input w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30"
               type="number"
               min={0}
               max={drawCount}
