@@ -471,7 +471,6 @@ export function PtControlsPanel({
 
     const comparable = cloneSettingWithoutUpdatedAt(settings);
     const serialized = comparable ? JSON.stringify(comparable) : '';
-    const isEcho = lastEmittedRef.current === serialized;
 
     const nextPerPull = settings?.perPull?.price != null ? String(settings.perPull.price) : '';
     setPerPull((previous) => (previous === nextPerPull ? previous : nextPerPull));
@@ -480,9 +479,6 @@ export function PtControlsPanel({
     setComplete((previous) => (previous === nextComplete ? previous : nextComplete));
 
     setBundles((previous) => {
-      if (isEcho) {
-        return previous;
-      }
       if (!settings?.bundles) {
         return [];
       }
@@ -515,7 +511,7 @@ export function PtControlsPanel({
         })
       : [];
     setGuarantees((previous) =>
-      isEcho || areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
+      areGuaranteeRowsEqual(previous, nextGuarantees) ? previous : nextGuarantees
     );
     if (lastEmittedRef.current !== serialized) {
       lastEmittedRef.current = serialized;
