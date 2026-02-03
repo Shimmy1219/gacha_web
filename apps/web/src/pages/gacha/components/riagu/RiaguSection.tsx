@@ -509,7 +509,7 @@ export function RiaguSection(): JSX.Element {
                         type="button"
                         className="riagu-summary-card__toggle text-xs font-semibold text-accent transition hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                         onClick={() => setIsSummaryDetailsOpen((current) => !current)}
-                        aria-controls={summaryDetailsId}
+                        aria-controls={isSummaryDetailsOpen ? summaryDetailsId : undefined}
                         aria-expanded={isSummaryDetailsOpen}
                       >
                         {isSummaryDetailsOpen ? '詳細を閉じる' : '詳細を表示'}
@@ -559,59 +559,53 @@ export function RiaguSection(): JSX.Element {
                         </dd>
                       </div>
                     </dl>
-                    <div
-                      id={summaryDetailsId}
-                      data-state={isSummaryDetailsOpen ? 'open' : 'closed'}
-                      className={clsx(
-                        'riagu-summary-card__details-wrapper mt-3 grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
-                        'data-[state=open]:grid-rows-[1fr]',
-                        'data-[state=closed]:grid-rows-[0fr]'
-                      )}
-                    >
-                      <div className="riagu-summary-card__details min-h-0 space-y-2 overflow-hidden rounded-xl border border-border/40 bg-panel/40 p-2 text-[11px] text-muted-foreground">
-                        <div className="riagu-summary-card__detail-group grid gap-1">
-                          <div className="riagu-summary-card__detail-item">
-                            配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}
+                    {isSummaryDetailsOpen ? (
+                      <div id={summaryDetailsId} className="riagu-summary-card__details-wrapper mt-3">
+                        <div className="riagu-summary-card__details min-h-0 space-y-2 overflow-hidden rounded-xl border border-border/40 bg-panel/40 p-2 text-[11px] text-muted-foreground">
+                          <div className="riagu-summary-card__detail-group grid gap-1">
+                            <div className="riagu-summary-card__detail-item">
+                              配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              還元後売り上げ: {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount, '算出不可', 12)}
+                            </div>
                           </div>
-                          <div className="riagu-summary-card__detail-item">
-                            ガチャ1連当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
+                          <div className="riagu-summary-card__separator h-px bg-border/60" />
+                          <div className="riagu-summary-card__detail-group grid gap-1">
+                            <div className="riagu-summary-card__detail-item">
+                              pt未記録履歴: {formatQuantity(summaryMetrics.missingCurrencyHistoryCount)}件
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              単価未設定アイテム: {formatQuantity(summaryMetrics.missingUnitCostCount)}件
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              在庫切れアイテム: {formatQuantity(summaryMetrics.outOfStockCount)}件
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              排出率不明アイテム: {formatQuantity(summaryMetrics.missingRateCount)}件
+                            </div>
                           </div>
-                          <div className="riagu-summary-card__detail-item">
-                            ガチャ1連あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                          <div className="riagu-summary-card__separator h-px bg-border/60" />
+                          <div className="riagu-summary-card__notes space-y-1">
+                            <p className="riagu-summary-card__note">※推定利益率は現在の排出率・単価設定に基づく期待値です。</p>
+                            <p className="riagu-summary-card__note">※実質利益率は履歴の獲得ptを還元率で円換算して算出しています。</p>
+                            <p className="riagu-summary-card__note">※税金・送料・手数料・外部コストは含みません。</p>
                           </div>
-                          <div className="riagu-summary-card__detail-item">
-                            ガチャ1連あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
-                          </div>
-                          <div className="riagu-summary-card__detail-item">
-                            還元後売り上げ: {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
-                          </div>
-                          <div className="riagu-summary-card__detail-item">
-                            実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount, '算出不可', 12)}
-                          </div>
-                        </div>
-                        <div className="riagu-summary-card__separator h-px bg-border/60" />
-                        <div className="riagu-summary-card__detail-group grid gap-1">
-                          <div className="riagu-summary-card__detail-item">
-                            pt未記録履歴: {formatQuantity(summaryMetrics.missingCurrencyHistoryCount)}件
-                          </div>
-                          <div className="riagu-summary-card__detail-item">
-                            単価未設定アイテム: {formatQuantity(summaryMetrics.missingUnitCostCount)}件
-                          </div>
-                          <div className="riagu-summary-card__detail-item">
-                            在庫切れアイテム: {formatQuantity(summaryMetrics.outOfStockCount)}件
-                          </div>
-                          <div className="riagu-summary-card__detail-item">
-                            排出率不明アイテム: {formatQuantity(summaryMetrics.missingRateCount)}件
-                          </div>
-                        </div>
-                        <div className="riagu-summary-card__separator h-px bg-border/60" />
-                        <div className="riagu-summary-card__notes space-y-1">
-                          <p className="riagu-summary-card__note">※推定利益率は現在の排出率・単価設定に基づく期待値です。</p>
-                          <p className="riagu-summary-card__note">※実質利益率は履歴の獲得ptを還元率で円換算して算出しています。</p>
-                          <p className="riagu-summary-card__note">※税金・送料・手数料・外部コストは含みません。</p>
                         </div>
                       </div>
-                    </div>
+                    ) : null}
                   </article>
                   {activeEntries.map((entry) => {
                     const panelId = `riagu-card-panel-${entry.id}`;
