@@ -71,12 +71,6 @@ export function RaritySimulationDialog({
   return (
     <>
       <ModalBody className="rarity-simulation-dialog__body space-y-5">
-        <section className="rarity-simulation-dialog__overview rounded-3xl bg-surface/80 px-5 py-4">
-          <p className="rarity-simulation-dialog__overview-text text-sm leading-relaxed text-muted-foreground">
-            現在の排出率から、指定連数での実質排出率をシミュレートします。
-          </p>
-        </section>
-
         <div className="rarity-simulation-dialog__controls flex flex-col gap-3">
           <div className="rarity-simulation-dialog__control rarity-simulation-dialog__control--draw flex flex-col gap-2">
             <span className="rarity-simulation-dialog__control-label text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">

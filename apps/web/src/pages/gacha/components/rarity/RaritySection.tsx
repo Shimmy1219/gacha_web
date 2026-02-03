@@ -235,6 +235,7 @@ export function RaritySection(): JSX.Element {
     push(RaritySimulationDialog, {
       id: `rarity-simulation-${activeGachaId}`,
       title: '実質排出率のシミュレーション',
+      description: '現在の排出率から、指定連数での実質排出率をシミュレートします。',
       size: 'md',
       payload: {
         rarities: sortedRarityRows.map((rarity) => ({
