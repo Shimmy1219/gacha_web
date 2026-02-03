@@ -60,6 +60,19 @@ interface RiaguSummaryMetrics {
   missingRateCount: number;
 }
 
+interface RiaguItemMetric {
+  itemRate: number | null;
+  remainingStock: number | null;
+}
+
+interface RiaguSummaryInputs {
+  activeEntries: RiaguDisplayEntry[];
+  activeItemMetrics: Map<string, RiaguItemMetric>;
+  activePullHistoryEntries: PullHistoryEntryV1[];
+  gachaOwnerShareRate: number | null;
+  perPullPrice: number | null;
+}
+
 const currencyFormatter = new Intl.NumberFormat('ja-JP', {
   style: 'currency',
   currency: 'JPY',
@@ -128,6 +141,106 @@ function formatQuantity(value: number): string {
     return '0';
   }
   return numberFormatter.format(value);
+}
+
+function sanitizeNonNegativeNumber(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function createRiaguSummaryMetrics({
+  activeEntries,
+  activeItemMetrics,
+  activePullHistoryEntries,
+  gachaOwnerShareRate,
+  perPullPrice
+}: RiaguSummaryInputs): RiaguSummaryMetrics {
+  let totalOrderCost = 0;
+  let missingUnitCostCount = 0;
+  let outOfStockCount = 0;
+  let missingRateCount = 0;
+  let estimatedExpectedCostPerDrawRaw = 0;
+  let estimatedTermCount = 0;
+
+  activeEntries.forEach((entry) => {
+    const unitCost = sanitizeNonNegativeNumber(entry.unitCost);
+    if (unitCost == null) {
+      missingUnitCostCount += 1;
+    } else {
+      const quantity = sanitizeNonNegativeNumber(entry.requiredQuantity) ?? 0;
+      totalOrderCost += unitCost * quantity;
+    }
+
+    const itemMetrics = activeItemMetrics.get(entry.itemId);
+    if (itemMetrics?.remainingStock === 0) {
+      outOfStockCount += 1;
+      return;
+    }
+    if (unitCost == null) {
+      return;
+    }
+    if (itemMetrics?.itemRate == null) {
+      missingRateCount += 1;
+      return;
+    }
+
+    const expectedCostTerm = calculateExpectedCostPerDraw({
+      itemRate: itemMetrics.itemRate,
+      unitCost,
+      isOutOfStock: itemMetrics.remainingStock === 0
+    });
+    if (expectedCostTerm == null) {
+      return;
+    }
+    estimatedExpectedCostPerDrawRaw += expectedCostTerm;
+    estimatedTermCount += 1;
+  });
+
+  const estimatedRevenuePerDraw = calculateRevenuePerDraw(perPullPrice, gachaOwnerShareRate);
+  const estimatedExpectedCostPerDraw = estimatedTermCount > 0 ? estimatedExpectedCostPerDrawRaw : null;
+  const estimatedProfitPerDraw = calculateProfitAmount(estimatedRevenuePerDraw, estimatedExpectedCostPerDraw);
+  const estimatedEvaluation = evaluateProfitMargin({
+    revenueAmount: estimatedRevenuePerDraw,
+    costAmount: estimatedExpectedCostPerDraw
+  });
+
+  let totalEarnedPt = 0;
+  let missingCurrencyHistoryCount = 0;
+  activePullHistoryEntries.forEach((entry) => {
+    const currencyUsed = sanitizeNonNegativeNumber(entry.currencyUsed);
+    if (currencyUsed == null) {
+      missingCurrencyHistoryCount += 1;
+      return;
+    }
+    totalEarnedPt += currencyUsed;
+  });
+
+  const actualRevenueAmount = calculateRevenuePerDraw(totalEarnedPt, gachaOwnerShareRate);
+  const actualProfitAmount = calculateProfitAmount(actualRevenueAmount, totalOrderCost);
+  const actualEvaluation = evaluateProfitMargin({
+    revenueAmount: actualRevenueAmount,
+    costAmount: totalOrderCost
+  });
+
+  return {
+    estimatedMarginPercent: estimatedEvaluation.percent,
+    estimatedRevenuePerDraw,
+    estimatedExpectedCostPerDraw,
+    estimatedProfitPerDraw,
+    estimatedStatus: estimatedEvaluation.status,
+    actualMarginPercent: actualEvaluation.percent,
+    actualRevenueAmount,
+    actualProfitAmount,
+    actualStatus: actualEvaluation.status,
+    totalEarnedPt,
+    totalOrderCost,
+    missingCurrencyHistoryCount,
+    missingUnitCostCount,
+    outOfStockCount,
+    missingRateCount
+  };
 }
 
 export function RiaguSection(): JSX.Element {
@@ -309,7 +422,7 @@ export function RiaguSection(): JSX.Element {
   }, [activeGachaId, data?.ptSettings?.byGachaId]);
   const activeItemMetrics = useMemo(() => {
     const gachaId = activeGachaId;
-    const itemMetrics = new Map<string, { itemRate: number | null; remainingStock: number | null }>();
+    const itemMetrics = new Map<string, RiaguItemMetric>();
     if (!gachaId) {
       return itemMetrics;
     }
@@ -340,91 +453,13 @@ export function RiaguSection(): JSX.Element {
     });
   }, [activeGachaId, data?.pullHistory?.pulls]);
   const summaryMetrics = useMemo<RiaguSummaryMetrics>(() => {
-    let totalOrderCost = 0;
-    let missingUnitCostCount = 0;
-    let outOfStockCount = 0;
-    let missingRateCount = 0;
-    let estimatedExpectedCostPerDrawRaw = 0;
-    let estimatedTermCount = 0;
-
-    activeEntries.forEach((entry) => {
-      const hasUnitCost = typeof entry.unitCost === 'number' && Number.isFinite(entry.unitCost);
-      if (hasUnitCost) {
-        const unitCost = entry.unitCost as number;
-        const quantity = Number.isFinite(entry.requiredQuantity) ? Math.max(entry.requiredQuantity, 0) : 0;
-        totalOrderCost += unitCost * quantity;
-      } else {
-        missingUnitCostCount += 1;
-      }
-
-      const itemMetrics = activeItemMetrics.get(entry.itemId);
-      if (itemMetrics?.remainingStock === 0) {
-        outOfStockCount += 1;
-        return;
-      }
-      if (!hasUnitCost) {
-        return;
-      }
-      if (itemMetrics?.itemRate == null) {
-        missingRateCount += 1;
-        return;
-      }
-
-      const expectedCostTerm = calculateExpectedCostPerDraw({
-        itemRate: itemMetrics.itemRate,
-        unitCost: entry.unitCost,
-        isOutOfStock: itemMetrics.remainingStock === 0
-      });
-      if (expectedCostTerm == null) {
-        return;
-      }
-      estimatedExpectedCostPerDrawRaw += expectedCostTerm;
-      estimatedTermCount += 1;
+    return createRiaguSummaryMetrics({
+      activeEntries,
+      activeItemMetrics,
+      activePullHistoryEntries,
+      gachaOwnerShareRate,
+      perPullPrice
     });
-
-    const estimatedRevenuePerDraw = calculateRevenuePerDraw(perPullPrice, gachaOwnerShareRate);
-    const estimatedExpectedCostPerDraw = estimatedTermCount > 0 ? estimatedExpectedCostPerDrawRaw : null;
-    const estimatedProfitPerDraw = calculateProfitAmount(estimatedRevenuePerDraw, estimatedExpectedCostPerDraw);
-    const estimatedEvaluation = evaluateProfitMargin({
-      revenueAmount: estimatedRevenuePerDraw,
-      costAmount: estimatedExpectedCostPerDraw
-    });
-
-    let totalEarnedPt = 0;
-    let missingCurrencyHistoryCount = 0;
-    activePullHistoryEntries.forEach((entry) => {
-      const currencyUsed = entry.currencyUsed;
-      if (typeof currencyUsed === 'number' && Number.isFinite(currencyUsed) && currencyUsed >= 0) {
-        totalEarnedPt += currencyUsed;
-      } else {
-        missingCurrencyHistoryCount += 1;
-      }
-    });
-
-    const actualRevenueAmount = calculateRevenuePerDraw(totalEarnedPt, gachaOwnerShareRate);
-    const actualProfitAmount = calculateProfitAmount(actualRevenueAmount, totalOrderCost);
-    const actualEvaluation = evaluateProfitMargin({
-      revenueAmount: actualRevenueAmount,
-      costAmount: totalOrderCost
-    });
-
-    return {
-      estimatedMarginPercent: estimatedEvaluation.percent,
-      estimatedRevenuePerDraw,
-      estimatedExpectedCostPerDraw,
-      estimatedProfitPerDraw,
-      estimatedStatus: estimatedEvaluation.status,
-      actualMarginPercent: actualEvaluation.percent,
-      actualRevenueAmount,
-      actualProfitAmount,
-      actualStatus: actualEvaluation.status,
-      totalEarnedPt,
-      totalOrderCost,
-      missingCurrencyHistoryCount,
-      missingUnitCostCount,
-      outOfStockCount,
-      missingRateCount
-    };
   }, [activeEntries, activeItemMetrics, activePullHistoryEntries, gachaOwnerShareRate, perPullPrice]);
   const summaryDetailsId = activeGachaId ? `riagu-summary-card-details-${activeGachaId}` : 'riagu-summary-card-details';
 
