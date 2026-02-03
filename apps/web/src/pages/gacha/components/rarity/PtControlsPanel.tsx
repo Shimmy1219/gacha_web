@@ -373,7 +373,8 @@ function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSetti
 
 function buildSettingsFromSnapshot(
   snapshot: PanelSnapshot,
-  previous: PtSettingV3 | undefined
+  previous: PtSettingV3 | undefined,
+  defaultRarityId: string
 ): PtSettingV3 | undefined {
   const next: PtSettingV3 = {};
 
@@ -413,7 +414,7 @@ function buildSettingsFromSnapshot(
   const guarantees = snapshot.guarantees
     .map((guarantee): PtGuaranteeV3 | null => {
       const threshold = parsePositiveInteger(guarantee.minPulls);
-      const rarityId = guarantee.rarityId.trim();
+      const rarityId = guarantee.rarityId.trim() || defaultRarityId;
       if (!rarityId || threshold == null) {
         return null;
       }
@@ -459,6 +460,7 @@ export function PtControlsPanel({
     () => itemOptionsByRarity ?? new Map<string, GuaranteeItemOption[]>(),
     [itemOptionsByRarity]
   );
+  const defaultRarityId = rarityOptions[0]?.value ?? '';
 
   const initialComparableSettings = cloneSettingWithoutUpdatedAt(settings);
   const lastEmittedRef = useRef<string>(
@@ -531,7 +533,7 @@ export function PtControlsPanel({
       if (hasWarnings) {
         return;
       }
-      const nextSetting = buildSettingsFromSnapshot(snapshot, settings);
+      const nextSetting = buildSettingsFromSnapshot(snapshot, settings, defaultRarityId);
       const serialized = nextSetting ? JSON.stringify(nextSetting) : '';
       if (lastEmittedRef.current === serialized) {
         return;
@@ -539,7 +541,7 @@ export function PtControlsPanel({
       lastEmittedRef.current = serialized;
       onSettingsChange(nextSetting);
     },
-    [onSettingsChange, settings]
+    [defaultRarityId, onSettingsChange, settings]
   );
 
   useEffect(() => {
@@ -705,7 +707,7 @@ export function PtControlsPanel({
           <AddButton
             onClick={() =>
               setGuarantees((prev) => {
-                const next = [...prev, createGuaranteeRow()];
+                const next = [...prev, createGuaranteeRow(undefined, { rarityId: defaultRarityId })];
                 return next;
               })
             }
