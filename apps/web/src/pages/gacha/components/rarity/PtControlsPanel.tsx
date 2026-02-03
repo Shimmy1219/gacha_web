@@ -604,102 +604,104 @@ export function PtControlsPanel({
         }
       />
 
-      <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
-        {bundles.map((bundle, index) => {
-          const evaluation = bundleEvaluations.get(bundle.id) ?? {
-            discountPercent: null,
-            isLoss: false,
-            warnNotIncreasing: false,
-            warnDuplicatePrice: false
-          };
-          const discountPercent = evaluation.discountPercent;
-          const isLoss = evaluation.isLoss;
-          const percentLabel =
-            discountPercent != null ? formatPercentage(Math.abs(discountPercent)) : null;
+      {bundles.length > 0 ? (
+        <div className="pt-controls-panel__bundle-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
+          {bundles.map((bundle, index) => {
+            const evaluation = bundleEvaluations.get(bundle.id) ?? {
+              discountPercent: null,
+              isLoss: false,
+              warnNotIncreasing: false,
+              warnDuplicatePrice: false
+            };
+            const discountPercent = evaluation.discountPercent;
+            const isLoss = evaluation.isLoss;
+            const percentLabel =
+              discountPercent != null ? formatPercentage(Math.abs(discountPercent)) : null;
 
-          const savingsLabel = discountPercent == null
-            ? null
-            : `${percentLabel}%${isLoss ? '損' : '得'}`;
+            const savingsLabel = discountPercent == null
+              ? null
+              : `${percentLabel}%${isLoss ? '損' : '得'}`;
 
-          return (
-            <div
-              key={bundle.id}
-              className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-1 py-2"
-            >
-            <div className="pt-controls-panel__bundle-fields flex flex-col gap-1 text-xs text-muted-foreground">
-              <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
-                <InlineNumberField
-                  value={bundle.price}
-                  onChange={(value) =>
+            return (
+              <div
+                key={bundle.id}
+                className="pt-controls-panel__bundle-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-1 py-2"
+              >
+                <div className="pt-controls-panel__bundle-fields flex flex-col gap-1 text-xs text-muted-foreground">
+                  <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
+                    <InlineNumberField
+                      value={bundle.price}
+                      onChange={(value) =>
+                        setBundles((prev) => {
+                          const next = [...prev];
+                          next[index] = { ...next[index], price: value };
+                          return next;
+                        })
+                      }
+                      placeholder="3000"
+                      className={clsx(
+                        'w-[10ch]',
+                        isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                      )}
+                    />
+                    <span className="text-xs leading-none text-muted-foreground">ptで</span>
+                    <InlineNumberField
+                      value={bundle.pulls}
+                      onChange={(value) =>
+                        setBundles((prev) => {
+                          const next = [...prev];
+                          next[index] = { ...next[index], pulls: value };
+                          return next;
+                        })
+                      }
+                      placeholder="10"
+                      min={1}
+                      className={clsx(
+                        'w-[8ch]',
+                        isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
+                      )}
+                    />
+                    <span className="text-xs leading-none text-muted-foreground">連</span>
+                    {savingsLabel ? (
+                      <span
+                        className={clsx(
+                          'ml-1 text-[11px] font-semibold',
+                          isLoss ? 'text-rose-400' : 'text-emerald-400'
+                        )}
+                      >
+                        {savingsLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  {evaluation.warnNotIncreasing ? (
+                    <span className="text-[11px] font-semibold text-amber-400">
+                      高ptのお得率は低ptのお得率を上回る必要があります
+                    </span>
+                  ) : null}
+                  {evaluation.warnDuplicatePrice ? (
+                    <span className="text-[11px] font-semibold text-amber-400">
+                      同じptが既に設定されています
+                    </span>
+                  ) : null}
+                  {isLoss ? (
+                    <span className="text-[11px] font-semibold text-rose-400">
+                      通常時より損になるように設定することは出来ません
+                    </span>
+                  ) : null}
+                </div>
+                <RemoveButton
+                  onClick={() =>
                     setBundles((prev) => {
-                      const next = [...prev];
-                      next[index] = { ...next[index], price: value };
+                      const next = prev.filter((entry) => entry.id !== bundle.id);
                       return next;
                     })
                   }
-                  placeholder="3000"
-                  className={clsx(
-                    'w-[10ch]',
-                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
-                  )}
                 />
-                <span className="text-xs leading-none text-muted-foreground">ptで</span>
-                <InlineNumberField
-                  value={bundle.pulls}
-                  onChange={(value) =>
-                    setBundles((prev) => {
-                      const next = [...prev];
-                      next[index] = { ...next[index], pulls: value };
-                      return next;
-                    })
-                  }
-                  placeholder="10"
-                  min={1}
-                  className={clsx(
-                    'w-[8ch]',
-                    isLoss && 'border-rose-400 text-rose-500 focus:border-rose-500 focus:ring-rose-400/40'
-                  )}
-                />
-                <span className="text-xs leading-none text-muted-foreground">連</span>
-                {savingsLabel ? (
-                  <span
-                    className={clsx(
-                      'ml-1 text-[11px] font-semibold',
-                      isLoss ? 'text-rose-400' : 'text-emerald-400'
-                    )}
-                  >
-                    {savingsLabel}
-                  </span>
-                ) : null}
               </div>
-              {evaluation.warnNotIncreasing ? (
-                <span className="text-[11px] font-semibold text-amber-400">
-                  高ptのお得率は低ptのお得率を上回る必要があります
-                </span>
-              ) : null}
-              {evaluation.warnDuplicatePrice ? (
-                <span className="text-[11px] font-semibold text-amber-400">
-                  同じptが既に設定されています
-                </span>
-              ) : null}
-              {isLoss ? (
-                <span className="text-[11px] font-semibold text-rose-400">
-                  通常時より損になるように設定することは出来ません
-                </span>
-              ) : null}
-            </div>
-              <RemoveButton
-                onClick={() =>
-                  setBundles((prev) => {
-                    const next = prev.filter((entry) => entry.id !== bundle.id);
-                    return next;
-                  })
-                }
-              />
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <ControlsRow
         label="天井保証"
@@ -715,104 +717,106 @@ export function PtControlsPanel({
         }
       />
 
-      <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
-        {guarantees.map((guarantee, index) => (
-          <div
-            key={guarantee.id}
-            className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
-          >
-            <div className="pt-controls-panel__guarantee-fields flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <InlineNumberField
-                value={guarantee.minPulls}
-                onChange={(value) =>
+      {guarantees.length > 0 ? (
+        <div className="pt-controls-panel__guarantee-items space-y-1.5 rounded-2xl border border-border/40 bg-panel-muted/60 px-2 py-2">
+          {guarantees.map((guarantee, index) => (
+            <div
+              key={guarantee.id}
+              className="pt-controls-panel__guarantee-row grid grid-cols-[minmax(0,1fr),auto] items-center gap-2 border-b border-border/50 bg-transparent px-3 py-2"
+            >
+              <div className="pt-controls-panel__guarantee-fields flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <InlineNumberField
+                  value={guarantee.minPulls}
+                  onChange={(value) =>
+                    setGuarantees((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], minPulls: value };
+                      return next;
+                    })
+                  }
+                  placeholder="30"
+                  min={1}
+                  className="w-[8ch]"
+                />
+                <span className="text-xs leading-none text-muted-foreground">連以上で</span>
+                <InlineSelectField
+                  value={guarantee.rarityId || (rarityOptions[0]?.value ?? '')}
+                  onChange={(value) =>
+                    setGuarantees((prev) => {
+                      const next = [...prev];
+                      const available = itemOptionsMap.get(value) ?? [];
+                      const currentItemId = next[index].itemId;
+                      const shouldResetItem =
+                        next[index].targetType === 'item' &&
+                        (currentItemId === '' || !available.some((option) => option.value === currentItemId));
+                      next[index] = {
+                        ...next[index],
+                        rarityId: value,
+                        targetType: shouldResetItem ? 'rarity' : next[index].targetType,
+                        itemId: shouldResetItem ? '' : currentItemId
+                      };
+                      return next;
+                    })
+                  }
+                  options={rarityOptions}
+                />
+                <span className="text-xs leading-none text-muted-foreground">の中から</span>
+                <SingleSelectDropdown<string>
+                  value={
+                    guarantee.targetType === 'item' && guarantee.itemId
+                      ? `item:${guarantee.itemId}`
+                      : 'rarity'
+                  }
+                  options={[
+                    { value: 'rarity', label: 'ランダム' },
+                    ...(itemOptionsMap.get(guarantee.rarityId) ?? []).map((option) => ({
+                      value: `item:${option.value}`,
+                      label: option.label
+                    }))
+                  ]}
+                  onChange={(value) =>
+                    setGuarantees((prev) => {
+                      const next = [...prev];
+                      const isItem = value.startsWith('item:');
+                      const itemId = isItem ? value.slice(5) : '';
+                      next[index] = {
+                        ...next[index],
+                        targetType: isItem ? 'item' : 'rarity',
+                        itemId
+                      };
+                      return next;
+                    })
+                  }
+                  fallbackToFirstOption={false}
+                />
+                <span className="text-xs leading-none text-muted-foreground">を</span>
+                <InlineNumberField
+                  value={guarantee.quantity}
+                  onChange={(value) =>
+                    setGuarantees((prev) => {
+                      const next = [...prev];
+                      next[index] = { ...next[index], quantity: value };
+                      return next;
+                    })
+                  }
+                  placeholder="1"
+                  min={1}
+                  className="w-[6ch]"
+                />
+                <span className="text-xs leading-none text-muted-foreground">個確定</span>
+              </div>
+              <RemoveButton
+                onClick={() =>
                   setGuarantees((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], minPulls: value };
+                    const next = prev.filter((entry) => entry.id !== guarantee.id);
                     return next;
                   })
                 }
-                placeholder="30"
-                min={1}
-                className="w-[8ch]"
               />
-              <span className="text-xs leading-none text-muted-foreground">連以上で</span>
-              <InlineSelectField
-                value={guarantee.rarityId || (rarityOptions[0]?.value ?? '')}
-                onChange={(value) =>
-                  setGuarantees((prev) => {
-                    const next = [...prev];
-                    const available = itemOptionsMap.get(value) ?? [];
-                    const currentItemId = next[index].itemId;
-                    const shouldResetItem =
-                      next[index].targetType === 'item' &&
-                      (currentItemId === '' || !available.some((option) => option.value === currentItemId));
-                    next[index] = {
-                      ...next[index],
-                      rarityId: value,
-                      targetType: shouldResetItem ? 'rarity' : next[index].targetType,
-                      itemId: shouldResetItem ? '' : currentItemId
-                    };
-                    return next;
-                  })
-                }
-                options={rarityOptions}
-              />
-              <span className="text-xs leading-none text-muted-foreground">の中から</span>
-              <SingleSelectDropdown<string>
-                value={
-                  guarantee.targetType === 'item' && guarantee.itemId
-                    ? `item:${guarantee.itemId}`
-                    : 'rarity'
-                }
-                options={[
-                  { value: 'rarity', label: 'ランダム' },
-                  ...(itemOptionsMap.get(guarantee.rarityId) ?? []).map((option) => ({
-                    value: `item:${option.value}`,
-                    label: option.label
-                  }))
-                ]}
-                onChange={(value) =>
-                  setGuarantees((prev) => {
-                    const next = [...prev];
-                    const isItem = value.startsWith('item:');
-                    const itemId = isItem ? value.slice(5) : '';
-                    next[index] = {
-                      ...next[index],
-                      targetType: isItem ? 'item' : 'rarity',
-                      itemId
-                    };
-                    return next;
-                  })
-                }
-                fallbackToFirstOption={false}
-              />
-              <span className="text-xs leading-none text-muted-foreground">を</span>
-              <InlineNumberField
-                value={guarantee.quantity}
-                onChange={(value) =>
-                  setGuarantees((prev) => {
-                    const next = [...prev];
-                    next[index] = { ...next[index], quantity: value };
-                    return next;
-                  })
-                }
-                placeholder="1"
-                min={1}
-                className="w-[6ch]"
-              />
-              <span className="text-xs leading-none text-muted-foreground">個確定</span>
             </div>
-            <RemoveButton
-              onClick={() =>
-                setGuarantees((prev) => {
-                  const next = prev.filter((entry) => entry.id !== guarantee.id);
-                  return next;
-                })
-              }
-            />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }
