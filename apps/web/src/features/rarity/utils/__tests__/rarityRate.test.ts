@@ -18,4 +18,14 @@ describe('formatRarityRate', () => {
     const rate = clampRate(0.04949);
     expect(formatRarityRate(rate)).toBe('4.949');
   });
+
+  it('keeps tiny rates without rounding to zero up to 10^-10%', () => {
+    const rate = clampRate(0.000005);
+    expect(formatRarityRate(rate)).toBe('0.0005');
+  });
+
+  it('supports minimum display precision of 10^-10%', () => {
+    const rate = clampRate(1e-12);
+    expect(formatRarityRate(rate)).toBe('0.0000000001');
+  });
 });

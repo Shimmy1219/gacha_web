@@ -23,6 +23,7 @@ interface RarityTableProps {
   onEmitRateCommit?: (rarityId: string) => void;
   onDelete?: (rarityId: string) => void;
   onAdd?: () => void;
+  onSimulation?: () => void;
   canDeleteRow?: (rarityId: string) => boolean;
 }
 
@@ -34,6 +35,7 @@ export function RarityTable({
   onEmitRateCommit,
   onDelete,
   onAdd,
+  onSimulation,
   canDeleteRow
 }: RarityTableProps): JSX.Element {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -112,12 +114,12 @@ export function RarityTable({
         </colgroup>
         <thead className="rarity-section__table-head bg-panel-contrast/90 text-xs uppercase tracking-[0.3em] text-muted-foreground">
           <tr>
-            <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 font-semibold">
+            <th className="rarity-section__column rarity-section__column-label px-[3px] py-2.5 text-center font-semibold">
               レアリティ
             </th>
-            <th className="rarity-section__column rarity-section__column-color py-2.5 font-semibold">カラー</th>
-            <th className="rarity-section__column rarity-section__column-rate py-2.5 font-semibold">排出率</th>
-            <th className="rarity-section__column rarity-section__column-actions py-2.5" />
+            <th className="rarity-section__column rarity-section__column-color py-2.5 text-center font-semibold">カラー</th>
+            <th className="rarity-section__column rarity-section__column-rate py-2.5 text-center font-semibold">排出率</th>
+            <th className="rarity-section__column rarity-section__column-actions py-2.5 text-center" />
           </tr>
         </thead>
         <tbody className="rarity-section__table-body divide-y divide-border/40 bg-panel-muted">
@@ -212,14 +214,24 @@ export function RarityTable({
           })}
           <tr className="rarity-section__add-row">
             <td className="rarity-section__cell px-1 py-3" colSpan={4}>
-              <button
-                type="button"
-                className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={onAdd}
-                disabled={!onAdd}
-              >
-                追加
-              </button>
+              <div className="rarity-section__add-actions flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="rarity-section__add-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={onAdd}
+                  disabled={!onAdd}
+                >
+                  追加
+                </button>
+                <button
+                  type="button"
+                  className="rarity-section__simulation-button inline-flex w-full items-center justify-center rounded-xl border border-border/70 bg-panel-contrast px-3 py-2 text-sm text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={onSimulation}
+                  disabled={!onSimulation || rows.length === 0}
+                >
+                  実質排出率のシミュレーション
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>

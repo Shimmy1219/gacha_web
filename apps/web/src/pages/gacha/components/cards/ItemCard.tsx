@@ -1,7 +1,7 @@
 import { clsx } from 'clsx';
-import { forwardRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { forwardRef, type MouseEvent as ReactMouseEvent } from 'react';
 
-import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
+import { RarityLabel } from '../../../../components/RarityLabel';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemPreviewButton } from '../../../../components/ItemPreviewThumbnail';
 
@@ -41,6 +41,7 @@ export interface ItemCardModel {
   order: number;
   createdAt: string;
   updatedAt: string;
+  remainingStock?: number | null;
 }
 
 export interface ItemCardPreviewPayload {
@@ -85,12 +86,14 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const fallbackUrl = imageAsset?.thumbnailUrl ?? null;
   const canPreviewAsset = Boolean(onPreviewAsset && (assetId || previewAssetId || fallbackUrl));
   const additionalAssetCount = Math.max(0, model.additionalAssetCount ?? 0);
-  const { className: rarityClassName, style: rarityStyle } = getRarityTextPresentation(rarity.color);
-  const rarityTextStyle: CSSProperties = {
-    display: 'inline-block',
-    maxWidth: 'fit-content',
-    ...(rarityStyle ?? {})
-  };
+  const remainingStock = model.remainingStock;
+  const hasRemainingStock = remainingStock !== null && remainingStock !== undefined;
+  const remainingLabel = hasRemainingStock
+    ? `残り${new Intl.NumberFormat('ja-JP').format(Math.max(0, remainingStock))}`
+    : '';
+  const remainingBadge = hasRemainingStock ? (
+    <span className="shrink-0 px-1 text-[10px] font-semibold text-accent">{remainingLabel}</span>
+  ) : null;
 
   const handlePreviewClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (event.ctrlKey || event.metaKey) {
@@ -116,11 +119,7 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
   const rateDisplay = rarityRateLabel ?? rarity.itemRateDisplay ?? '';
   const hasRate = rateDisplay.trim().length > 0;
 
-  const rarityLabel = (
-    <span className={clsx('truncate', rarityClassName)} style={rarityTextStyle}>
-      {rarity.label}
-    </span>
-  );
+  const rarityLabel = <RarityLabel label={rarity.label} color={rarity.color} />;
 
   return (
     <article
@@ -173,16 +172,26 @@ export const ItemCard = forwardRef<HTMLDivElement, ItemCardProps>(function ItemC
             </span>
           ) : null}
         </div>
-        <div className={clsx('flex flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
+        <div className={clsx('flex min-w-0 flex-1 flex-col', isMobile ? 'gap-1' : 'gap-3')}>
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-surface-foreground">{model.name}</h3>
+            <h3 className="flex min-w-0 items-center justify-between gap-2 overflow-hidden text-sm font-semibold text-surface-foreground">
+              <span className="min-w-0 max-w-full truncate">{model.name}</span>
+              {!isMobile ? remainingBadge : null}
+            </h3>
             <span
               className={clsx(
                 'flex text-[11px] font-medium text-surface-foreground',
                 isMobile ? 'flex-col gap-1' : 'items-baseline justify-between gap-2'
               )}
             >
-              {rarityLabel}
+              {isMobile ? (
+                <span className="flex min-w-0 items-center gap-2">
+                  {rarityLabel}
+                  {remainingBadge}
+                </span>
+              ) : (
+                rarityLabel
+              )}
               <span
                 className={clsx(
                   'text-[10px] font-normal text-muted-foreground tabular-nums',

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { REAL_GOODS_TYPE_SUGGESTIONS } from './riaguTypeSuggestions';
 
 export interface RiaguConfigDialogPayload {
   gachaId: string;
@@ -14,6 +15,31 @@ export interface RiaguConfigDialogPayload {
 
 const INPUT_CLASSNAME =
   'w-full rounded-xl border border-border/60 bg-surface/30 px-3 py-2 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/30';
+const KANJI_REPLACEMENTS: Array<[string, string]> = [
+  ['下敷き', 'したじき'],
+  ['巾着', 'きんちゃく'],
+  ['帽子', 'ぼうし'],
+  ['靴下', 'くつした'],
+  ['抱き枕', 'だきまくら'],
+  ['箸', 'はし'],
+  ['食器', 'しょっき'],
+  ['色紙', 'しきし'],
+  ['缶', 'かん']
+];
+
+const normalizeSuggestionText = (value: string) => {
+  const lowered = value.trim().toLowerCase();
+  const replaced = KANJI_REPLACEMENTS.reduce((accumulator, [target, replacement]) => {
+    if (!accumulator.includes(target)) {
+      return accumulator;
+    }
+    return accumulator.replaceAll(target, replacement);
+  }, lowered);
+  const kanaConverted = replaced.replace(/[\u30a1-\u30f6]/g, (char) =>
+    String.fromCharCode(char.charCodeAt(0) - 0x60)
+  );
+  return kanaConverted.replace(/[\s/／・]/g, '').replace(/[-‐‑–—]/g, '');
+};
 
 export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguConfigDialogPayload>): JSX.Element {
   const { riagu: riaguStore } = useDomainStores();
@@ -21,6 +47,16 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
     payload?.defaultPrice !== undefined && payload?.defaultPrice !== null ? String(payload.defaultPrice) : ''
   );
   const [type, setType] = useState<string>(payload?.defaultType ?? '');
+  const normalizedTypeInput = useMemo(() => normalizeSuggestionText(type), [type]);
+  const typeSuggestions = useMemo(() => {
+    if (!normalizedTypeInput) {
+      return REAL_GOODS_TYPE_SUGGESTIONS;
+    }
+    return REAL_GOODS_TYPE_SUGGESTIONS.filter((suggestion) => {
+      const keys = [suggestion.label, ...(suggestion.aliases ?? [])];
+      return keys.some((key) => normalizeSuggestionText(key).includes(normalizedTypeInput));
+    });
+  }, [normalizedTypeInput]);
 
   useEffect(() => {
     const itemId = payload?.itemId;
@@ -92,43 +128,72 @@ export function RiaguConfigDialog({ payload, close }: ModalComponentProps<RiaguC
 
   return (
     <>
-      <ModalBody className="rounded-2xl bg-surface/20 p-6">
-        <p className="text-sm text-muted-foreground">
-          対象アイテム: <span className="font-medium text-surface-foreground">{payload?.itemName ?? '-'}</span>
+      <ModalBody className="riagu-config-dialog__body rounded-2xl bg-surface/20 p-0 md:pr-0">
+        <p className="riagu-config-dialog__target-row flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <span className="riagu-config-dialog__target-label shrink-0">対象アイテム:</span>
+          <span className="riagu-config-dialog__target-name min-w-0 flex-1 truncate font-medium text-surface-foreground">
+            {payload?.itemName ?? '-'}
+          </span>
         </p>
-        <div className="space-y-4">
-          <label className="space-y-2">
-            <span className="text-sm font-medium text-surface-foreground">原価（円）</span>
+        <div className="riagu-config-dialog__price-section space-y-4">
+          <label className="riagu-config-dialog__field riagu-config-dialog__field--price space-y-2">
+            <span className="riagu-config-dialog__field-label text-sm font-medium text-surface-foreground">発注価格（円）</span>
             <input
               type="number"
               min={0}
-              step={10}
+              step="any"
               value={price}
               onChange={(event) => setPrice(event.target.value)}
-              className={INPUT_CLASSNAME}
+              className={`riagu-config-dialog__input riagu-config-dialog__input--price ${INPUT_CLASSNAME}`}
               placeholder="300"
             />
           </label>
-          <label className="space-y-2">
-            <span className="text-sm font-medium text-surface-foreground">リアルグッズタイプ</span>
+        </div>
+        <div className="riagu-config-dialog__type-section mt-4 space-y-4">
+          <label className="riagu-config-dialog__field riagu-config-dialog__field--type space-y-2">
+            <span className="riagu-config-dialog__field-label text-sm font-medium text-surface-foreground">リアルグッズタイプ</span>
             <input
               type="text"
               value={type}
               onChange={(event) => setType(event.target.value)}
-              className={INPUT_CLASSNAME}
+              className={`riagu-config-dialog__input riagu-config-dialog__input--type ${INPUT_CLASSNAME}`}
               placeholder="アクリルスタンド / 缶バッジ など"
             />
           </label>
+          <div className="riagu-config-dialog__suggestions space-y-1">
+            <p className="riagu-config-dialog__suggestions-label text-xs font-semibold text-muted-foreground">候補</p>
+            <div className="riagu-config-dialog__suggestion-list flex max-h-[64px] min-h-[64px] flex-wrap content-start gap-2 overflow-hidden">
+              {typeSuggestions.length > 0 ? (
+                typeSuggestions.map((suggestion) => {
+                  const normalizedKeys = [suggestion.label, ...(suggestion.aliases ?? [])].map(normalizeSuggestionText);
+                  const isSelected = normalizedKeys.includes(normalizedTypeInput);
+                  return (
+                    <button
+                      key={suggestion.label}
+                      type="button"
+                      onClick={() => setType(suggestion.label)}
+                      className={`riagu-config-dialog__suggestion-chip inline-flex items-center rounded-full border px-3 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 ${
+                        isSelected
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border/60 text-muted-foreground hover:border-accent hover:text-accent'
+                      }`}
+                    >
+                      {suggestion.label}
+                    </button>
+                  );
+                })
+              ) : normalizedTypeInput ? (
+                <p className="riagu-config-dialog__suggestion-empty text-xs text-muted-foreground">一致する候補はありません。</p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </ModalBody>
-      <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
-        リアグ情報はガチャの保存オプションに含まれ、共有ZIPにも出力されます。
-      </p>
-      <ModalFooter>
-        <button type="button" className="btn btn-primary" onClick={handleSave}>
+      <ModalFooter className="riagu-config-dialog__footer">
+        <button type="button" className="riagu-config-dialog__save-button btn btn-primary" onClick={handleSave}>
           保存する
         </button>
-        <button type="button" className="btn btn-muted" onClick={close}>
+        <button type="button" className="riagu-config-dialog__close-button btn btn-muted" onClick={close}>
           閉じる
         </button>
       </ModalFooter>

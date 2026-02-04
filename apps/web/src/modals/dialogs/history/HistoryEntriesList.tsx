@@ -1,13 +1,15 @@
 import { ClipboardIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { type CSSProperties } from 'react';
 
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 import { type PullHistoryEntrySourceV1, type PullHistoryEntryV1 } from '@domain/app-persistence';
-import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
+import { RarityLabel } from '../../../components/RarityLabel';
 import { XLogoIcon } from '../../../components/icons/XLogoIcon';
 import { type ShareHandler } from '../../../hooks/useShare';
+import { resolveSafeUrl } from '../../../utils/safeUrl';
 import { type HistoryItemMetadata } from './historyUtils';
+import { WarningDialog } from '../WarningDialog';
+import { useModal } from '../../ModalProvider';
 
 const SOURCE_LABELS: Record<PullHistoryEntrySourceV1, string> = {
   insiteResult: 'ガチャ結果',
@@ -48,11 +50,11 @@ interface ItemEntryViewModel {
   itemLabel: string;
   count: number;
   rarityLabel?: string;
-  rarityTextClassName?: string;
-  rarityTextStyle?: CSSProperties;
+  rarityColor?: string | null;
   raritySortOrder: number;
   isNew: boolean;
   hasOriginalPrizeMissing: boolean;
+  missingOriginalPrizeCount: number;
 }
 
 export interface HistoryEntriesListProps {
@@ -65,6 +67,13 @@ export interface HistoryEntriesListProps {
   shareHandlers: ShareHandler;
 }
 
+function formatOriginalPrizeWarningMessage(item: ItemEntryViewModel): string {
+  if (item.missingOriginalPrizeCount > 1) {
+    return `オリジナル景品「${item.itemLabel}」のうち${item.missingOriginalPrizeCount}件分にファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
+  }
+  return `オリジナル景品「${item.itemLabel}」にファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
+}
+
 export function HistoryEntriesList({
   entries,
   userName,
@@ -74,8 +83,10 @@ export function HistoryEntriesList({
   itemMetadata,
   shareHandlers
 }: HistoryEntriesListProps): JSX.Element {
+  const { push } = useModal();
+
   return (
-    <div className="inventory-history-dialog__scroll space-y-3 max-h-[60vh] overflow-y-auto">
+    <div className="space-y-3">
       {entries.map((entry, index) => {
         const entryKey = entry.id ?? `${entry.executedAt ?? 'unknown'}-${index}`;
         const executedAtLabel = formatExecutedAt(executedAtFormatter, entry.executedAt);
@@ -129,20 +140,18 @@ export function HistoryEntriesList({
             const raritySortOrder = metadata?.raritySortOrder ?? Number.NEGATIVE_INFINITY;
             const isOriginalPrize = metadata?.isOriginalPrize === true;
             const assignedCount = isOriginalPrize ? assignedCounts.get(itemId) ?? 0 : 0;
-            const { className: rarityTextClassName, style: rarityTextStyle } = getRarityTextPresentation(
-              typeof rarityColor === 'string' ? rarityColor : undefined
-            );
+            const missingOriginalPrizeCount = isOriginalPrize ? Math.max(0, count - assignedCount) : 0;
 
             return {
               itemId,
               count,
               itemLabel: metadata?.name ?? itemId,
               rarityLabel,
-              rarityTextClassName,
-              rarityTextStyle,
+              rarityColor: typeof rarityColor === 'string' ? rarityColor : null,
               raritySortOrder,
               isNew: count > 0 && newItemSet.has(itemId),
-              hasOriginalPrizeMissing: isOriginalPrize && count > assignedCount
+              hasOriginalPrizeMissing: isOriginalPrize && missingOriginalPrizeCount > 0,
+              missingOriginalPrizeCount
             } satisfies ItemEntryViewModel;
           })
           .filter((value): value is ItemEntryViewModel => value !== null)
@@ -173,6 +182,7 @@ export function HistoryEntriesList({
         urlParams.set('ref_src', 'twsrc%5Etfw');
         urlParams.set('text', shareText);
         const tweetUrl = `https://twitter.com/intent/tweet?${urlParams.toString()}`;
+        const safeTweetUrl = resolveSafeUrl(tweetUrl, { allowedProtocols: ['https:'] });
 
         const currentFeedback = shareHandlers.feedback?.entryKey === entryKey ? shareHandlers.feedback.status : null;
 
@@ -205,18 +215,13 @@ export function HistoryEntriesList({
                 {itemEntries.map((item) => (
                   <div key={item.itemId} className="flex items-center gap-3 text-sm text-surface-foreground">
                     {item.rarityLabel ? (
-                      <span className="inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
-                        <span
-                          className={clsx('inventory-history-dialog__rarity-badge__label', item.rarityTextClassName)}
-                          style={item.rarityTextStyle}
-                        >
-                          {item.rarityLabel}
-                        </span>
+                      <span className="inline-flex min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                        <RarityLabel label={item.rarityLabel} color={item.rarityColor} />
                       </span>
                     ) : null}
-                    <span className="flex-1 font-medium">
-                      <span className="inline-flex flex-wrap items-center gap-2">
-                        <span>{item.itemLabel}</span>
+                    <span className="flex-1 min-w-0 overflow-hidden font-medium">
+                      <span className="inline-flex w-full min-w-0 items-center gap-2">
+                        <span className="block min-w-0 flex-1 truncate">{item.itemLabel}</span>
                         {item.isNew ? (
                           <span className="inline-flex h-5 items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 text-[10px] font-semibold leading-none text-emerald-700">
                             new
@@ -226,7 +231,25 @@ export function HistoryEntriesList({
                     </span>
                     <span className="flex items-center gap-1">
                       {item.hasOriginalPrizeMissing ? (
-                        <ExclamationTriangleIcon className="h-4 w-4 text-amber-500" aria-label="未送信" />
+                        <button
+                          type="button"
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                          onClick={() => {
+                            push(WarningDialog, {
+                              id: `original-prize-warning-${item.itemId}`,
+                              title: 'オリジナル景品の警告',
+                              size: 'sm',
+                              payload: {
+                                message: formatOriginalPrizeWarningMessage(item),
+                                confirmLabel: '閉じる'
+                              }
+                            });
+                          }}
+                          aria-label={`オリジナル景品「${item.itemLabel}」の警告を表示`}
+                          title="オリジナル景品の警告を表示"
+                        >
+                          <ExclamationTriangleIcon className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       ) : null}
                       <span
                         className={clsx(
@@ -259,17 +282,28 @@ export function HistoryEntriesList({
                     <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果を共有</span>
                   </button>
-                  <a
-                    href={tweetUrl}
-                    className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Xで共有"
-                    aria-label="Xで共有"
-                  >
-                    <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                    <span className="sr-only">Xで共有</span>
-                  </a>
+                  {safeTweetUrl ? (
+                    <a
+                      href={safeTweetUrl}
+                      className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Xで共有"
+                      aria-label="Xで共有"
+                    >
+                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                      <span className="sr-only">Xで共有</span>
+                    </a>
+                  ) : (
+                    <span
+                      className="btn aspect-square h-8 w-8 border-none bg-[#000000]/60 p-1.5 text-white/70 !min-h-0"
+                      aria-disabled="true"
+                      title="Xで共有"
+                    >
+                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
+                      <span className="sr-only">Xで共有</span>
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"

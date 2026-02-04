@@ -55,6 +55,7 @@ export interface GachaCatalogItemV4 {
   originalPrize?: boolean;
   assets?: GachaCatalogItemAssetV4[];
   riagu?: boolean;
+  stockCount?: number;
   updatedAt?: string;
 }
 
@@ -223,9 +224,23 @@ export interface UiPreferencesStateV3 {
   toolbar?: Record<string, unknown>;
   users?: Record<string, unknown>;
   gacha?: {
+    ownerShareRate?: number;
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;
+      [key: string]: unknown;
+    };
+    stock?: {
+      includeOutOfStockInComplete?: boolean;
+      allowOutOfStockGuaranteeItem?: boolean;
+      [key: string]: unknown;
+    };
+    guarantee?: {
+      applyLowerThresholdGuarantees?: boolean;
+      [key: string]: unknown;
+    };
+    share?: {
+      excludeRiaguImages?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -260,6 +275,7 @@ export interface ReceivePrefsStateV3 {
     skipIntro: boolean;
     lastConfirmedAt?: string;
   };
+  ownerName?: string | null;
 }
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';

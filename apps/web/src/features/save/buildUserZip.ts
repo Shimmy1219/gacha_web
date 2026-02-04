@@ -23,6 +23,10 @@ interface SelectedAsset {
   isRiagu: boolean;
 }
 
+export type ZipSelectedAsset = SelectedAsset;
+
+export type ZipSelectedAsset = SelectedAsset;
+
 export interface OriginalPrizeMissingItem {
   gachaId: string | undefined;
   gachaName: string;
@@ -33,8 +37,10 @@ export interface OriginalPrizeMissingItem {
 }
 
 interface ZipItemMetadata {
-  filePath: string;
+  filePath: string | null;
+  gachaId?: string | null;
   gachaName: string;
+  itemId?: string | null;
   itemName: string;
   rarity: string;
   rarityColor: string | null;
@@ -42,6 +48,24 @@ interface ZipItemMetadata {
   riaguType: string | null;
   obtainedCount: number;
   isNewForUser: boolean;
+  isOmitted?: boolean;
+}
+
+interface ZipCatalogItemMetadata {
+  itemId: string;
+  itemName: string;
+  rarityId: string;
+  rarityLabel: string;
+  rarityColor: string | null;
+  isRiagu: boolean;
+  assetCount: number;
+  order: number | null;
+}
+
+interface ZipCatalogGachaMetadata {
+  gachaId: string;
+  gachaName: string;
+  items: ZipCatalogItemMetadata[];
 }
 
 interface HistorySelectionMetadata {
@@ -55,8 +79,30 @@ interface BuildParams {
   selection: SaveTargetSelection;
   userId: string;
   userName: string;
+  ownerName?: string;
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
+  excludeRiaguImages?: boolean;
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
+}
+
+export interface ZipSelectionPlan {
+  assets: ZipSelectedAsset[];
+  metadataAssets: ZipSelectedAsset[];
+  omittedAssetIds: Set<string>;
+  includedPullIds: Set<string>;
+  historySelectionDetails: HistorySelectionMetadata[];
+  warnings: Set<string>;
+  originalPrizeMissingPullIds: string[];
 }
 
 type CatalogGacha = GachaCatalogStateV4['byGacha'][string] | undefined;
@@ -364,7 +410,7 @@ function collectOriginalPrizeSelection(params: {
             itemId,
             itemName,
             rarityId: catalogItem.rarityId ?? 'unknown',
-            count: requiredCount,
+            count: 1,
             isRiagu: Boolean(catalogItem.riagu)
           });
           contributed = true;
@@ -456,6 +502,42 @@ function collectOriginalPrizeSelection(params: {
   const assignedCounts = new Map<string, number>();
   const assignmentKeys = new Set<string>();
 
+  Object.values(inventoriesForUser ?? {}).forEach((inventory) => {
+    if (!inventory) {
+      return;
+    }
+    if (gachaFilter && !gachaFilter.has(inventory.gachaId)) {
+      return;
+    }
+
+    Object.entries(inventory.originalPrizeAssets ?? {}).forEach(([itemId, assetEntries]) => {
+      if (itemIdFilter && !itemIdFilter.has(itemId)) {
+        return;
+      }
+      const key = `${inventory.gachaId}:${itemId}`;
+      const required = requiredCounts.get(key);
+      if (!required || !Array.isArray(assetEntries)) {
+        return;
+      }
+
+      assetEntries.forEach((asset) => {
+        if (!asset?.assetId) {
+          return;
+        }
+        if (seenAssets.has(asset.assetId)) {
+          return;
+        }
+        seenAssets.add(asset.assetId);
+        assignedCounts.set(key, (assignedCounts.get(key) ?? 0) + 1);
+        assets.push({
+          ...required.item,
+          assetId: asset.assetId,
+          count: 1
+        });
+      });
+    });
+  });
+
   Object.values(history?.pulls ?? {}).forEach((entry) => {
     if (!entry || normalizeUserId(entry.userId) !== normalizedUserId) {
       return;
@@ -500,7 +582,8 @@ function collectOriginalPrizeSelection(params: {
         seenAssets.add(assignment.assetId);
         assets.push({
           ...required.item,
-          assetId: assignment.assetId
+          assetId: assignment.assetId,
+          count: 1
         });
       });
     });
@@ -600,10 +683,10 @@ function aggregateInventoryItems(
           warnings,
           seenAssets,
           (type, { gachaId, itemId: warningItemId, itemName }) => {
-            const id = gachaId ?? 'unknown';
+            const label = context.gachaName || gachaId || 'unknown';
             return type === 'missingItem'
-              ? `カタログ情報が見つかりません: ${id} / ${warningItemId}`
-              : `ファイルが未設定: ${id} / ${itemName ?? warningItemId}`;
+              ? `カタログ情報が見つかりません: ${label} / ${warningItemId}`
+              : `ファイルが未設定: ${label} / ${itemName ?? warningItemId}`;
           }
         );
 
@@ -622,9 +705,10 @@ function aggregateHistoryItems(
   selection: Extract<SaveTargetSelection, { mode: 'history' }>,
   warnings: Set<string>,
   normalizedTargetUserId: string,
-  itemIdFilter: Set<string> | null | undefined,
-  newItemsOnlyPullIds: Set<string> | null | undefined,
-  seenAssets: Set<string>
+  itemIdFilter?: Set<string> | null,
+  newItemsOnlyPullIds?: Set<string> | null,
+  originalPrizeOnlyPullIds?: Set<string> | null,
+  seenAssets?: Set<string>
 ): { assets: SelectedAsset[]; pulls: HistorySelectionMetadata[]; includedPullIds: Set<string> } {
   const history = snapshot.pullHistory;
   if (!history?.pulls) {
@@ -633,6 +717,7 @@ function aggregateHistoryItems(
 
   const catalogState = snapshot.catalogState;
   const appState = snapshot.appState;
+  const resolvedSeenAssets = seenAssets ?? new Set<string>();
   const selected: SelectedAsset[] = [];
   const pullMetadata: HistorySelectionMetadata[] = [];
   const includedPullIds = new Set<string>();
@@ -652,7 +737,8 @@ function aggregateHistoryItems(
       return;
     }
 
-    const newItemsOnly = Boolean(newItemsOnlyPullIds && newItemsOnlyPullIds.has(entryId));
+    const originalPrizeOnly = Boolean(originalPrizeOnlyPullIds && originalPrizeOnlyPullIds.has(entryId));
+    const newItemsOnly = !originalPrizeOnly && Boolean(newItemsOnlyPullIds && newItemsOnlyPullIds.has(entryId));
     const newItemsSet = newItemsOnly ? new Set(entry.newItems ?? []) : null;
 
     const normalizedPullCount = Number.isFinite(entry.pullCount)
@@ -668,37 +754,39 @@ function aggregateHistoryItems(
     const context = resolveCatalogContext(catalogState, appState, entry.gachaId);
     let entryContributed = false;
 
-    Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
-      if (!itemId || !Number.isFinite(count) || count <= 0) {
-        return;
-      }
-      if (itemIdFilter && !itemIdFilter.has(itemId)) {
-        return;
-      }
-      if (newItemsSet && !newItemsSet.has(itemId)) {
-        return;
-      }
-
-      const assets = createSelectedAssets(
-        context,
-        itemId,
-        'unknown',
-        count,
-        warnings,
-        seenAssets,
-        (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
-          const id = warningGachaId ?? 'unknown';
-          return type === 'missingItem'
-            ? `履歴に対応する景品が見つかりません: ${id} / ${warningItemId}`
-            : `履歴の景品にファイルが設定されていません: ${id} / ${itemName ?? warningItemId}`;
+    if (!originalPrizeOnly) {
+      Object.entries(entry.itemCounts ?? {}).forEach(([itemId, count]) => {
+        if (!itemId || !Number.isFinite(count) || count <= 0) {
+          return;
         }
-      );
+        if (itemIdFilter && !itemIdFilter.has(itemId)) {
+          return;
+        }
+        if (newItemsSet && !newItemsSet.has(itemId)) {
+          return;
+        }
 
-      if (assets.length > 0) {
-        selected.push(...assets);
-        entryContributed = true;
-      }
-    });
+        const assets = createSelectedAssets(
+          context,
+          itemId,
+          'unknown',
+          count,
+          warnings,
+          resolvedSeenAssets,
+          (type, { gachaId: warningGachaId, itemId: warningItemId, itemName }) => {
+            const label = context.gachaName || warningGachaId || 'unknown';
+            return type === 'missingItem'
+              ? `履歴に対応する景品が見つかりません: ${label} / ${warningItemId}`
+              : `履歴の景品にファイルが設定されていません: ${label} / ${itemName ?? warningItemId}`;
+          }
+        );
+
+        if (assets.length > 0) {
+          selected.push(...assets);
+          entryContributed = true;
+        }
+      });
+    }
 
     if (entryContributed) {
       includedPullIds.add(entryId);
@@ -835,24 +923,121 @@ function isItemNewForUser(
   return !entries.some((entry) => normalizeUserId(entry.userId) === normalizedUserId && entry.gachaId === gachaId);
 }
 
-export async function buildUserZipFromSelection({
+function resolveCatalogGachaIds(
+  selection: SaveTargetSelection,
+  catalogState: GachaCatalogStateV4 | undefined,
+  metadataAssets: SelectedAsset[]
+): string[] {
+  if (!catalogState?.byGacha) {
+    return [];
+  }
+  if (selection.mode === 'gacha') {
+    return Array.from(new Set(selection.gachaIds.filter((id) => id && id.trim())));
+  }
+  if (selection.mode === 'history') {
+    return Array.from(
+      new Set(
+        metadataAssets
+          .map((asset) => asset.gachaId)
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+      )
+    );
+  }
+  return Object.keys(catalogState.byGacha);
+}
+
+function buildCatalogSummary(
+  catalogState: GachaCatalogStateV4 | undefined,
+  appState: GachaLocalStorageSnapshot['appState'] | undefined,
+  rarityState: GachaRarityStateV3 | undefined,
+  selection: SaveTargetSelection,
+  metadataAssets: SelectedAsset[]
+): ZipCatalogGachaMetadata[] {
+  if (!catalogState?.byGacha) {
+    return [];
+  }
+  const gachaIds = resolveCatalogGachaIds(selection, catalogState, metadataAssets);
+  if (gachaIds.length === 0) {
+    return [];
+  }
+
+  const summaries: ZipCatalogGachaMetadata[] = [];
+  gachaIds.forEach((gachaId) => {
+    const gachaSnapshot = catalogState.byGacha[gachaId];
+    if (!gachaSnapshot) {
+      return;
+    }
+    const gachaName = appState?.meta?.[gachaId]?.displayName ?? gachaId;
+    const orderIndex = new Map<string, number>();
+    (gachaSnapshot.order ?? []).forEach((itemId, index) => {
+      orderIndex.set(itemId, index);
+    });
+
+    const items: ZipCatalogItemMetadata[] = Object.entries(gachaSnapshot.items ?? {}).map(([itemId, item]) => {
+      const rarityLabel = resolveRarityLabel(rarityState, item.rarityId ?? '');
+      const rarityColor = rarityState?.entities?.[item.rarityId ?? '']?.color ?? null;
+      const assetCount = Array.isArray(item.assets) ? item.assets.length : 0;
+      const fallbackOrder = orderIndex.get(itemId);
+      const orderValue = Number.isFinite(item.order)
+        ? (item.order as number)
+        : Number.isFinite(fallbackOrder)
+          ? (fallbackOrder as number)
+          : null;
+
+      return {
+        itemId,
+        itemName: item.name ?? itemId,
+        rarityId: item.rarityId ?? 'unknown',
+        rarityLabel,
+        rarityColor,
+        isRiagu: Boolean(item.riagu),
+        assetCount,
+        order: orderValue
+      };
+    });
+
+    items.sort((a, b) => {
+      if (a.order !== null && b.order !== null && a.order !== b.order) {
+        return a.order - b.order;
+      }
+      if (a.order !== null) {
+        return -1;
+      }
+      if (b.order !== null) {
+        return 1;
+      }
+      return a.itemName.localeCompare(b.itemName, 'ja');
+    });
+
+    if (items.length > 0) {
+      summaries.push({ gachaId, gachaName, items });
+    }
+  });
+
+  summaries.sort((a, b) => a.gachaName.localeCompare(b.gachaName, 'ja'));
+  return summaries;
+}
+
+export function buildZipSelectionPlan({
   snapshot,
   selection,
   userId,
   userName,
+  ownerName,
   includeMetadata = true,
-  itemIdFilter
-}: BuildParams): Promise<ZipBuildResult> {
+  itemIdFilter,
+  excludeRiaguImages
+}: BuildParams): ZipSelectionPlan {
   ensureBrowserEnvironment();
 
   const warnings = new Set<string>();
   const seenAssets = new Set<string>();
 
   const catalogState = snapshot.catalogState;
-  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
   const inventoriesForUser = snapshot.userInventories?.inventories?.[userId];
   const normalizedUserId = normalizeUserId(userId);
   const normalizedItemFilter = itemIdFilter && itemIdFilter.size > 0 ? new Set(itemIdFilter) : null;
+  const shouldExcludeRiaguImages = excludeRiaguImages === true;
 
   const originalPrizeSelection = collectOriginalPrizeSelection({
     snapshot,
@@ -867,10 +1052,17 @@ export async function buildUserZipFromSelection({
   let collected: SelectedAsset[] = [];
   let historySelectionDetails: HistorySelectionMetadata[] = [];
   let includedPullIds: Set<string> = new Set();
+  let metadataAssets: SelectedAsset[] = [];
+  let omittedAssetIds: Set<string> = new Set();
+
   if (selection.mode === 'history') {
     const newItemsOnlyPullIds =
       selection.newItemsOnlyPullIds && selection.newItemsOnlyPullIds.length > 0
         ? new Set(selection.newItemsOnlyPullIds)
+        : null;
+    const missingOnlyPullIds =
+      selection.missingOnlyPullIds && selection.missingOnlyPullIds.length > 0
+        ? new Set(selection.missingOnlyPullIds)
         : null;
     const historyAggregation = aggregateHistoryItems(
       snapshot,
@@ -879,6 +1071,7 @@ export async function buildUserZipFromSelection({
       normalizedUserId,
       normalizedItemFilter,
       newItemsOnlyPullIds,
+      missingOnlyPullIds,
       seenAssets
     );
     collected = [...originalPrizeSelection.assets, ...historyAggregation.assets];
@@ -886,6 +1079,37 @@ export async function buildUserZipFromSelection({
     includedPullIds = historyAggregation.includedPullIds;
     if (originalPrizeSelection.includedPullIds) {
       originalPrizeSelection.includedPullIds.forEach((id) => includedPullIds.add(id));
+    }
+    if (newItemsOnlyPullIds && newItemsOnlyPullIds.size > 0) {
+      const allHistoryAggregation = aggregateHistoryItems(
+        snapshot,
+        selection,
+        warnings,
+        normalizedUserId,
+        normalizedItemFilter,
+        null,
+        missingOnlyPullIds
+      );
+      const metadataEntries = new Map<string, SelectedAsset>();
+      originalPrizeSelection.assets.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      allHistoryAggregation.assets.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      metadataAssets = Array.from(metadataEntries.values());
+      const selectedAssetIds = new Set(collected.map((item) => item.assetId));
+      omittedAssetIds = new Set(
+        metadataAssets
+          .filter((item) => !selectedAssetIds.has(item.assetId))
+          .map((item) => item.assetId)
+      );
+    } else {
+      const metadataEntries = new Map<string, SelectedAsset>();
+      collected.forEach((item) => {
+        metadataEntries.set(item.assetId, item);
+      });
+      metadataAssets = Array.from(metadataEntries.values());
     }
   } else {
     collected = aggregateInventoryItems(
@@ -908,9 +1132,72 @@ export async function buildUserZipFromSelection({
         Array.from(includedPullIds)
       );
     }
+    const metadataEntries = new Map<string, SelectedAsset>();
+    collected.forEach((item) => {
+      metadataEntries.set(item.assetId, item);
+    });
+    metadataAssets = Array.from(metadataEntries.values());
   }
 
-  if (collected.length === 0) {
+  if (shouldExcludeRiaguImages && collected.length > 0) {
+    collected = collected.filter((item) => !item.isRiagu);
+  }
+
+  if (shouldExcludeRiaguImages && metadataAssets.length > 0) {
+    metadataAssets = metadataAssets.filter((item) => !item.isRiagu);
+  }
+
+  if (shouldExcludeRiaguImages && omittedAssetIds.size > 0) {
+    const allowed = new Set(metadataAssets.map((item) => item.assetId));
+    omittedAssetIds = new Set(Array.from(omittedAssetIds).filter((assetId) => allowed.has(assetId)));
+  }
+
+  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+
+  return {
+    assets: collected,
+    metadataAssets,
+    omittedAssetIds,
+    includedPullIds,
+    historySelectionDetails,
+    warnings,
+    originalPrizeMissingPullIds
+  };
+}
+
+export async function buildUserZipFromSelection({
+  snapshot,
+  selection,
+  userId,
+  userName,
+  ownerName,
+  includeMetadata = true,
+  itemIdFilter,
+  excludeRiaguImages
+}: BuildParams): Promise<ZipBuildResult> {
+  const plan = buildZipSelectionPlan({
+    snapshot,
+    selection,
+    userId,
+    userName,
+    ownerName,
+    includeMetadata,
+    itemIdFilter,
+    excludeRiaguImages
+  });
+
+  const { warnings } = plan;
+  const collected = plan.assets;
+  const metadataAssets = plan.metadataAssets;
+  const omittedAssetIds = plan.omittedAssetIds;
+  const includedPullIds = plan.includedPullIds;
+  const historySelectionDetails = plan.historySelectionDetails;
+  const rarityState: GachaRarityStateV3 | undefined = snapshot.rarityState;
+  const catalogState = snapshot.catalogState;
+
+  const canProceedWithoutAssets = includeMetadata && metadataAssets.length > 0;
+
+  if (collected.length === 0 && !canProceedWithoutAssets) {
     throw new Error('保存できる景品が見つかりませんでした');
   }
 
@@ -929,13 +1216,14 @@ export async function buildUserZipFromSelection({
     return Boolean(record?.asset?.blob);
   });
 
-  if (availableRecords.length === 0) {
+  if (availableRecords.length === 0 && !canProceedWithoutAssets) {
     throw new Error('ファイルデータを読み込めませんでした');
   }
 
   const zip = new JSZip();
   const itemsFolder = zip.folder('items');
   const itemMetadataMap: Record<string, ZipItemMetadata> | null = includeMetadata ? {} : null;
+  const fileNameCounters = new Map<string, number>();
 
   availableRecords.forEach(({ item, asset }) => {
     if (!itemsFolder) {
@@ -949,7 +1237,12 @@ export async function buildUserZipFromSelection({
     }
 
     const fileExtension = inferAssetExtension(asset);
-    const fileName = `${item.assetId}${fileExtension}`;
+    const baseName = sanitizePathComponent(item.itemName ?? 'item') || 'item';
+    const counterKey = `${sanitizedGachaName}::${baseName}`;
+    const nextIndex = (fileNameCounters.get(counterKey) ?? 0) + 1;
+    fileNameCounters.set(counterKey, nextIndex);
+    const suffix = nextIndex > 1 ? `_${nextIndex}` : '';
+    const fileName = `${baseName}${suffix}${fileExtension}`;
 
     gachaDir.file(fileName, asset.blob, {
       binary: true,
@@ -962,22 +1255,51 @@ export async function buildUserZipFromSelection({
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
       itemMetadataMap[item.assetId] = {
         filePath,
+        gachaId: item.gachaId ?? null,
         gachaName: item.gachaName,
+        itemId: item.itemId ?? null,
         itemName: item.itemName,
         rarity: rarityLabel,
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
         obtainedCount: item.count,
-        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId)
+        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
+        isOmitted: false
       };
     }
   });
 
+  if (itemMetadataMap && metadataAssets.length > 0) {
+    metadataAssets.forEach((item) => {
+      if (itemMetadataMap[item.assetId]) {
+        return;
+      }
+      const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
+      const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
+      itemMetadataMap[item.assetId] = {
+        filePath: null,
+        gachaId: item.gachaId ?? null,
+        gachaName: item.gachaName,
+        itemId: item.itemId ?? null,
+        itemName: item.itemName,
+        rarity: rarityLabel,
+        rarityColor,
+        isRiagu: item.isRiagu,
+        riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+        obtainedCount: item.count,
+        isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
+        isOmitted: omittedAssetIds.has(item.assetId)
+      };
+    });
+  }
+
   const metaFolder = includeMetadata ? zip.folder('meta') : null;
   const generatedAt = includeMetadata ? new Date().toISOString() : null;
   const pullIds = Array.from(includedPullIds);
+  const normalizedOwnerName = typeof ownerName === 'string' ? ownerName.trim() : '';
   if (includeMetadata && metaFolder && generatedAt && itemMetadataMap) {
+    const catalogSummary = buildCatalogSummary(catalogState, snapshot.appState, rarityState, selection, metadataAssets);
     metaFolder.file(
       'selection.json',
       JSON.stringify(
@@ -988,6 +1310,7 @@ export async function buildUserZipFromSelection({
             id: userId,
             displayName: userName
           },
+          owner: normalizedOwnerName ? { displayName: normalizedOwnerName } : undefined,
           selection,
           itemCount: availableRecords.length,
           warnings: Array.from(warnings),
@@ -1008,6 +1331,26 @@ export async function buildUserZipFromSelection({
       }
     );
 
+    if (catalogSummary.length > 0) {
+      metaFolder.file(
+        'catalog.json',
+        JSON.stringify(
+          {
+            version: 1,
+            generatedAt,
+            gachas: catalogSummary
+          },
+          null,
+          2
+        ),
+        {
+          date: new Date(generatedAt),
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        }
+      );
+    }
+
     metaFolder.file(
       'items.json',
       JSON.stringify(itemMetadataMap, null, 2),
@@ -1022,7 +1365,7 @@ export async function buildUserZipFromSelection({
   const blob = await zip.generateAsync({ type: 'blob' });
   const timestamp = formatTimestamp(new Date());
   const fileName = sanitizeFileName(userName || userId, timestamp);
-  const originalPrizeMissingPullIds = Array.from(originalPrizeSelection.missingPullIds);
+  const originalPrizeMissingPullIds = plan.originalPrizeMissingPullIds;
 
   return {
     blob,

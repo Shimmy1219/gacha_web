@@ -25,7 +25,6 @@ import { PrizeSettingsDialog } from '../../../../modals/dialogs/PrizeSettingsDia
 import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
-import { useHaptics } from '../../../../features/haptics/HapticsProvider';
 import { type GachaCatalogItemV4, type RiaguCardModelV3 } from '@domain/app-persistence';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
@@ -34,9 +33,12 @@ import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 import { ItemContextMenu } from './ItemContextMenu';
 import {
   buildGachaPools,
+  buildItemInventoryCountMap,
   formatItemRateWithPrecision,
-  inferRarityFractionDigits
+  inferRarityFractionDigits,
+  resolveRemainingStock
 } from '../../../../logic/gacha';
+import { formatRarityRate } from '../../../../features/rarity/utils/rarityRate';
 
 const FALLBACK_RARITY_COLOR = '#a1a1aa';
 const PLACEHOLDER_CREATED_AT = '2024-01-01T00:00:00.000Z';
@@ -103,7 +105,6 @@ export function ItemsSection(): JSX.Element {
     []
   );
   const { isMobile } = useResponsiveDashboard();
-  const { triggerConfirmation, triggerError } = useHaptics();
   const defaultColumnCount = 3;
   const [gridTemplateColumns, setGridTemplateColumns] = useState(
     `repeat(${defaultColumnCount}, minmax(100px,181px))`
@@ -195,15 +196,50 @@ export function ItemsSection(): JSX.Element {
     [data?.rarityState]
   );
 
-  const { poolsByGachaId, itemsById } = useMemo(
+  const itemInventoryCounts = useMemo(
+    () => buildItemInventoryCountMap(data?.userInventories?.byItemId),
+    [data?.userInventories?.byItemId]
+  );
+
+  const { poolsByGachaId, itemsById, rateRedistributionsByGachaId } = useMemo(
     () =>
       buildGachaPools({
         catalogState: data?.catalogState,
         rarityState: data?.rarityState,
-        rarityFractionDigits
+        rarityFractionDigits,
+        inventoryCountsByItemId: itemInventoryCounts
       }),
-    [data?.catalogState, data?.rarityState, rarityFractionDigits]
+    [data?.catalogState, data?.rarityState, itemInventoryCounts, rarityFractionDigits]
   );
+
+  const rateRedistributionNotice = useMemo(() => {
+    if (!activeGachaId) {
+      return null;
+    }
+
+    const redistribution = rateRedistributionsByGachaId.get(activeGachaId);
+    if (!redistribution) {
+      return null;
+    }
+
+    const rarityEntities = data?.rarityState?.entities ?? {};
+    const targetLabel = rarityEntities[redistribution.targetRarityId]?.label ?? redistribution.targetRarityId;
+    const sourceLabels = redistribution.sourceRarityIds
+      .map((rarityId) => rarityEntities[rarityId]?.label ?? rarityId)
+      .filter((label) => Boolean(label));
+    const formattedRate = formatRarityRate(redistribution.totalMissingRate);
+    const rateLabel = formattedRate ? `${formattedRate}%` : '';
+    const sourceText =
+      sourceLabels.length > 0
+        ? `アイテムが存在しないレアリティ（${sourceLabels.join(' / ')}）の排出率${rateLabel}を`
+        : `アイテムが存在しないレアリティの排出率${rateLabel}を`;
+    const strategyNote =
+      redistribution.targetStrategy === 'next-highest'
+        ? '（自動調整対象のレアリティが存在しないため、次に排出率が高いレアリティへ加算）'
+        : '';
+
+    return `${sourceText}「${targetLabel}」に加算しています。${strategyNote}`;
+  }, [activeGachaId, data?.rarityState?.entities, rateRedistributionsByGachaId]);
 
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
@@ -230,10 +266,7 @@ export function ItemsSection(): JSX.Element {
         return;
       }
 
-      const pool = poolsByGachaId.get(gachaId);
-      if (!pool) {
-        return;
-      }
+      const pool = poolsByGachaId.get(gachaId) ?? null;
 
       const gachaMeta = data.appState?.meta?.[gachaId];
       const results: ItemEntry[] = [];
@@ -245,20 +278,29 @@ export function ItemsSection(): JSX.Element {
         }
 
         const poolItem = itemsById.get(snapshot.itemId);
+        const remainingStock = resolveRemainingStock(
+          snapshot.itemId,
+          snapshot.stockCount,
+          itemInventoryCounts
+        );
+        const isOutOfStock = remainingStock === 0;
         const rarityEntity = rarityEntities[snapshot.rarityId];
-        const rarityGroup = pool.rarityGroups.get(snapshot.rarityId);
+        const rarityGroup = pool?.rarityGroups.get(snapshot.rarityId);
 
         const emitRate = poolItem?.rarityEmitRate ?? rarityEntity?.emitRate;
         const baseWeight = poolItem?.drawWeight ?? (snapshot.pickupTarget ? 2 : 1);
-        const computedItemRate =
-          poolItem?.itemRate ??
-          (rarityGroup?.emitRate && rarityGroup?.totalWeight
-            ? (rarityGroup.emitRate * baseWeight) / rarityGroup.totalWeight
-            : undefined);
+        const computedItemRate = isOutOfStock
+          ? undefined
+          : poolItem?.itemRate ??
+            (rarityGroup?.emitRate && rarityGroup?.totalWeight
+              ? (rarityGroup.emitRate * baseWeight) / rarityGroup.totalWeight
+              : undefined);
         const ratePrecision = rarityFractionDigits.get(snapshot.rarityId);
-        const baseDisplay = poolItem?.itemRateDisplay
-          ? poolItem.itemRateDisplay.replace(/%$/, '')
-          : '';
+        const baseDisplay = isOutOfStock
+          ? ''
+          : poolItem?.itemRateDisplay
+            ? poolItem.itemRateDisplay.replace(/%$/, '')
+            : '';
         const formattedRate = baseDisplay
           ? baseDisplay
           : formatItemRateWithPrecision(computedItemRate, ratePrecision);
@@ -303,7 +345,8 @@ export function ItemsSection(): JSX.Element {
           originalPrize: Boolean(snapshot.originalPrize),
           order: snapshot.order ?? 0,
           createdAt: gachaMeta?.createdAt ?? snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
-          updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT
+          updatedAt: snapshot.updatedAt ?? PLACEHOLDER_CREATED_AT,
+          remainingStock
         };
 
         const entry: ItemEntry = {
@@ -321,7 +364,15 @@ export function ItemsSection(): JSX.Element {
     });
 
     return { itemsByGacha: entries, flatItems: flat };
-  }, [data?.appState, data?.catalogState, data?.rarityState, itemsById, poolsByGachaId, rarityFractionDigits]);
+  }, [
+    data?.appState,
+    data?.catalogState,
+    data?.rarityState,
+    itemInventoryCounts,
+    itemsById,
+    poolsByGachaId,
+    rarityFractionDigits
+  ]);
 
   const itemEntryById = useMemo(() => {
     const map = new Map<string, ItemEntry>();
@@ -944,6 +995,7 @@ export function ItemsSection(): JSX.Element {
           isRiagu: model.isRiagu,
           hasRiaguCard: Boolean(riaguCard),
           riaguAssignmentCount,
+          stockCount: catalogItem?.stockCount ?? null,
           assets: assetEntries,
           rarityColor: rarity.color,
           riaguPrice: riaguCard?.unitCost,
@@ -959,7 +1011,8 @@ export function ItemsSection(): JSX.Element {
                 completeTarget: payload.completeTarget,
                 originalPrize: payload.originalPrize,
                 riagu: payload.riagu,
-                assets: payload.assets
+                assets: payload.assets,
+                stockCount: payload.stockCount == null ? undefined : payload.stockCount
               };
               catalogStore.updateItem({
                 gachaId: model.gachaId,
@@ -1122,6 +1175,13 @@ export function ItemsSection(): JSX.Element {
                   ) : null}
                   {status === 'ready' && activeGachaId && items.length === 0 ? (
                     <p className="text-sm text-muted-foreground">このガチャには表示できるアイテムがありません。</p>
+                  ) : null}
+
+                  {rateRedistributionNotice ? (
+                    <div className="items-section__rate-redistribution mb-3 ml-4 mr-4 rounded-2xl border px-4 py-3 text-sm sm:mr-2">
+                      <p className="font-semibold">排出率の再配分が発生しています</p>
+                      <p className="items-section__rate-redistribution-message mt-1">{rateRedistributionNotice}</p>
+                    </div>
                   ) : null}
 
                   {showAddCard || items.length > 0 ? (

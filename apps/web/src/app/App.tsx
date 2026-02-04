@@ -268,13 +268,15 @@ export function App(): JSX.Element {
       title: 'サイト設定',
       description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
       size: 'xl',
-      panelPaddingClassName: 'p-2 lg:p-6'
+      panelClassName: 'page-settings-modal overflow-hidden',
+      panelPaddingClassName: 'p-2 lg:p-6',
+      showHeaderCloseButton: true
     });
   };
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {
-    title: '四遊楽ガチャツール',
-    tagline: 'Integrated Gacha Management Tool emergency',
+    title: '♡四遊楽ガチャツール♡',
+    tagline: 'SHIYURA Integrated Gacha Management Tool ',
     mainRef,
     isMobile,
     onDrawGacha: handleDrawGacha,

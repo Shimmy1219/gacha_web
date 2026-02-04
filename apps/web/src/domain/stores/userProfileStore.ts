@@ -486,6 +486,80 @@ export class UserProfileStore extends PersistedStore<UserProfilesStateV3 | undef
     }, options);
   }
 
+  resetDiscordInfo(options: UpdateOptions = { persist: 'immediate' }): void {
+    this.update((previous) => {
+      const base = normalizeState(previous);
+      const now = new Date().toISOString();
+      let changed = false;
+      const nextUsers: Record<string, UserProfileCardV3> = {};
+
+      Object.entries(base.users).forEach(([profileId, profile]) => {
+        if (!profile) {
+          return;
+        }
+
+        const hasDiscordInfo =
+          Object.prototype.hasOwnProperty.call(profile, 'discordUserId') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordDisplayName') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordUserName') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordAvatarAssetId') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordAvatarUrl') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLinkedAt') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareChannelId') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareChannelName') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareChannelParentId') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareUrl') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareLabel') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareTitle') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareComment') ||
+          Object.prototype.hasOwnProperty.call(profile, 'discordLastShareAt');
+
+        if (!hasDiscordInfo) {
+          nextUsers[profileId] = profile;
+          return;
+        }
+
+        changed = true;
+
+        const {
+          discordUserId: _discardUserId,
+          discordDisplayName: _discardDisplayName,
+          discordUserName: _discardUserName,
+          discordAvatarAssetId: _discardAvatarAssetId,
+          discordAvatarUrl: _discardAvatarUrl,
+          discordLinkedAt: _discardLinkedAt,
+          discordLastShareChannelId: _discardChannelId,
+          discordLastShareChannelName: _discardChannelName,
+          discordLastShareChannelParentId: _discardParentId,
+          discordLastShareUrl: _discardShareUrl,
+          discordLastShareLabel: _discardShareLabel,
+          discordLastShareTitle: _discardShareTitle,
+          discordLastShareComment: _discardShareComment,
+          discordLastShareAt: _discardShareAt,
+          ...rest
+        } = profile;
+
+        nextUsers[profileId] = {
+          ...rest,
+          id: profile.id,
+          displayName: profile.displayName,
+          joinedAt: profile.joinedAt,
+          updatedAt: now
+        } satisfies UserProfileCardV3;
+      });
+
+      if (!changed) {
+        return previous;
+      }
+
+      return {
+        ...base,
+        updatedAt: now,
+        users: nextUsers
+      } satisfies UserProfilesStateV3;
+    }, options);
+  }
+
   deleteProfile(
     profileId: string,
     options: UpdateOptions = { persist: 'immediate' }

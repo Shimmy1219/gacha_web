@@ -83,6 +83,7 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
   };
 
   const dismissible = entry.props.dismissible ?? true;
+  const showHeaderCloseButton = dismissible && entry.props.showHeaderCloseButton === true;
 
   return (
     <Transition.Root show as={Fragment} appear>
@@ -125,7 +126,7 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
               className={entry.props.panelClassName}
               paddingClassName={entry.props.panelPaddingClassName}
             >
-              {dismissible ? (
+              {showHeaderCloseButton ? (
                 <button
                   type="button"
                   onClick={handleClose}
@@ -139,7 +140,7 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
                 title={entry.props.title}
                 description={entry.props.description}
                 actions={
-                  dismissible ? (
+                  showHeaderCloseButton ? (
                     <button
                       type="button"
                       onClick={handleClose}

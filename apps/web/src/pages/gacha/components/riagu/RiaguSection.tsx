@@ -1,14 +1,27 @@
+import { Disclosure } from '@headlessui/react';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
-import { getRarityTextPresentation } from '../../../../features/rarity/utils/rarityColorPresentation';
+import { RarityLabel } from '../../../../components/RarityLabel';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
 import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
 import { useModal, RiaguConfigDialog } from '../../../../modals';
+import { buildGachaPools, buildItemInventoryCountMap, normalizePtSetting } from '../../../../logic/gacha';
+import {
+  calculateExpectedCostPerDraw,
+  calculateProfitAmount,
+  calculateRevenuePerDraw,
+  evaluateProfitMargin,
+  type RiaguProfitStatus
+} from '../../../../logic/riaguProfit';
+import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { DEFAULT_GACHA_OWNER_SHARE_RATE } from '@domain/stores/uiPreferencesStore';
+import { useStoreValue } from '@domain/stores';
+import type { PullHistoryEntryV1 } from '@domain/app-persistence';
 
 interface RiaguDisplayEntry {
   id: string;
@@ -29,6 +42,37 @@ interface RiaguDisplayEntry {
 
 type RiaguEntriesByGacha = Record<string, RiaguDisplayEntry[]>;
 
+interface RiaguSummaryMetrics {
+  estimatedMarginPercent: number | null;
+  estimatedRevenuePerDraw: number | null;
+  estimatedExpectedCostPerDraw: number | null;
+  estimatedProfitPerDraw: number | null;
+  estimatedStatus: RiaguProfitStatus;
+  actualMarginPercent: number | null;
+  actualRevenueAmount: number | null;
+  actualProfitAmount: number | null;
+  actualStatus: RiaguProfitStatus;
+  totalEarnedPt: number;
+  totalOrderCost: number;
+  missingCurrencyHistoryCount: number;
+  missingUnitCostCount: number;
+  outOfStockCount: number;
+  missingRateCount: number;
+}
+
+interface RiaguItemMetric {
+  itemRate: number | null;
+  remainingStock: number | null;
+}
+
+interface RiaguSummaryInputs {
+  activeEntries: RiaguDisplayEntry[];
+  activeItemMetrics: Map<string, RiaguItemMetric>;
+  activePullHistoryEntries: PullHistoryEntryV1[];
+  gachaOwnerShareRate: number | null;
+  perPullPrice: number | null;
+}
+
 const currencyFormatter = new Intl.NumberFormat('ja-JP', {
   style: 'currency',
   currency: 'JPY',
@@ -36,6 +80,54 @@ const currencyFormatter = new Intl.NumberFormat('ja-JP', {
 });
 
 const numberFormatter = new Intl.NumberFormat('ja-JP');
+
+const RIAGU_PANEL_CLOSE_DELAY_MS = 300;
+
+function formatMarginPercent(value: number | null): string {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return '算出不可';
+  }
+  return `${value.toFixed(1)}%`;
+}
+
+function formatCurrencyAmount(
+  value: number | null | undefined,
+  fallback = '算出不可',
+  maximumFractionDigits = 0
+): string {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return new Intl.NumberFormat('ja-JP', {
+    style: 'currency',
+    currency: 'JPY',
+    maximumFractionDigits
+  }).format(value);
+}
+
+function formatShareRate(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
+    return '—';
+  }
+  return `${(Math.round(value * 1000) / 10).toFixed(1).replace(/\.0$/, '')}%`;
+}
+
+function formatPoints(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0pt';
+  }
+  return `${numberFormatter.format(value)}pt`;
+}
+
+function resolveProfitToneClass(status: RiaguProfitStatus): string {
+  if (status === 'profit') {
+    return 'text-emerald-400';
+  }
+  if (status === 'loss') {
+    return 'text-rose-400';
+  }
+  return 'text-muted-foreground';
+}
 
 function formatCurrency(value: number | undefined): string {
   if (value == null) {
@@ -51,11 +143,118 @@ function formatQuantity(value: number): string {
   return numberFormatter.format(value);
 }
 
+function sanitizeNonNegativeNumber(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function createRiaguSummaryMetrics({
+  activeEntries,
+  activeItemMetrics,
+  activePullHistoryEntries,
+  gachaOwnerShareRate,
+  perPullPrice
+}: RiaguSummaryInputs): RiaguSummaryMetrics {
+  let totalOrderCost = 0;
+  let missingUnitCostCount = 0;
+  let outOfStockCount = 0;
+  let missingRateCount = 0;
+  let estimatedExpectedCostPerDrawRaw = 0;
+  let estimatedTermCount = 0;
+
+  activeEntries.forEach((entry) => {
+    const unitCost = sanitizeNonNegativeNumber(entry.unitCost);
+    if (unitCost == null) {
+      missingUnitCostCount += 1;
+    } else {
+      const quantity = sanitizeNonNegativeNumber(entry.requiredQuantity) ?? 0;
+      totalOrderCost += unitCost * quantity;
+    }
+
+    const itemMetrics = activeItemMetrics.get(entry.itemId);
+    if (itemMetrics?.remainingStock === 0) {
+      outOfStockCount += 1;
+      return;
+    }
+    if (unitCost == null) {
+      return;
+    }
+    if (itemMetrics?.itemRate == null) {
+      missingRateCount += 1;
+      return;
+    }
+
+    const expectedCostTerm = calculateExpectedCostPerDraw({
+      itemRate: itemMetrics.itemRate,
+      unitCost,
+      isOutOfStock: itemMetrics.remainingStock === 0
+    });
+    if (expectedCostTerm == null) {
+      return;
+    }
+    estimatedExpectedCostPerDrawRaw += expectedCostTerm;
+    estimatedTermCount += 1;
+  });
+
+  const estimatedRevenuePerDraw = calculateRevenuePerDraw(perPullPrice, gachaOwnerShareRate);
+  const estimatedExpectedCostPerDraw = estimatedTermCount > 0 ? estimatedExpectedCostPerDrawRaw : null;
+  const estimatedProfitPerDraw = calculateProfitAmount(estimatedRevenuePerDraw, estimatedExpectedCostPerDraw);
+  const estimatedEvaluation = evaluateProfitMargin({
+    revenueAmount: estimatedRevenuePerDraw,
+    costAmount: estimatedExpectedCostPerDraw
+  });
+
+  let totalEarnedPt = 0;
+  let missingCurrencyHistoryCount = 0;
+  activePullHistoryEntries.forEach((entry) => {
+    const currencyUsed = sanitizeNonNegativeNumber(entry.currencyUsed);
+    if (currencyUsed == null) {
+      missingCurrencyHistoryCount += 1;
+      return;
+    }
+    totalEarnedPt += currencyUsed;
+  });
+
+  const actualRevenueAmount = calculateRevenuePerDraw(totalEarnedPt, gachaOwnerShareRate);
+  const actualProfitAmount = calculateProfitAmount(actualRevenueAmount, totalOrderCost);
+  const actualEvaluation = evaluateProfitMargin({
+    revenueAmount: actualRevenueAmount,
+    costAmount: totalOrderCost
+  });
+
+  return {
+    estimatedMarginPercent: estimatedEvaluation.percent,
+    estimatedRevenuePerDraw,
+    estimatedExpectedCostPerDraw,
+    estimatedProfitPerDraw,
+    estimatedStatus: estimatedEvaluation.status,
+    actualMarginPercent: actualEvaluation.percent,
+    actualRevenueAmount,
+    actualProfitAmount,
+    actualStatus: actualEvaluation.status,
+    totalEarnedPt,
+    totalOrderCost,
+    missingCurrencyHistoryCount,
+    missingUnitCostCount,
+    outOfStockCount,
+    missingRateCount
+  };
+}
+
 export function RiaguSection(): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const [isSummaryDetailsOpen, setIsSummaryDetailsOpen] = useState(false);
   const confirmDeleteGacha = useGachaDeletion();
   const { push } = useModal();
+  const { uiPreferences } = useDomainStores();
+  const uiPreferencesState = useStoreValue(uiPreferences);
+  const getDefaultOpenState = useCallback(
+    (cardId: string) => uiPreferences.getRiaguCardOpenState(cardId) ?? true,
+    [uiPreferences, uiPreferencesState]
+  );
 
   const { entriesByGacha, riaguGachaIds, totalEntryCount } = useMemo(() => {
     const grouped: RiaguEntriesByGacha = {};
@@ -190,6 +389,10 @@ export function RiaguSection(): JSX.Element {
     });
   }, [data?.appState?.selectedGachaId, gachaTabs]);
 
+  useEffect(() => {
+    setIsSummaryDetailsOpen(false);
+  }, [activeGachaId]);
+
   const gachaTabIds = useMemo(() => gachaTabs.map((tab) => tab.id), [gachaTabs]);
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
   const panelAnimationClass = clsx(
@@ -204,6 +407,61 @@ export function RiaguSection(): JSX.Element {
     () => gachaTabs.find((tab) => tab.id === activeGachaId)?.label ?? activeGachaId ?? '',
     [gachaTabs, activeGachaId]
   );
+  const gachaOwnerShareRate = useMemo(
+    () => uiPreferences.getGachaOwnerShareRatePreference() ?? DEFAULT_GACHA_OWNER_SHARE_RATE,
+    [uiPreferencesState, uiPreferences]
+  );
+  const perPullPrice = useMemo(() => {
+    const gachaId = activeGachaId;
+    if (!gachaId) {
+      return null;
+    }
+    const setting = data?.ptSettings?.byGachaId?.[gachaId];
+    const { normalized } = normalizePtSetting(setting);
+    return normalized.perPull?.unitPrice ?? null;
+  }, [activeGachaId, data?.ptSettings?.byGachaId]);
+  const activeItemMetrics = useMemo(() => {
+    const gachaId = activeGachaId;
+    const itemMetrics = new Map<string, RiaguItemMetric>();
+    if (!gachaId) {
+      return itemMetrics;
+    }
+    const inventoryCounts = buildItemInventoryCountMap(data?.userInventories?.byItemId);
+    const { poolsByGachaId } = buildGachaPools({
+      catalogState: data?.catalogState,
+      rarityState: data?.rarityState,
+      inventoryCountsByItemId: inventoryCounts,
+      includeOutOfStockItems: true
+    });
+    const pool = poolsByGachaId.get(gachaId);
+    pool?.items.forEach((item) => {
+      itemMetrics.set(item.itemId, {
+        itemRate: typeof item.itemRate === 'number' && Number.isFinite(item.itemRate) ? item.itemRate : null,
+        remainingStock:
+          typeof item.remainingStock === 'number' && Number.isFinite(item.remainingStock) ? item.remainingStock : null
+      });
+    });
+    return itemMetrics;
+  }, [activeGachaId, data?.catalogState, data?.rarityState, data?.userInventories?.byItemId]);
+  const activePullHistoryEntries = useMemo(() => {
+    const gachaId = activeGachaId;
+    if (!gachaId) {
+      return [] as PullHistoryEntryV1[];
+    }
+    return Object.values(data?.pullHistory?.pulls ?? {}).filter((entry): entry is PullHistoryEntryV1 => {
+      return Boolean(entry?.gachaId && entry.gachaId === gachaId);
+    });
+  }, [activeGachaId, data?.pullHistory?.pulls]);
+  const summaryMetrics = useMemo<RiaguSummaryMetrics>(() => {
+    return createRiaguSummaryMetrics({
+      activeEntries,
+      activeItemMetrics,
+      activePullHistoryEntries,
+      gachaOwnerShareRate,
+      perPullPrice
+    });
+  }, [activeEntries, activeItemMetrics, activePullHistoryEntries, gachaOwnerShareRate, perPullPrice]);
+  const summaryDetailsId = activeGachaId ? `riagu-summary-card-details-${activeGachaId}` : 'riagu-summary-card-details';
 
   return (
     <SectionContainer
@@ -240,114 +498,249 @@ export function RiaguSection(): JSX.Element {
 
               {activeEntries.length > 0 ? (
                 <div className="riagu-section__list space-y-3">
-                  {activeEntries.map((entry) => {
-                    const { className, style } = getRarityTextPresentation(entry.rarityColor);
-                    return (
-                      <article
-                        key={entry.id}
-                        className="riagu-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-5 shadow-sm"
+                  <article className="riagu-summary-card riagu-card rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-3 shadow-sm">
+                    <header className="riagu-summary-card__header flex flex-wrap items-start justify-between gap-2">
+                      <div className="riagu-summary-card__heading flex min-w-0 flex-col gap-1">
+                        <h3 className="riagu-summary-card__title text-sm font-semibold text-surface-foreground">
+                          リアグ収支サマリー
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        className="riagu-summary-card__toggle text-xs font-semibold text-accent transition hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                        onClick={() => setIsSummaryDetailsOpen((current) => !current)}
+                        aria-controls={isSummaryDetailsOpen ? summaryDetailsId : undefined}
+                        aria-expanded={isSummaryDetailsOpen}
                       >
-                        <header className="riagu-card__header flex items-start justify-between gap-3">
-                          <div className="riagu-card__meta flex flex-1 flex-col gap-3">
-                            <div className="riagu-card__meta-heading flex items-center gap-3">
-                              <ItemPreview
-                                assetId={entry.assetId}
-                                previewAssetId={entry.thumbnailAssetId}
-                                fallbackUrl={entry.thumbnailUrl}
-                                alt={`${entry.itemName}のプレビュー`}
-                                kindHint="image"
-                                className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
-                                emptyLabel="noImage"
-                              />
-                              <div className="riagu-card__meta-text flex-1 space-y-2">
-                                <span className="riagu-card__rarity inline-flex min-w-[3rem] items-center justify-center rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-surface-foreground shadow-sm">
-                                  <span
-                                    className={clsx('inventory-history-dialog__rarity-badge__label', className)}
-                                    style={style}
-                                  >
-                                    {entry.rarityLabel}
-                                  </span>
-                                </span>
-                                <h3 className="riagu-card__title text-base font-semibold text-surface-foreground">{entry.itemName}</h3>
-                              </div>
+                        {isSummaryDetailsOpen ? '詳細を閉じる' : '詳細を表示'}
+                      </button>
+                    </header>
+                    <dl className="riagu-summary-card__metrics mt-2 grid grid-cols-2 gap-2 text-[11px] leading-snug text-muted-foreground">
+                      <div className="riagu-summary-card__metric space-y-1 rounded-xl border border-border/40 bg-panel/40 p-2">
+                        <dt className="riagu-summary-card__metric-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                          推定利益率
+                        </dt>
+                        <dd
+                          className={clsx(
+                            'riagu-summary-card__metric-value text-sm font-semibold',
+                            resolveProfitToneClass(summaryMetrics.estimatedStatus)
+                          )}
+                        >
+                          {formatMarginPercent(summaryMetrics.estimatedMarginPercent)}
+                        </dd>
+                      </div>
+                      <div className="riagu-summary-card__metric space-y-1 rounded-xl border border-border/40 bg-panel/40 p-2">
+                        <dt className="riagu-summary-card__metric-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                          実質利益率
+                        </dt>
+                        <dd
+                          className={clsx(
+                            'riagu-summary-card__metric-value text-sm font-semibold',
+                            resolveProfitToneClass(summaryMetrics.actualStatus)
+                          )}
+                        >
+                          {formatMarginPercent(summaryMetrics.actualMarginPercent)}
+                        </dd>
+                      </div>
+                      <div className="riagu-summary-card__metric space-y-1 rounded-xl border border-border/40 bg-panel/40 p-2">
+                        <dt className="riagu-summary-card__metric-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                          トータル獲得pt
+                        </dt>
+                        <dd className="riagu-summary-card__metric-value text-sm font-semibold text-surface-foreground">
+                          {formatPoints(summaryMetrics.totalEarnedPt)}
+                        </dd>
+                      </div>
+                      <div className="riagu-summary-card__metric space-y-1 rounded-xl border border-border/40 bg-panel/40 p-2">
+                        <dt className="riagu-summary-card__metric-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                          全リアグ発注合計金額
+                        </dt>
+                        <dd className="riagu-summary-card__metric-value text-sm font-semibold text-surface-foreground">
+                          {formatCurrencyAmount(summaryMetrics.totalOrderCost, '—')}
+                        </dd>
+                      </div>
+                    </dl>
+                    {isSummaryDetailsOpen ? (
+                      <div id={summaryDetailsId} className="riagu-summary-card__details-wrapper mt-3">
+                        <div className="riagu-summary-card__details min-h-0 space-y-2 overflow-hidden rounded-xl border border-border/40 bg-panel/40 p-2 text-[11px] text-muted-foreground">
+                          <div className="riagu-summary-card__detail-group grid gap-1">
+                            <div className="riagu-summary-card__detail-item">
+                              配信アプリからの還元率: {formatShareRate(gachaOwnerShareRate)}
                             </div>
-                            <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
-                              <div className="riagu-card__summary-item space-y-1">
-                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                  原価
-                                </dt>
-                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                  {formatCurrency(entry.unitCost)}
-                                </dd>
-                              </div>
-                              <div className="riagu-card__summary-item space-y-1">
-                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                  必要個数
-                                </dt>
-                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                  {formatQuantity(entry.requiredQuantity)}
-                                </dd>
-                              </div>
-                              <div className="riagu-card__summary-item space-y-1">
-                                <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                                  合計金額
-                                </dt>
-                                <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
-                                  {formatCurrency(entry.totalCost)}
-                                </dd>
-                              </div>
-                            </dl>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連当たりの還元額: {formatCurrencyAmount(summaryMetrics.estimatedRevenuePerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連あたり期待原価: {formatCurrencyAmount(summaryMetrics.estimatedExpectedCostPerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              ガチャ1連あたり推定利益: {formatCurrencyAmount(summaryMetrics.estimatedProfitPerDraw, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              還元後売り上げ: {formatCurrencyAmount(summaryMetrics.actualRevenueAmount, '算出不可', 12)}
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              実質利益: {formatCurrencyAmount(summaryMetrics.actualProfitAmount, '算出不可', 12)}
+                            </div>
                           </div>
-                          <div className="riagu-card__aside flex flex-col items-end gap-2">
-                            <div className="riagu-card__type chip text-xs text-muted-foreground">
-                              {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                          <div className="riagu-summary-card__separator h-px bg-border/60" />
+                          <div className="riagu-summary-card__detail-group grid gap-1">
+                            <div className="riagu-summary-card__detail-item">
+                              pt未記録履歴: {formatQuantity(summaryMetrics.missingCurrencyHistoryCount)}件
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                push(RiaguConfigDialog, {
-                                  id: `${entry.itemId}-riagu`,
-                                  title: 'リアルグッズ設定',
-                                  size: 'sm',
-                                  payload: {
-                                    gachaId: entry.gachaId,
-                                    itemId: entry.itemId,
-                                    itemName: entry.itemName,
-                                    defaultPrice: entry.unitCost,
-                                    defaultType: entry.typeLabel
-                                  }
-                                })
-                              }
-                              className="riagu-card__action inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                            >
-                              リアグ設定
-                            </button>
+                            <div className="riagu-summary-card__detail-item">
+                              単価未設定アイテム: {formatQuantity(summaryMetrics.missingUnitCostCount)}件
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              在庫切れアイテム: {formatQuantity(summaryMetrics.outOfStockCount)}件
+                            </div>
+                            <div className="riagu-summary-card__detail-item">
+                              排出率不明アイテム: {formatQuantity(summaryMetrics.missingRateCount)}件
+                            </div>
                           </div>
-                        </header>
-                        <div className="riagu-card__winners space-y-2">
-                          {entry.winners.map((winner) => (
-                            <div
-                              key={`${entry.id}-${winner.id}`}
-                              className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-surface-foreground"
-                            >
-                              <span className="riagu-card__winner-name flex items-center gap-2">
-                                {winner.discordAvatarUrl ? (
-                                  <span className="riagu-card__winner-avatar inline-flex h-6 w-6 shrink-0 overflow-hidden rounded-full bg-surface">
-                                    <img
-                                      src={winner.discordAvatarUrl}
-                                      alt=""
-                                      loading="lazy"
-                                      className="h-full w-full object-cover"
-                                    />
-                                  </span>
-                                ) : null}
-                                <span>{winner.name}</span>
-                              </span>
-                              <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
-                            </div>
-                          ))}
+                          <div className="riagu-summary-card__separator h-px bg-border/60" />
+                          <div className="riagu-summary-card__notes space-y-1">
+                            <p className="riagu-summary-card__note">※推定利益率は現在の排出率・単価設定に基づく期待値です。</p>
+                            <p className="riagu-summary-card__note">※実質利益率は履歴の獲得ptを還元率で円換算して算出しています。</p>
+                            <p className="riagu-summary-card__note">※税金・送料・手数料・外部コストは含みません。</p>
+                          </div>
                         </div>
-                      </article>
+                      </div>
+                    ) : null}
+                  </article>
+                  {activeEntries.map((entry) => {
+                    const panelId = `riagu-card-panel-${entry.id}`;
+                    return (
+                      <Disclosure key={entry.id} defaultOpen={getDefaultOpenState(entry.id)}>
+                        {({ open }) => {
+                          const handleToggle = () => {
+                            uiPreferences.setRiaguCardOpenState(entry.id, !open, { persist: 'debounced' });
+                          };
+
+                          return (
+                            <article
+                              className={clsx(
+                                'riagu-card rounded-2xl border border-border/60 bg-[var(--color-item-card)] p-3 shadow-sm',
+                                open ? 'space-y-4' : 'space-y-0'
+                              )}
+                            >
+                              <header className="riagu-card__header flex flex-col gap-3">
+                                <div className="riagu-card__meta flex min-w-0 flex-1 flex-col gap-3 text-left">
+                                  <div className="riagu-card__meta-heading flex min-w-0 items-start gap-3">
+                                    <Disclosure.Button
+                                      type="button"
+                                      className="riagu-card__meta-trigger flex shrink-0 items-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                      aria-label="リアグ当選者の表示を切り替える"
+                                      onClick={handleToggle}
+                                    >
+                                      <ItemPreview
+                                        assetId={entry.assetId}
+                                        previewAssetId={entry.thumbnailAssetId}
+                                        fallbackUrl={entry.thumbnailUrl}
+                                        alt={`${entry.itemName}のプレビュー`}
+                                        kindHint="image"
+                                        className="riagu-card__preview h-14 w-14 shrink-0 bg-surface-deep"
+                                        emptyLabel="noImage"
+                                      />
+                                    </Disclosure.Button>
+                                    <div className="riagu-card__meta-text min-w-0 flex-1">
+                                      <div className="riagu-card__meta-row flex min-w-0 items-start gap-3">
+                                        <Disclosure.Button
+                                          type="button"
+                                          className="riagu-card__meta-trigger flex min-w-0 flex-1 items-start text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                          aria-label="リアグ当選者の表示を切り替える"
+                                          onClick={handleToggle}
+                                        >
+                                          <div className="riagu-card__meta-tags flex flex-col items-start gap-1">
+                                            <div className="riagu-card__type chip h-5 px-2 py-0 text-[11px] text-muted-foreground">
+                                              {entry.typeLabel?.trim() ? entry.typeLabel : 'タイプ未設定'}
+                                            </div>
+                                            <span className="riagu-card__rarity inline-flex h-5 min-w-[3rem] items-center text-[11px] font-medium text-surface-foreground">
+                                              <RarityLabel label={entry.rarityLabel} color={entry.rarityColor} />
+                                            </span>
+                                          </div>
+                                        </Disclosure.Button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            push(RiaguConfigDialog, {
+                                              id: `${entry.itemId}-riagu`,
+                                              title: 'リアルグッズ設定',
+                                              size: 'sm',
+                                              payload: {
+                                                gachaId: entry.gachaId,
+                                                itemId: entry.itemId,
+                                                itemName: entry.itemName,
+                                                defaultPrice: entry.unitCost,
+                                                defaultType: entry.typeLabel
+                                              }
+                                            })
+                                          }
+                                          className="riagu-card__action inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        >
+                                          リアグ設定
+                                        </button>
+                                      </div>
+                                      <Disclosure.Button
+                                        type="button"
+                                        className="riagu-card__title-trigger w-full min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                        aria-label="リアグ当選者の表示を切り替える"
+                                        onClick={handleToggle}
+                                      >
+                                        <h3 className="riagu-card__title flex min-w-0 items-center justify-between gap-2 overflow-hidden text-sm font-semibold text-surface-foreground">
+                                          <span className="min-w-0 max-w-full truncate">{entry.itemName}</span>
+                                        </h3>
+                                      </Disclosure.Button>
+                                    </div>
+                                  </div>
+                                  <Disclosure.Button
+                                    type="button"
+                                    className="riagu-card__summary-trigger text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                                    aria-label="リアグ当選者の表示を切り替える"
+                                    onClick={handleToggle}
+                                  >
+                                    <dl className="riagu-card__summary grid grid-cols-3 gap-2 text-[11px] leading-snug text-muted-foreground">
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                        発注価格
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatCurrency(entry.unitCost)}
+                                        </dd>
+                                      </div>
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                          必要個数
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatQuantity(entry.requiredQuantity)}
+                                        </dd>
+                                      </div>
+                                      <div className="riagu-card__summary-item space-y-1">
+                                        <dt className="riagu-card__summary-label text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                                          合計金額
+                                        </dt>
+                                        <dd className="riagu-card__summary-value text-sm font-medium text-surface-foreground">
+                                          {formatCurrency(entry.totalCost)}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                  </Disclosure.Button>
+                                </div>
+                              </header>
+                              <div
+                                data-state={open ? 'open' : 'closed'}
+                                className={clsx(
+                                  'riagu-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+                                  'data-[state=open]:grid-rows-[1fr]',
+                                  'data-[state=closed]:grid-rows-[0fr]'
+                                )}
+                              >
+                                <RiaguCardWinners open={open} panelId={panelId} winners={entry.winners} />
+                              </div>
+                            </article>
+                          );
+                        }}
+                      </Disclosure>
                     );
                   })}
                 </div>
@@ -357,5 +750,65 @@ export function RiaguSection(): JSX.Element {
         </div>
       </div>
     </SectionContainer>
+  );
+}
+
+interface RiaguCardWinnersProps {
+  open: boolean;
+  panelId: string;
+  winners: RiaguDisplayEntry['winners'];
+}
+
+function RiaguCardWinners({ open, panelId, winners }: RiaguCardWinnersProps): JSX.Element | null {
+  const [shouldRender, setShouldRender] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShouldRender(false);
+    }, RIAGU_PANEL_CLOSE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [open]);
+
+  if (!shouldRender) {
+    return null;
+  }
+
+  return (
+    <Disclosure.Panel
+      static
+      id={panelId}
+      className={clsx(
+        'overflow-hidden transition-opacity duration-300 ease-linear',
+        'group-data-[state=open]:opacity-100',
+        'group-data-[state=closed]:opacity-0'
+      )}
+    >
+      <div className="riagu-card__winners space-y-2">
+        {winners.map((winner) => (
+          <div
+            key={`${panelId}-${winner.id}`}
+            className="riagu-card__winner flex items-center justify-between rounded-xl border border-border/60 bg-panel-muted px-4 py-3 text-sm text-surface-foreground"
+          >
+            <span className="riagu-card__winner-name flex items-center gap-2">
+              {winner.discordAvatarUrl ? (
+                <span className="riagu-card__winner-avatar inline-flex h-6 w-6 shrink-0 overflow-hidden rounded-full bg-surface">
+                  <img src={winner.discordAvatarUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                </span>
+              ) : null}
+              <span className="riagu-card__winner-label">{winner.name}</span>
+            </span>
+            <span className="riagu-card__winner-count chip">{winner.count > 0 ? `×${winner.count}` : '—'}</span>
+          </div>
+        ))}
+      </div>
+    </Disclosure.Panel>
   );
 }

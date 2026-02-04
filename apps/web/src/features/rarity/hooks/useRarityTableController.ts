@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 
 import {
   MAX_PERCENT_FRACTION_DIGITS,
-  MAX_RATE_FRACTION_DIGITS,
   formatRarityRate,
   parseRarityRateInput
 } from '../utils/rarityRate';

@@ -94,7 +94,7 @@ export function UsersSection(): JSX.Element {
         <button
           type="button"
           className={clsx(
-            'users-section__filter-toggle items-section__filter-button chip border-accent/40 bg-accent/10 text-accent transition-all duration-300 ease-linear',
+            'users-section__filter-toggle items-section__filter-button chip h-7 py-1 border-accent/40 bg-accent/10 text-accent transition-all duration-300 ease-linear',
             filtersOpen
               ? 'border-accent/70 bg-accent/20 text-accent'
               : 'hover:border-accent/60 hover:bg-accent/15'

@@ -38,6 +38,7 @@ export interface PrizeSettingsDialogPayload {
   isRiagu: boolean;
   hasRiaguCard?: boolean;
   riaguAssignmentCount?: number;
+  stockCount?: number | null;
   assets?: PrizeSettingsAsset[];
   rarityColor?: string;
   riaguPrice?: number;
@@ -51,6 +52,7 @@ export interface PrizeSettingsDialogPayload {
     completeTarget: boolean;
     originalPrize: boolean;
     riagu: boolean;
+    stockCount: number | null;
     assets: PrizeSettingsAsset[];
   }) => void;
   onDelete?: (data: { itemId: string; gachaId: string }) => void;
@@ -144,7 +146,7 @@ function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps)
   const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明';
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
+    <div className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-border/60 bg-surface/20 px-3 py-2">
       <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-border/20">
         {previewUrl ? (
           isImagePreview ? (
@@ -160,7 +162,7 @@ function AssetPreviewItem({ asset, isPrimary, onRemove }: AssetPreviewItemProps)
           <PhotoIcon className="h-6 w-6 text-muted-foreground" />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-hidden">
         <p className="truncate text-xs font-semibold text-surface-foreground">
           {preview.name ?? asset.assetId}
         </p>
@@ -196,7 +198,11 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       complete: payload?.completeTarget ?? false,
       originalPrize: payload?.originalPrize ?? false,
       riagu: payload?.isRiagu ?? false,
-      assets: normalizeAssets(payload?.assets)
+      assets: normalizeAssets(payload?.assets),
+      stockCount:
+        typeof payload?.stockCount === 'number' && Number.isFinite(payload.stockCount)
+          ? Math.max(0, Math.floor(payload.stockCount))
+          : null
     }),
     [payload]
   );
@@ -208,6 +214,9 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const [originalPrize, setOriginalPrize] = useState(initialState.originalPrize);
   const [riaguTarget, setRiaguTarget] = useState(initialState.riagu);
   const [assetEntries, setAssetEntries] = useState<PrizeSettingsAsset[]>(initialState.assets);
+  const [stockCountInput, setStockCountInput] = useState<string>(
+    initialState.stockCount !== null ? String(initialState.stockCount) : ''
+  );
   const [isProcessingAsset, setIsProcessingAsset] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const assetRequestIdRef = useRef(0);
@@ -386,7 +395,8 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
     completeTarget !== initialState.complete ||
     originalPrize !== initialState.originalPrize ||
     riaguTarget !== initialState.riagu ||
-    !areAssetsEqual(assetEntries, initialState.assets);
+    !areAssetsEqual(assetEntries, initialState.assets) ||
+    stockCountInput !== (initialState.stockCount !== null ? String(initialState.stockCount) : '');
 
   const rarityColor = currentRarityColor ?? '#ff4f89';
   const rarityPreviewPresentation = getRarityTextPresentation(rarityColor);
@@ -413,6 +423,17 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       completeTarget,
       originalPrize,
       riagu: riaguTarget,
+      stockCount: (() => {
+        const normalized = stockCountInput.trim();
+        if (!normalized) {
+          return null;
+        }
+        const parsed = Number(normalized);
+        if (!Number.isFinite(parsed)) {
+          return null;
+        }
+        return Math.max(0, Math.floor(parsed));
+      })(),
       assets: originalPrize ? [] : normalizeAssets(assetEntries)
     });
 
@@ -533,7 +554,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           ) : null}
         </div>
         {assetEntries.length > 0 ? (
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 w-full max-w-full space-y-2 overflow-hidden">
             {assetEntries.map((asset, index) => (
               <AssetPreviewItem
                 key={asset.assetId}
@@ -557,7 +578,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   return (
     <>
       <ModalBody className="rounded-2xl p-2">
-        <div className="flex flex-row items-end gap-4 lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <label className="flex-1 min-w-0 space-y-2">
             <span className="block text-sm font-medium text-surface-foreground">対象アイテム</span>
             <input
@@ -568,7 +589,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
               placeholder="煌めく星屑ブレスレット"
             />
           </label>
-          <div className="flex min-w-[11rem] shrink-0 flex-col gap-2 lg:max-w-[14rem]">
+          <div className="flex w-full shrink-0 flex-col gap-2 lg:w-auto lg:min-w-[11rem] lg:max-w-[14rem]">
             <span className="text-sm font-medium text-surface-foreground">レアリティ</span>
             <SingleSelectDropdown<string>
               value={rarityId}
@@ -617,7 +638,7 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           </div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[240px,minmax(0,1fr)]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <div className="rounded-2xl">
               <p className="text-sm font-medium text-surface-foreground">プレビュー</p>
               <div className="mt-3 flex flex-col gap-4 lg:items-center lg:text-center">
@@ -645,8 +666,10 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                     )}
                   </div>
                   <div className="flex w-full flex-1 flex-col gap-3 text-left lg:mt-4 lg:w-auto lg:items-center lg:text-center">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-surface-foreground">{name || '未設定'}</p>
+                    <div className="min-w-0 space-y-1">
+                      <p className="break-all text-sm font-semibold text-surface-foreground">
+                        {name || '未設定'}
+                      </p>
                       <span
                         className={clsx(
                           'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold',
@@ -657,17 +680,32 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                         {currentRarityLabel}
                       </span>
                     </div>
-                    <div className="space-y-2 lg:hidden">{renderFileSelectionContent()}</div>
                   </div>
                 </div>
+                <div className="mt-4 space-y-2 lg:hidden">{renderFileSelectionContent()}</div>
               </div>
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="min-w-0 space-y-1">
             <div className="hidden rounded-2xl p-3 lg:block">{renderFileSelectionContent()}</div>
-            <div className="rounded-2xl p-2">
+            <div className="rounded-2xl">
               <div className="flex flex-col gap-3">
+                <label className="space-y-2">
+                  <span className="text-sm font-medium text-surface-foreground">在庫数</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={stockCountInput}
+                    onChange={(event) => setStockCountInput(event.target.value)}
+                    className={INPUT_CLASSNAME}
+                    placeholder="未設定"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    空欄にすると在庫制限なしで排出されます。
+                  </span>
+                </label>
                 <SwitchField
                   label="ピックアップ対象"
                   description="同レアリティのアイテムより排出率が少し上がります"

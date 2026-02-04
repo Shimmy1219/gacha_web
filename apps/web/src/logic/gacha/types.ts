@@ -11,6 +11,8 @@ export interface GachaItemDefinition {
   itemRateDisplay?: string;
   pickupTarget: boolean;
   drawWeight: number;
+  stockCount?: number;
+  remainingStock?: number;
 }
 
 export interface GachaRarityGroup {
@@ -27,6 +29,13 @@ export interface GachaPoolDefinition {
   gachaId: string;
   items: GachaItemDefinition[];
   rarityGroups: Map<string, GachaRarityGroup>;
+}
+
+export interface RarityRateRedistribution {
+  targetRarityId: string;
+  sourceRarityIds: string[];
+  totalMissingRate: number;
+  targetStrategy: 'auto-adjust' | 'next-highest';
 }
 
 export interface NormalizedPerPullSetting {
@@ -114,6 +123,20 @@ export interface ExecuteGachaArgs {
   points: number;
   completeExecutionsOverride?: number;
   rng?: () => number;
+  includeOutOfStockInComplete?: boolean;
+  allowOutOfStockGuaranteeItem?: boolean;
+  applyLowerThresholdGuarantees?: boolean;
+}
+
+export interface ExecuteGachaByPullsArgs {
+  gachaId: string;
+  pool: GachaPoolDefinition;
+  settings: PtSettingV3 | undefined;
+  pulls: number;
+  rng?: () => number;
+  includeOutOfStockInComplete?: boolean;
+  allowOutOfStockGuaranteeItem?: boolean;
+  applyLowerThresholdGuarantees?: boolean;
 }
 
 export interface ExecutedPullItem {
@@ -141,12 +164,17 @@ export interface BuildGachaPoolsArgs {
   catalogState: import('@domain/app-persistence').GachaCatalogStateV4 | undefined;
   rarityState: import('@domain/app-persistence').GachaRarityStateV3 | undefined;
   rarityFractionDigits?: Map<string, number>;
+  inventoryCountsByItemId?: ItemInventoryCountMap;
+  includeOutOfStockItems?: boolean;
 }
 
 export interface BuildGachaPoolsResult {
   poolsByGachaId: Map<string, GachaPoolDefinition>;
   itemsById: Map<string, GachaItemDefinition>;
+  rateRedistributionsByGachaId: Map<string, RarityRateRedistribution>;
 }
+
+export type ItemInventoryCountMap = Map<string, number> | Record<string, number> | undefined;
 
 export type GachaPtSettingsLookup = Record<string, PtSettingV3 | undefined>;
 

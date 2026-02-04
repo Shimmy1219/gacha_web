@@ -14,6 +14,7 @@ import { clsx } from 'clsx';
 
 import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
 import { ConfirmDialog, ModalBody } from '..';
 import { type ModalComponent } from '../ModalTypes';
@@ -21,11 +22,15 @@ import { useAppPersistence, useDomainStores } from '../../features/storage/AppPe
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
 import { clearAllDiscordGuildSelections } from '../../features/discord/discordGuildSelectionStorage';
+import { clearAllDiscordUserStates } from '../../features/discord/discordUserStateStorage';
 import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarStorage';
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
-import type { DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
+import {
+  DEFAULT_GACHA_OWNER_SHARE_RATE,
+  type DashboardDesktopLayout
+} from '@domain/stores/uiPreferencesStore';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -98,6 +103,14 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewForeground: string;
 }>;
 
+function formatOwnerShareRateInput(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+  const percent = Math.round(value * 1000) / 10;
+  return Number.isFinite(percent) ? String(percent).replace(/\.0$/, '') : '';
+}
+
 const REM_IN_PIXELS = 16;
 const BASE_MODAL_MIN_HEIGHT_REM = 28;
 const VIEWPORT_PADDING_REM = 12;
@@ -112,6 +125,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [isDeletingAllData, setIsDeletingAllData] = useState(false);
+  const [isResettingDiscordServerInfo, setIsResettingDiscordServerInfo] = useState(false);
   const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
   const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
@@ -139,6 +153,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   } = useSiteTheme();
   const [customAccentDraft, setCustomAccentDraft] = useState(() => customAccentColor.toUpperCase());
   const persistence = useAppPersistence();
+  const { data: discordSession } = useDiscordSession();
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -160,9 +175,41 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const excludeRiaguImagesPreference = useMemo(
+    () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const excludeRiaguImages = excludeRiaguImagesPreference ?? false;
+  const completeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getCompleteGachaIncludeOutOfStockPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const completeOutOfStock = completeOutOfStockPreference ?? false;
+  const guaranteeOutOfStockPreference = useMemo(
+    () => uiPreferencesStore.getGuaranteeOutOfStockItemPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const guaranteeOutOfStock = guaranteeOutOfStockPreference ?? false;
+  const applyLowerThresholdGuaranteesPreference = useMemo(
+    () => uiPreferencesStore.getApplyLowerThresholdGuaranteesPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
+  const gachaOwnerShareRatePreference = useMemo(
+    () => uiPreferencesStore.getGachaOwnerShareRatePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const gachaOwnerShareRate = gachaOwnerShareRatePreference ?? DEFAULT_GACHA_OWNER_SHARE_RATE;
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
+  const [ownerName, setOwnerName] = useState<string>(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    return prefs?.ownerName ?? '';
+  });
+  const [ownerShareRateInput, setOwnerShareRateInput] = useState<string>(() =>
+    formatOwnerShareRateInput(gachaOwnerShareRate)
+  );
   const handleRestoreGacha = useCallback(
     (gachaId: string) => {
       appStateStore.restoreGacha(gachaId);
@@ -180,6 +227,45 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaId(null);
     setEditingGachaName('');
   }, []);
+
+  const handleOwnerShareRateChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setOwnerShareRateInput(event.target.value);
+  }, []);
+
+  const handleOwnerShareRateCommit = useCallback(() => {
+    const trimmed = ownerShareRateInput.trim();
+    if (!trimmed) {
+      uiPreferencesStore.setGachaOwnerShareRatePreference(null, { persist: 'immediate' });
+      setOwnerShareRateInput(formatOwnerShareRateInput(DEFAULT_GACHA_OWNER_SHARE_RATE));
+      return;
+    }
+
+    const normalizedInput = trimmed.replace('%', '');
+    const numeric = Number(normalizedInput);
+    if (!Number.isFinite(numeric)) {
+      setOwnerShareRateInput(formatOwnerShareRateInput(gachaOwnerShareRate));
+      return;
+    }
+
+    const clamped = Math.min(Math.max(numeric, 0), 100);
+    const normalized = clamped / 100;
+    uiPreferencesStore.setGachaOwnerShareRatePreference(normalized, { persist: 'immediate' });
+    setOwnerShareRateInput(formatOwnerShareRateInput(normalized));
+  }, [gachaOwnerShareRate, ownerShareRateInput, uiPreferencesStore]);
+
+  const handleOwnerShareRateKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleOwnerShareRateCommit();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOwnerShareRateInput(formatOwnerShareRateInput(gachaOwnerShareRate));
+      }
+    },
+    [gachaOwnerShareRate, handleOwnerShareRateCommit]
+  );
   const handleCommitEditingGacha = useCallback(() => {
     if (!editingGachaId) {
       return;
@@ -190,9 +276,65 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setEditingGachaName('');
   }, [appStateStore, editingGachaId, editingGachaName]);
 
+  useEffect(() => {
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    setOwnerName(prefs?.ownerName ?? '');
+  }, [discordSession?.loggedIn, discordSession?.user?.name, persistence]);
+
+  const persistOwnerName = useCallback(
+    (nextName: string) => {
+      const snapshot = persistence.loadSnapshot();
+      const current = snapshot.receivePrefs;
+      const normalized = nextName.trim();
+      const nextPrefs = {
+        ...current,
+        version: 3,
+        intro: current?.intro ?? { skipIntro: false },
+        ownerName: normalized.length > 0 ? normalized : null
+      };
+      persistence.saveReceivePrefsDebounced(nextPrefs);
+    },
+    [persistence]
+  );
+
+  const handleOwnerNameChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setOwnerName(value);
+      persistOwnerName(value);
+    },
+    [persistOwnerName]
+  );
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleExcludeRiaguImagesChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setExcludeRiaguImagesPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleCompleteOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setCompleteGachaIncludeOutOfStockPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleGuaranteeOutOfStockChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setGuaranteeOutOfStockItemPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleApplyLowerThresholdGuaranteesChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setApplyLowerThresholdGuaranteesPreference(enabled, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -263,6 +405,28 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     userInventoriesStore,
     userProfilesStore
   ]);
+
+  const handleResetDiscordServerInfo = useCallback(() => {
+    if (isResettingDiscordServerInfo) {
+      return;
+    }
+
+    setIsResettingDiscordServerInfo(true);
+
+    try {
+      clearAllDiscordUserStates();
+      userProfilesStore.resetDiscordInfo({ persist: 'immediate' });
+    } catch (error) {
+      console.error('Failed to reset Discord server info', error);
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(
+          'Discordサーバー情報のリセットに失敗しました。ブラウザのストレージ設定をご確認の上、再度お試しください。'
+        );
+      }
+    } finally {
+      setIsResettingDiscordServerInfo(false);
+    }
+  }, [isResettingDiscordServerInfo, userProfilesStore]);
 
   const handleRequestDeleteAllData = useCallback(() => {
     if (isDeletingAllData) {
@@ -365,6 +529,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   useEffect(() => {
     setDesktopLayout(uiPreferencesStore.getDashboardDesktopLayout());
   }, [uiPreferencesState, uiPreferencesStore]);
+
+  useEffect(() => {
+    const nextValue = formatOwnerShareRateInput(gachaOwnerShareRate);
+    setOwnerShareRateInput((previous) => (previous === nextValue ? previous : nextValue));
+  }, [gachaOwnerShareRate]);
 
   const menuItems = useMemo(() => MENU_ITEMS, []);
 
@@ -539,6 +708,54 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
               />
+              <SwitchField
+                label="リアグに登録した画像は送信・保存されないようにする"
+                description="ONにすると保存オプションやクイック送信でリアグ対象の画像を含めません。"
+                checked={excludeRiaguImages}
+                onChange={handleExcludeRiaguImagesChange}
+              />
+              <SwitchField
+                label="コンプリートガチャの時に在庫切れのアイテムも排出する"
+                description="ONにするとコンプリートガチャ時に在庫切れのアイテムも排出します。在庫数をオーバーしますので、追加の発注が必要になります。"
+                checked={completeOutOfStock}
+                onChange={handleCompleteOutOfStockChange}
+              />
+              <SwitchField
+                label="天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出する"
+                description="ONにすると、天井保証のアイテムに在庫が設定されている時、在庫切れでもアイテムを排出します。天井保証アイテムの候補が複数あるときは、在庫切れのアイテムは排出されません"
+                checked={guaranteeOutOfStock}
+                onChange={handleGuaranteeOutOfStockChange}
+              />
+              <SwitchField
+                label="上位連数の天井保証に達した時に下位連数の保証も適用する"
+                description="ONにすると、複数の天井保証が設定されている場合に下位の保証もすべて適用します。OFFの場合は、到達した中で最も高い連数の保証のみ適用します。"
+                checked={applyLowerThresholdGuarantees}
+                onChange={handleApplyLowerThresholdGuaranteesChange}
+              />
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+              <label htmlFor="gacha-owner-share-rate" className="text-sm font-semibold text-surface-foreground">
+                配信アプリからの還元率
+              </label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                ガチャ売上のうち、オーナーに入る割合を設定します。
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  id="gacha-owner-share-rate"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={ownerShareRateInput}
+                  onChange={handleOwnerShareRateChange}
+                  onBlur={handleOwnerShareRateCommit}
+                  onKeyDown={handleOwnerShareRateKeyDown}
+                  className="w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  inputMode="decimal"
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
             </div>
             <div className="space-y-4 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
               <div className="space-y-1">
@@ -936,6 +1153,22 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               </p>
             </div>
             <div className="space-y-4">
+              <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+                <label htmlFor="owner-name" className="text-sm font-semibold text-surface-foreground">
+                  オーナー名
+                </label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  共有リンクの作成者として表示される名前です。Discordログイン時は自動で入力されます。
+                </p>
+                <input
+                  id="owner-name"
+                  type="text"
+                  value={ownerName}
+                  onChange={handleOwnerNameChange}
+                  placeholder="例: Shimmy配信"
+                  className="mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                />
+              </div>
               <SwitchField
                 label="Discordデバッグログを表示"
                 description="Discordログイン処理の詳細ログを画面下部に表示します。"
@@ -954,6 +1187,35 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={confirmLogout}
                 onChange={setConfirmLogout}
               />
+              <div className="space-y-3 rounded-2xl border border-border/60 bg-panel-contrast/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-semibold text-surface-foreground">Discordサーバー情報のリセット</h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      登録したDiscordサーバーの情報（ギルド、メンバー）をリセットします。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm font-semibold text-surface-foreground transition hover:border-accent/40 hover:bg-panel-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent/60"
+                    onClick={handleResetDiscordServerInfo}
+                    disabled={isResettingDiscordServerInfo}
+                    aria-busy={isResettingDiscordServerInfo}
+                  >
+                    {isResettingDiscordServerInfo ? (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <span>リセットしています…</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                        <span>リセット</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
               <div className="space-y-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
                 <div className="space-y-2">
                   <h3 className="text-sm font-semibold text-surface-foreground">全てのデータを削除</h3>
@@ -1008,10 +1270,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
       }}
     >
-      <div className="flex flex-1 flex-col gap-6 overflow-hidden [&>*]:min-h-0 lg:flex-row lg:items-start lg:gap-8">
+      <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
           className={clsx(
-            'w-full shrink-0',
+            'm-2 w-[calc(100%-1rem)] shrink-0 p-2 lg:m-0 lg:w-full lg:p-0',
             isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
             activeView === 'menu' ? 'block' : 'hidden',
             'lg:block'
@@ -1026,10 +1288,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                     type="button"
                     onClick={() => handleMenuSelect(item.id)}
                     className={clsx(
-                      'w-full rounded-xl border px-4 py-3 text-left transition',
+                      'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
                       isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground'
-                        : 'border-transparent text-muted-foreground hover:border-border/60 hover:bg-panel-muted/70'
+                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
+                        : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
                     )}
                   >
                     <div className="flex items-center justify-between gap-4">
@@ -1051,17 +1313,17 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         </nav>
         <div
           className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-2xl border border-border/60 bg-panel p-6 pr-4 shadow-sm',
+            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
             isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
           )}
           style={{ maxHeight: viewportLimit ?? undefined }}
         >
           {!isLargeLayout ? (
-            <div className="mb-4 flex items-center">
+            <div className="mb-4 flex items-center lg:hidden">
               <button
                 type="button"
                 onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground lg:hidden"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
               >
                 <span aria-hidden="true">〈</span>
                 <span>メニューに戻る</span>

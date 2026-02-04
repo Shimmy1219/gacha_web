@@ -19,6 +19,8 @@ import type { SaveTargetSelection, SaveTargetSelectionMode } from '../../feature
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { SaveOptionsDialog } from './SaveOptionsDialog';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { WarningDialog } from './WarningDialog';
+import { useModal } from '../ModalProvider';
 
 interface SaveTargetDialogPayload {
   userId: string;
@@ -84,6 +86,25 @@ function getGachaDisplayName(gachaId: string, appMeta: AppMetaMap): string {
     return '未設定のガチャ';
   }
   return appMeta?.[gachaId]?.displayName ?? gachaId;
+}
+
+function formatMissingOriginalPrizeMessage(items: HistorySelectionItem[], gachaName: string): string {
+  const missingNames = Array.from(
+    new Set(
+      items
+        .filter((item) => item.hasOriginalPrizeMissing)
+        .map((item) => item.itemName || item.itemId)
+        .filter((name): name is string => Boolean(name))
+    )
+  );
+  const itemCount = missingNames.length;
+  if (itemCount === 0) {
+    return 'オリジナル景品のファイルが割り当てられていません。ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。';
+  }
+  const previewNames = missingNames.slice(0, 3).map((name) => `「${name}」`).join('、');
+  const suffix = itemCount > 3 ? `など${itemCount}件` : '';
+  const previewLabel = previewNames ? `対象: ${previewNames}${suffix}。` : '';
+  return `「${gachaName}」のオリジナル景品のうち${itemCount}件にファイルが割り当てられていません。${previewLabel}ユーザーごとの「オリジナル景品設定」からファイルを割り当ててください。`;
 }
 
 function collectSnapshotItemIds(snapshot: UserInventorySnapshotV3 | undefined): Set<string> {
@@ -273,6 +294,12 @@ function buildHistoryEntries(
       return a.rarityLabel.localeCompare(b.rarityLabel, 'ja');
     });
 
+    const normalizedStatus = entry.status ?? 'new';
+    const missingByItems = items.length > 0 ? items.some((item) => item.hasOriginalPrizeMissing) : false;
+    const hasOriginalPrizeMissing =
+      normalizedStatus !== 'new' &&
+      (missingByItems || (items.length === 0 && entry.hasOriginalPrizeMissing === true));
+
     result.push({
       id: entry.id,
       gachaId: entry.gachaId,
@@ -280,7 +307,7 @@ function buildHistoryEntries(
       executedAt: entry.executedAt,
       pullCount: entry.pullCount,
       status: entry.status,
-      hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing,
+      hasOriginalPrizeMissing,
       itemTypeCount: normalizedItems.length,
       items,
       rarityGroups,
@@ -299,6 +326,7 @@ function buildHistoryEntries(
 }
 
 export function SaveTargetDialog({ payload, replace, close }: ModalComponentProps<SaveTargetDialogPayload>): JSX.Element {
+  const { push } = useModal();
   const { status, data, error } = useGachaLocalStorage();
   const [mode, setMode] = useState<SaveTargetSelectionMode>('all');
   const [selectedGachaIds, setSelectedGachaIds] = useState<string[]>([]);
@@ -307,6 +335,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   const [historySelectionInitialized, setHistorySelectionInitialized] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
   const [newItemsOnlyHistoryIds, setNewItemsOnlyHistoryIds] = useState<string[]>([]);
+  const [missingOnlyHistoryIds, setMissingOnlyHistoryIds] = useState<string[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const appMeta = data?.appState?.meta;
@@ -322,6 +351,9 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
     () => buildHistoryEntries(data?.pullHistory, payload.userId, appMeta, catalogState, rarityState),
     [appMeta, catalogState, data?.pullHistory, payload.userId, rarityState]
   );
+  const historyMissingEntryIds = useMemo(() => {
+    return new Set(historyEntries.filter((entry) => entry.hasOriginalPrizeMissing).map((entry) => entry.id));
+  }, [historyEntries]);
 
   useEffect(() => {
     setValidationError(null);
@@ -404,6 +436,20 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
   }, [selectedHistoryIds, historyEntries]);
 
   useEffect(() => {
+    setMissingOnlyHistoryIds((previous) => {
+      if (previous.length === 0) {
+        return previous;
+      }
+      const selectedSet = new Set(selectedHistoryIds);
+      const validIds = previous.filter((id) => selectedSet.has(id) && historyMissingEntryIds.has(id));
+      if (validIds.length === previous.length) {
+        return previous;
+      }
+      return validIds;
+    });
+  }, [historyMissingEntryIds, selectedHistoryIds]);
+
+  useEffect(() => {
     setExpandedHistoryIds((previous) =>
       previous.filter((id) => historyEntries.some((entry) => entry.id === id))
     );
@@ -447,7 +493,29 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       }
       return [...previous, entryId];
     });
+    if (!newItemsOnlyHistoryIds.includes(entryId)) {
+      setMissingOnlyHistoryIds((previous) => previous.filter((id) => id !== entryId));
+    }
     setNewItemsOnlyHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous.filter((id) => id !== entryId);
+      }
+      return [...previous, entryId];
+    });
+  };
+
+  const toggleHistoryMissingOnly = (entryId: string) => {
+    setHistorySelectionInitialized(true);
+    setSelectedHistoryIds((previous) => {
+      if (previous.includes(entryId)) {
+        return previous;
+      }
+      return [...previous, entryId];
+    });
+    if (!missingOnlyHistoryIds.includes(entryId)) {
+      setNewItemsOnlyHistoryIds((previous) => previous.filter((id) => id !== entryId));
+    }
+    setMissingOnlyHistoryIds((previous) => {
       if (previous.includes(entryId)) {
         return previous.filter((id) => id !== entryId);
       }
@@ -486,10 +554,14 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       const uniqueNewOnlyIds = Array.from(new Set(newItemsOnlyHistoryIds)).filter((id) =>
         uniqueHistoryIds.includes(id)
       );
+      const uniqueMissingOnlyIds = Array.from(new Set(missingOnlyHistoryIds)).filter(
+        (id) => uniqueHistoryIds.includes(id) && historyMissingEntryIds.has(id)
+      );
       selection = {
         mode: 'history',
         pullIds: uniqueHistoryIds,
-        ...(uniqueNewOnlyIds.length > 0 ? { newItemsOnlyPullIds: uniqueNewOnlyIds } : {})
+        ...(uniqueNewOnlyIds.length > 0 ? { newItemsOnlyPullIds: uniqueNewOnlyIds } : {}),
+        ...(uniqueMissingOnlyIds.length > 0 ? { missingOnlyPullIds: uniqueMissingOnlyIds } : {})
       };
     } else {
       selection = { mode: 'all' };
@@ -632,11 +704,16 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
             ) : (
               <div className="grid max-h-72 gap-2 overflow-y-auto pr-1">
                 {historyEntries.map((entry) => {
+                  const entryHasOriginalPrizeMissing = historyMissingEntryIds.has(entry.id);
                   const statusLabel = getPullHistoryStatusLabel(entry.status, {
-                    hasOriginalPrizeMissing: entry.hasOriginalPrizeMissing
+                    hasOriginalPrizeMissing: entryHasOriginalPrizeMissing
                   });
                   const newItemsOnlyActive = newItemsOnlyHistoryIds.includes(entry.id);
+                  const missingOnlyActive = missingOnlyHistoryIds.includes(entry.id);
                   const newItemsSet = new Set(entry.newItems);
+                  const missingWarningMessage = entryHasOriginalPrizeMissing
+                    ? formatMissingOriginalPrizeMessage(entry.items, entry.gachaName)
+                    : '';
                   return (
                     <div
                       key={entry.id}
@@ -688,6 +765,38 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
                             />
                             <span>ユーザーが新規に取得したものだけを保存</span>
                           </label>
+                          {entryHasOriginalPrizeMissing ? (
+                            <div className="flex items-center gap-2 text-surface-foreground/70">
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  checked={missingOnlyActive}
+                                  onChange={() => toggleHistoryMissingOnly(entry.id)}
+                                />
+                                <span>未送信分のみ保存</span>
+                              </label>
+                              <button
+                                type="button"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-amber-500 transition hover:bg-amber-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
+                                onClick={() => {
+                                  push(WarningDialog, {
+                                    id: `original-prize-warning-${entry.id}`,
+                                    title: 'オリジナル景品の警告',
+                                    size: 'sm',
+                                    payload: {
+                                      message: missingWarningMessage,
+                                      confirmLabel: '閉じる'
+                                    }
+                                  });
+                                }}
+                                aria-label="オリジナル景品の警告を表示"
+                                title="オリジナル景品の警告を表示"
+                              >
+                                <ExclamationTriangleIcon className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                         <span className="text-[11px] text-muted-foreground">{entry.itemTypeCount}種類の景品</span>
                       </div>

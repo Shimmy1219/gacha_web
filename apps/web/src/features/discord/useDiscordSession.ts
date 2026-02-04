@@ -5,6 +5,10 @@ import {
   logDiscordAuthError,
   logDiscordAuthEvent
 } from './discordAuthDebugLogStore';
+import {
+  DISCORD_PWA_PENDING_STATE_STORAGE_KEY,
+  getDiscordInfoStore
+} from './discordInfoStore';
 
 export interface DiscordUserProfile {
   id: string;
@@ -40,9 +44,7 @@ interface PendingPwaStateRecord {
   createdAt: number;
 }
 
-const PWA_PENDING_STATE_STORAGE_KEY = 'discord:pwa:pending_state';
 const PWA_PENDING_STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
-let localStorageAvailabilityCache: boolean | null = null;
 type PwaClaimResult =
   | 'skipped'
   | 'no-pending'
@@ -58,72 +60,57 @@ function createStatePreview(state: string): string {
   return state.length > 8 ? `${state.slice(0, 4)}...` : state;
 }
 
-function isLocalStorageAvailable(): boolean {
-  if (localStorageAvailabilityCache !== null) {
-    return localStorageAvailabilityCache;
-  }
+function isDiscordInfoStoreReady(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
-  try {
-    const testKey = '__discord_auth_test__';
-    window.localStorage.setItem(testKey, '1');
-    window.localStorage.removeItem(testKey);
-    localStorageAvailabilityCache = true;
-    return localStorageAvailabilityCache;
-  } catch (error) {
-    console.warn('Discord PWA state persistence is unavailable', error);
-    localStorageAvailabilityCache = false;
-    return localStorageAvailabilityCache;
-  }
+  return getDiscordInfoStore().isReady();
 }
 
 function persistPendingPwaState(record: PendingPwaStateRecord): void {
-  if (!isLocalStorageAvailable()) {
+  if (!isDiscordInfoStoreReady()) {
     return;
   }
   try {
-    window.localStorage.setItem(PWA_PENDING_STATE_STORAGE_KEY, JSON.stringify(record));
+    void getDiscordInfoStore().saveJson(DISCORD_PWA_PENDING_STATE_STORAGE_KEY, record);
   } catch (error) {
     console.warn('Failed to persist Discord PWA pending state', error);
   }
 }
 
 function clearPendingPwaState(): void {
-  if (!isLocalStorageAvailable()) {
+  if (!isDiscordInfoStoreReady()) {
     return;
   }
   try {
-    window.localStorage.removeItem(PWA_PENDING_STATE_STORAGE_KEY);
+    void getDiscordInfoStore().remove(DISCORD_PWA_PENDING_STATE_STORAGE_KEY);
   } catch (error) {
     console.warn('Failed to clear Discord PWA pending state', error);
   }
 }
 
 function readPendingPwaState(): PendingPwaStateRecord | null {
-  if (!isLocalStorageAvailable()) {
+  if (!isDiscordInfoStoreReady()) {
     return null;
   }
   try {
-    const raw = window.localStorage.getItem(PWA_PENDING_STATE_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as Partial<PendingPwaStateRecord> | null;
+    const parsed = getDiscordInfoStore().getJson<Partial<PendingPwaStateRecord>>(
+      DISCORD_PWA_PENDING_STATE_STORAGE_KEY
+    );
     if (!parsed || typeof parsed.state !== 'string' || parsed.state.length === 0) {
-      window.localStorage.removeItem(PWA_PENDING_STATE_STORAGE_KEY);
+      void getDiscordInfoStore().remove(DISCORD_PWA_PENDING_STATE_STORAGE_KEY);
       return null;
     }
     const createdAt = typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now();
     if (Date.now() - createdAt > PWA_PENDING_STATE_MAX_AGE_MS) {
-      window.localStorage.removeItem(PWA_PENDING_STATE_STORAGE_KEY);
+      void getDiscordInfoStore().remove(DISCORD_PWA_PENDING_STATE_STORAGE_KEY);
       return null;
     }
     return { state: parsed.state, createdAt };
   } catch (error) {
     console.warn('Failed to read Discord PWA pending state', error);
     try {
-      window.localStorage.removeItem(PWA_PENDING_STATE_STORAGE_KEY);
+      void getDiscordInfoStore().remove(DISCORD_PWA_PENDING_STATE_STORAGE_KEY);
     } catch (cleanupError) {
       console.warn('Failed to cleanup invalid Discord PWA pending state', cleanupError);
     }

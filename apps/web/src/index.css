@@ -192,6 +192,26 @@
     box-shadow: inset 0 10px 12px -10px rgb(var(--color-overlay) / 0.9);
   }
 
+  .items-section__rate-redistribution {
+    border-color: rgb(251 191 36 / 0.4);
+    background-color: rgb(245 158 11 / 0.15);
+    color: rgb(254 243 199);
+  }
+
+  .items-section__rate-redistribution-message {
+    color: rgb(253 230 138);
+  }
+
+  :root[data-site-theme-scheme='light'] .items-section__rate-redistribution {
+    border-color: rgb(253 230 138 / 0.7);
+    background-color: rgb(255 251 235 / 0.8);
+    color: rgb(120 53 15);
+  }
+
+  :root[data-site-theme-scheme='light'] .items-section__rate-redistribution-message {
+    color: rgb(146 64 14);
+  }
+
   .section-scroll.section-scroll--no-scrollbar {
     padding-right: 0;
   }
@@ -248,27 +268,14 @@
     background: rgb(var(--color-accent) / 1);
   }
 
-  .inventory-history-dialog__scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(var(--color-accent) / 0.5) transparent;
-  }
+  @media (max-width: 1023px) {
+    .page-settings-modal .modal-header > div {
+      margin-left: 16px;
+    }
 
-  .inventory-history-dialog__scroll::-webkit-scrollbar {
-    width: 0.5rem;
-  }
-
-  .inventory-history-dialog__scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .inventory-history-dialog__scroll::-webkit-scrollbar-thumb {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--color-accent) / 0.55),
-      rgb(var(--color-accent-bright) / 0.4)
-    );
-    border-radius: 9999px;
-    border: 2px solid transparent;
+    .page-settings-modal .modal-header > div > h2 {
+      margin-top: 16px;
+    }
   }
 
   .inventory-history-dialog__rarity-badge {
@@ -583,6 +590,8 @@
   width: 100%;
   max-width: 100%;
   table-layout: auto;
+  border-radius: 0.5rem;
+  overflow: hidden;
 }
 
 .rarity-section__col-label {

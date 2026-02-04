@@ -34,6 +34,7 @@ export const DASHBOARD_DESKTOP_LAYOUT_VALUES = ['grid', 'sidebar'] as const;
 export type DashboardDesktopLayout = (typeof DASHBOARD_DESKTOP_LAYOUT_VALUES)[number];
 const DASHBOARD_DESKTOP_LAYOUT_SET = new Set<string>(DASHBOARD_DESKTOP_LAYOUT_VALUES);
 export const DEFAULT_DASHBOARD_DESKTOP_LAYOUT: DashboardDesktopLayout = 'grid';
+export const DEFAULT_GACHA_OWNER_SHARE_RATE = 0.15;
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -71,6 +72,19 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return fallback;
 }
 
+function normalizeOptionalBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return null;
+}
+
 function normalizeKeyword(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -85,6 +99,28 @@ function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeGachaOwnerShareRate(value: unknown): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+    return null;
+  }
+
+  let normalized = numeric;
+  if (normalized > 1) {
+    normalized = normalized <= 100 ? normalized / 100 : 1;
+  }
+
+  if (normalized < 0) {
+    normalized = 0;
+  }
+
+  return normalized;
 }
 
 function normalizeHexColor(value: unknown): string | null {
@@ -222,6 +258,50 @@ function readDashboardDesktopLayoutFromState(
   return normalizeDashboardDesktopLayout(dashboard.desktop);
 }
 
+function readUserCardOpenState(state: UiPreferencesStateV3 | undefined, userId: string): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const users = state.users;
+  if (!isRecord(users)) {
+    return null;
+  }
+
+  const cards = users.cards;
+  if (!isRecord(cards)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(cards, userId)) {
+    return null;
+  }
+
+  return normalizeOptionalBoolean(cards[userId]);
+}
+
+function readRiaguCardOpenState(state: UiPreferencesStateV3 | undefined, cardId: string): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const riagu = state.riagu;
+  if (!isRecord(riagu)) {
+    return null;
+  }
+
+  const cards = riagu.cards;
+  if (!isRecord(cards)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(cards, cardId)) {
+    return null;
+  }
+
+  return normalizeOptionalBoolean(cards[cardId]);
+}
+
 function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
   if (!isRecord(raw)) {
     return { ...DEFAULT_USER_FILTER_PREFERENCES };
@@ -342,6 +422,23 @@ function readDrawDialogLastSelectedGachaId(
   return normalizeDrawDialogLastSelectedGachaId(drawDialog.lastSelectedGachaId);
 }
 
+function readGachaOwnerShareRatePreference(state: UiPreferencesStateV3 | undefined): number | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(gacha, 'ownerShareRate')) {
+    return null;
+  }
+
+  return normalizeGachaOwnerShareRate(gacha.ownerShareRate);
+}
+
 function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
   if (!state) {
     return null;
@@ -362,6 +459,94 @@ function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined)
   }
 
   return normalizeBoolean(drawDialog.quickSendNewOnly, false);
+}
+
+function readExcludeRiaguImagesPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const share = gacha.share;
+  if (!isRecord(share)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(share, 'excludeRiaguImages')) {
+    return null;
+  }
+
+  return normalizeBoolean(share.excludeRiaguImages, false);
+}
+
+function readCompleteGachaIncludeOutOfStockPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const stock = gacha.stock;
+  if (!isRecord(stock)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(stock, 'includeOutOfStockInComplete')) {
+    return null;
+  }
+
+  return normalizeBoolean(stock.includeOutOfStockInComplete, false);
+}
+
+function readGuaranteeOutOfStockItemPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const stock = gacha.stock;
+  if (!isRecord(stock)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(stock, 'allowOutOfStockGuaranteeItem')) {
+    return null;
+  }
+
+  return normalizeBoolean(stock.allowOutOfStockGuaranteeItem, false);
+}
+
+function readApplyLowerThresholdGuaranteesPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const guarantee = gacha.guarantee;
+  if (!isRecord(guarantee)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(guarantee, 'applyLowerThresholdGuarantees')) {
+    return null;
+  }
+
+  return normalizeBoolean(guarantee.applyLowerThresholdGuarantees, false);
 }
 
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
@@ -566,6 +751,22 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getGachaOwnerShareRatePreference(): number | null {
+    return readGachaOwnerShareRatePreference(this.state);
+  }
+
+  getExcludeRiaguImagesPreference(): boolean | null {
+    return readExcludeRiaguImagesPreference(this.state);
+  }
+
+  getCompleteGachaIncludeOutOfStockPreference(): boolean | null {
+    return readCompleteGachaIncludeOutOfStockPreference(this.state);
+  }
+
+  getGuaranteeOutOfStockItemPreference(): boolean | null {
+    return readGuaranteeOutOfStockItemPreference(this.state);
+  }
+
   setLastSelectedDrawGachaId(
     nextId: string | null | undefined,
     options: UpdateOptions = { persist: 'debounced' }
@@ -694,8 +895,396 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     );
   }
 
+  setGachaOwnerShareRatePreference(
+    nextValue: number | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeGachaOwnerShareRate(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readGachaOwnerShareRatePreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+
+        if (normalized != null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              ownerShareRate: normalized
+            }
+          };
+        }
+
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+        if (nextGacha) {
+          delete nextGacha.ownerShareRate;
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setExcludeRiaguImagesPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readExcludeRiaguImagesPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousShare = previousGacha && isRecord(previousGacha.share) ? previousGacha.share : undefined;
+
+        const nextShare = previousShare ? { ...previousShare } : undefined;
+        if (normalized !== null) {
+          const ensured = nextShare ?? {};
+          ensured.excludeRiaguImages = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            share: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextShare) {
+          delete nextShare.excludeRiaguImages;
+        }
+
+        const hasShareEntries = Boolean(nextShare && Object.keys(nextShare).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasShareEntries && nextGacha) {
+          nextGacha['share'] = nextShare as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['share'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setCompleteGachaIncludeOutOfStockPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readCompleteGachaIncludeOutOfStockPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousStock = previousGacha && isRecord(previousGacha.stock) ? previousGacha.stock : undefined;
+
+        const nextStock = previousStock ? { ...previousStock } : undefined;
+        if (normalized !== null) {
+          const ensured = nextStock ?? {};
+          ensured.includeOutOfStockInComplete = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            stock: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextStock) {
+          delete nextStock.includeOutOfStockInComplete;
+        }
+
+        const hasStockEntries = Boolean(nextStock && Object.keys(nextStock).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasStockEntries && nextGacha) {
+          nextGacha['stock'] = nextStock as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['stock'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setGuaranteeOutOfStockItemPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readGuaranteeOutOfStockItemPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousStock = previousGacha && isRecord(previousGacha.stock) ? previousGacha.stock : undefined;
+
+        const nextStock = previousStock ? { ...previousStock } : undefined;
+        if (normalized !== null) {
+          const ensured = nextStock ?? {};
+          ensured.allowOutOfStockGuaranteeItem = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            stock: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextStock) {
+          delete nextStock.allowOutOfStockGuaranteeItem;
+        }
+
+        const hasStockEntries = Boolean(nextStock && Object.keys(nextStock).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasStockEntries && nextGacha) {
+          nextGacha['stock'] = nextStock as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['stock'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
   getUserFilterPreferences(): UserFilterPreferences {
     return normalizeUserFilterPreferences(this.state?.users && isRecord(this.state.users) ? this.state.users.filter : undefined);
+  }
+
+  getUserCardOpenState(userId: string): boolean | null {
+    const trimmed = userId.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return readUserCardOpenState(this.state, trimmed);
+  }
+
+  setUserCardOpenState(
+    userId: string,
+    open: boolean,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const trimmed = userId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readUserCardOpenState(previous, trimmed);
+        if (current === open) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousUsers = base.users && isRecord(base.users) ? base.users : {};
+        const previousCards = previousUsers.cards && isRecord(previousUsers.cards) ? previousUsers.cards : {};
+
+        return {
+          ...base,
+          users: {
+            ...previousUsers,
+            cards: {
+              ...previousCards,
+              [trimmed]: open
+            }
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getRiaguCardOpenState(cardId: string): boolean | null {
+    const trimmed = cardId.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return readRiaguCardOpenState(this.state, trimmed);
+  }
+
+  setRiaguCardOpenState(
+    cardId: string,
+    open: boolean,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const trimmed = cardId.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+
+    this.update(
+      (previous) => {
+        const current = readRiaguCardOpenState(previous, trimmed);
+        if (current === open) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousRiagu = base.riagu && isRecord(base.riagu) ? base.riagu : {};
+        const previousCards = previousRiagu.cards && isRecord(previousRiagu.cards) ? previousRiagu.cards : {};
+
+        return {
+          ...base,
+          riagu: {
+            ...previousRiagu,
+            cards: {
+              ...previousCards,
+              [trimmed]: open
+            }
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getApplyLowerThresholdGuaranteesPreference(): boolean | null {
+    return readApplyLowerThresholdGuaranteesPreference(this.state);
+  }
+
+  setApplyLowerThresholdGuaranteesPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readApplyLowerThresholdGuaranteesPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousGuarantee = previousGacha && isRecord(previousGacha.guarantee) ? previousGacha.guarantee : undefined;
+
+        const nextGuarantee = previousGuarantee ? { ...previousGuarantee } : undefined;
+        if (normalized !== null) {
+          const ensured = nextGuarantee ?? {};
+          ensured.applyLowerThresholdGuarantees = normalized;
+          const nextGacha = {
+            ...(previousGacha ?? {}),
+            guarantee: ensured
+          };
+          return { ...base, gacha: nextGacha };
+        }
+
+        if (nextGuarantee) {
+          delete nextGuarantee.applyLowerThresholdGuarantees;
+        }
+
+        const hasGuaranteeEntries = Boolean(nextGuarantee && Object.keys(nextGuarantee).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasGuaranteeEntries && nextGacha) {
+          nextGacha['guarantee'] = nextGuarantee as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['guarantee'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
   }
 
   setUserFilterPreferences(

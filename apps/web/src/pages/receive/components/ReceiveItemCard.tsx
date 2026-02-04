@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
@@ -10,6 +10,7 @@ import {
 } from '../../../pages/gacha/components/rarity/color-picker/palette';
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
+import { ReceiveSaveButton } from './ReceiveSaveButtons';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
@@ -132,13 +133,13 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
           <video
             src={objectUrl}
             controls
-            className="receive-item-card-video-preview h-full w-full rounded-xl bg-black object-contain md:rounded-2xl"
+            className="receive-item-card-video-preview h-full w-full rounded-xl bg-surface-deep object-contain md:rounded-2xl"
             preload="metadata"
           />
         );
       case 'audio':
         return (
-          <div className="receive-item-card-audio-wrapper flex h-full w-full items-center justify-center rounded-xl bg-black/60 p-4 md:rounded-2xl">
+          <div className="receive-item-card-audio-wrapper flex h-full w-full items-center justify-center rounded-xl bg-surface-deep/80 p-4 md:rounded-2xl">
             <audio controls src={objectUrl} className="receive-item-card-audio-player w-full" preload="metadata" />
           </div>
         );
@@ -146,13 +147,14 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
         return (
           <iframe
             src={objectUrl}
-            className="receive-item-card-text-preview h-full w-full rounded-xl border border-white/10 bg-black/50 md:rounded-2xl"
+            className="receive-item-card-text-preview h-full w-full rounded-xl border border-border/60 bg-surface/70 md:rounded-2xl"
             title={item.filename}
+            sandbox=""
           />
         );
       default:
         return (
-          <div className="receive-item-card-preview-unsupported flex h-full items-center justify-center rounded-xl bg-black/40 text-xs text-muted-foreground md:rounded-2xl">
+          <div className="receive-item-card-preview-unsupported flex h-full items-center justify-center rounded-xl bg-panel/60 text-xs text-muted-foreground md:rounded-2xl">
             <span className="receive-item-card-preview-unsupported-text">プレビュー未対応</span>
           </div>
         );
@@ -167,14 +169,14 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
   );
 
   return (
-    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl shadow-black/40 backdrop-blur">
+    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
         <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
-          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-white/10 bg-black/60 md:aspect-video md:h-auto md:rounded-2xl md:border-transparent">
+          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:aspect-[2/1] md:h-auto md:rounded-2xl">
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
-                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-white/15 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/30'
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/20'
                 )}
                 style={rarityBadgeStyle}
               >
@@ -184,7 +186,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             {previewNode}
           </div>
           <div className="receive-item-card-kind-chip-mobile-container md:hidden">
-            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-pink-200">
+            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {kindChipInner}
             </div>
           </div>
@@ -192,28 +194,28 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
         <div className="receive-item-card-body flex min-w-0 flex-1 flex-col gap-3 md:gap-4">
           <div className="receive-item-card-metadata space-y-2">
             <div className="receive-item-card-title-group space-y-1">
-              <p className="receive-item-card-item-name line-clamp-2 text-base font-semibold text-white">
+              <p className="receive-item-card-item-name line-clamp-2 text-base font-semibold text-surface-foreground">
                 {item.metadata?.itemName ?? item.filename}
               </p>
               {item.metadata?.gachaName ? (
-                <p className="receive-item-card-gacha-name text-sm text-pink-200/80">
+                <p className="receive-item-card-gacha-name text-sm text-muted-foreground">
                   {item.metadata.gachaName}
                 </p>
               ) : null}
             </div>
             <div className="receive-item-card-attribute-group flex flex-wrap gap-2 text-xs text-muted-foreground">
               {typeof item.metadata?.obtainedCount === 'number' ? (
-                <span className="receive-item-card-attribute receive-item-card-attribute-count rounded-full border border-white/10 bg-white/10 px-2 py-1 font-medium text-blue-100/80">
+                <span className="receive-item-card-attribute receive-item-card-attribute-count rounded-full border border-border/60 bg-surface/40 px-2 py-1 font-medium text-muted-foreground">
                   獲得数: {item.metadata.obtainedCount}
                 </span>
               ) : null}
               {item.metadata?.isRiagu ? (
-                <span className="receive-item-card-attribute receive-item-card-attribute-riagu rounded-full border border-amber-400/60 bg-amber-500/20 px-2 py-1 font-medium text-amber-100">
+                <span className="receive-item-card-attribute receive-item-card-attribute-riagu rounded-full border border-amber-500/50 bg-amber-500/15 px-2 py-1 font-medium text-amber-600">
                   リアルグッズ
                 </span>
               ) : null}
               {item.metadata?.isNewForUser ? (
-                <span className="receive-item-card-attribute receive-item-card-attribute-new rounded-full border border-emerald-400/60 bg-emerald-500/20 px-2 py-1 font-semibold text-emerald-100">
+                <span className="receive-item-card-attribute receive-item-card-attribute-new rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2 py-1 font-semibold text-emerald-600">
                   NEW
                 </span>
               ) : null}
@@ -221,19 +223,15 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
           </div>
           <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="receive-item-card-kind-chip-desktop-container hidden md:flex">
-              <div className="receive-item-card-kind-chip-desktop flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-pink-200">
+              <div className="receive-item-card-kind-chip-desktop flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {kindChipInner}
               </div>
             </div>
             <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-              <button
-                type="button"
+              <ReceiveSaveButton
                 onClick={() => onSave(item)}
-                className="receive-item-card-save-button inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-900/40 transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400"
-              >
-                <ArrowUpTrayIcon className="receive-item-card-save-icon h-5 w-5" aria-hidden="true" />
-                <span className="receive-item-card-save-text">保存</span>
-              </button>
+                className="receive-item-card-save-button"
+              />
             </div>
           </div>
         </div>

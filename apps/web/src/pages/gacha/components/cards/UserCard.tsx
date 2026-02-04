@@ -26,6 +26,7 @@ import {
 } from '../../../../modals';
 import { ContextMenu, type ContextMenuEntry } from '../menu/ContextMenu';
 import { useAssetPreview } from '../../../../features/assets/useAssetPreview';
+import { useStoreValue } from '@domain/stores';
 import type { OriginalPrizeInstance } from '@domain/originalPrize';
 
 export type UserId = string;
@@ -77,6 +78,8 @@ export interface UserCardProps {
   discordAvatarUrl?: string | null;
 }
 
+const PANEL_CLOSE_DELAY_MS = 300;
+
 export function UserCard({
   userId,
   userName,
@@ -96,8 +99,10 @@ export function UserCard({
   const {
     userProfiles: userProfilesStore,
     userInventories: userInventoriesStore,
-    pullHistory: pullHistoryStore
+    pullHistory: pullHistoryStore,
+    uiPreferences
   } = useDomainStores();
+  const uiPreferencesState = useStoreValue(uiPreferences);
   const [userMenuAnchor, setUserMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(userName);
@@ -106,6 +111,8 @@ export function UserCard({
   const toggleButtonRef = useRef<HTMLButtonElement | null>(null);
   const nameFieldId = `user-name-${userId}`;
   const panelId = `user-card-panel-${userId}`;
+  const INTERACTIVE_SELECTOR =
+    'button, a, input, textarea, select, summary, details, [role="button"], [data-card-toggle-exclude="true"]';
 
   useEffect(() => {
     if (!isEditingName) {
@@ -134,6 +141,11 @@ export function UserCard({
   const avatarAssetId = discordAvatarAssetId ?? null;
   const avatarPreview = useAssetPreview(avatarAssetId);
   const avatarSrc = avatarPreview.url ?? (discordAvatarUrl ?? null);
+  const persistedOpenState = useMemo(
+    () => uiPreferences.getUserCardOpenState(userId),
+    [uiPreferences, uiPreferencesState, userId]
+  );
+  const resolvedDefaultOpen = persistedOpenState ?? expandedByDefault ?? false;
   const avatarFallback = useMemo(() => {
     const source = normalizedDiscordDisplayName || userName;
     if (!source) {
@@ -161,6 +173,26 @@ export function UserCard({
     const rect = event.currentTarget.getBoundingClientRect();
     setUserMenuAnchor({ x: rect.left, y: rect.bottom + 8 });
   }, []);
+
+  const handleCardClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      if (isEditingName) {
+        return;
+      }
+      if (event.defaultPrevented) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if (target.closest(INTERACTIVE_SELECTOR)) {
+        return;
+      }
+      toggleButtonRef.current?.click();
+    },
+    [INTERACTIVE_SELECTOR, isEditingName]
+  );
 
   const handleCloseUserMenu = useCallback(() => {
     setUserMenuAnchor(null);
@@ -305,10 +337,13 @@ export function UserCard({
   );
 
   return (
-    <Disclosure defaultOpen={expandedByDefault}>
+    <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
         <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
-          <header className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+          <header
+            className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap"
+            onClick={handleCardClick}
+          >
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <Disclosure.Button
                 ref={toggleButtonRef}
@@ -318,6 +353,9 @@ export function UserCard({
                   open && 'text-accent'
                 )}
                 aria-label="ユーザー詳細の表示を切り替える"
+                onClick={() => {
+                  uiPreferences.setUserCardOpenState(userId, !open, { persist: 'debounced' });
+                }}
               >
                 <ChevronRightIcon
                   className={clsx(
@@ -411,11 +449,11 @@ export function UserCard({
             <div className="user-card__actions flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                className="user-card__export-button inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-accent/70 bg-accent px-3 py-1 text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
+                className="user-card__export-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-accent/70 bg-accent text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
                 onClick={() => onExport?.(userId)}
+                aria-label="保存"
               >
                 <FolderArrowDownIcon className="h-5 w-5" />
-                保存
               </button>
               <button
                 type="button"
@@ -444,33 +482,89 @@ export function UserCard({
               'data-[state=closed]:grid-rows-[0fr]'
             )}
           >
-            <Disclosure.Panel
-              static
-              id={panelId}
-              className={clsx(
-                'overflow-hidden transition-opacity duration-300 ease-linear',
-                'group-data-[state=open]:opacity-100',
-                'group-data-[state=closed]:opacity-0'
-              )}
-            >
-              <div className="user-card__inventories space-y-4">
-                {inventories.map((inventory) => (
-                  <GachaInventoryCard
-                    key={inventory.inventoryId}
-                    inventory={inventory}
-                    showCounts={showCounts}
-                    userId={userId}
-                    userName={userName}
-                    catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
-                    rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
-                  />
-                ))}
-              </div>
-            </Disclosure.Panel>
+            <UserCardPanel
+              open={open}
+              panelId={panelId}
+              inventories={inventories}
+              showCounts={showCounts}
+              userId={userId}
+              userName={userName}
+              catalogItemsMap={catalogItemsMap}
+              rarityOptionsMap={rarityOptionsMap}
+            />
           </div>
         </article>
       )}
     </Disclosure>
+  );
+}
+
+interface UserCardPanelProps {
+  open: boolean;
+  panelId: string;
+  inventories: UserInventoryEntry[];
+  showCounts: boolean;
+  userId: UserId;
+  userName: string;
+  catalogItemsMap: Record<string, InventoryCatalogItemOption[]>;
+  rarityOptionsMap: Record<string, InventoryRarityOption[]>;
+}
+
+function UserCardPanel({
+  open,
+  panelId,
+  inventories,
+  showCounts,
+  userId,
+  userName,
+  catalogItemsMap,
+  rarityOptionsMap
+}: UserCardPanelProps): JSX.Element | null {
+  const [shouldRender, setShouldRender] = useState(open);
+
+  useEffect(() => {
+    if (open) {
+      setShouldRender(true);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShouldRender(false);
+    }, PANEL_CLOSE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [open]);
+
+  if (!shouldRender) {
+    return null;
+  }
+
+  return (
+    <Disclosure.Panel
+      static
+      id={panelId}
+      className={clsx(
+        'overflow-hidden transition-opacity duration-300 ease-linear',
+        'group-data-[state=open]:opacity-100',
+        'group-data-[state=closed]:opacity-0'
+      )}
+    >
+      <div className="user-card__inventories space-y-4">
+        {inventories.map((inventory) => (
+          <GachaInventoryCard
+            key={inventory.inventoryId}
+            inventory={inventory}
+            showCounts={showCounts}
+            userId={userId}
+            userName={userName}
+            catalogItems={catalogItemsMap[inventory.gachaId] ?? []}
+            rarityOptions={rarityOptionsMap[inventory.gachaId] ?? []}
+          />
+        ))}
+      </div>
+    </Disclosure.Panel>
   );
 }
 
@@ -898,7 +992,7 @@ function GachaInventoryCard({
           return (
             <div
               key={rarityId}
-              className="user-card__rarity-row grid grid-cols-[minmax(5rem,auto),1fr] items-start gap-2"
+              className="user-card__rarity-row grid min-w-0 grid-cols-[minmax(5rem,auto),1fr] items-start gap-2"
             >
               <div className="user-card__rarity-label flex items-center gap-2">
                 <span className={clsx('user-card__rarity-name text-sm font-semibold', className)} style={style}>
@@ -910,7 +1004,7 @@ function GachaInventoryCard({
                   </span>
                 ) : null}
               </div>
-              <div className="user-card__rarity-items flex flex-wrap items-start gap-2">
+              <div className="user-card__rarity-items flex min-w-0 flex-wrap items-start gap-2">
                 {group.items.map((item) => {
                   const editorKey = `edit:${rarityId}:${item.itemId}`;
                   const isActive = activeEditor === editorKey && draftMode === 'edit';
@@ -924,8 +1018,10 @@ function GachaInventoryCard({
                         )}
                         onSubmit={handleSubmitDraft}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{item.itemName}</span>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="max-w-full truncate text-xs text-muted-foreground">
+                            {item.itemName}
+                          </span>
                           <input
                             type="number"
                             min={0}
@@ -962,7 +1058,7 @@ function GachaInventoryCard({
                       key={`${inventory.inventoryId}-${editorKey}`}
                       type="button"
                       className={clsx(
-                        'user-card__item-chip inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition',
+                        'user-card__item-chip inline-flex max-w-full min-w-0 items-center gap-2 overflow-hidden rounded-full border px-3 py-1 text-xs transition',
                         item.isMissing
                           ? 'border-dashed border-border/40 bg-surface/10 text-muted-foreground/60 opacity-60'
                           : 'border-border/60 bg-muted text-surface-foreground',
@@ -975,7 +1071,7 @@ function GachaInventoryCard({
                       onClick={() => item.rarity.rarityId && handleStartEdit(rarityId, item.itemId, item.count)}
                       disabled={!isEditing || !item.rarity.rarityId}
                     >
-                      <span>{item.itemName}</span>
+                      <span className="block max-w-full truncate">{item.itemName}</span>
                       {showCounts && item.count > 1 ? (
                         <span className="user-card__item-quantity text-[10px] text-muted-foreground">×{item.count}</span>
                       ) : null}
