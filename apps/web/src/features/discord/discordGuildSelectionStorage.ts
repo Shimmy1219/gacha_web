@@ -15,6 +15,19 @@ export interface DiscordGuildCategorySelection {
   selectedAt?: string;
 }
 
+export const DISCORD_GUILD_ROOT_CATEGORY_ID = '__discord-guild-root__';
+export const DISCORD_GUILD_ROOT_CATEGORY_NAME = 'ギルド直下';
+
+export function isDiscordGuildRootCategoryId(categoryId: string | null | undefined): boolean {
+  return typeof categoryId === 'string' && categoryId === DISCORD_GUILD_ROOT_CATEGORY_ID;
+}
+
+export function isDiscordGuildRootCategorySelection(
+  category: DiscordGuildCategorySelection | null | undefined
+): boolean {
+  return isDiscordGuildRootCategoryId(category?.id);
+}
+
 export interface DiscordGuildSelection {
   guildId: string;
   guildName: string;

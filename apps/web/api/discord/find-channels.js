@@ -197,47 +197,49 @@ export default async function handler(req, res){
     return res.json({ ok:true, channel_id: null, created:false });
   }
 
-  if (!categoryId) {
-    log.warn('category id missing for channel creation');
-    return res.status(400).json({ ok:false, error:'category_id required to create private channel' });
-  }
-
-  const category = allChannels.find(c => c.type === 4 && c.id === categoryId);
-  if (!category) {
-    log.warn('specified category not found in guild', { categoryId });
-    return res.status(404).json({ ok:false, error:'指定されたカテゴリが見つかりません。' });
+  let parentCategoryId = null;
+  if (categoryId) {
+    const category = allChannels.find(c => c.type === 4 && c.id === categoryId);
+    if (!category) {
+      log.warn('specified category not found in guild', { categoryId });
+      return res.status(404).json({ ok:false, error:'指定されたカテゴリが見つかりません。' });
+    }
+    parentCategoryId = category.id;
   }
 
   // 無ければ作成
   const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId, botId: botUserId });
   let created;
+  const channelCreatePayload = {
+    name: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
+    type: 0,
+    permission_overwrites: overwrites
+  };
+  if (parentCategoryId) {
+    channelCreatePayload.parent_id = parentCategoryId;
+  }
   try {
     log.debug('creating new channel', {
       guildId,
       memberId,
-      parentCategoryId: category.id,
-      channelNamePreview: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
+      parentCategoryId,
+      channelNamePreview: channelCreatePayload.name,
       overwritePayload: overwrites,
     });
     created = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
-      body: {
-        name: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
-        type: 0,               // text
-        parent_id: category.id,
-        permission_overwrites: overwrites
-      }
+      body: channelCreatePayload
     });
   } catch (error) {
     return respondDiscordApiError(error, 'guild-channel-create');
   }
 
-  log.info('channel created', { channelId: created.id, guildId, memberId, parentId: category.id });
+  log.info('channel created', { channelId: created.id, guildId, memberId, parentId: parentCategoryId });
   return res.json({
     ok:true,
     channel_id: created.id,
     channel_name: typeof created?.name === 'string' ? created.name : null,
     created:true,
-    parent_id: category.id
+    parent_id: parentCategoryId
   });
 }

@@ -26,6 +26,7 @@ import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
   DiscordGuildSelectionMissingError,
+  isDiscordGuildRootCategoryId,
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -939,15 +940,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         if (!channelId) {
           if (!preferredCategory) {
             throw new Error(
-              'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。'
+              'お渡しチャンネルの配置先が設定されていません。Discord共有設定を確認してください。'
             );
           }
 
           const params = new URLSearchParams({
             guild_id: guildSelection.guildId,
-            member_id: sharedMemberId,
-            category_id: preferredCategory
+            member_id: sharedMemberId
           });
+          if (!isDiscordGuildRootCategoryId(preferredCategory)) {
+            params.set('category_id', preferredCategory);
+          }
           const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
             method: 'GET',
             headers: {

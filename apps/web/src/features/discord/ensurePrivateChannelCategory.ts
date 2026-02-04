@@ -52,7 +52,7 @@ export async function ensurePrivateChannelCategory({
         }
       },
       onClose: () => {
-        rejectOnce(new Error('お渡しチャンネルのカテゴリが設定されていません。'));
+        rejectOnce(new Error('お渡しチャンネルの配置先が設定されていません。'));
       }
     });
   });

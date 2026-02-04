@@ -7,6 +7,9 @@ import {
 import { useQuery } from '@tanstack/react-query';
 
 import {
+  DISCORD_GUILD_ROOT_CATEGORY_ID,
+  DISCORD_GUILD_ROOT_CATEGORY_NAME,
+  isDiscordGuildRootCategoryId,
   loadDiscordGuildSelection,
   saveDiscordGuildSelection,
   type DiscordGuildCategorySelection
@@ -29,6 +32,12 @@ interface DiscordCategoryCreateResponse {
   ok: boolean;
   category?: DiscordCategorySummary;
   error?: string;
+}
+
+interface DiscordCategoryOption {
+  id: string;
+  name: string;
+  isGuildRoot: boolean;
 }
 
 interface DiscordPrivateChannelCategoryDialogPayload {
@@ -94,6 +103,21 @@ export function DiscordPrivateChannelCategoryDialog({
 
   const categoriesQuery = useDiscordGuildCategories(guildId);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const categoryOptions = useMemo<DiscordCategoryOption[]>(
+    () => [
+      {
+        id: DISCORD_GUILD_ROOT_CATEGORY_ID,
+        name: DISCORD_GUILD_ROOT_CATEGORY_NAME,
+        isGuildRoot: true
+      },
+      ...categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        isGuildRoot: false
+      }))
+    ],
+    [categories]
+  );
 
   useEffect(() => {
     if (!payload?.initialCategory?.id) {
@@ -152,11 +176,14 @@ export function DiscordPrivateChannelCategoryDialog({
       return;
     }
     if (!selectedCategoryId) {
-      setSubmitError('カテゴリを選択してください。');
+      setSubmitError('配置先を選択してください。');
       return;
     }
-    const category = categories.find((item) => item.id === selectedCategoryId);
-    if (!category) {
+    const selectedAsGuildRoot = isDiscordGuildRootCategoryId(selectedCategoryId);
+    const category = selectedAsGuildRoot
+      ? null
+      : categories.find((item) => item.id === selectedCategoryId);
+    if (!selectedAsGuildRoot && !category) {
       setSubmitError('選択されたカテゴリが見つかりませんでした。最新の情報を再取得してください。');
       return;
     }
@@ -173,7 +200,9 @@ export function DiscordPrivateChannelCategoryDialog({
         member_id: discordUserId,
         create: '1'
       });
-      params.set('category_id', category.id);
+      if (category?.id) {
+        params.set('category_id', category.id);
+      }
       params.set('display_name', 'カテゴリ確認用チャンネル');
 
       const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
@@ -237,11 +266,17 @@ export function DiscordPrivateChannelCategoryDialog({
 
       setSubmitStage('saving-selection');
 
-      const categorySelection: DiscordGuildCategorySelection = {
-        id: category.id,
-        name: category.name,
-        selectedAt: new Date().toISOString()
-      };
+      const categorySelection: DiscordGuildCategorySelection = selectedAsGuildRoot
+        ? {
+            id: DISCORD_GUILD_ROOT_CATEGORY_ID,
+            name: DISCORD_GUILD_ROOT_CATEGORY_NAME,
+            selectedAt: new Date().toISOString()
+          }
+        : {
+            id: category.id,
+            name: category.name,
+            selectedAt: new Date().toISOString()
+          };
       saveDiscordGuildSelection(discordUserId, {
         ...selection,
         privateChannelCategory: categorySelection
@@ -260,15 +295,15 @@ export function DiscordPrivateChannelCategoryDialog({
     <>
       <ModalBody className="space-y-6">
         <section className="space-y-2 rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
-          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルのカテゴリを選択</h2>
+          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルの配置先を選択</h2>
           <p>
-            選択したカテゴリの配下に1:1のお渡しチャンネルを自動作成します。カテゴリはこの端末に保存され、次回以降の共有に利用されます。
+            選択したカテゴリ配下、またはギルド直下に1:1のお渡しチャンネルを自動作成します。設定はこの端末に保存され、次回以降の共有に利用されます。
           </p>
         </section>
 
         <section className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h3 className="text-sm font-semibold text-surface-foreground">カテゴリ一覧</h3>
+            <h3 className="text-sm font-semibold text-surface-foreground">配置先一覧</h3>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {categoriesQuery.isFetching ? (
                 <span className="inline-flex items-center gap-1" aria-live="polite">
@@ -308,28 +343,36 @@ export function DiscordPrivateChannelCategoryDialog({
 
           {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length === 0 ? (
             <div className="rounded-2xl border border-border/60 bg-surface/30 px-4 py-3 text-sm text-muted-foreground">
-              カテゴリが見つかりませんでした。新しいカテゴリを作成するか、Discord側で作成した後に再取得してください。
+              カテゴリが見つかりませんでした。ギルド直下を選択するか、カテゴリを作成して再取得してください。
             </div>
           ) : null}
 
-          {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length > 0 ? (
+          {!categoriesQuery.isLoading && !categoriesQuery.isError ? (
             <ul className="space-y-2">
-              {categories.map((category) => {
-                const isSelected = category.id === selectedCategoryId;
+              {categoryOptions.map((option) => {
+                const isSelected = option.id === selectedCategoryId;
                 return (
-                  <li key={category.id}>
+                  <li key={option.id}>
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedCategoryId(category.id);
+                        setSelectedCategoryId(option.id);
                         setSubmitError(null);
                       }}
                       className="flex w-full items-center justify-between gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
                       aria-pressed={isSelected}
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-surface-foreground">{category.name || '(名称未設定)'}</span>
-                        <span className="text-xs text-muted-foreground">ID: {category.id}</span>
+                        <span className="text-sm font-semibold text-surface-foreground">
+                          {option.name || '(名称未設定)'}
+                        </span>
+                        {option.isGuildRoot ? (
+                          <span className="text-xs text-muted-foreground">
+                            カテゴリを使用せずに、ギルド直下へチャンネルを作成します。
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">ID: {option.id}</span>
+                        )}
                       </div>
                       {isSelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />

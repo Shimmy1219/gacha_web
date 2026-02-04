@@ -25,6 +25,7 @@ import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordPro
 import { useHaptics } from '../../features/haptics/HapticsProvider';
 import {
   DiscordGuildSelectionMissingError,
+  isDiscordGuildRootCategoryId,
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
@@ -1402,7 +1403,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         if (!channelId) {
           if (!preferredCategory) {
-            throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
+            throw new Error('お渡しチャンネルの配置先が設定されていません。Discord共有設定を確認してください。');
           }
 
           const params = new URLSearchParams({
@@ -1410,7 +1411,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             member_id: sharedMemberId,
             create: '1'
           });
-          params.set('category_id', preferredCategory);
+          if (!isDiscordGuildRootCategoryId(preferredCategory)) {
+            params.set('category_id', preferredCategory);
+          }
           const displayNameForChannel = pickDisplayName(
             profile.discordDisplayName,
             receiverDisplayName,
@@ -1648,7 +1651,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       const message =
         error instanceof DiscordGuildSelectionMissingError
           ? error.message
-          : 'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。';
+          : 'お渡しチャンネルの配置先が設定されていません。Discord共有設定を確認してください。';
       setDiscordDeliveryError(message);
       return;
     }

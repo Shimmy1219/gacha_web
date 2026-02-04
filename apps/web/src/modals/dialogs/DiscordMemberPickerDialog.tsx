@@ -20,6 +20,7 @@ import {
 } from '../../features/discord/discordMemberCacheStorage';
 import {
   type DiscordGuildCategorySelection,
+  isDiscordGuildRootCategoryId,
   updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
@@ -363,7 +364,7 @@ export function DiscordMemberPickerDialog({
       return;
     }
     if (!category?.id) {
-      setSubmitError('お渡し用のカテゴリが選択されていません。');
+      setSubmitError('お渡し用の配置先が選択されていません。');
       return;
     }
 
@@ -380,7 +381,9 @@ export function DiscordMemberPickerDialog({
       if (selectedMemberSummary?.displayName) {
         params.set('display_name', selectedMemberSummary.displayName);
       }
-      params.set('category_id', category.id);
+      if (!isDiscordGuildRootCategoryId(category.id)) {
+        params.set('category_id', category.id);
+      }
 
       const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
         headers: {
@@ -562,15 +565,18 @@ export function DiscordMemberPickerDialog({
                 Discordギルドのメンバーから共有先を選択し、お渡し用のテキストチャンネルへ共有リンクを送信します。
               </p>
               <p className="mt-2">
-                選択したメンバーとの1:1お渡しチャンネルが見つからない場合は、保存済みのカテゴリ配下に自動で作成します。カテゴリは事前に設定しておく必要があります。
+                選択したメンバーとの1:1お渡しチャンネルが見つからない場合は、保存済みの配置先（カテゴリ配下 / ギルド直下）に自動で作成します。
               </p>
               {selectedCategory ? (
                 <p className="mt-2 text-xs text-surface-foreground">
-                  現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
+                  現在のお渡し配置先: {selectedCategory.name}
+                  {isDiscordGuildRootCategoryId(selectedCategory.id)
+                    ? '（ギルド直下）'
+                    : ` (ID: ${selectedCategory.id})`}
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-danger">
-                  お渡しカテゴリが未設定です。「Discordに共有」を押すとカテゴリ選択モーダルが表示されます。
+                  お渡し配置先が未設定です。「Discordに共有」を押すとカテゴリ選択モーダルが表示されます。
                 </p>
               )}
             </>
