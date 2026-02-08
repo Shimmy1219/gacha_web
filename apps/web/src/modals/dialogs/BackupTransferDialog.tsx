@@ -45,50 +45,59 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
 
   return (
     <>
-      <ModalBody className="space-y-6 text-sm leading-relaxed">
-        <div className="space-y-3">
-          <p className="text-muted-foreground">
+      <ModalBody className="backup-transfer-dialog__body space-y-6 text-sm leading-relaxed">
+        <div className="backup-transfer-dialog__notes space-y-3">
+          <p className="backup-transfer-dialog__note text-muted-foreground">
             バックアップを読み込む時は「ガチャを登録」ボタンから読み込んでください。
           </p>
-          <p className="text-muted-foreground">
-            引き継ぎは24時間以内に完了させてください。24時間経過後はアップロードしたデータは自動的に削除されます。
+          <p className="backup-transfer-dialog__note text-muted-foreground">
+            引き継ぎは24時間以内に完了させてください。24時間経過後は引継ぎコードが無効になります。
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="backup-transfer-dialog__grid grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-surface/80 p-5 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="backup-transfer-dialog__card backup-transfer-dialog__card--backup flex flex-col gap-2 rounded-2xl border border-border/60 bg-surface/80 p-5 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             onClick={() => handleSelection('backup', payload?.onSelectBackup)}
             disabled={isBackupPending}
             aria-busy={isBackupPending}
           >
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
-              <ArchiveBoxArrowDownIcon className="h-6 w-6" />
+            <span className="backup-transfer-dialog__card-icon inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
+              <ArchiveBoxArrowDownIcon className="backup-transfer-dialog__card-icon-svg h-6 w-6" />
             </span>
-            <span className="text-base font-semibold text-surface-foreground">バックアップを作成する</span>
-            <span className="text-xs text-muted-foreground">
+            <span className="backup-transfer-dialog__card-title text-base font-semibold text-surface-foreground">
+              バックアップを作成する
+            </span>
+            <span className="backup-transfer-dialog__card-description text-xs text-muted-foreground">
               端末に現在のデータを保存します。バックアップを読み込む時は「ガチャを登録」ボタンから読み込んでください。
             </span>
           </button>
           <button
             type="button"
-            className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-surface/80 p-5 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="backup-transfer-dialog__card backup-transfer-dialog__card--transfer flex flex-col gap-2 rounded-2xl border border-border/60 bg-surface/80 p-5 text-left transition hover:border-accent/40 hover:bg-surface/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             onClick={() => handleSelection('transfer', payload?.onSelectTransfer)}
             disabled={isTransferPending}
             aria-busy={isTransferPending}
           >
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
-              <ArrowPathRoundedSquareIcon className="h-6 w-6" />
+            <span className="backup-transfer-dialog__card-icon inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-surface text-accent">
+              <ArrowPathRoundedSquareIcon className="backup-transfer-dialog__card-icon-svg h-6 w-6" />
             </span>
-            <span className="text-base font-semibold text-surface-foreground">クラウド経由で引き継ぎをする</span>
-            <span className="text-xs text-muted-foreground">
-              引継ぎを行うと6桁のコードが発行されます。引き継ぎは24時間以内に完了させてください。24時間経過後はアップロードしたデータは自動的に削除されます。
+            <span className="backup-transfer-dialog__card-title text-base font-semibold text-surface-foreground">
+              クラウド経由で引き継ぎをする
+            </span>
+            <span className="backup-transfer-dialog__card-description text-xs text-muted-foreground">
+              引継ぎを行うと5桁のコードが発行されます。引き継ぎは24時間以内に完了させてください（期限を過ぎるとコードが無効になります）。
             </span>
           </button>
         </div>
       </ModalBody>
       <ModalFooter>
-        <button type="button" className="btn btn-muted" onClick={close} disabled={pending !== null}>
+        <button
+          type="button"
+          className="backup-transfer-dialog__close btn btn-muted"
+          onClick={close}
+          disabled={pending !== null}
+        >
           閉じる
         </button>
       </ModalFooter>

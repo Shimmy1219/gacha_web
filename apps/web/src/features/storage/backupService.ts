@@ -938,7 +938,13 @@ function collectAssetIdsToImport(
   return assetIds;
 }
 
-export async function exportBackupToDevice(persistence: AppPersistence): Promise<void> {
+export interface BackupShimmyBuildResult {
+  blob: Blob;
+  fileName: string;
+  savedAt: string;
+}
+
+export async function buildBackupShimmyBlob(persistence: AppPersistence): Promise<BackupShimmyBuildResult> {
   ensureBrowserEnvironment();
 
   const [snapshot, assets] = await Promise.all([Promise.resolve(persistence.loadSnapshot()), exportAllAssets()]);
@@ -1000,6 +1006,12 @@ export async function exportBackupToDevice(persistence: AppPersistence): Promise
 
   const backupTimestamp = formatBackupTimestamp(new Date(savedAt));
   const fileName = `shiyura-gacha-backup-${backupTimestamp}.shimmy`;
+
+  return { blob, fileName, savedAt };
+}
+
+export async function exportBackupToDevice(persistence: AppPersistence): Promise<void> {
+  const { blob, fileName } = await buildBackupShimmyBlob(persistence);
 
   const url = URL.createObjectURL(blob);
   try {

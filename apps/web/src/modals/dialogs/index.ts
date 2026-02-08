@@ -25,6 +25,8 @@ export * from './BackupTransferDialog';
 export * from './BackupImportConflictDialog';
 export * from './SaveTargetDialog';
 export * from './StartWizardDialog';
+export * from './TransferCreateDialog';
+export * from './TransferImportDialog';
 export * from './UserDiscordProfileDialog';
 export * from './UserHistoryDialog';
 export * from './WarningDialog';
