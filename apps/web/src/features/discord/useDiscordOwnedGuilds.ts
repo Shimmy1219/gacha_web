@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { fetchDiscordApi } from './fetchDiscordApi';
+
 export interface DiscordGuildSummary {
   id: string;
   name: string;
@@ -18,28 +20,8 @@ interface DiscordGuildsResponse {
 }
 
 async function fetchDiscordGuilds(): Promise<DiscordGuildSummary[]> {
-  const csrfResponse = await fetch('/api/discord/csrf', {
+  const response = await fetchDiscordApi('/api/discord/bot-guilds', {
     method: 'GET',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-
-  if (!csrfResponse.ok) {
-    throw new Error(`Failed to issue CSRF token: ${csrfResponse.status}`);
-  }
-
-  const csrfPayload = (await csrfResponse.json()) as { ok: boolean; token?: string };
-  if (!csrfPayload.ok || !csrfPayload.token) {
-    throw new Error('Invalid CSRF payload received');
-  }
-
-  const response = await fetch('/api/discord/bot-guilds', {
-    method: 'GET',
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      'X-CSRF-Token': csrfPayload.token,
-    },
   });
 
   if (!response.ok) {

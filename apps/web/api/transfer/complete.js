@@ -1,13 +1,11 @@
 // /api/transfer/complete.js
-import { isAllowedOrigin } from '../_lib/origin.js';
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 import {
   TRANSFER_TTL_SEC,
-  assertCsrfDoubleSubmit,
   ensureAllowedBlobUrl,
   normalizeTransferCode,
-  parseBody,
   transferKey,
 } from './_lib.js';
 
@@ -19,36 +17,18 @@ function clampTtlSec(expiresAtIso) {
   return ttlSec;
 }
 
-export default async function handler(req, res) {
+const guarded = withApiGuards({
+  route: '/api/transfer/complete',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'transfer:complete', limit: 30, windowSec: 60 },
+})(async (req, res) => {
   const log = createRequestLogger('api/transfer/complete', req);
   log.info('request received', { method: req.method });
 
-  if (req.method === 'GET' && 'health' in (req.query || {})) {
-    log.info('health check ok');
-    return res.status(200).json({ ok: true, route: '/api/transfer/complete' });
-  }
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
-
-  const originCheck = isAllowedOrigin(req);
-  if (!originCheck.ok) {
-    log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
-    return res.status(403).json({ ok: false, error: 'Forbidden: origin not allowed' });
-  }
-
-  const body = parseBody(req);
-  try {
-    await assertCsrfDoubleSubmit(req, body);
-  } catch (error) {
-    const status = error?.statusCode || 403;
-    log.warn('csrf check failed', { status, message: error?.message });
-    return res.status(status).json({ ok: false, error: error?.message || 'Forbidden' });
-  }
-
+  const body = req.body ?? {};
   const code = normalizeTransferCode(body?.code);
   const pathname = typeof body?.pathname === 'string' ? body.pathname : '';
   const url = typeof body?.url === 'string' ? body.url : '';
@@ -62,9 +42,9 @@ export default async function handler(req, res) {
     ensureAllowedBlobUrl(url);
     if (downloadUrl) ensureAllowedBlobUrl(downloadUrl);
   } catch (error) {
-    const status = error?.statusCode || 400;
-    log.warn('invalid blob url', { status, message: error?.message });
-    return res.status(status).json({ ok: false, error: error?.message || 'Bad Request' });
+    const statusCode = error?.statusCode || 400;
+    log.warn('invalid blob url', { status: statusCode, message: error?.message });
+    return res.status(statusCode).json({ ok: false, error: error?.message || 'Bad Request' });
   }
 
   const key = transferKey(code);
@@ -96,5 +76,6 @@ export default async function handler(req, res) {
 
   log.info('transfer completed', { code, pathname });
   return res.status(200).json({ ok: true, expiresAt: record.expiresAt });
-}
+});
 
+export default guarded;

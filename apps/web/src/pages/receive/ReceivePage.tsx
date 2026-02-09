@@ -84,6 +84,35 @@ function describeResolveError(status: number, payload?: ResolveResponsePayload |
   return payload?.error ?? '受け取りリンクの確認に失敗しました。しばらく待って再度お試しください。';
 }
 
+interface CsrfResponsePayload {
+  ok?: boolean;
+  token?: string;
+  error?: string;
+}
+
+async function requestCsrfToken(signal?: AbortSignal): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal
+    });
+  } catch {
+    throw new Error('CSRFトークンの取得に失敗しました (ネットワークエラー)');
+  }
+
+  const payload = (await response.json().catch(() => null)) as CsrfResponsePayload | null;
+  if (!response.ok || !payload?.ok || typeof payload.token !== 'string' || !payload.token) {
+    const reason = payload?.error ?? `status ${response.status}`;
+    throw new Error(`CSRFトークンの取得に失敗しました (${reason})`);
+  }
+
+  return payload.token;
+}
+
 async function resolveReceiveToken(token: string, signal?: AbortSignal): Promise<ResolveSuccessPayload> {
   let response: Response;
   try {
@@ -242,6 +271,7 @@ export function ReceivePage(): JSX.Element {
   const [omittedItemNames, setOmittedItemNames] = useState<string[]>([]);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const csrfRef = useRef<string | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
     const tokenParam = searchParams.get('t');
     const historyParam = searchParams.get('history');
@@ -713,11 +743,14 @@ export function ReceivePage(): JSX.Element {
     setCleanupError(null);
 
     try {
+      const csrf = csrfRef.current ?? (await requestCsrfToken());
+      csrfRef.current = csrf;
+
       const response = await fetch('/api/receive/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ token: resolvedToken })
+        body: JSON.stringify({ token: resolvedToken, csrf })
       });
 
       let payload: { ok?: boolean; error?: string } | null = null;

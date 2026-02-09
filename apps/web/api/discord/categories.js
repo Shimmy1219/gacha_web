@@ -1,5 +1,7 @@
 // /api/discord/categories.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
@@ -16,16 +18,18 @@ function normalizeCategoryResponse(channel) {
   };
 }
 
-export default async function handler(req, res) {
+export default withApiGuards({
+  route: '/api/discord/categories',
+  health: { enabled: true },
+  methods: ['GET', 'POST'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:categories', limit: 30, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/categories', req);
   log.info('request received', { method: req.method, query: req.query });
 
   const method = req.method || 'GET';
-  if (method !== 'GET' && method !== 'POST') {
-    res.setHeader('Allow', 'GET,POST');
-    log.warn('method not allowed', { method });
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
 
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
@@ -110,4 +114,4 @@ export default async function handler(req, res) {
   } catch (error) {
     return respondDiscordApiError(error, 'guild-category-create');
   }
-}
+});

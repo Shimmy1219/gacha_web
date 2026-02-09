@@ -4,6 +4,7 @@ import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { createEdgeRequestLogger } from '../_lib/edgeLogger.js';
+import { withEdgeGuards } from '../_lib/edgeGuards';
 
 export const config = { runtime: 'edge' };
 
@@ -165,30 +166,15 @@ async function fetchBotGuilds(token: string | null, log: ReturnType<typeof creat
   };
 }
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   const log = createEdgeRequestLogger('api/discord/bot-guilds', request);
   log.info('request received');
-
-  if (request.method !== 'GET') {
-    log.warn('method not allowed', { method: request.method });
-    return jsonResponse(405, { ok: false, error: 'Method Not Allowed' }, { headers: { Allow: 'GET' } });
-  }
 
   const cookies = getCookies(request);
   const sid = typeof cookies?.sid === 'string' ? cookies.sid : null;
   if (!sid) {
     log.info('session cookie is missing');
     return jsonResponse(401, { ok: false, error: 'no session' });
-  }
-
-  const csrfCookie = typeof cookies?.discord_csrf === 'string' ? cookies.discord_csrf : null;
-  const csrfHeader = request.headers.get(DEFAULT_CSRF_HEADER_NAME);
-  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
-    log.warn('csrf validation failed', {
-      hasCookie: Boolean(csrfCookie),
-      hasHeader: Boolean(csrfHeader),
-    });
-    return jsonResponse(403, { ok: false, error: 'csrf mismatch' });
   }
 
   let session: any;
@@ -243,3 +229,12 @@ export default async function handler(request: Request): Promise<Response> {
     },
   });
 }
+
+const guarded = withEdgeGuards({
+  methods: ['GET'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:bot-guilds', limit: 60, windowSec: 60 },
+})(handler);
+
+export default guarded;
