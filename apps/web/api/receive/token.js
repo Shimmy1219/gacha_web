@@ -1,6 +1,7 @@
 // /api/receive/token.js
 import crypto from 'crypto';
-import { hostToOrigin, isAllowedOrigin } from '../_lib/origin.js';
+import { withApiGuards } from '../_lib/apiGuards.js';
+import { hostToOrigin } from '../_lib/origin.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 
@@ -8,19 +9,6 @@ const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
 
 // ===== Helpers =====
 function vLog(...args){ if (VERBOSE) console.log('[receive/token]', ...args); }
-
-function parseCookies(header) {
-  const out = {};
-  if (!header) return out;
-  header.split(';').forEach((part) => {
-    const i = part.indexOf('=');
-    if (i === -1) return;
-    const k = part.slice(0, i).trim();
-    const v = part.slice(i + 1).trim();
-    out[k] = decodeURIComponent(v);
-  });
-  return out;
-}
 
 // base64url <-> Buffer
 const b64u = {
@@ -126,46 +114,25 @@ function readKey(){
   return key;
 }
 
-export default async function handler(req, res){
+const guarded = withApiGuards({
+  route: '/api/receive/token',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'receive:token', limit: 30, windowSec: 60 },
+})(async function handler(req, res){
   const log = createRequestLogger('api/receive/token', req);
   log.info('request received');
 
-  // health
-  if (req.method === 'GET' && 'health' in (req.query||{})) {
-    log.info('health check ok');
-    return res.status(200).json({ ok: true, route: '/api/receive/token' });
-  }
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
-
   try{
-    // 同一オリジン検証
-    const originCheck = isAllowedOrigin(req);
-    if (!originCheck.ok) {
-      log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
-      return res.status(403).json({ ok:false, error:'Forbidden: origin not allowed' });
-    }
-
-    const body = (req.body && typeof req.body === 'object') ? req.body
-                : JSON.parse(req.body || '{}');
-
-    const { url, name, purpose, validUntil, csrf } = body || {};
+    const body = req.body ?? {};
+    const { url, name, purpose, validUntil } = body || {};
     log.info('payload received', {
       hasUrl: Boolean(url),
       hasName: Boolean(name),
       purpose: typeof purpose === 'string' ? purpose : undefined,
     });
-
-    // CSRF（二重送信: Cookie + body）
-    const cookies = parseCookies(req.headers.cookie || '');
-    if (!csrf || !cookies.csrf || cookies.csrf !== csrf) {
-      log.warn('csrf mismatch');
-      return res.status(403).json({ ok:false, error:'Forbidden: CSRF token mismatch' });
-    }
 
     if (!url || typeof url !== 'string') {
       log.warn('url missing or invalid');
@@ -228,4 +195,6 @@ export default async function handler(req, res){
       ok:false, error: msg
     });
   }
-}
+});
+
+export default guarded;

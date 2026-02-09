@@ -513,7 +513,35 @@ export function useDiscordSession(): UseDiscordSessionResult {
     logDiscordAuthEvent('DiscordログアウトAPIを呼び出します', {
       endpoint: '/api/auth/logout'
     });
-    const response = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    let csrf: string | null = null;
+    try {
+      const csrfResponse = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      });
+      const csrfPayload = (await csrfResponse.json().catch(() => null)) as { ok?: boolean; token?: string } | null;
+      if (csrfResponse.ok && csrfPayload?.ok && typeof csrfPayload.token === 'string') {
+        csrf = csrfPayload.token;
+      }
+    } catch (error) {
+      logDiscordAuthError('CSRFトークンの発行に失敗しました', error);
+    }
+
+    if (!csrf) {
+      logDiscordAuthError('CSRFトークンが取得できなかったためログアウトを中断します', {
+        endpoint: '/api/auth/logout'
+      });
+      return;
+    }
+
+    const response = await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ csrf })
+    });
     if (!response.ok) {
       logDiscordAuthError('DiscordログアウトAPIの呼び出しに失敗しました', {
         status: response.status

@@ -9,6 +9,8 @@ import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
+import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
+import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -201,7 +203,12 @@ export function App(): JSX.Element {
           }
         },
         onEnterTransferCode: () => {
-          console.info('引継ぎコード入力処理は未接続です');
+          push(TransferImportDialog, {
+            id: 'transfer-import-dialog',
+            title: '引継ぎコードで復元',
+            description: '発行された5桁の引継ぎコードと暗証番号（4桁）でデータを復元します。',
+            size: 'md'
+          });
         },
         onCreateNew: () => {
           push(CreateGachaWizardDialog, {
@@ -253,10 +260,13 @@ export function App(): JSX.Element {
           }
         },
         onSelectTransfer: () => {
-          console.info('引継ぎ処理は未接続です');
-          if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-            window.alert('引継ぎコードによる復元は準備中です。');
-          }
+          push(TransferCreateDialog, {
+            id: 'transfer-create-dialog',
+            title: '引継ぎコードを発行',
+            description:
+              'バックアップ(.shimmy)を生成して暗号化し、クラウドに保存します。引継ぐ際に4桁の暗証番号の設定が必要です。引継ぎコードと、暗証番号は引き継ぎ先で必要になります。',
+            size: 'md'
+          });
         }
       }
     });
