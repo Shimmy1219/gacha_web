@@ -24,6 +24,10 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
+import {
+  isDiscordMissingPermissionsErrorCode,
+  pushDiscordMissingPermissionsWarning
+} from './_lib/discordApiErrorHandling';
 
 export interface DiscordMemberShareResult {
   memberId: string;
@@ -388,15 +392,25 @@ export function DiscordMemberPickerDialog({
         parent_id?: string | null;
         created?: boolean;
         error?: string;
+        errorCode?: string;
       } | null;
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+          pushDiscordMissingPermissionsWarning(push, message);
+          throw new Error('Discord botの権限が不足しています。');
+        }
         throw new Error(message);
       }
 
       if (!findPayload.ok) {
-        throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
+        const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+          pushDiscordMissingPermissionsWarning(push, message);
+          throw new Error('Discord botの権限が不足しています。');
+        }
+        throw new Error(message);
       }
 
       const channelId = findPayload.channel_id ?? null;
