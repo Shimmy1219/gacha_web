@@ -51,6 +51,9 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
             バックアップを読み込む時は「ガチャを登録」ボタンから読み込んでください。
           </p>
           <p className="backup-transfer-dialog__note text-muted-foreground">
+            引継ぐ際に4桁の暗証番号の設定が必要です。引継ぎコードと、暗証番号は引き継ぎ先で必要になります。
+          </p>
+          <p className="backup-transfer-dialog__note text-muted-foreground">
             引き継ぎは24時間以内に完了させてください。24時間経過後は引継ぎコードが無効になります。
           </p>
         </div>
@@ -66,7 +69,7 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
               <ArchiveBoxArrowDownIcon className="backup-transfer-dialog__card-icon-svg h-6 w-6" />
             </span>
             <span className="backup-transfer-dialog__card-title text-base font-semibold text-surface-foreground">
-              バックアップを作成する
+              バックアップを作成
             </span>
             <span className="backup-transfer-dialog__card-description text-xs text-muted-foreground">
               端末に現在のデータを保存します。バックアップを読み込む時は「ガチャを登録」ボタンから読み込んでください。
@@ -83,10 +86,10 @@ export function BackupTransferDialog({ payload, close }: ModalComponentProps<Bac
               <ArrowPathRoundedSquareIcon className="backup-transfer-dialog__card-icon-svg h-6 w-6" />
             </span>
             <span className="backup-transfer-dialog__card-title text-base font-semibold text-surface-foreground">
-              クラウド経由で引き継ぎをする
+              クラウド経由でデータ移行
             </span>
             <span className="backup-transfer-dialog__card-description text-xs text-muted-foreground">
-              引継ぎを行うと5桁のコードが発行されます。引き継ぎは24時間以内に完了させてください（期限を過ぎるとコードが無効になります）。
+              shimmy.comのストレージ経由で、データを安全に他の端末へ移行出来ます。
             </span>
           </button>
         </div>
