@@ -72,6 +72,9 @@ export function parseDiscordApiError(error) {
   return extractDiscordApiErrorInfo(error);
 }
 
+export const DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA =
+  '申し訳ございません。Discord botの権限確認中にエラーが発生しました。でも大丈夫です。ギルド設定でBotに「チャンネルの管理(Manage Channels)」権限を付与してください。そしたらもう一度試してみてください。';
+
 export function isDiscordMissingPermissionsError(error) {
   const info = extractDiscordApiErrorInfo(error);
   if (!info) {

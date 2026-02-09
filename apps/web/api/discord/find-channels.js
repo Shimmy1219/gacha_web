@@ -5,6 +5,7 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
+  DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
   isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError,
   PERM
@@ -94,8 +95,7 @@ export default async function handler(req, res){
       log.warn('discord bot is missing permissions', { context, message });
       return res.status(403).json({
         ok: false,
-        error:
-          'Discord Botに権限が不足しています。ギルド設定でBotに「チャンネルの管理(Manage Channels)」権限を付与してください。'
+        error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA
       });
     }
     log.error('discord api request failed', { context, message });
