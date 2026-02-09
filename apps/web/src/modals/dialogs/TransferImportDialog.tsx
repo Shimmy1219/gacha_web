@@ -1,4 +1,3 @@
-import { ArrowDownTrayIcon, KeyIcon } from '@heroicons/react/24/outline';
 import { useCallback, useMemo, useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -202,9 +201,6 @@ export function TransferImportDialog({
                   5桁の引継ぎコードと、発行時に設定した4桁の暗証番号を入力してください。
                 </p>
               </div>
-              <span className="transfer-import-dialog__form-icon inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-surface text-accent">
-                <ArrowDownTrayIcon className="h-6 w-6" aria-hidden="true" />
-              </span>
             </div>
 
             <div className="transfer-import-dialog__inputs grid gap-3 sm:grid-cols-2">
@@ -240,9 +236,6 @@ export function TransferImportDialog({
                     value={pinInput}
                     onChange={(event) => setPinInput(event.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
                   />
-                  <span className="transfer-import-dialog__pin-icon inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-surface text-accent">
-                    <KeyIcon className="h-5 w-5" aria-hidden="true" />
-                  </span>
                 </div>
               </label>
             </div>

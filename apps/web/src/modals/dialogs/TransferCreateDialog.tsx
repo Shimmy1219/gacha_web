@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowPathRoundedSquareIcon, ClipboardIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, ArrowPathRoundedSquareIcon, ClipboardIcon } from '@heroicons/react/24/outline';
 import { useCallback, useMemo, useState } from 'react';
 import { put } from '@vercel/blob/client';
 
@@ -180,21 +180,29 @@ export function TransferCreateDialog({
           </section>
         ) : (
           <section className="transfer-create-dialog__form space-y-4 rounded-3xl border border-border/60 bg-surface/60 p-5">
-            <div className="transfer-create-dialog__form-header flex items-start justify-between gap-4">
+            <div className="transfer-create-dialog__form-header grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
               <div className="transfer-create-dialog__form-title-wrap space-y-1">
                 <h3 className="transfer-create-dialog__form-title text-base font-semibold text-surface-foreground">
                   暗証番号を設定してコードを発行
                 </h3>
                 <p className="transfer-create-dialog__form-subtitle text-xs text-muted-foreground">
-                  バックアップ(.shimmy)を生成して暗号化し、クラウドに保存します。
-                </p>
-                <p className="transfer-create-dialog__form-subtitle transfer-create-dialog__form-subtitle--pin text-xs text-muted-foreground">
-                  引継ぐ際に4桁の暗証番号の設定が必要です。引継ぎコードと、暗証番号は引き継ぎ先で必要になります。
+                  暗証番号（4桁）でバックアップを暗号化し、クラウドへ一時保存します。
                 </p>
               </div>
-              <span className="transfer-create-dialog__form-icon inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-surface text-accent">
-                <KeyIcon className="h-6 w-6" aria-hidden="true" />
-              </span>
+              <button
+                type="button"
+                className="transfer-create-dialog__issue btn btn-primary inline-flex items-center gap-2 whitespace-nowrap sm:ml-2 sm:shrink-0"
+                onClick={() => void handleIssue()}
+                disabled={!canIssue}
+                aria-busy={pending}
+              >
+                {pending ? (
+                  <ArrowPathIcon className="transfer-create-dialog__issue-icon h-5 w-5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ArrowPathRoundedSquareIcon className="transfer-create-dialog__issue-icon h-5 w-5" aria-hidden="true" />
+                )}
+                <span className="transfer-create-dialog__issue-label">{pending ? '発行中...' : '引継ぎコードを発行'}</span>
+              </button>
             </div>
 
             <div className="transfer-create-dialog__inputs grid gap-3 sm:grid-cols-2">
@@ -232,25 +240,9 @@ export function TransferCreateDialog({
               </label>
             </div>
 
-            <div className="transfer-create-dialog__actions flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="transfer-create-dialog__hint text-xs text-muted-foreground">
-                発行後は引き継ぎ先の端末で、「ガチャを登録」から「引継ぎコード入力」でデータを移行することが出来ます。
-              </p>
-              <button
-                type="button"
-                className="transfer-create-dialog__issue btn btn-primary inline-flex items-center gap-2"
-                onClick={() => void handleIssue()}
-                disabled={!canIssue}
-                aria-busy={pending}
-              >
-                {pending ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <ArrowPathRoundedSquareIcon className="h-5 w-5" aria-hidden="true" />
-                )}
-                {pending ? '発行中...' : '引継ぎコードを発行'}
-              </button>
-            </div>
+            <p className="transfer-create-dialog__hint text-xs text-muted-foreground">
+              発行後は引き継ぎ先の端末で、「ガチャを登録」から「引継ぎコード入力」でデータを移行することが出来ます。
+            </p>
           </section>
         )}
       </ModalBody>

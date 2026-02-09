@@ -263,7 +263,8 @@ export function App(): JSX.Element {
           push(TransferCreateDialog, {
             id: 'transfer-create-dialog',
             title: '引継ぎコードを発行',
-            description: '暗証番号（4桁）でバックアップを暗号化し、クラウドへ一時保存します。',
+            description:
+              'バックアップ(.shimmy)を生成して暗号化し、クラウドに保存します。引継ぐ際に4桁の暗証番号の設定が必要です。引継ぎコードと、暗証番号は引き継ぎ先で必要になります。',
             size: 'md'
           });
         }
