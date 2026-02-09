@@ -25,8 +25,6 @@ interface SelectedAsset {
 
 export type ZipSelectedAsset = SelectedAsset;
 
-export type ZipSelectedAsset = SelectedAsset;
-
 export interface OriginalPrizeMissingItem {
   gachaId: string | undefined;
   gachaName: string;
@@ -83,16 +81,6 @@ interface BuildParams {
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
   excludeRiaguImages?: boolean;
-}
-
-export interface ZipSelectionPlan {
-  assets: ZipSelectedAsset[];
-  metadataAssets: ZipSelectedAsset[];
-  omittedAssetIds: Set<string>;
-  includedPullIds: Set<string>;
-  historySelectionDetails: HistorySelectionMetadata[];
-  warnings: Set<string>;
-  originalPrizeMissingPullIds: string[];
 }
 
 export interface ZipSelectionPlan {
@@ -1022,9 +1010,6 @@ export function buildZipSelectionPlan({
   snapshot,
   selection,
   userId,
-  userName,
-  ownerName,
-  includeMetadata = true,
   itemIdFilter,
   excludeRiaguImages
 }: BuildParams): ZipSelectionPlan {

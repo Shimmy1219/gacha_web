@@ -12,6 +12,10 @@ import {
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import {
+  isDiscordMissingPermissionsErrorCode,
+  pushDiscordMissingPermissionsWarning
+} from './_lib/discordApiErrorHandling';
 
 interface DiscordCategorySummary {
   id: string;
@@ -23,12 +27,14 @@ interface DiscordCategoriesResponse {
   ok: boolean;
   categories?: DiscordCategorySummary[];
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordCategoryCreateResponse {
   ok: boolean;
   category?: DiscordCategorySummary;
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordPrivateChannelCategoryDialogPayload {
@@ -75,7 +81,8 @@ function useDiscordGuildCategories(guildId: string | null | undefined) {
 
 export function DiscordPrivateChannelCategoryDialog({
   payload,
-  close
+  close,
+  push
 }: ModalComponentProps<DiscordPrivateChannelCategoryDialogPayload>): JSX.Element {
   const guildId = payload?.guildId ?? null;
   const discordUserId = payload?.discordUserId ?? '';
@@ -127,6 +134,11 @@ export function DiscordPrivateChannelCategoryDialog({
       const payload = (await response.json().catch(() => null)) as DiscordCategoryCreateResponse | null;
       if (!response.ok || !payload?.ok || !payload.category) {
         const message = payload?.error || 'カテゴリの作成に失敗しました。';
+        if (isDiscordMissingPermissionsErrorCode(payload?.errorCode)) {
+          pushDiscordMissingPermissionsWarning(push, message);
+          setCreateError(null);
+          return;
+        }
         throw new Error(message);
       }
       setNewCategoryName('');
@@ -190,15 +202,27 @@ export function DiscordPrivateChannelCategoryDialog({
         parent_id?: string | null;
         created?: boolean;
         error?: string;
+        errorCode?: string;
       } | null;
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
+        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+          pushDiscordMissingPermissionsWarning(push, message);
+          setSubmitError(null);
+          return;
+        }
         throw new Error(message);
       }
 
       if (!findPayload.ok) {
-        throw new Error(findPayload.error || 'テスト用チャンネルの作成に失敗しました');
+        const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
+        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+          pushDiscordMissingPermissionsWarning(push, message);
+          setSubmitError(null);
+          return;
+        }
+        throw new Error(message);
       }
 
       createdChannelId = findPayload.channel_id ?? null;
