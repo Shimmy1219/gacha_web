@@ -20,7 +20,7 @@ export function pushDiscordMissingPermissionsWarning(
 
   push(WarningDialog, {
     id: 'discord-missing-permissions-warning',
-    title: 'Discord Botの権限',
+    title: 'Discord Botの権限が不足しています',
     intent: 'warning',
     payload: {
       message: resolvedMessage,
