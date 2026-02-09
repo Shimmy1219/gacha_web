@@ -1,46 +1,26 @@
 // /api/transfer/consume.js
 import { del } from '@vercel/blob';
-import { isAllowedOrigin } from '../_lib/origin.js';
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 import {
-  assertCsrfDoubleSubmit,
   ensureAllowedBlobUrl,
   normalizeTransferCode,
-  parseBody,
   transferKey,
 } from './_lib.js';
 
-export default async function handler(req, res) {
+const guarded = withApiGuards({
+  route: '/api/transfer/consume',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'transfer:consume', limit: 30, windowSec: 60 },
+})(async (req, res) => {
   const log = createRequestLogger('api/transfer/consume', req);
   log.info('request received', { method: req.method });
 
-  if (req.method === 'GET' && 'health' in (req.query || {})) {
-    log.info('health check ok');
-    return res.status(200).json({ ok: true, route: '/api/transfer/consume' });
-  }
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
-
-  const originCheck = isAllowedOrigin(req);
-  if (!originCheck.ok) {
-    log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
-    return res.status(403).json({ ok: false, error: 'Forbidden: origin not allowed' });
-  }
-
-  const body = parseBody(req);
-  try {
-    await assertCsrfDoubleSubmit(req, body);
-  } catch (error) {
-    const status = error?.statusCode || 403;
-    log.warn('csrf check failed', { status, message: error?.message });
-    return res.status(status).json({ ok: false, error: error?.message || 'Forbidden' });
-  }
-
+  const body = req.body ?? {};
   const code = normalizeTransferCode(body?.code);
   if (!code) {
     return res.status(400).json({ ok: false, error: 'Bad Request' });
@@ -79,5 +59,6 @@ export default async function handler(req, res) {
   await kv.del(key);
   log.info('transfer code consumed', { code });
   return res.status(200).json({ ok: true, deleted: Boolean(url) });
-}
+});
 
+export default guarded;

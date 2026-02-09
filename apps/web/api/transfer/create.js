@@ -1,12 +1,10 @@
 // /api/transfer/create.js
-import { isAllowedOrigin } from '../_lib/origin.js';
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 import {
   TRANSFER_TTL_SEC,
   TRANSFER_UPLOAD_TOKEN_TTL_MS,
-  assertCsrfDoubleSubmit,
-  parseBody,
   randomObjectSuffix,
   randomTransferCode,
   transferKey,
@@ -16,35 +14,16 @@ function toIso(ms) {
   return new Date(ms).toISOString();
 }
 
-export default async function handler(req, res) {
+export default withApiGuards({
+  route: '/api/transfer/create',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'transfer:create', limit: 10, windowSec: 60 },
+})(async (req, res) => {
   const log = createRequestLogger('api/transfer/create', req);
   log.info('request received', { method: req.method });
-
-  if (req.method === 'GET' && 'health' in (req.query || {})) {
-    log.info('health check ok');
-    return res.status(200).json({ ok: true, route: '/api/transfer/create' });
-  }
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
-
-  const originCheck = isAllowedOrigin(req);
-  if (!originCheck.ok) {
-    log.warn('origin check failed', { origin: originCheck.candidate, allowed: originCheck.allowed });
-    return res.status(403).json({ ok: false, error: 'Forbidden: origin not allowed' });
-  }
-
-  const body = parseBody(req);
-  try {
-    await assertCsrfDoubleSubmit(req, body);
-  } catch (error) {
-    const status = error?.statusCode || 403;
-    log.warn('csrf check failed', { status, message: error?.message });
-    return res.status(status).json({ ok: false, error: error?.message || 'Forbidden' });
-  }
 
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!blobToken) {
@@ -105,4 +84,4 @@ export default async function handler(req, res) {
 
   log.error('transfer code allocation exhausted');
   return res.status(503).json({ ok: false, error: 'Failed to allocate transfer code' });
-}
+});
