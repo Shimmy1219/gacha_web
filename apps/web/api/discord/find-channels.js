@@ -5,6 +5,7 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
+  DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS,
   DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
   isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError,
@@ -95,7 +96,8 @@ export default async function handler(req, res){
       log.warn('discord bot is missing permissions', { context, message });
       return res.status(403).json({
         ok: false,
-        error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA
+        error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
+        errorCode: DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS
       });
     }
     log.error('discord api request failed', { context, message });

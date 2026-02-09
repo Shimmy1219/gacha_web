@@ -29,6 +29,10 @@ import {
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import {
+  isDiscordMissingPermissionsErrorCode,
+  pushDiscordMissingPermissionsWarning
+} from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV4,
@@ -1434,16 +1438,26 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             parent_id?: string | null;
             created?: boolean;
             error?: string;
+            errorCode?: string;
           } | null;
 
           if (!findResponse.ok || !findPayload) {
             const message =
               findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+              pushDiscordMissingPermissionsWarning(push, message);
+              throw new Error('Discord botの権限が不足しています。');
+            }
             throw new Error(message);
           }
 
           if (!findPayload.ok) {
-            throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
+            const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+              pushDiscordMissingPermissionsWarning(push, message);
+              throw new Error('Discord botの権限が不足しています。');
+            }
+            throw new Error(message);
           }
 
           channelId = trimOrNull(findPayload.channel_id);

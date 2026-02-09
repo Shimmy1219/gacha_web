@@ -34,6 +34,10 @@ import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import {
+  isDiscordMissingPermissionsErrorCode,
+  pushDiscordMissingPermissionsWarning
+} from './_lib/discordApiErrorHandling';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import {
   applyLegacyAssetsToInstances,
@@ -963,16 +967,26 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             parent_id?: string | null;
             created?: boolean;
             error?: string;
+            errorCode?: string;
           } | null;
 
           if (!findResponse.ok || !findPayload) {
             const message =
               findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+              pushDiscordMissingPermissionsWarning(push, message);
+              throw new Error('Discord botの権限が不足しています。');
+            }
             throw new Error(message);
           }
 
           if (!findPayload.ok) {
-            throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
+            const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
+              pushDiscordMissingPermissionsWarning(push, message);
+              throw new Error('Discord botの権限が不足しています。');
+            }
+            throw new Error(message);
           }
 
           channelId = trimOrNull(findPayload.channel_id);
