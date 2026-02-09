@@ -108,9 +108,9 @@ async function postJson<T>(
 }
 
 export function useTransferApi(): {
-  createTransfer: () => Promise<{ code: string; token: string; pathname: string; expiresAt?: string }>;
+  createTransfer: (args: { pin: string }) => Promise<{ code: string; token: string; pathname: string; expiresAt?: string }>;
   completeTransfer: (args: { code: string; pathname: string; url: string; downloadUrl?: string }) => Promise<void>;
-  resolveTransfer: (args: { code: string }) => Promise<{ downloadUrl: string; createdAt?: string; expiresAt?: string }>;
+  resolveTransfer: (args: { code: string; pin: string }) => Promise<{ downloadUrl: string; createdAt?: string; expiresAt?: string }>;
   consumeTransfer: (args: { code: string }) => Promise<{ deleted: boolean }>;
 } {
   const csrfRef = useRef<string | null>(null);
@@ -127,9 +127,12 @@ export function useTransferApi(): {
     return token;
   }, []);
 
-  const createTransfer = useCallback(async () => {
+  const createTransfer = useCallback(async (args: { pin: string }) => {
     const csrf = await ensureCsrfToken();
-    const { response, payload } = await postJson<TransferCreateResponse>(fetch, TRANSFER_CREATE_ENDPOINT, { csrf });
+    const { response, payload } = await postJson<TransferCreateResponse>(fetch, TRANSFER_CREATE_ENDPOINT, {
+      csrf,
+      pin: args.pin
+    });
     if (!response.ok || !payload?.ok || !payload.code || !payload.token || !payload.pathname) {
       const reason = payload?.error ?? `status ${response.status}`;
       throw new TransferApiError(`引継ぎコードの発行に失敗しました (${reason})`);
@@ -162,11 +165,12 @@ export function useTransferApi(): {
   );
 
   const resolveTransfer = useCallback(
-    async (args: { code: string }) => {
+    async (args: { code: string; pin: string }) => {
       const csrf = await ensureCsrfToken();
       const { response, payload } = await postJson<TransferResolveResponse>(fetch, TRANSFER_RESOLVE_ENDPOINT, {
         csrf,
-        code: args.code
+        code: args.code,
+        pin: args.pin
       });
 
       if (!response.ok || !payload?.ok || !payload.downloadUrl) {
@@ -203,4 +207,3 @@ export function useTransferApi(): {
 
   return { createTransfer, completeTransfer, resolveTransfer, consumeTransfer };
 }
-

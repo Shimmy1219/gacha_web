@@ -3,8 +3,13 @@ import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 import {
+  TRANSFER_PIN_HASH_ALG,
+  TRANSFER_PIN_HASH_ITERATIONS,
   TRANSFER_TTL_SEC,
   TRANSFER_UPLOAD_TOKEN_TTL_MS,
+  hashTransferPin,
+  normalizeTransferPin,
+  randomPinSalt,
   randomObjectSuffix,
   randomTransferCode,
   transferKey,
@@ -25,6 +30,12 @@ export default withApiGuards({
   const log = createRequestLogger('api/transfer/create', req);
   log.info('request received', { method: req.method });
 
+  const body = req.body ?? {};
+  const pin = normalizeTransferPin(body?.pin);
+  if (!pin) {
+    return res.status(400).json({ ok: false, error: 'Bad Request' });
+  }
+
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
   if (!blobToken) {
     log.error('blob token missing');
@@ -34,6 +45,17 @@ export default withApiGuards({
   const now = Date.now();
   const expiresAtMs = now + TRANSFER_TTL_SEC * 1000;
   const uploadTokenExpiresAtMs = now + TRANSFER_UPLOAD_TOKEN_TTL_MS;
+
+  const pinSalt = randomPinSalt();
+  let pinHash;
+  try {
+    pinHash = await hashTransferPin(pin, { salt: pinSalt, iterations: TRANSFER_PIN_HASH_ITERATIONS });
+  } catch (error) {
+    log.warn('failed to hash transfer pin', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return res.status(400).json({ ok: false, error: 'Bad Request' });
+  }
 
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const code = randomTransferCode();
@@ -48,6 +70,9 @@ export default withApiGuards({
       createdAt: toIso(now),
       expiresAt: toIso(expiresAtMs),
       uploadTokenExpiresAt: toIso(uploadTokenExpiresAtMs),
+      pinKdf: { alg: TRANSFER_PIN_HASH_ALG, iterations: TRANSFER_PIN_HASH_ITERATIONS },
+      pinSalt,
+      pinHash,
     };
 
     try {

@@ -105,7 +105,7 @@ export function TransferImportDialog({
 
     setPending(true);
     try {
-      const resolved = await resolveTransfer({ code });
+      const resolved = await resolveTransfer({ code, pin: pinInput });
       setResolvedExpiresAt(resolved.expiresAt);
 
       const downloadResponse = await fetch(resolved.downloadUrl, { cache: 'no-store' });

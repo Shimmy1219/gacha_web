@@ -84,7 +84,7 @@ export function TransferCreateDialog({
       const { blob: plainShimmy } = await buildBackupShimmyBlob(persistence);
       const encrypted = await encryptShimmyBlobForTransfer(plainShimmy, pin);
 
-      const slot = await createTransfer();
+      const slot = await createTransfer({ pin });
 
       const uploadResult = await put(slot.pathname, encrypted, {
         access: 'public',
