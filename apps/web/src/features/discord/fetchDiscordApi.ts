@@ -57,8 +57,18 @@ function mergeHeaders(base?: HeadersInit, extra?: HeadersInit): Headers {
   return headers;
 }
 
-function hasCsrfFailure(response: Response): boolean {
-  return response.status === 403;
+async function isLikelyCsrfFailure(response: Response): Promise<boolean> {
+  if (response.status !== 403) {
+    return false;
+  }
+  try {
+    const cloned = response.clone();
+    const payload = (await cloned.json().catch(() => null)) as { error?: unknown } | null;
+    const message = typeof payload?.error === 'string' ? payload.error : '';
+    return /csrf/i.test(message);
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchDiscordApi(input: string, init: RequestInit = {}): Promise<Response> {
@@ -75,7 +85,7 @@ export async function fetchDiscordApi(input: string, init: RequestInit = {}): Pr
     headers,
   });
 
-  if (!hasCsrfFailure(response)) {
+  if (!(await isLikelyCsrfFailure(response))) {
     return response;
   }
 
@@ -91,4 +101,3 @@ export async function fetchDiscordApi(input: string, init: RequestInit = {}): Pr
     headers: retryHeaders,
   });
 }
-
