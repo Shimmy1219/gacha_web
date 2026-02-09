@@ -267,7 +267,7 @@ export function TransferImportDialog({
             ) : null}
 
             {hasExistingData ? (
-              <div className="transfer-import-dialog__mode-panel space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4">
+              <div className="transfer-import-dialog__mode-panel space-y-3 bg-surface/30">
                 <div className="transfer-import-dialog__mode-header space-y-1">
                   <p className="transfer-import-dialog__mode-title text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     復元方法
@@ -316,11 +316,6 @@ export function TransferImportDialog({
                   </button>
                 </div>
 
-                {importMode === 'overwrite' ? (
-                  <p className="transfer-import-dialog__mode-warning text-xs text-muted-foreground">
-                    上書きを選ぶと、この端末のデータは復元後に元へ戻せません。必要なら事前にバックアップを作成してください。
-                  </p>
-                ) : null}
               </div>
             ) : null}
 

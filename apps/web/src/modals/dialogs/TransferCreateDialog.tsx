@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ArrowPathRoundedSquareIcon, ClipboardIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, ClipboardIcon } from '@heroicons/react/24/outline';
 import { useCallback, useMemo, useState } from 'react';
 import { put } from '@vercel/blob/client';
 
@@ -134,7 +134,7 @@ export function TransferCreateDialog({
 
         {issuedCode ? (
           <section className="transfer-create-dialog__issued space-y-4 rounded-3xl border border-border/60 bg-surface/60 p-5">
-            <div className="transfer-create-dialog__issued-header flex items-start justify-between gap-4">
+            <div className="transfer-create-dialog__issued-header flex items-start gap-4">
               <div className="transfer-create-dialog__issued-title-wrap space-y-1">
                 <h3 className="transfer-create-dialog__issued-title text-base font-semibold text-surface-foreground">
                   引継ぎコードを発行しました
@@ -143,9 +143,6 @@ export function TransferCreateDialog({
                   発行後は引き継ぎ先の端末で、「ガチャを登録」から「引継ぎコード入力」でデータを移行することが出来ます。
                 </p>
               </div>
-              <span className="transfer-create-dialog__issued-icon inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-surface text-accent">
-                <ArrowPathRoundedSquareIcon className="h-6 w-6" aria-hidden="true" />
-              </span>
             </div>
 
             <div className="transfer-create-dialog__code-panel flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-surface/30 px-4 py-3">
