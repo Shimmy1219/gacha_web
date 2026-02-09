@@ -14,7 +14,7 @@ import {
   type UserInventoriesStateV3,
   type UserProfilesStateV3
 } from '@domain/app-persistence';
-import { exportAllAssets, importAssets, type StoredAssetRecord } from '@domain/assets/assetStorage';
+import { deleteAllAssets, exportAllAssets, importAssets, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { projectInventories } from '@domain/inventoryProjection';
 import { type DomainStores } from '@domain/stores/createDomainStores';
 
@@ -67,7 +67,7 @@ interface ImportContext {
 interface MergeResult {
   snapshot: GachaLocalStorageSnapshot;
   context: ImportContext;
-  skippedGacha: Array<{ id: string; name?: string }>;
+  skipped: Array<{ id: string; name?: string }>;
 }
 
 export interface BackupImportResult {
@@ -93,10 +93,130 @@ export interface BackupImportOptions {
     | ((entry: BackupDuplicateEntry) => Promise<BackupDuplicateResolution | void>);
 }
 
+export interface BackupOverwriteOptions {
+  persistence: AppPersistence;
+  stores: DomainStores;
+}
+
 function ensureBrowserEnvironment(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('バックアップ機能はブラウザ環境でのみ利用できます');
   }
+}
+
+function hydrateStores(stores: DomainStores, snapshot: GachaLocalStorageSnapshot): void {
+  stores.appState.hydrate(snapshot.appState);
+  stores.catalog.hydrate(snapshot.catalogState);
+  stores.rarities.hydrate(snapshot.rarityState);
+  stores.userProfiles.hydrate(snapshot.userProfiles);
+  stores.riagu.hydrate(snapshot.riaguState);
+  stores.ptControls.hydrate(snapshot.ptSettings);
+  stores.uiPreferences.hydrate(snapshot.uiPreferences);
+  stores.pullHistory.hydrate(snapshot.pullHistory);
+  stores.userInventories.hydrate(snapshot.userInventories);
+
+  const projection = projectInventories({
+    pullHistory: snapshot.pullHistory,
+    catalogState: snapshot.catalogState,
+    previousState: snapshot.userInventories
+  });
+  stores.userInventories.applyProjectionResult(projection.state, { emit: true, persist: 'debounced' });
+}
+
+async function loadBackupFromFile(
+  file: File
+): Promise<{ zip: JSZip; metadata: BackupFileMetadata; normalizedSnapshot: GachaLocalStorageSnapshot }> {
+  ensureBrowserEnvironment();
+
+  const zip = await JSZip.loadAsync(file);
+  const metadataEntry = zip.file(METADATA_FILENAME);
+  if (!metadataEntry) {
+    throw new Error('バックアップのメタデータが見つかりませんでした');
+  }
+
+  const metadataRaw = await metadataEntry.async('string');
+  const metadata = JSON.parse(metadataRaw) as BackupFileMetadata;
+
+  if (!metadata.snapshot) {
+    throw new Error('バックアップに有効なスナップショットが含まれていません');
+  }
+
+  if (metadata.version !== BACKUP_VERSION) {
+    throw new Error('このバックアップ形式には対応していません');
+  }
+
+  const normalizedSnapshot: GachaLocalStorageSnapshot = {
+    ...metadata.snapshot,
+    catalogState: normalizeCatalogStateSnapshot(metadata.snapshot.catalogState)
+  };
+
+  return { zip, metadata, normalizedSnapshot };
+}
+
+async function extractAssetRecordsFromBackupZip(
+  zip: JSZip,
+  metadata: BackupFileMetadata,
+  assetIdsToImport: Set<string>
+): Promise<StoredAssetRecord[]> {
+  const assetRecords: StoredAssetRecord[] = [];
+  const assetEntries = metadata.assets ?? [];
+
+  for (const assetMeta of assetEntries) {
+    if (!assetMeta?.id || !assetIdsToImport.has(assetMeta.id)) {
+      continue;
+    }
+
+    const path = assetMeta.path ?? `${ASSETS_DIRECTORY}/${assetMeta.id}`;
+    const assetFile = zip.file(path);
+    if (!assetFile) {
+      console.warn(`バックアップ内のアセット ${assetMeta.id} が見つかりませんでした`);
+      continue;
+    }
+
+    const blob = await assetFile.async('blob');
+
+    let previewBlob: Blob | null = null;
+    const previewPath = assetMeta.previewPath ?? null;
+    const previewType = assetMeta.previewType ?? null;
+
+    if (previewPath) {
+      const previewEntry = zip.file(previewPath);
+      if (!previewEntry) {
+        console.warn(`バックアップ内のプレビュー ${previewPath} が見つかりませんでした`);
+      } else {
+        const previewBuffer = await previewEntry.async('arraybuffer');
+        const blobOptions: BlobPropertyBag = previewType ? { type: previewType } : {};
+        previewBlob = new Blob([previewBuffer], blobOptions);
+      }
+    } else if (assetMeta.previewBlob instanceof Blob) {
+      // 互換性確保: v1 バックアップで previewBlob が含まれていた場合のみ利用
+      previewBlob = assetMeta.previewBlob;
+    }
+
+    const resolvedPreviewType = previewType ?? (previewBlob?.type ?? null);
+    const resolvedPreviewSize =
+      typeof assetMeta.previewSize === 'number' && Number.isFinite(assetMeta.previewSize)
+        ? Number(assetMeta.previewSize)
+        : previewBlob instanceof Blob
+          ? previewBlob.size
+          : null;
+
+    assetRecords.push({
+      id: assetMeta.id,
+      name: assetMeta.name,
+      type: assetMeta.type,
+      size: assetMeta.size,
+      createdAt: assetMeta.createdAt,
+      updatedAt: assetMeta.updatedAt,
+      previewId: assetMeta.previewId ?? null,
+      previewType: resolvedPreviewType,
+      previewSize: resolvedPreviewSize,
+      previewBlob,
+      blob
+    });
+  }
+
+  return assetRecords;
 }
 
 function resolveVersion(...versions: Array<number | undefined>): number {
@@ -1032,30 +1152,8 @@ export async function importBackupFromFile(
   options: BackupImportOptions
 ): Promise<BackupImportResult> {
   const { persistence, stores, resolveDuplicate } = options;
-  ensureBrowserEnvironment();
-
-  const zip = await JSZip.loadAsync(file);
-  const metadataEntry = zip.file(METADATA_FILENAME);
-  if (!metadataEntry) {
-    throw new Error('バックアップのメタデータが見つかりませんでした');
-  }
-
-  const metadataRaw = await metadataEntry.async('string');
-  const metadata = JSON.parse(metadataRaw) as BackupFileMetadata;
-
-  if (!metadata.snapshot) {
-    throw new Error('バックアップに有効なスナップショットが含まれていません');
-  }
-
-  if (metadata.version !== BACKUP_VERSION) {
-    throw new Error('このバックアップ形式には対応していません');
-  }
-
+  const { zip, metadata, normalizedSnapshot } = await loadBackupFromFile(file);
   const baseSnapshot = persistence.loadSnapshot();
-  const normalizedSnapshot: GachaLocalStorageSnapshot = {
-    ...metadata.snapshot,
-    catalogState: normalizeCatalogStateSnapshot(metadata.snapshot.catalogState)
-  };
 
   const existingMeta = baseSnapshot.appState?.meta ?? {};
   const importMeta = normalizedSnapshot.appState?.meta ?? {};
@@ -1113,84 +1211,12 @@ export async function importBackupFromFile(
   }
 
   const assetIdsToImport = collectAssetIdsToImport(normalizedSnapshot, context.gachaIds);
-  const assetRecords: StoredAssetRecord[] = [];
-
-  const assetEntries = metadata.assets ?? [];
-  for (const assetMeta of assetEntries) {
-    if (!assetMeta?.id || !assetIdsToImport.has(assetMeta.id)) {
-      continue;
-    }
-
-    const path = assetMeta.path ?? `${ASSETS_DIRECTORY}/${assetMeta.id}`;
-    const assetFile = zip.file(path);
-    if (!assetFile) {
-      console.warn(`バックアップ内のアセット ${assetMeta.id} が見つかりませんでした`);
-      continue;
-    }
-
-    const blob = await assetFile.async('blob');
-
-    let previewBlob: Blob | null = null;
-    const previewPath = assetMeta.previewPath ?? null;
-    const previewType = assetMeta.previewType ?? null;
-
-    if (previewPath) {
-      const previewEntry = zip.file(previewPath);
-      if (!previewEntry) {
-        console.warn(`バックアップ内のプレビュー ${previewPath} が見つかりませんでした`);
-      } else {
-        const previewBuffer = await previewEntry.async('arraybuffer');
-        const blobOptions: BlobPropertyBag = previewType ? { type: previewType } : {};
-        previewBlob = new Blob([previewBuffer], blobOptions);
-      }
-    } else if (assetMeta.previewBlob instanceof Blob) {
-      // 互換性確保: v1 バックアップで previewBlob が含まれていた場合のみ利用
-      previewBlob = assetMeta.previewBlob;
-    }
-
-    const resolvedPreviewType = previewType ?? (previewBlob?.type ?? null);
-    const resolvedPreviewSize =
-      typeof assetMeta.previewSize === 'number' && Number.isFinite(assetMeta.previewSize)
-        ? Number(assetMeta.previewSize)
-        : previewBlob instanceof Blob
-          ? previewBlob.size
-          : null;
-
-    assetRecords.push({
-      id: assetMeta.id,
-      name: assetMeta.name,
-      type: assetMeta.type,
-      size: assetMeta.size,
-      createdAt: assetMeta.createdAt,
-      updatedAt: assetMeta.updatedAt,
-      previewId: assetMeta.previewId ?? null,
-      previewType: resolvedPreviewType,
-      previewSize: resolvedPreviewSize,
-      previewBlob,
-      blob
-    });
-  }
+  const assetRecords = await extractAssetRecordsFromBackupZip(zip, metadata, assetIdsToImport);
 
   await importAssets(assetRecords);
 
   persistence.saveSnapshot(mergedSnapshot);
-
-  stores.appState.hydrate(mergedSnapshot.appState);
-  stores.catalog.hydrate(mergedSnapshot.catalogState);
-  stores.rarities.hydrate(mergedSnapshot.rarityState);
-  stores.userProfiles.hydrate(mergedSnapshot.userProfiles);
-  stores.riagu.hydrate(mergedSnapshot.riaguState);
-  stores.ptControls.hydrate(mergedSnapshot.ptSettings);
-  stores.uiPreferences.hydrate(mergedSnapshot.uiPreferences);
-  stores.pullHistory.hydrate(mergedSnapshot.pullHistory);
-  stores.userInventories.hydrate(mergedSnapshot.userInventories);
-
-  const projection = projectInventories({
-    pullHistory: mergedSnapshot.pullHistory,
-    catalogState: mergedSnapshot.catalogState,
-    previousState: mergedSnapshot.userInventories
-  });
-  stores.userInventories.applyProjectionResult(projection.state, { emit: true, persist: 'debounced' });
+  hydrateStores(stores, mergedSnapshot);
 
   const importedGachaNames = importedGachaIds
     .map((gachaId) => mergedSnapshot.appState?.meta?.[gachaId]?.displayName)
@@ -1200,6 +1226,38 @@ export async function importBackupFromFile(
     importedGachaIds,
     importedGachaNames,
     skippedGacha: skipped,
+    importedAssetCount: assetRecords.length
+  };
+}
+
+export async function restoreBackupOverwriteAllFromFile(
+  file: File,
+  options: BackupOverwriteOptions
+): Promise<BackupImportResult> {
+  const { persistence, stores } = options;
+  const { zip, metadata, normalizedSnapshot } = await loadBackupFromFile(file);
+
+  const importedGachaIds = Object.keys(normalizedSnapshot.appState?.meta ?? {}).filter(Boolean);
+  const gachaIdSet = new Set(importedGachaIds);
+
+  const assetIdsToImport = collectAssetIdsToImport(normalizedSnapshot, gachaIdSet);
+  const assetRecords = await extractAssetRecordsFromBackupZip(zip, metadata, assetIdsToImport);
+
+  // 上書き復元では既存アセットが孤立するため、全削除してから取り込み直す。
+  await deleteAllAssets();
+  await importAssets(assetRecords);
+
+  persistence.saveSnapshot(normalizedSnapshot);
+  hydrateStores(stores, normalizedSnapshot);
+
+  const importedGachaNames = importedGachaIds
+    .map((gachaId) => normalizedSnapshot.appState?.meta?.[gachaId]?.displayName)
+    .filter((name): name is string => Boolean(name));
+
+  return {
+    importedGachaIds,
+    importedGachaNames,
+    skippedGacha: [],
     importedAssetCount: assetRecords.length
   };
 }

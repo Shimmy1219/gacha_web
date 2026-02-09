@@ -5,6 +5,7 @@ import { BackupImportConflictDialog } from './BackupImportConflictDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import {
   importBackupFromFile,
+  restoreBackupOverwriteAllFromFile,
   type BackupDuplicateEntry,
   type BackupDuplicateResolution
 } from '../../features/storage/backupService';
@@ -20,6 +21,8 @@ import { useHaptics } from '../../features/haptics/HapticsProvider';
 interface TransferImportDialogPayload {
   onImported?: () => void;
 }
+
+type TransferImportMode = 'overwrite' | 'append';
 
 function formatIsoAsJp(iso?: string): string | undefined {
   if (!iso) return undefined;
@@ -38,8 +41,15 @@ export function TransferImportDialog({
   const { resolveTransfer, consumeTransfer } = useTransferApi();
   const { triggerConfirmation, triggerError } = useHaptics();
 
+  const hasExistingData = useMemo(() => {
+    const snapshot = persistence.loadSnapshot();
+    const meta = snapshot.appState?.meta ?? {};
+    return Object.keys(meta).length > 0;
+  }, [persistence]);
+
   const [codeInput, setCodeInput] = useState('');
   const [pinInput, setPinInput] = useState('');
+  const [importMode, setImportMode] = useState<TransferImportMode>('overwrite');
   const [pending, setPending] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -116,11 +126,18 @@ export function TransferImportDialog({
       const shimmyBlob = await decryptTransferBlobToShimmy(encryptedBlob, pinInput);
       const file = new File([shimmyBlob], `transfer-${code}.shimmy`, { type: 'application/x-shimmy' });
 
-      const result = await importBackupFromFile(file, {
-        persistence,
-        stores,
-        resolveDuplicate: resolveBackupDuplicate
-      });
+      const mode = hasExistingData ? importMode : 'overwrite';
+      const result =
+        mode === 'append'
+          ? await importBackupFromFile(file, {
+              persistence,
+              stores,
+              resolveDuplicate: resolveBackupDuplicate
+            })
+          : await restoreBackupOverwriteAllFromFile(file, {
+              persistence,
+              stores
+            });
 
       try {
         await consumeTransfer({ code });
@@ -143,7 +160,8 @@ export function TransferImportDialog({
               .join(', ')}`
           : '';
 
-      setSuccessMessage(`引継ぎが完了しました。\n${importedList}${assetsLine}${skippedList}`);
+      const modeLabel = mode === 'append' ? '追記' : '上書き';
+      setSuccessMessage(`${modeLabel}で引継ぎが完了しました。\n${importedList}${assetsLine}${skippedList}`);
       triggerConfirmation();
       payload?.onImported?.();
     } catch (error) {
@@ -162,6 +180,8 @@ export function TransferImportDialog({
   }, [
     codeInput,
     consumeTransfer,
+    hasExistingData,
+    importMode,
     payload,
     persistence,
     pinInput,
@@ -244,6 +264,64 @@ export function TransferImportDialog({
               <p className="transfer-import-dialog__expires text-xs text-muted-foreground">
                 有効期限: {expiresAtLabel}
               </p>
+            ) : null}
+
+            {hasExistingData ? (
+              <div className="transfer-import-dialog__mode-panel space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4">
+                <div className="transfer-import-dialog__mode-header space-y-1">
+                  <p className="transfer-import-dialog__mode-title text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    復元方法
+                  </p>
+                  <p className="transfer-import-dialog__mode-subtitle text-xs text-muted-foreground">
+                    この端末に既存データがあるため、復元方法を選択してください。
+                  </p>
+                </div>
+
+                <div className="transfer-import-dialog__mode-options grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    className={`transfer-import-dialog__mode-option transfer-import-dialog__mode-option--overwrite flex flex-col gap-1 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                      importMode === 'overwrite'
+                        ? 'border-accent/60 bg-accent/10'
+                        : 'border-border/60 bg-surface/40 hover:border-accent/40'
+                    }`}
+                    onClick={() => setImportMode('overwrite')}
+                    disabled={pending}
+                    data-state={importMode === 'overwrite' ? 'selected' : 'unselected'}
+                  >
+                    <span className="transfer-import-dialog__mode-option-label text-sm font-semibold text-surface-foreground">
+                      上書き
+                    </span>
+                    <span className="transfer-import-dialog__mode-option-desc text-xs text-muted-foreground">
+                      この端末のデータを削除して復元します。
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`transfer-import-dialog__mode-option transfer-import-dialog__mode-option--append flex flex-col gap-1 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                      importMode === 'append'
+                        ? 'border-accent/60 bg-accent/10'
+                        : 'border-border/60 bg-surface/40 hover:border-accent/40'
+                    }`}
+                    onClick={() => setImportMode('append')}
+                    disabled={pending}
+                    data-state={importMode === 'append' ? 'selected' : 'unselected'}
+                  >
+                    <span className="transfer-import-dialog__mode-option-label text-sm font-semibold text-surface-foreground">
+                      追記
+                    </span>
+                    <span className="transfer-import-dialog__mode-option-desc text-xs text-muted-foreground">
+                      既存データを残したまま追加します。
+                    </span>
+                  </button>
+                </div>
+
+                {importMode === 'overwrite' ? (
+                  <p className="transfer-import-dialog__mode-warning text-xs text-muted-foreground">
+                    上書きを選ぶと、この端末のデータは復元後に元へ戻せません。必要なら事前にバックアップを作成してください。
+                  </p>
+                ) : null}
+              </div>
             ) : null}
 
             <div className="transfer-import-dialog__actions flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
