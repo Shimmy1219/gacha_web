@@ -72,6 +72,22 @@ export function parseDiscordApiError(error) {
   return extractDiscordApiErrorInfo(error);
 }
 
+export function isDiscordMissingPermissionsError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 403) {
+    return false;
+  }
+  const code = typeof info?.jsonBody?.code === 'number' ? info.jsonBody.code : null;
+  if (code === 50013) {
+    return true;
+  }
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
+  return raw.includes('missing permissions');
+}
+
 export function isDiscordUnknownGuildError(error) {
   const info = extractDiscordApiErrorInfo(error);
   if (!info) {
@@ -90,14 +106,30 @@ export function isDiscordUnknownGuildError(error) {
 
 export function build1to1Overwrites({ guildId, ownerId, memberId, botId }){
   const allowMask = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
-  const overwrites = [
-    // @everyone を見えなくする
-    { id: guildId, type: 0, allow: '0', deny: String(PERM.VIEW_CHANNEL) },
-    // オーナー
-    { id: ownerId, type: 1, allow: allowMask, deny: '0' },
-    // メンバー
-    { id: memberId, type: 1, allow: allowMask, deny: '0' },
-  ];
+  const overwrites = [];
+
+  // @everyone を見えなくする
+  overwrites.push({ id: guildId, type: 0, allow: '0', deny: String(PERM.VIEW_CHANNEL) });
+
+  const seenMemberIds = new Set();
+  const pushMemberOverwrite = (value) => {
+    if (typeof value !== 'string') {
+      return;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return;
+    }
+    if (seenMemberIds.has(trimmed)) {
+      return;
+    }
+    seenMemberIds.add(trimmed);
+    overwrites.push({ id: trimmed, type: 1, allow: allowMask, deny: '0' });
+  };
+
+  // オーナー / メンバー（同一の場合は重複を避ける）
+  pushMemberOverwrite(ownerId);
+  pushMemberOverwrite(memberId);
 
   const resolvedBotId = (() => {
     if (typeof botId === 'string' && botId.trim()) {
@@ -107,9 +139,7 @@ export function build1to1Overwrites({ guildId, ownerId, memberId, botId }){
     return typeof envBotId === 'string' ? envBotId.trim() : '';
   })();
 
-  if (resolvedBotId) {
-    overwrites.push({ id: resolvedBotId, type: 1, allow: allowMask, deny: '0' });
-  }
+  pushMemberOverwrite(resolvedBotId);
 
   return overwrites;
 }

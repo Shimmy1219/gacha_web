@@ -4,6 +4,7 @@ import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
   assertGuildOwner,
+  isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
@@ -60,6 +61,14 @@ export default async function handler(req, res) {
       return res.status(404).json({
         ok: false,
         error: '選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。'
+      });
+    }
+    if (isDiscordMissingPermissionsError(error)) {
+      log.warn('discord bot is missing permissions', { context, message });
+      return res.status(403).json({
+        ok: false,
+        error:
+          'Discord Botに権限が不足しています。ギルド設定でBotに「チャンネルの管理(Manage Channels)」権限を付与してください。'
       });
     }
     log.error('discord api request failed', { context, message });
