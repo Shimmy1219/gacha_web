@@ -1,6 +1,7 @@
 import JSZip, { JSZipObject } from 'jszip';
 
 import type { ReceiveItemMetadata, ReceiveMediaItem, ReceiveMediaKind } from './types';
+import { inferDigitalItemTypeFromBlob, normalizeDigitalItemType } from '@domain/digital-items/digitalItemTypes';
 
 interface SelectionMetadataPayload {
   user?: { displayName?: string };
@@ -104,6 +105,7 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
     const parsed = JSON.parse(jsonText) as Record<string, Omit<ReceiveItemMetadata, 'id'>>;
     const mapped: Record<string, ReceiveItemMetadata> = {};
     for (const [id, metadata] of Object.entries(parsed)) {
+      const digitalItemType = normalizeDigitalItemType((metadata as { digitalItemType?: unknown }).digitalItemType) ?? undefined;
       mapped[id] = {
         id,
         ...metadata,
@@ -111,6 +113,7 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
         gachaId: typeof metadata.gachaId === 'string' ? metadata.gachaId : metadata.gachaId ?? null,
         itemId: typeof metadata.itemId === 'string' ? metadata.itemId : metadata.itemId ?? null,
         rarityColor: metadata.rarityColor ?? null,
+        digitalItemType,
         isOmitted: Boolean(metadata.isOmitted)
       };
     }
@@ -197,12 +200,14 @@ async function extractReceiveMediaItemsFromZip(
 
     for (const metadata of metadataEntries) {
       if (!metadata.filePath) {
+        metadata.digitalItemType = normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
       }
       const entry = findZipObjectByRelativePath(zip, metadata.filePath);
       if (!entry) {
+        metadata.digitalItemType = normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
@@ -211,6 +216,15 @@ async function extractReceiveMediaItemsFromZip(
       const blobEntry = await entry.async('blob');
       const filename = entry.name.split('/').pop() ?? entry.name;
       const mimeType = blobEntry.type || undefined;
+      const kind = detectMediaKind(filename, mimeType);
+      const digitalItemType =
+        normalizeDigitalItemType(metadata.digitalItemType) ??
+        (await inferDigitalItemTypeFromBlob({
+          blob: blobEntry,
+          mimeType,
+          kindHint: kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'other'
+        }));
+      metadata.digitalItemType = digitalItemType;
       mediaItems.push({
         id: metadata.id,
         path: entry.name,
@@ -218,7 +232,7 @@ async function extractReceiveMediaItemsFromZip(
         size: blobEntry.size,
         blob: blobEntry,
         mimeType,
-        kind: detectMediaKind(filename, mimeType),
+        kind,
         metadata
       });
       processed += 1;

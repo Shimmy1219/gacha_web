@@ -11,6 +11,7 @@ import {
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 import { ReceiveSaveButton } from './ReceiveSaveButtons';
+import { IconRingWearDialog, useModal } from '../../../modals';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
@@ -91,6 +92,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
 
 export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Element {
   const objectUrl = useObjectUrl(item.blob);
+  const { push } = useModal();
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
@@ -168,6 +170,8 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     </>
   );
 
+  const canWearIconRing = item.kind === 'image' && item.metadata?.digitalItemType === 'icon-ring';
+
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
@@ -228,6 +232,22 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               </div>
             </div>
             <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+              {canWearIconRing ? (
+                <button
+                  type="button"
+                  className="receive-item-card-wear-button btn btn-muted"
+                  onClick={() =>
+                    push(IconRingWearDialog, {
+                      id: `icon-ring-wear-${item.id}`,
+                      title: 'アイコンリングを装着',
+                      size: 'lg',
+                      payload: { ringItem: item }
+                    })
+                  }
+                >
+                  装着
+                </button>
+              ) : null}
               <ReceiveSaveButton
                 onClick={() => onSave(item)}
                 className="receive-item-card-save-button"

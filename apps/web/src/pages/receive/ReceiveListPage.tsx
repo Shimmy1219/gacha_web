@@ -4,6 +4,7 @@ import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { MultiSelectDropdown, type MultiSelectOption } from '../gacha/components/select/MultiSelectDropdown';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import {
@@ -17,6 +18,7 @@ import {
   persistHistoryMetadata
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
+import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -30,6 +32,7 @@ interface ReceiveInventoryItem {
   isRiagu: boolean;
   obtainedCount: number;
   kind: ReceiveMediaKind;
+  digitalItemType: DigitalItemTypeKey;
   previewUrl: string | null;
   sourceItems: ReceiveMediaItem[];
   isOwned: boolean;
@@ -138,6 +141,7 @@ function ReceiveInventoryItemCard({
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="chip">x{item.obtainedCount}</span>
+                <span className="chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
                 {item.isRiagu ? (
                   <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
                 ) : null}
@@ -165,6 +169,16 @@ export function ReceiveListPage(): JSX.Element {
   const [savingGroupKey, setSavingGroupKey] = useState<string | null>(null);
   const [savingItemKey, setSavingItemKey] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
+
+  const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
+    () =>
+      DIGITAL_ITEM_TYPE_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label
+      })),
+    []
+  );
 
   useEffect(() => {
     let active = true;
@@ -307,6 +321,7 @@ export function ReceiveListPage(): JSX.Element {
                   isRiagu: Boolean(metadata.isRiagu),
                   obtainedCount: obtained,
                   kind: 'unknown',
+                  digitalItemType: metadata.digitalItemType ?? 'other',
                   previewUrl: null,
                   sourceItems: [],
                   isOwned: true
@@ -345,6 +360,9 @@ export function ReceiveListPage(): JSX.Element {
               const existing = itemMap.get(itemKey);
               if (existing) {
                 existing.kind = item.kind;
+                if (item.metadata?.digitalItemType) {
+                  existing.digitalItemType = item.metadata.digitalItemType;
+                }
                 if (!existing.previewUrl && item.kind === 'image') {
                   const url = URL.createObjectURL(item.blob);
                   objectUrls.push(url);
@@ -375,6 +393,7 @@ export function ReceiveListPage(): JSX.Element {
                   isRiagu: Boolean(item.metadata?.isRiagu),
                   obtainedCount: obtained,
                   kind: item.kind,
+                  digitalItemType: item.metadata?.digitalItemType ?? 'other',
                   previewUrl,
                   sourceItems: [item],
                   isOwned: true
@@ -439,6 +458,7 @@ export function ReceiveListPage(): JSX.Element {
                     isRiagu: Boolean(item.isRiagu),
                     obtainedCount: 0,
                     kind: 'unknown',
+                    digitalItemType: 'other',
                     previewUrl: null,
                     sourceItems: [],
                     isOwned: false
@@ -514,10 +534,64 @@ export function ReceiveListPage(): JSX.Element {
     };
   }, []);
 
-  const isEmpty = status === 'ready' && groups.length === 0;
-  const totalOwnedKinds = useMemo(() => groups.reduce((sum, group) => sum + group.ownedKinds, 0), [groups]);
-  const totalKinds = useMemo(() => groups.reduce((sum, group) => sum + group.totalKinds, 0), [groups]);
-  const totalOwnedCount = useMemo(() => groups.reduce((sum, group) => sum + group.ownedCount, 0), [groups]);
+  const displayGroups = useMemo<ReceiveGachaGroup[]>(() => {
+    if (digitalItemTypeFilter === '*') {
+      return groups;
+    }
+
+    const selected = new Set(digitalItemTypeFilter);
+    if (selected.size === 0) {
+      return [];
+    }
+
+    return groups
+      .map((group) => {
+        const filteredItems = group.items.filter((item) => selected.has(item.digitalItemType));
+        if (filteredItems.length === 0) {
+          return null;
+        }
+
+        const ownedCountMap = new Map<string, number>();
+        const totalKindSet = new Set<string>();
+        const sourceItems: ReceiveMediaItem[] = [];
+        const seenSourceIds = new Set<string>();
+
+        filteredItems.forEach((item) => {
+          totalKindSet.add(item.baseKey);
+          if (item.isOwned) {
+            const existing = ownedCountMap.get(item.baseKey) ?? 0;
+            ownedCountMap.set(item.baseKey, Math.max(existing, item.obtainedCount));
+          }
+          item.sourceItems.forEach((source) => {
+            if (seenSourceIds.has(source.id)) {
+              return;
+            }
+            seenSourceIds.add(source.id);
+            sourceItems.push(source);
+          });
+        });
+
+        const ownedKinds = ownedCountMap.size;
+        const totalKinds = totalKindSet.size;
+        const ownedCount = Array.from(ownedCountMap.values()).reduce((sum, value) => sum + value, 0);
+
+        return {
+          ...group,
+          items: filteredItems,
+          ownedKinds,
+          totalKinds,
+          ownedCount,
+          sourceItems
+        };
+      })
+      .filter((group): group is ReceiveGachaGroup => Boolean(group));
+  }, [digitalItemTypeFilter, groups]);
+
+  const isBaseEmpty = status === 'ready' && groups.length === 0;
+  const isFilteredEmpty = status === 'ready' && groups.length > 0 && displayGroups.length === 0;
+  const totalOwnedKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedKinds, 0), [displayGroups]);
+  const totalKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.totalKinds, 0), [displayGroups]);
+  const totalOwnedCount = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedCount, 0), [displayGroups]);
   const hasSaving = Boolean(savingGroupKey || savingItemKey);
 
   const toggleGroup = useCallback((groupKey: string) => {
@@ -582,6 +656,43 @@ export function ReceiveListPage(): JSX.Element {
               所持 {totalOwnedKinds} 種類 / 全 {totalKinds} 種類 ・ 合計 {totalOwnedCount} 個
             </p>
           ) : null}
+          {status === 'ready' && groups.length > 0 ? (
+            <div className="receive-list-page__filter-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="receive-list-page__filter-label text-xs font-semibold text-muted-foreground">フィルタ</p>
+              <div className="receive-list-page__filter-control w-full sm:w-[320px]">
+                <MultiSelectDropdown<DigitalItemTypeKey>
+                  value={digitalItemTypeFilter}
+                  options={digitalItemTypeOptions}
+                  onChange={setDigitalItemTypeFilter}
+                  labels={{
+                    all: 'すべて',
+                    none: '未選択',
+                    multiple: (count) => `${count}種類`
+                  }}
+                  renderButtonLabel={({ allSelected, selectedValues }) => {
+                    if (allSelected) {
+                      return 'タイプ: すべて';
+                    }
+                    if (selectedValues.size === 0) {
+                      return 'タイプ: 未選択';
+                    }
+                    if (selectedValues.size === 1) {
+                      const [single] = Array.from(selectedValues);
+                      return `タイプ: ${getDigitalItemTypeLabel(single)}`;
+                    }
+                    return `タイプ: ${selectedValues.size}種類`;
+                  }}
+                  classNames={{
+                    root: 'w-full',
+                    button:
+                      'w-full justify-between rounded-xl border border-border/60 bg-surface/40 px-4 py-2 text-sm font-semibold text-surface-foreground',
+                    menu:
+                      'w-full space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 backdrop-blur-sm'
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
         </header>
 
         {status === 'loading' ? (
@@ -602,15 +713,21 @@ export function ReceiveListPage(): JSX.Element {
           </div>
         ) : null}
 
-        {isEmpty ? (
+        {isBaseEmpty ? (
           <div className="rounded-2xl border border-dashed border-border/60 bg-surface/40 p-6 text-sm text-muted-foreground">
             まだ所持アイテムがありません。/receive で受け取ると一覧に表示されます。
           </div>
         ) : null}
 
-        {groups.length > 0 ? (
+        {isFilteredEmpty ? (
+          <div className="rounded-2xl border border-dashed border-border/60 bg-surface/40 p-6 text-sm text-muted-foreground">
+            フィルタに一致するアイテムがありません。
+          </div>
+        ) : null}
+
+        {displayGroups.length > 0 ? (
           <section className="flex flex-col gap-6">
-            {groups.map((group) => {
+            {displayGroups.map((group) => {
               const groupKey = group.gachaId ?? group.gachaName;
               const isCollapsed = Boolean(collapsedGroups[groupKey]);
               const contentId = createGroupDomId(groupKey);

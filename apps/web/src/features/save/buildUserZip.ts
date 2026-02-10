@@ -9,6 +9,11 @@ import type {
 } from '@domain/app-persistence';
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { generateDeterministicUserId } from '@domain/idGenerators';
+import {
+  type DigitalItemTypeKey,
+  inferDigitalItemTypeFromBlob,
+  normalizeDigitalItemType
+} from '@domain/digital-items/digitalItemTypes';
 
 import type { SaveTargetSelection, ZipBuildResult } from './types';
 
@@ -21,6 +26,7 @@ interface SelectedAsset {
   rarityId: string;
   count: number;
   isRiagu: boolean;
+  digitalItemType?: DigitalItemTypeKey;
 }
 
 export type ZipSelectedAsset = SelectedAsset;
@@ -44,6 +50,7 @@ interface ZipItemMetadata {
   rarityColor: string | null;
   isRiagu: boolean;
   riaguType: string | null;
+  digitalItemType: DigitalItemTypeKey;
   obtainedCount: number;
   isNewForUser: boolean;
   isOmitted?: boolean;
@@ -239,11 +246,14 @@ function createSelectedAssets(
   }
 
   const assetEntries = Array.isArray(catalogItem.assets) ? catalogItem.assets : [];
-  const assetIds = assetEntries
-    .map((asset) => asset?.assetId)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const resolvedAssetEntries = assetEntries
+    .map((asset) => ({
+      assetId: typeof asset?.assetId === 'string' ? asset.assetId.trim() : '',
+      digitalItemType: normalizeDigitalItemType(asset?.digitalItemType) ?? undefined
+    }))
+    .filter((entry) => entry.assetId.length > 0);
 
-  if (assetIds.length === 0) {
+  if (resolvedAssetEntries.length === 0) {
     warnings.add(
       buildWarning('missingAsset', {
         gachaId: context.gachaId,
@@ -257,7 +267,8 @@ function createSelectedAssets(
   const normalizedCount =
     typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount > 0 ? rawCount : 1;
 
-  return assetIds.reduce<SelectedAsset[]>((acc, assetId) => {
+  return resolvedAssetEntries.reduce<SelectedAsset[]>((acc, entry) => {
+    const assetId = entry.assetId;
     if (seenAssets.has(assetId)) {
       return acc;
     }
@@ -271,7 +282,8 @@ function createSelectedAssets(
       itemName: catalogItem.name ?? itemId,
       rarityId: catalogItem.rarityId ?? fallbackRarityId,
       count: normalizedCount,
-      isRiagu: Boolean(catalogItem.riagu)
+      isRiagu: Boolean(catalogItem.riagu),
+      digitalItemType: entry.digitalItemType
     });
     return acc;
   }, []);
@@ -1210,15 +1222,15 @@ export async function buildUserZipFromSelection({
   const itemMetadataMap: Record<string, ZipItemMetadata> | null = includeMetadata ? {} : null;
   const fileNameCounters = new Map<string, number>();
 
-  availableRecords.forEach(({ item, asset }) => {
+  for (const { item, asset } of availableRecords) {
     if (!itemsFolder) {
-      return;
+      continue;
     }
 
     const sanitizedGachaName = sanitizePathComponent(item.gachaName);
     const gachaDir = itemsFolder.folder(sanitizedGachaName);
     if (!gachaDir) {
-      return;
+      continue;
     }
 
     const fileExtension = inferAssetExtension(asset);
@@ -1235,6 +1247,18 @@ export async function buildUserZipFromSelection({
     });
 
     if (itemMetadataMap) {
+      const mimeType = asset.type || asset.blob.type || null;
+      const kindHint =
+        mimeType?.startsWith('image/')
+          ? 'image'
+          : mimeType?.startsWith('video/')
+            ? 'video'
+            : mimeType?.startsWith('audio/')
+              ? 'audio'
+              : 'other';
+      const digitalItemType =
+        normalizeDigitalItemType(item.digitalItemType) ??
+        (await inferDigitalItemTypeFromBlob({ blob: asset.blob, mimeType, kindHint }));
       const filePath = `items/${sanitizedGachaName}/${fileName}`;
       const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
@@ -1248,18 +1272,20 @@ export async function buildUserZipFromSelection({
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+        digitalItemType,
         obtainedCount: item.count,
         isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
         isOmitted: false
       };
     }
-  });
+  }
 
   if (itemMetadataMap && metadataAssets.length > 0) {
     metadataAssets.forEach((item) => {
       if (itemMetadataMap[item.assetId]) {
         return;
       }
+      const digitalItemType = normalizeDigitalItemType(item.digitalItemType) ?? 'other';
       const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
       itemMetadataMap[item.assetId] = {
@@ -1272,6 +1298,7 @@ export async function buildUserZipFromSelection({
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
+        digitalItemType,
         obtainedCount: item.count,
         isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
         isOmitted: omittedAssetIds.has(item.assetId)

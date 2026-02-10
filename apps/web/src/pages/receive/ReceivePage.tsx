@@ -5,6 +5,7 @@ import {
   ArrowPathIcon,
   CheckIcon,
   ClockIcon,
+  Cog6ToothIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 
@@ -24,6 +25,7 @@ import {
 import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
+import { ReceiveIconSettingsDialog, useModal } from '../../modals';
 interface ResolveSuccessPayload {
   url: string;
   name?: string;
@@ -218,6 +220,7 @@ function formatOmittedMessage(itemNames: string[]): string | null {
 
 export function ReceivePage(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { push } = useModal();
   const [tokenInput, setTokenInput] = useState<string>('');
   const [resolveStatus, setResolveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -804,6 +807,23 @@ export function ReceivePage(): JSX.Element {
                 DiscordやXのアプリ内ブラウザから来た方は、safariやchromeなどで開きなおすことをオススメします。
               </div>
               <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
+            </div>
+            <div className="receive-page-hero-actions flex flex-col items-start gap-2">
+              <button
+                type="button"
+                className="receive-page-icon-settings-button btn btn-muted inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm"
+                onClick={() =>
+                  push(ReceiveIconSettingsDialog, {
+                    id: 'receive-icon-settings',
+                    title: 'アイコン設定',
+                    size: 'lg',
+                    payload: {}
+                  })
+                }
+              >
+                <Cog6ToothIcon className="h-4 w-4" aria-hidden="true" />
+                <span className="receive-page-icon-settings-button-text">アイコン設定</span>
+              </button>
             </div>
           </div>
 

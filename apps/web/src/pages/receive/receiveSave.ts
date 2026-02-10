@@ -41,6 +41,10 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+export function triggerReceiveBlobDownload(blob: Blob, filename: string): void {
+  triggerBlobDownload(blob, filename);
+}
+
 function createShareFile(filename: string, blob: Blob): File | null {
   if (typeof File === 'undefined') {
     return null;
