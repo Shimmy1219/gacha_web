@@ -328,31 +328,36 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
         ) : null}
 
         {status === 'ready' && composites.length > 0 ? (
-          <div className="icon-ring-wear-dialog__grid mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {composites.map((entry) => (
-              <div
-                key={entry.iconAssetId}
-                className="icon-ring-wear-dialog__card rounded-2xl border border-border/60 bg-surface/20 p-3"
-              >
-                <div className="icon-ring-wear-dialog__preview-container aspect-square w-full overflow-hidden rounded-xl border border-border/60 bg-panel-muted/70">
-                  <img
-                    src={entry.previewUrl}
-                    alt={entry.downloadName}
-                    className="icon-ring-wear-dialog__preview-image h-full w-full object-contain"
-                  />
-                </div>
-                <p className="icon-ring-wear-dialog__icon-name mt-2 truncate text-xs font-semibold text-surface-foreground">
-                  {entry.iconName}
-                </p>
-                <button
-                  type="button"
-                  className="icon-ring-wear-dialog__save-button btn btn-primary mt-3 w-full"
-                  onClick={() => triggerReceiveBlobDownload(entry.blob, entry.downloadName)}
+          <div
+            className="icon-ring-wear-dialog__cards-scroll mt-4 -mx-4 overflow-x-auto px-4 pb-2 snap-x snap-mandatory overscroll-x-contain"
+            aria-label="装着プレビュー一覧"
+          >
+            <div className="icon-ring-wear-dialog__cards-track flex w-max gap-3">
+              {composites.map((entry) => (
+                <div
+                  key={entry.iconAssetId}
+                  className="icon-ring-wear-dialog__card w-40 flex-shrink-0 snap-start rounded-2xl border border-border/60 bg-surface/20 p-2"
                 >
-                  保存する
-                </button>
-              </div>
-            ))}
+                  <div className="icon-ring-wear-dialog__preview-container aspect-square w-full overflow-hidden rounded-xl border border-border/60 bg-panel-muted/70">
+                    <img
+                      src={entry.previewUrl}
+                      alt={entry.downloadName}
+                      className="icon-ring-wear-dialog__preview-image h-full w-full object-contain"
+                    />
+                  </div>
+                  <p className="icon-ring-wear-dialog__icon-name mt-1 truncate text-[11px] font-semibold text-surface-foreground">
+                    {entry.iconName}
+                  </p>
+                  <button
+                    type="button"
+                    className="icon-ring-wear-dialog__save-button btn btn-primary mt-2 h-9 w-full px-3 text-xs"
+                    onClick={() => triggerReceiveBlobDownload(entry.blob, entry.downloadName)}
+                  >
+                    保存する
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         ) : null}
       </ModalBody>
@@ -365,4 +370,3 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     </>
   );
 }
-
