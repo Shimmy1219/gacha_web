@@ -37,7 +37,7 @@ export function useAssetPreview(
     let objectUrl: string | null = null;
 
     const resolvedAssetId = assetId ?? null;
-    const resolvedPreviewId = options.previewAssetId ?? resolvedAssetId;
+    const resolvedPreviewId = options.previewAssetId ?? null;
 
     if (!resolvedAssetId && !resolvedPreviewId) {
       setState(INITIAL_STATE);
