@@ -6,6 +6,7 @@ export interface DiscordGuildMemberSummary {
   username: string;
   globalName: string | null;
   nick: string | null;
+  joinedAt: string | null;
   avatar: string | null;
   avatarUrl: string | null;
   displayName: string;
@@ -113,6 +114,8 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
   const globalName =
     typeof record.globalName === 'string' || record.globalName === null ? (record.globalName as string | null) : null;
   const nick = typeof record.nick === 'string' || record.nick === null ? (record.nick as string | null) : null;
+  const joinedAt =
+    typeof record.joinedAt === 'string' || record.joinedAt === null ? (record.joinedAt as string | null) : null;
   const avatar = typeof record.avatar === 'string' ? (record.avatar as string) : null;
   const displayName = typeof record.displayName === 'string' ? (record.displayName as string) : '';
   const avatarUrlCandidate =
@@ -169,6 +172,7 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
     username,
     globalName,
     nick,
+    joinedAt,
     avatar,
     avatarUrl: avatarUrlCandidate ?? buildMemberAvatarUrl(id, avatar),
     displayName

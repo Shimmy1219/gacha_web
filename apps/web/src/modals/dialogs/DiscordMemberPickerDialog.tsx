@@ -18,6 +18,7 @@ import {
   type DiscordMemberCacheEntry,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { sortDiscordGuildMembersByRecentJoin } from '../../features/discord/discordMemberSorting';
 import {
   type DiscordGuildCategorySelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
@@ -297,17 +298,7 @@ export function DiscordMemberPickerDialog({
   }, [members, selectedMemberId]);
 
   const sortedMembers = useMemo(() => {
-    return [...members].sort((a, b) => {
-      const nameA = a.displayName.toLowerCase();
-      const nameB = b.displayName.toLowerCase();
-      if (nameA < nameB) {
-        return -1;
-      }
-      if (nameA > nameB) {
-        return 1;
-      }
-      return a.id.localeCompare(b.id);
-    });
+    return sortDiscordGuildMembersByRecentJoin(members);
   }, [members]);
 
   const handleSelect = (memberId: string) => {

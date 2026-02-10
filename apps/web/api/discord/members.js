@@ -58,6 +58,7 @@ export default async function handler(req, res){
       username,
       globalName: m?.user?.global_name || null,
       nick: m?.nick || null,
+      joinedAt: typeof m?.joined_at === 'string' ? m.joined_at : null,
       avatar: m?.user?.avatar || null,
       displayName:
         m?.display_name ||
