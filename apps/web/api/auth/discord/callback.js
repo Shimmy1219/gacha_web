@@ -11,6 +11,7 @@ import {
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 import { resolveDiscordRedirectUri } from '../../_lib/discordAuthConfig.js';
+import { buildRedirectTarget, sanitizeReturnTo } from '../../_lib/returnTo.js';
 
 function normalizeLoginContext(value) {
   if (value === 'pwa') return 'pwa';
@@ -32,17 +33,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
   }
 
-  const { code, state, error } = req.query || {};
+  const { code, state, error, error_description } = req.query || {};
   const codeParam = Array.isArray(code) ? code[0] : code;
   const stateParam = Array.isArray(state) ? state[0] : state;
+  const errorParam = Array.isArray(error) ? error[0] : error;
+  const errorDescriptionParam = Array.isArray(error_description)
+    ? error_description[0]
+    : error_description;
   const statePreview =
     typeof stateParam === 'string' && stateParam.length > 8
       ? `${stateParam.slice(0, 4)}...`
       : stateParam;
-  if (error) {
-    log.warn('DiscordからOAuthエラーが報告されました', { error });
-    return res.status(400).send(`OAuth error: ${error}`);
-  }
   const cookies = getCookies(req);
   const expectedState = cookies['d_state'];
   const cookieVerifier = cookies['d_verifier'];
@@ -60,6 +61,72 @@ export default async function handler(req, res) {
   let shouldCleanupState = Boolean(stateParam);
   let stateRecordConsumed = false;
   let storedState = null;
+
+  if (typeof errorParam === 'string' && errorParam.length > 0) {
+    const logMethod = errorParam === 'access_denied' ? log.info.bind(log) : log.warn.bind(log);
+    logMethod('DiscordからOAuthエラーが報告されました', {
+      error: errorParam,
+      errorDescription: typeof errorDescriptionParam === 'string' ? errorDescriptionParam : undefined,
+      statePreview,
+    });
+
+    if (typeof stateParam === 'string' && stateParam.length > 0) {
+      try {
+        storedState = await consumeDiscordAuthState(stateParam);
+        stateRecordConsumed = Boolean(storedState);
+      } catch (consumeError) {
+        log.error('Discord認証stateのKV消費に失敗しました', {
+          error: consumeError instanceof Error ? consumeError.message : String(consumeError),
+          statePreview,
+        });
+      }
+    }
+
+    const returnTo = sanitizeReturnTo(storedState?.returnTo);
+    const redirectTarget = buildRedirectTarget(returnTo, {
+      discord_oauth_error: errorParam,
+    });
+
+    // 後続リクエストで誤検知しないようにクッキーを破棄
+    setCookie(res, 'd_state', '', { maxAge: 0 });
+    setCookie(res, 'd_verifier', '', { maxAge: 0 });
+    setCookie(res, 'd_login_context', '', { maxAge: 0 });
+    setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
+
+    // 念のため、KVに残っている場合は削除する
+    if (typeof stateParam === 'string' && stateParam.length > 0 && !stateRecordConsumed) {
+      try {
+        await deleteDiscordAuthState(stateParam);
+      } catch (cleanupError) {
+        log.error('kvからDiscord認証stateの削除に失敗しました', {
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          statePreview,
+        });
+      }
+    }
+
+    const formatParam = Array.isArray(req.query?.format) ? req.query?.format[0] : req.query?.format;
+    const acceptsJson =
+      formatParam === 'json' ||
+      (req.headers.accept || '')
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .some((value) => value === 'application/json' || value.endsWith('+json'));
+
+    res.setHeader('Cache-Control', 'no-store');
+
+    if (acceptsJson) {
+      return res.status(400).json({
+        ok: false,
+        error: 'OAuth error',
+        oauthError: errorParam,
+        redirectTo: redirectTarget,
+      });
+    }
+
+    res.writeHead(302, { Location: redirectTarget });
+    return res.end();
+  }
 
   try {
     if (!codeParam || !stateParam) {
@@ -265,7 +332,9 @@ export default async function handler(req, res) {
     // sid をクッキーへ（30日）
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
 
-    const formatParam = Array.isArray(req.query?.format) ? req.query?.format[0] : req.query?.format;
+    const formatParam = Array.isArray(req.query?.format)
+      ? req.query?.format[0]
+      : req.query?.format;
     const acceptsJson =
       formatParam === 'json' ||
       (req.headers.accept || '')
@@ -275,6 +344,7 @@ export default async function handler(req, res) {
 
     // UX: ルートへ返す（必要なら /?loggedin=1 など）
     res.setHeader('Cache-Control', 'no-store');
+    const redirectTarget = buildRedirectTarget(storedState?.returnTo);
     const sessionIdPreview = sid.length > 8 ? `${sid.slice(0, 4)}...${sid.slice(-4)}` : sid;
     log.info('ログインセッションを発行しSIDクッキーを設定しました', {
       userId: me.id,
@@ -326,12 +396,10 @@ export default async function handler(req, res) {
 
     if (acceptsJson) {
       log.info('クライアントにログイン完了(JSON)を返却しました', { loginContext });
-      return res.status(200).json({ ok: true, redirectTo: '/', loginContext });
+      return res.status(200).json({ ok: true, redirectTo: redirectTarget, loginContext });
     }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-
-    const redirectTarget = '/';
 
     if (loginContext === 'browser') {
       const redirectScript = `
@@ -400,11 +468,11 @@ export default async function handler(req, res) {
     </style>
   </head>
   <body>
-    <main>
-      <h1>ログインしました</h1>
-      <p>${guidanceMessage}</p>
-      <p><a href="${redirectTarget}">トップページに移動する</a></p>
-    </main>
+	    <main>
+	      <h1>ログインしました</h1>
+	      <p>${guidanceMessage}</p>
+	      <p><a href="${redirectTarget}">元の画面に戻る</a></p>
+	    </main>
     <noscript>
       <p>自動で移動しない場合は、上のリンクをタップしてください。</p>
     </noscript>
