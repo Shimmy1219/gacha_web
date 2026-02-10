@@ -165,7 +165,7 @@ function AssetPreviewItem({
   const isImagePreview = Boolean(previewType && previewType.startsWith('image/'));
   const isVideoPreview = Boolean(previewType && previewType.startsWith('video/'));
   const isAudioPreview = Boolean(previewType && previewType.startsWith('audio/'));
-  const typeLabel = isImagePreview ? '画像' : isVideoPreview ? '動画' : isAudioPreview ? '音声' : '不明';
+  // kind label intentionally omitted in UI (画像/動画/音声などは表示しない)
   const normalizedExplicitType = normalizeDigitalItemType(asset.digitalItemType);
   const [inferredType, setInferredType] = useState<DigitalItemTypeKey | null>(null);
 
@@ -177,7 +177,8 @@ function AssetPreviewItem({
 
     let active = true;
 
-    const mimeType = preview.previewType ?? preview.type ?? null;
+    // 推定用途ではオリジナルのMIME(type)を優先し、プレビューのMIME(previewType)は補助として扱う。
+    const mimeType = preview.type ?? preview.previewType ?? null;
     const fallback =
       isAudioPreview ? ('audio' satisfies DigitalItemTypeKey) : isVideoPreview ? ('video' satisfies DigitalItemTypeKey) : null;
 
@@ -259,7 +260,6 @@ function AssetPreviewItem({
               メイン
             </span>
           ) : null}
-          <span className="prize-settings-dialog__asset-kind-label">{typeLabel}</span>
           <button
             type="button"
             className="prize-settings-dialog__asset-digital-type-button inline-flex items-center rounded-full border border-border/60 bg-surface/40 px-2 py-0.5 text-[10px] font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent"
