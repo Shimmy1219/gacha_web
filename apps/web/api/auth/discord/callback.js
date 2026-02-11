@@ -124,8 +124,48 @@ export default async function handler(req, res) {
       });
     }
 
-    res.writeHead(302, { Location: redirectTarget });
-    return res.end();
+    // Service Worker が 3xx を App Shell に置き換える実装になっているため、
+    // ここでは 200 + HTML リダイレクトにする（結果として元画面でモーダルを出せる）。
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    const redirectScript = `
+      (function () {
+        var target = ${JSON.stringify(redirectTarget)};
+        var navigate = function () {
+          try {
+            window.location.replace(target);
+          } catch (error) {
+            window.location.href = target;
+          }
+        };
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          navigate();
+        } else {
+          document.addEventListener('DOMContentLoaded', navigate, { once: true });
+        }
+        window.setTimeout(function () {
+          try {
+            window.location.href = target;
+          } catch (error) {
+            // no-op
+          }
+        }, 4000);
+      })();
+    `;
+    const html = `<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>認証をキャンセルしました</title>
+  </head>
+  <body>
+    <script>${redirectScript}</script>
+    <noscript>
+      <p>自動で移動しない場合は、<a href="${redirectTarget}">こちら</a>をクリックしてください。</p>
+    </noscript>
+  </body>
+</html>`;
+    return res.status(200).send(html);
   }
 
   try {
