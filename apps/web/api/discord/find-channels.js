@@ -15,6 +15,7 @@ import { createRequestLogger } from '../_lib/logger.js';
 import {
   extractGiftChannelCandidates,
   extractOwnerBotOnlyGiftChannelCandidates,
+  normalizeOverwriteType,
   resolveBotIdentity,
 } from './_lib/giftChannelUtils.js';
 
@@ -58,6 +59,246 @@ function matchesOwnerBotOnlyCandidateByName(candidateName, expectedName, memberI
   }
 
   return normalizedName === `gift-${memberId}`.toLowerCase();
+}
+
+function normalizeSnowflake(value){
+  if (typeof value === 'string'){
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (typeof value === 'number'){
+    return String(value);
+  }
+  return null;
+}
+
+function toBigInt(value){
+  if (typeof value === 'string' && value){
+    try {
+      return BigInt(value);
+    } catch {
+      return 0n;
+    }
+  }
+  if (typeof value === 'number'){
+    return BigInt(value);
+  }
+  return 0n;
+}
+
+function allowsView(overwrite){
+  const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
+  return (toBigInt(overwrite?.allow) & viewChannelBit) === viewChannelBit;
+}
+
+function deniesView(overwrite){
+  const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
+  return (toBigInt(overwrite?.deny) & viewChannelBit) === viewChannelBit;
+}
+
+function evaluateChannelForGiftMatching({
+  channel,
+  ownerId,
+  guildId,
+  botUserIdSet,
+  memberId,
+  categoryId,
+  expectedChannelName
+}){
+  const channelId = normalizeSnowflake(channel?.id);
+  const channelType = typeof channel?.type === 'number' ? channel.type : null;
+  const parentId = normalizeSnowflake(channel?.parent_id);
+  const channelName = typeof channel?.name === 'string' ? channel.name : null;
+  const categoryMatched = !categoryId || parentId === categoryId;
+
+  const result = {
+    channelId: channelId ?? null,
+    channelName: channelName ?? null,
+    channelType,
+    parentId: parentId ?? null,
+    checks: {
+      isTextChannel: channelType === 0,
+      hasPermissionOverwrites: false,
+      ownerOverwritePresent: false,
+      botOverwritePresent: false,
+      botCanView: false,
+      everyoneDenyPresent: false,
+      everyoneDenyView: false,
+      ownerCanView: false,
+      memberCanView: false,
+      categoryMatched,
+      memberOverwriteCountExcludingOwnerAndBot: 0,
+      otherUserOverwriteCount: 0,
+      standardCandidateMemberId: null,
+      standardCandidateEligible: false,
+      standardCandidateMemberMatched: false,
+      standardCandidateWithBot: false,
+      standardCandidateWithoutBot: false,
+      ownerBotOnlyEligible: false,
+      ownerBotOnlyNameMatched: false,
+      ownerBotOnlyAdoptable: false,
+    },
+    reason: '',
+  };
+
+  if (channelType !== 0){
+    result.reason = 'skip:not_text_channel';
+    return result;
+  }
+
+  const overwrites = Array.isArray(channel?.permission_overwrites) ? channel.permission_overwrites : [];
+  result.checks.hasPermissionOverwrites = overwrites.length > 0;
+  if (overwrites.length === 0){
+    result.reason = 'skip:no_permission_overwrites';
+    return result;
+  }
+
+  const ownerSnowflake = normalizeSnowflake(ownerId);
+  const guildSnowflake = normalizeSnowflake(guildId);
+  const targetMemberSnowflake = normalizeSnowflake(memberId);
+  if (!ownerSnowflake || !guildSnowflake || !targetMemberSnowflake){
+    result.reason = 'skip:invalid_owner_or_guild_or_member';
+    return result;
+  }
+
+  const userOverwrites = overwrites.filter((ow) => normalizeOverwriteType(ow) === 'member');
+  const ownerOverwrite = userOverwrites.find((ow) => normalizeSnowflake(ow?.id) === ownerSnowflake);
+  result.checks.ownerOverwritePresent = Boolean(ownerOverwrite);
+  result.checks.ownerCanView = ownerOverwrite ? allowsView(ownerOverwrite) : false;
+  if (!ownerOverwrite){
+    result.reason = 'skip:owner_overwrite_missing';
+    return result;
+  }
+
+  const nonOwnerNonBotMemberOverwrites = userOverwrites.filter((ow) => {
+    const targetId = normalizeSnowflake(ow?.id);
+    if (!targetId){
+      return false;
+    }
+    if (targetId === ownerSnowflake){
+      return false;
+    }
+    if (botUserIdSet.has(targetId)){
+      return false;
+    }
+    return true;
+  });
+  result.checks.memberOverwriteCountExcludingOwnerAndBot = nonOwnerNonBotMemberOverwrites.length;
+
+  const botOverwrite = userOverwrites.find((ow) => {
+    const targetId = normalizeSnowflake(ow?.id);
+    return targetId ? botUserIdSet.has(targetId) : false;
+  });
+  result.checks.botOverwritePresent = Boolean(botOverwrite);
+  result.checks.botCanView = botOverwrite ? allowsView(botOverwrite) : false;
+
+  const everyoneOverwrite = overwrites.find(
+    (ow) => normalizeOverwriteType(ow) === 'role' && normalizeSnowflake(ow?.id) === guildSnowflake
+  );
+  result.checks.everyoneDenyPresent = Boolean(everyoneOverwrite);
+  result.checks.everyoneDenyView = everyoneOverwrite ? deniesView(everyoneOverwrite) : false;
+
+  // Standard owner + member (+ optional bot) candidate checks.
+  if (nonOwnerNonBotMemberOverwrites.length === 1){
+    const memberOverwrite = nonOwnerNonBotMemberOverwrites[0];
+    const extractedMemberId = normalizeSnowflake(memberOverwrite?.id);
+    result.checks.standardCandidateMemberId = extractedMemberId;
+    result.checks.memberCanView = memberOverwrite ? allowsView(memberOverwrite) : false;
+
+    const otherUsers = userOverwrites.filter((ow) => {
+      const targetId = normalizeSnowflake(ow?.id);
+      if (!targetId){
+        return false;
+      }
+      if (targetId === ownerSnowflake){
+        return false;
+      }
+      if (targetId === extractedMemberId){
+        return false;
+      }
+      if (botUserIdSet.has(targetId)){
+        return false;
+      }
+      return true;
+    });
+
+    result.checks.otherUserOverwriteCount = otherUsers.length;
+    result.checks.standardCandidateEligible = Boolean(
+      extractedMemberId &&
+      otherUsers.length === 0 &&
+      result.checks.everyoneDenyView &&
+      result.checks.ownerCanView &&
+      result.checks.memberCanView
+    );
+    result.checks.standardCandidateMemberMatched =
+      extractedMemberId === targetMemberSnowflake && result.checks.categoryMatched;
+    result.checks.standardCandidateWithBot =
+      result.checks.standardCandidateEligible &&
+      result.checks.standardCandidateMemberMatched &&
+      result.checks.botCanView;
+    result.checks.standardCandidateWithoutBot =
+      result.checks.standardCandidateEligible &&
+      result.checks.standardCandidateMemberMatched &&
+      !result.checks.botCanView;
+  }
+
+  // Owner + bot only candidate checks.
+  result.checks.ownerBotOnlyEligible = Boolean(
+    nonOwnerNonBotMemberOverwrites.length === 0 &&
+    result.checks.everyoneDenyView &&
+    result.checks.ownerCanView &&
+    result.checks.botCanView
+  );
+  result.checks.ownerBotOnlyNameMatched = matchesOwnerBotOnlyCandidateByName(
+    channelName,
+    expectedChannelName,
+    targetMemberSnowflake
+  );
+  result.checks.ownerBotOnlyAdoptable =
+    result.checks.ownerBotOnlyEligible &&
+    result.checks.categoryMatched &&
+    result.checks.ownerBotOnlyNameMatched;
+
+  if (result.checks.standardCandidateWithBot){
+    result.reason = 'match:standard_with_bot';
+    return result;
+  }
+  if (result.checks.standardCandidateWithoutBot){
+    result.reason = 'match:standard_without_bot';
+    return result;
+  }
+  if (result.checks.ownerBotOnlyAdoptable){
+    result.reason = 'match:owner_bot_only_adoptable';
+    return result;
+  }
+
+  if (!result.checks.categoryMatched){
+    result.reason = 'skip:category_mismatch';
+    return result;
+  }
+  if (result.checks.standardCandidateEligible && !result.checks.standardCandidateMemberMatched){
+    result.reason = 'skip:member_mismatch';
+    return result;
+  }
+  if (result.checks.ownerBotOnlyEligible && !result.checks.ownerBotOnlyNameMatched){
+    result.reason = 'skip:owner_bot_only_name_mismatch';
+    return result;
+  }
+  if (!result.checks.everyoneDenyView){
+    result.reason = 'skip:everyone_view_not_denied';
+    return result;
+  }
+  if (!result.checks.ownerCanView){
+    result.reason = 'skip:owner_view_not_allowed';
+    return result;
+  }
+  if (result.checks.memberOverwriteCountExcludingOwnerAndBot > 1){
+    result.reason = 'skip:member_overwrites_count_not_one';
+    return result;
+  }
+
+  result.reason = 'skip:not_matching_candidate';
+  return result;
 }
 
 export default async function handler(req, res){
@@ -173,6 +414,21 @@ export default async function handler(req, res){
   });
 
   const expectedChannelName = buildChannelNameFromDisplayName(memberDisplayNameParam, memberId);
+  const channelEvaluations = allChannels.map((channel) =>
+    evaluateChannelForGiftMatching({
+      channel,
+      ownerId: sess.uid,
+      guildId,
+      botUserIdSet,
+      memberId,
+      categoryId,
+      expectedChannelName
+    })
+  );
+  channelEvaluations.forEach((evaluation) => {
+    log.debug('channel evaluation for gift matching', evaluation);
+  });
+
   const matchesForMember = candidates.filter(
     (candidate) => candidate.memberId === memberId && matchesCandidateCategory(candidate, categoryId)
   );
