@@ -599,6 +599,7 @@ export function DiscordMemberPickerDialog({
   };
 
   const refreshLabel = linkPayload?.refreshLabel ?? '再取得';
+  const refreshButtonLabel = membersQuery.isFetching ? '更新中' : refreshLabel;
   const submitLabel = linkPayload?.submitLabel ?? 'Discordに共有';
 
   return (
@@ -669,12 +670,6 @@ export function DiscordMemberPickerDialog({
                   <option value="oldest">古参順</option>
                 </select>
               </div>
-              {membersQuery.isFetching ? (
-                <span className="inline-flex items-center gap-1" aria-live="polite">
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  更新中…
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 font-medium text-surface-foreground transition hover:bg-surface/60"
@@ -685,7 +680,7 @@ export function DiscordMemberPickerDialog({
                 aria-busy={membersQuery.isFetching}
               >
                 <ArrowPathIcon className={`h-4 w-4 ${membersQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
-                {refreshLabel}
+                <span aria-live="polite">{refreshButtonLabel}</span>
               </button>
             </div>
           </div>
@@ -786,7 +781,7 @@ export function DiscordMemberPickerDialog({
                           {fallbackLabel}
                           {member.nick ? ` ／ サーバーニックネーム: ${member.nick}` : ''}
                         </span>
-                        <div className="discord-member-picker-dialog__member-meta mt-2 flex flex-wrap items-center gap-2">
+                        <div className="discord-member-picker-dialog__member-meta flex flex-wrap items-center gap-2">
                           <span className={giftBadgeClass}>{giftLabel}</span>
                           {categoryLabel ? (
                             <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
