@@ -18,7 +18,7 @@ import {
   type DiscordMemberCacheEntry,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
-import { sortDiscordGuildMembersByRecentJoin } from '../../features/discord/discordMemberSorting';
+import { sortDiscordGuildMembers, type DiscordGuildMemberSortMode } from '../../features/discord/discordMemberSorting';
 import {
   type DiscordGuildCategorySelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
@@ -278,6 +278,7 @@ export function DiscordMemberPickerDialog({
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sortMode, setSortMode] = useState<DiscordGuildMemberSortMode>('newest');
   const [selectedCategory, setSelectedCategory] = useState<DiscordGuildCategorySelection | null>(
     !isLinkMode ? payload?.initialCategory ?? null : null
   );
@@ -298,8 +299,8 @@ export function DiscordMemberPickerDialog({
   }, [members, selectedMemberId]);
 
   const sortedMembers = useMemo(() => {
-    return sortDiscordGuildMembersByRecentJoin(members);
-  }, [members]);
+    return sortDiscordGuildMembers(members, sortMode);
+  }, [members, sortMode]);
 
   const handleSelect = (memberId: string) => {
     setSelectedMemberId(memberId);
@@ -552,8 +553,8 @@ export function DiscordMemberPickerDialog({
 
   return (
     <>
-      <ModalBody className="space-y-6">
-        <section className="rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
+      <ModalBody className="discord-member-picker-dialog__body space-y-6">
+        <section className="discord-member-picker-dialog__intro rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
           {isLinkMode ? (
             <>
               <p>Discordギルドのメンバーから連携するユーザーを選択し、ユーザープロフィールに保存します。</p>
@@ -582,18 +583,42 @@ export function DiscordMemberPickerDialog({
           )}
         </section>
 
-        <section className="space-y-4">
+        <section className="discord-member-picker-dialog__member-section space-y-4">
           {isLinkMode && !discordUserId ? (
             <p className="text-xs text-danger">Discordにログインしてからメンバー一覧を読み込んでください。</p>
           ) : null}
           {isLinkMode && discordUserId && !guildId ? (
             <p className="text-xs text-danger">Discord設定からギルドを選択するとメンバー一覧を利用できます。</p>
           ) : null}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h3 className="text-sm font-semibold text-surface-foreground">
+          <div className="discord-member-picker-dialog__member-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h3 className="discord-member-picker-dialog__member-title text-sm font-semibold text-surface-foreground">
               ギルドメンバー一覧
             </h3>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="discord-member-picker-dialog__member-controls flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <div className="discord-member-picker-dialog__sort flex items-center gap-2">
+                <label
+                  htmlFor="discord-member-picker-sort-select"
+                  className="discord-member-picker-dialog__sort-label text-xs font-medium text-muted-foreground"
+                >
+                  並び替え
+                </label>
+                <select
+                  id="discord-member-picker-sort-select"
+                  className="discord-member-picker-dialog__sort-select rounded-full border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  value={sortMode}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next === 'name' || next === 'id' || next === 'newest' || next === 'oldest') {
+                      setSortMode(next);
+                    }
+                  }}
+                >
+                  <option value="name">名前順</option>
+                  <option value="id">ID順</option>
+                  <option value="newest">新規加入順</option>
+                  <option value="oldest">古参順</option>
+                </select>
+              </div>
               {membersQuery.isFetching ? (
                 <span className="inline-flex items-center gap-1" aria-live="polite">
                   <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -615,14 +640,16 @@ export function DiscordMemberPickerDialog({
             </div>
           </div>
 
-          <div className="relative">
+          <div className="discord-member-picker-dialog__search relative">
             <MagnifyingGlassIcon
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              className="discord-member-picker-dialog__search-icon pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <input
               type="search"
-              className="w-full rounded-full border border-border/70 bg-surface/30 py-2 pl-10 pr-4 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+              id="discord-member-picker-search-input"
+              aria-label="メンバー検索"
+              className="discord-member-picker-dialog__search-input w-full rounded-full border border-border/70 bg-surface/30 py-2 pl-10 pr-4 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="メンバーを検索 (ニックネーム / ユーザー名)"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
@@ -652,7 +679,7 @@ export function DiscordMemberPickerDialog({
           ) : null}
 
           {!membersQuery.isLoading && !membersQuery.isError && sortedMembers.length > 0 ? (
-            <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            <ul className="discord-member-picker-dialog__member-list max-h-80 space-y-2 overflow-y-auto pr-1">
               {sortedMembers.map((member) => {
                 const isSelected = member.id === selectedMemberId;
                 const avatarUrl = getMemberAvatarUrl(member);
@@ -690,26 +717,26 @@ export function DiscordMemberPickerDialog({
                     <button
                       type="button"
                       onClick={() => handleSelect(member.id)}
-                      className="flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
+                      className="discord-member-picker-dialog__member-button flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
                       aria-pressed={isSelected}
                     >
-                      <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface text-base font-semibold text-muted-foreground">
+                      <span className="discord-member-picker-dialog__member-avatar relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface text-base font-semibold text-muted-foreground">
                         {avatarUrl ? (
                           <img src={avatarUrl} alt="Member avatar" className="h-full w-full object-cover" />
                         ) : (
                           displayName.slice(0, 2)
                         )}
                       </span>
-                      <div className="flex flex-1 flex-col">
-                        <span className="text-sm font-semibold text-surface-foreground">
+                      <div className="discord-member-picker-dialog__member-info flex flex-1 flex-col">
+                        <span className="discord-member-picker-dialog__member-name text-sm font-semibold text-surface-foreground">
                           {displayName}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="discord-member-picker-dialog__member-username text-xs text-muted-foreground">
                           @
                           {fallbackLabel}
                           {member.nick ? ` ／ サーバーニックネーム: ${member.nick}` : ''}
                         </span>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="discord-member-picker-dialog__member-meta mt-2 flex flex-wrap items-center gap-2">
                           <span className={giftBadgeClass}>{giftLabel}</span>
                           {categoryLabel ? (
                             <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
