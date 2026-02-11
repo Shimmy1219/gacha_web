@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
@@ -11,6 +12,7 @@ import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
 import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
 import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
+import { DiscordOauthErrorDialog } from '../modals/dialogs/DiscordOauthErrorDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -26,6 +28,8 @@ import { useHaptics } from '../features/haptics/HapticsProvider';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isMobile } = useResponsiveDashboard();
   const { push } = useModal();
   const persistence = useAppPersistence();
@@ -66,6 +70,40 @@ export function App(): JSX.Element {
       }),
     [push]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const oauthError = params.get('discord_oauth_error');
+
+    if (!oauthError) {
+      return;
+    }
+
+    push(DiscordOauthErrorDialog, {
+      id: 'discord-oauth-error',
+      title: 'Discordとの連携に失敗しました',
+      size: 'sm',
+      intent: 'warning',
+      payload: {
+        oauthError
+      }
+    });
+
+    params.delete('discord_oauth_error');
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch.length > 0 ? `?${nextSearch}` : '',
+        hash: location.hash
+      },
+      { replace: true }
+    );
+  }, [location.hash, location.pathname, location.search, navigate, push]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {

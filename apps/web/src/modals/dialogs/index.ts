@@ -1,6 +1,7 @@
 export * from './CreateGachaWizardDialog';
 export * from './DiscordBotInviteDialog';
 export * from './DiscordMemberPickerDialog';
+export * from './DiscordOauthErrorDialog';
 export * from './DiscordPrivateChannelCategoryDialog';
 export * from './DiscordStorageRecoveryDialog';
 export * from './DrawGachaDialog';

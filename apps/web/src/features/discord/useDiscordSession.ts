@@ -425,7 +425,11 @@ export function useDiscordSession(): UseDiscordSessionResult {
   const login = useCallback(async () => {
     const baseLoginUrl = '/api/auth/discord/start';
     const loginContext = resolveLoginContext();
-    const loginUrl = `${baseLoginUrl}?context=${encodeURIComponent(loginContext)}`;
+    const returnTo =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : '/gacha';
+    const loginUrl = `${baseLoginUrl}?context=${encodeURIComponent(loginContext)}&returnTo=${encodeURIComponent(returnTo)}`;
 
     try {
       logDiscordAuthEvent('Discordログイン開始APIへリクエストを送信します', {
