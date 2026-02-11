@@ -18,24 +18,11 @@ import {
   normalizeOverwriteType,
   resolveBotIdentity,
 } from './_lib/giftChannelUtils.js';
-
-function buildChannelNameFromDisplayName(displayName, memberId){
-  const fallback = `gift-${memberId}`;
-  if (typeof displayName !== 'string'){ return fallback; }
-  const trimmed = displayName.trim();
-  if (!trimmed){ return fallback; }
-
-  const normalized = trimmed.normalize('NFKC').toLowerCase();
-  const whitespaceCollapsed = normalized.replace(/\s+/gu, '-');
-  const sanitized = whitespaceCollapsed
-    .replace(/[^-\p{Letter}\p{Number}_]+/gu, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/^_+|_+$/g, '');
-
-  const candidate = sanitized || fallback;
-  return candidate.length > 90 ? candidate.slice(0, 90) : candidate;
-}
+import {
+  buildChannelNameFromDisplayName,
+  collectLegacyGiftChannelNameCandidates,
+  evaluateChannelForLegacyGiftRepair,
+} from './_lib/findChannelLegacyUtils.js';
 
 function matchesCandidateCategory(candidate, categoryId){
   if (!categoryId){
@@ -548,6 +535,87 @@ export default async function handler(req, res){
       categoryId: categoryId || null,
       channelIds: ownerBotOnlyCandidates.map((candidate) => candidate.channelId),
     });
+  }
+
+  if (categoryId){
+    const legacyNameCandidates = collectLegacyGiftChannelNameCandidates({
+      memberId,
+      memberDisplayNameParam,
+      expectedChannelName
+    });
+    const legacyEvaluations = allChannels.map((channel) =>
+      evaluateChannelForLegacyGiftRepair({
+        channel,
+        ownerId: sess.uid,
+        memberId,
+        categoryId,
+        botUserIdSet,
+        legacyNameCandidates
+      })
+    );
+    legacyEvaluations.forEach((evaluation) => {
+      log.debug('channel evaluation for legacy gift repair', evaluation);
+    });
+
+    const legacyRepairCandidates = legacyEvaluations
+      .filter((evaluation) => evaluation.reason === 'match:legacy_repair_candidate')
+      .filter((evaluation) => typeof evaluation.channelId === 'string');
+
+    if (legacyRepairCandidates.length === 1){
+      const adopted = legacyRepairCandidates[0];
+      if (!botUserId){
+        log.error('bot user id missing, cannot repair legacy channel', {
+          channelId: adopted.channelId,
+        });
+        return res.status(500).json({
+          ok:false,
+          error:'DiscordボットのユーザーIDが設定されていません。',
+        });
+      }
+
+      const normalizedOverwrites = build1to1Overwrites({
+        guildId,
+        ownerId: sess.uid,
+        memberId,
+        botId: botUserId
+      });
+      try {
+        await dFetch(`/channels/${adopted.channelId}`, {
+          token: process.env.DISCORD_BOT_TOKEN,
+          isBot: true,
+          method: 'PATCH',
+          body: {
+            permission_overwrites: normalizedOverwrites
+          }
+        });
+        log.info('legacy channel repaired and adopted as gift channel', {
+          channelId: adopted.channelId,
+          channelName: adopted.channelName,
+          parentId: adopted.parentId,
+          memberId,
+          categoryId: categoryId || null,
+        });
+      } catch (error) {
+        return respondDiscordApiError(error, 'legacy-gift-channel-repair');
+      }
+
+      return res.json({
+        ok:true,
+        channel_id: adopted.channelId,
+        channel_name: adopted.channelName ?? null,
+        created:false,
+        parent_id: adopted.parentId
+      });
+    }
+
+    if (legacyRepairCandidates.length > 1){
+      log.warn('multiple legacy channels matched member name; skip repair adoption', {
+        memberId,
+        categoryId: categoryId || null,
+        expectedChannelName,
+        channelIds: legacyRepairCandidates.map((candidate) => candidate.channelId),
+      });
+    }
   }
 
   if (!allowCreate){
