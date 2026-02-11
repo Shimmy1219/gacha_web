@@ -3,6 +3,7 @@ import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
   assertGuildOwner,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   isDiscordUnknownGuildError,
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
@@ -83,6 +84,7 @@ export default async function handler(req, res){
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
     log.error('discord api request failed', { context, message });

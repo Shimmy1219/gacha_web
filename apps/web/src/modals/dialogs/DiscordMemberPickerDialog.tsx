@@ -27,8 +27,7 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import {
-  isDiscordMissingPermissionsErrorCode,
-  pushDiscordMissingPermissionsWarning
+  pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
 export interface DiscordMemberShareResult {
@@ -54,12 +53,14 @@ interface DiscordMembersResponse {
   ok: boolean;
   members?: DiscordGuildMemberSummary[];
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordGiftChannelsResponse {
   ok: boolean;
   channels?: unknown;
   error?: string;
+  errorCode?: string;
 }
 
 type DiscordMemberPickerMode = 'share' | 'link';
@@ -126,7 +127,8 @@ function useDiscordGuildMembers(
   discordUserId: string | null | undefined,
   guildId: string | null | undefined,
   query: string,
-  categoryId: string | null | undefined
+  categoryId: string | null | undefined,
+  push: ModalComponentProps['push']
 ) {
   const trimmedQuery = query.trim();
   const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
@@ -185,6 +187,11 @@ function useDiscordGuildMembers(
 
       if (!response.ok) {
         const message = payload?.error?.trim();
+        pushDiscordApiWarningByErrorCode(
+          push,
+          payload?.errorCode,
+          message && message.length > 0 ? message : `Discordメンバー一覧の取得に失敗しました (${response.status})`
+        );
         throw new Error(
           message && message.length > 0
             ? `Discordメンバー一覧の取得に失敗しました: ${message}`
@@ -193,6 +200,7 @@ function useDiscordGuildMembers(
       }
 
       if (!payload?.ok || !Array.isArray(payload.members)) {
+        pushDiscordApiWarningByErrorCode(push, payload?.errorCode, payload?.error);
         throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
@@ -236,6 +244,11 @@ function useDiscordGuildMembers(
 
           if (!giftResponse.ok || !giftPayload?.ok) {
             const message = giftPayload?.error?.trim();
+            pushDiscordApiWarningByErrorCode(
+              push,
+              giftPayload?.errorCode,
+              message && message.length > 0 ? message : `お渡しチャンネル一覧の取得に失敗しました (${giftResponse.status})`
+            );
             if (message) {
               console.warn(`Failed to update Discord gift channel cache: ${message}`);
             } else {
@@ -282,7 +295,8 @@ function useDiscordGuildMembers(
     gcTime: 5 * 60 * 1000,
     keepPreviousData: true,
     initialData,
-    initialDataUpdatedAt
+    initialDataUpdatedAt,
+    retry: false
   });
 }
 
@@ -317,7 +331,7 @@ export function DiscordMemberPickerDialog({
   }, [payload?.initialCategory?.id, selectedCategory?.id]);
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId);
+  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId, push);
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
@@ -430,18 +444,18 @@ export function DiscordMemberPickerDialog({
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
-          throw new Error('Discord botの権限が不足しています。');
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
         }
         throw new Error(message);
       }
 
       if (!findPayload.ok) {
         const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
-          throw new Error('Discord botの権限が不足しています。');
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
         }
         throw new Error(message);
       }

@@ -5,6 +5,7 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS,
   DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
   isDiscordMissingPermissionsError,
@@ -356,6 +357,7 @@ export default async function handler(req, res){
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
     if (isDiscordMissingPermissionsError(error)) {

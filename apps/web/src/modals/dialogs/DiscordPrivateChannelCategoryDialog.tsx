@@ -13,8 +13,7 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
-  isDiscordMissingPermissionsErrorCode,
-  pushDiscordMissingPermissionsWarning
+  pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
 interface DiscordCategorySummary {
@@ -44,7 +43,10 @@ interface DiscordPrivateChannelCategoryDialogPayload {
   onCategorySelected?: (category: DiscordGuildCategorySelection) => void;
 }
 
-function useDiscordGuildCategories(guildId: string | null | undefined) {
+function useDiscordGuildCategories(
+  guildId: string | null | undefined,
+  push: ModalComponentProps['push']
+) {
   return useQuery({
     queryKey: ['discord', 'categories', guildId],
     queryFn: async () => {
@@ -61,6 +63,11 @@ function useDiscordGuildCategories(guildId: string | null | undefined) {
       const payload = (await response.json().catch(() => null)) as DiscordCategoriesResponse | null;
       if (!response.ok) {
         const message = payload?.error?.trim();
+        pushDiscordApiWarningByErrorCode(
+          push,
+          payload?.errorCode,
+          message && message.length > 0 ? message : `カテゴリ情報の取得に失敗しました (${response.status})`
+        );
         throw new Error(
           message && message.length > 0
             ? `カテゴリ情報の取得に失敗しました: ${message}`
@@ -75,7 +82,8 @@ function useDiscordGuildCategories(guildId: string | null | undefined) {
     enabled: Boolean(guildId),
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
-    keepPreviousData: true
+    keepPreviousData: true,
+    retry: false
   });
 }
 
@@ -99,7 +107,7 @@ export function DiscordPrivateChannelCategoryDialog({
 
   const isSubmitting = submitStage !== 'idle';
 
-  const categoriesQuery = useDiscordGuildCategories(guildId);
+  const categoriesQuery = useDiscordGuildCategories(guildId, push);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
 
   useEffect(() => {
@@ -134,8 +142,7 @@ export function DiscordPrivateChannelCategoryDialog({
       const payload = (await response.json().catch(() => null)) as DiscordCategoryCreateResponse | null;
       if (!response.ok || !payload?.ok || !payload.category) {
         const message = payload?.error || 'カテゴリの作成に失敗しました。';
-        if (isDiscordMissingPermissionsErrorCode(payload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
+        if (pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message)) {
           setCreateError(null);
           return;
         }
@@ -207,8 +214,7 @@ export function DiscordPrivateChannelCategoryDialog({
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
           setSubmitError(null);
           return;
         }
@@ -217,8 +223,7 @@ export function DiscordPrivateChannelCategoryDialog({
 
       if (!findPayload.ok) {
         const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
           setSubmitError(null);
           return;
         }
