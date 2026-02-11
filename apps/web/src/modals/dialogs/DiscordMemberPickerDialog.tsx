@@ -4,7 +4,7 @@ import {
   CheckCircleIcon,
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
@@ -14,8 +14,10 @@ import {
   normalizeDiscordMemberGiftChannels,
   saveDiscordMemberCache,
   mergeDiscordMemberGiftChannels,
+  mergeDiscordGuildMembersGiftChannelMetadata,
   applyGiftChannelMetadataFromCache,
   type DiscordMemberCacheEntry,
+  type DiscordMemberGiftChannelInfo,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
 import { sortDiscordGuildMembers, type DiscordGuildMemberSortMode } from '../../features/discord/discordMemberSorting';
@@ -206,12 +208,16 @@ function useDiscordGuildMembers(
       }
 
       if (guildId && normalizedMembers.length > 0) {
+        let latestChannels: DiscordMemberGiftChannelInfo[] | null = null;
+        const channelMemberIds = trimmedQuery
+          ? normalizedMembers.map((member) => member.id).filter(Boolean)
+          : null;
+
         try {
           const channelParams = new URLSearchParams({ guild_id: guildId });
           if (trimmedQuery) {
-            const memberIds = normalizedMembers.map((member) => member.id).filter(Boolean);
-            if (memberIds.length > 0) {
-              channelParams.set('member_ids', memberIds.join(','));
+            if (channelMemberIds && channelMemberIds.length > 0) {
+              channelParams.set('member_ids', channelMemberIds.join(','));
             }
           }
 
@@ -233,7 +239,14 @@ function useDiscordGuildMembers(
             }
           } else if (discordUserId) {
             const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
-            const mergedEntry = mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+            latestChannels = normalizedChannels;
+            const mergeOptions = channelMemberIds ? { memberIds: channelMemberIds } : undefined;
+            const mergedEntry = mergeDiscordMemberGiftChannels(
+              discordUserId,
+              guildId,
+              normalizedChannels,
+              mergeOptions
+            );
             if (mergedEntry) {
               channelCacheEntry = mergedEntry;
             }
@@ -241,14 +254,21 @@ function useDiscordGuildMembers(
         } catch (error) {
           console.warn('Failed to update Discord gift channel cache', error);
         }
-      }
 
-      if (!channelCacheEntry && discordUserId && guildId) {
-        channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
-      }
+        if (!channelCacheEntry && discordUserId && guildId) {
+          channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
+        }
 
-      if (channelCacheEntry) {
-        normalizedMembers = applyGiftChannelMetadataFromCache(normalizedMembers, channelCacheEntry.members);
+        if (channelCacheEntry) {
+          normalizedMembers = applyGiftChannelMetadataFromCache(normalizedMembers, channelCacheEntry.members);
+        }
+
+        if (latestChannels) {
+          normalizedMembers = mergeDiscordGuildMembersGiftChannelMetadata(normalizedMembers, latestChannels, {
+            memberIds: channelMemberIds,
+            mode: 'replace'
+          });
+        }
       }
 
       return normalizedMembers;
@@ -267,6 +287,7 @@ export function DiscordMemberPickerDialog({
   close,
   push
 }: ModalComponentProps<DiscordMemberPickerPayload>): JSX.Element {
+  const queryClient = useQueryClient();
   const mode: DiscordMemberPickerMode = payload?.mode === 'link' ? 'link' : 'share';
   const isLinkMode = mode === 'link';
   const sharePayload = !isLinkMode ? (payload as DiscordMemberPickerSharePayload | undefined) : undefined;
@@ -417,6 +438,35 @@ export function DiscordMemberPickerDialog({
       if (!channelId) {
         throw new Error('お渡しチャンネルの作成に失敗しました。');
       }
+
+      const nextGiftChannelInfo: DiscordMemberGiftChannelInfo = {
+        memberId: selectedMemberId,
+        channelId,
+        channelName: findPayload.channel_name ?? null,
+        channelParentId: findPayload.parent_id ?? null,
+        botHasView: true
+      };
+
+      // Gift channel creation can succeed even if the subsequent send fails.
+      // Update cache so the member list reflects "お渡しチャンネル未作成" -> created.
+      mergeDiscordMemberGiftChannels(discordUserId, guildId, [nextGiftChannelInfo], {
+        memberIds: [selectedMemberId],
+        mode: 'upsert'
+      });
+
+      const trimmedQuery = debouncedQuery.trim();
+      queryClient.setQueryData<DiscordGuildMemberSummary[]>(
+        ['discord', 'members', discordUserId, guildId, trimmedQuery],
+        (current) => {
+          if (!Array.isArray(current)) {
+            return current;
+          }
+          return mergeDiscordGuildMembersGiftChannelMetadata(current, [nextGiftChannelInfo], {
+            memberIds: [selectedMemberId],
+            mode: 'upsert'
+          });
+        }
+      );
 
       const title =
         sharePayload?.shareTitle ?? `${sharePayload?.receiverName ?? '景品'}のお渡しリンクです`;
