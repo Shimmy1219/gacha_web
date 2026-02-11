@@ -51,6 +51,7 @@ export default async function handler(req, res){
   }
 
   const guildId = typeof req.query.guild_id === 'string' ? req.query.guild_id.trim() : '';
+  const categoryId = typeof req.query.category_id === 'string' ? req.query.category_id.trim() : '';
   if (!guildId){
     log.warn('missing guild identifier');
     return res.status(400).json({ ok:false, error:'guild_id required' });
@@ -63,6 +64,7 @@ export default async function handler(req, res){
 
   log.debug('request parameters normalized', {
     guildId,
+    categoryId: categoryId || null,
     memberIdFilterCount: memberIdCandidates.size,
   });
 
@@ -126,7 +128,11 @@ export default async function handler(req, res){
     ? candidates.filter((candidate) => memberIdCandidates.has(candidate.memberId))
     : candidates;
 
-  const payload = filtered.map((candidate) => ({
+  const categoryFiltered = categoryId
+    ? filtered.filter((candidate) => candidate.parentId === categoryId)
+    : filtered;
+
+  const payload = categoryFiltered.map((candidate) => ({
     channel_id: candidate.channelId,
     channel_name: candidate.channelName ?? null,
     parent_id: candidate.parentId ?? null,
@@ -136,6 +142,7 @@ export default async function handler(req, res){
 
   log.info('gift channel listing completed', {
     guildId,
+    categoryId: categoryId || null,
     returnedCount: payload.length,
   });
 

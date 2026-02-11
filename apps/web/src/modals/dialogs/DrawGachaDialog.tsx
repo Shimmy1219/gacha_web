@@ -1692,6 +1692,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         mode: 'link',
         guildId: guildSelection.guildId,
         discordUserId: staffDiscordId,
+        initialCategory: guildSelection.privateChannelCategory ?? null,
         submitLabel: '追加',
         refreshLabel: 'メンバー情報の更新',
         onMemberPicked: async (member) => {

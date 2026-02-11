@@ -125,7 +125,8 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 function useDiscordGuildMembers(
   discordUserId: string | null | undefined,
   guildId: string | null | undefined,
-  query: string
+  query: string,
+  categoryId: string | null | undefined
 ) {
   const trimmedQuery = query.trim();
   const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
@@ -162,7 +163,7 @@ function useDiscordGuildMembers(
   }, [cacheEntry]);
 
   return useQuery<DiscordGuildMemberSummary[]>({
-    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery],
+    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryId ?? null],
     queryFn: async () => {
       if (!discordUserId || !guildId) {
         return [];
@@ -215,6 +216,9 @@ function useDiscordGuildMembers(
 
         try {
           const channelParams = new URLSearchParams({ guild_id: guildId });
+          if (categoryId) {
+            channelParams.set('category_id', categoryId);
+          }
           if (trimmedQuery) {
             if (channelMemberIds && channelMemberIds.length > 0) {
               channelParams.set('member_ids', channelMemberIds.join(','));
@@ -303,9 +307,17 @@ export function DiscordMemberPickerDialog({
   const [selectedCategory, setSelectedCategory] = useState<DiscordGuildCategorySelection | null>(
     !isLinkMode ? payload?.initialCategory ?? null : null
   );
+  const categoryFilterId = useMemo(() => {
+    const selectedId = selectedCategory?.id?.trim();
+    if (selectedId) {
+      return selectedId;
+    }
+    const initialId = payload?.initialCategory?.id?.trim();
+    return initialId && initialId.length > 0 ? initialId : null;
+  }, [payload?.initialCategory?.id, selectedCategory?.id]);
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery);
+  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId);
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
@@ -456,7 +468,7 @@ export function DiscordMemberPickerDialog({
 
       const trimmedQuery = debouncedQuery.trim();
       queryClient.setQueryData<DiscordGuildMemberSummary[]>(
-        ['discord', 'members', discordUserId, guildId, trimmedQuery],
+        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterId ?? null],
         (current) => {
           if (!Array.isArray(current)) {
             return current;

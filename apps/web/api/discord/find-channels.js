@@ -14,6 +14,7 @@ import {
 import { createRequestLogger } from '../_lib/logger.js';
 import {
   extractGiftChannelCandidates,
+  extractOwnerBotOnlyGiftChannelCandidates,
   resolveBotIdentity,
 } from './_lib/giftChannelUtils.js';
 
@@ -33,6 +34,30 @@ function buildChannelNameFromDisplayName(displayName, memberId){
 
   const candidate = sanitized || fallback;
   return candidate.length > 90 ? candidate.slice(0, 90) : candidate;
+}
+
+function matchesCandidateCategory(candidate, categoryId){
+  if (!categoryId){
+    return true;
+  }
+  return candidate.parentId === categoryId;
+}
+
+function matchesOwnerBotOnlyCandidateByName(candidateName, expectedName, memberId){
+  if (typeof candidateName !== 'string'){
+    return false;
+  }
+  const normalizedName = candidateName.trim().toLowerCase();
+  if (!normalizedName){
+    return false;
+  }
+
+  const normalizedExpected = typeof expectedName === 'string' ? expectedName.trim().toLowerCase() : '';
+  if (normalizedExpected && normalizedName === normalizedExpected){
+    return true;
+  }
+
+  return normalizedName === `gift-${memberId}`.toLowerCase();
 }
 
 export default async function handler(req, res){
@@ -147,7 +172,23 @@ export default async function handler(req, res){
     candidateCount: candidates.length,
   });
 
-  const matchesForMember = candidates.filter((candidate) => candidate.memberId === memberId);
+  const expectedChannelName = buildChannelNameFromDisplayName(memberDisplayNameParam, memberId);
+  const matchesForMember = candidates.filter(
+    (candidate) => candidate.memberId === memberId && matchesCandidateCategory(candidate, categoryId)
+  );
+  const outOfCategoryMatches = categoryId
+    ? candidates.filter((candidate) => candidate.memberId === memberId && candidate.parentId !== categoryId)
+    : [];
+
+  if (categoryId && outOfCategoryMatches.length > 0){
+    log.info('existing member channels found outside selected category and ignored', {
+      memberId,
+      categoryId,
+      ignoredCount: outOfCategoryMatches.length,
+      ignoredChannelIds: outOfCategoryMatches.map((candidate) => candidate.channelId),
+    });
+  }
+
   const matchWithBot = matchesForMember.find((candidate) => candidate.botHasView);
   const matchWithoutBot = matchesForMember.find((candidate) => !candidate.botHasView);
 
@@ -203,6 +244,56 @@ export default async function handler(req, res){
     });
   }
 
+  const ownerBotOnlyCandidates = extractOwnerBotOnlyGiftChannelCandidates({
+    channels: textChannels,
+    ownerId: sess.uid,
+    guildId,
+    botUserIdSet,
+  })
+    .filter((candidate) => matchesCandidateCategory(candidate, categoryId))
+    .filter((candidate) => matchesOwnerBotOnlyCandidateByName(candidate.channelName, expectedChannelName, memberId));
+
+  if (ownerBotOnlyCandidates.length === 1){
+    const adopted = ownerBotOnlyCandidates[0];
+    try {
+      await dFetch(`/channels/${adopted.channelId}/permissions/${memberId}`, {
+        token: process.env.DISCORD_BOT_TOKEN,
+        isBot:true,
+        method:'PUT',
+        body: {
+          type: 1,
+          allow: allowMaskString,
+          deny: '0'
+        }
+      });
+      log.info('adopted owner+bot channel and granted member permission', {
+        channelId: adopted.channelId,
+        memberId,
+        parentId: adopted.parentId,
+        categoryId: categoryId || null,
+      });
+    } catch (error) {
+      return respondDiscordApiError(error, 'guild-channel-grant-member');
+    }
+
+    return res.json({
+      ok:true,
+      channel_id: adopted.channelId,
+      channel_name: adopted.channelName ?? null,
+      created:false,
+      parent_id: adopted.parentId
+    });
+  }
+
+  if (ownerBotOnlyCandidates.length > 1){
+    log.warn('multiple owner+bot channels matched member name; skip adoption', {
+      memberId,
+      expectedChannelName,
+      categoryId: categoryId || null,
+      channelIds: ownerBotOnlyCandidates.map((candidate) => candidate.channelId),
+    });
+  }
+
   if (!allowCreate){
     log.info('matching channel not found and creation disabled', { allowCreate });
     return res.json({ ok:true, channel_id: null, created:false });
@@ -227,13 +318,13 @@ export default async function handler(req, res){
       guildId,
       memberId,
       parentCategoryId: category.id,
-      channelNamePreview: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
+      channelNamePreview: expectedChannelName,
       overwritePayload: overwrites,
     });
     created = await dFetch(`/guilds/${guildId}/channels`, {
       token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
       body: {
-        name: buildChannelNameFromDisplayName(memberDisplayNameParam, memberId),
+        name: expectedChannelName,
         type: 0,               // text
         parent_id: category.id,
         permission_overwrites: overwrites
