@@ -19,6 +19,7 @@ export * from './PrizeSettingsDialog';
 export * from './RarityInUseDialog';
 export * from './RarityRateErrorDialog';
 export * from './RaritySimulationDialog';
+export * from './ReleaseNotesDialog';
 export * from './RiaguConfigDialog';
 export * from './RiaguDisableConfirmDialog';
 export * from './SaveOptionsDialog';

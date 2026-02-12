@@ -13,6 +13,7 @@ import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConfli
 import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
 import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
 import { DiscordOauthErrorDialog } from '../modals/dialogs/DiscordOauthErrorDialog';
+import { ReleaseNotesDialog } from '../modals/dialogs/ReleaseNotesDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -25,9 +26,11 @@ import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
 import { useHaptics } from '../features/haptics/HapticsProvider';
+import { getUnreadReleaseNotes, RELEASE_NOTES } from '../content/releaseNotes';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
+  const releaseModalOpenedForRef = useRef<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { isMobile } = useResponsiveDashboard();
@@ -104,6 +107,45 @@ export function App(): JSX.Element {
       { replace: true }
     );
   }, [location.hash, location.pathname, location.search, navigate, push]);
+
+  useEffect(() => {
+    const isGachaRootPath = location.pathname === '/gacha' || location.pathname === '/gacha/';
+    if (!isGachaRootPath) {
+      releaseModalOpenedForRef.current = null;
+      return;
+    }
+
+    const latestRelease = RELEASE_NOTES[0];
+    if (!latestRelease) {
+      return;
+    }
+
+    const lastSeenRelease = uiPreferencesStore.getLastSeenRelease();
+    const unreadReleaseNotes = getUnreadReleaseNotes(RELEASE_NOTES, lastSeenRelease);
+    if (unreadReleaseNotes.length === 0) {
+      releaseModalOpenedForRef.current = null;
+      return;
+    }
+
+    if (releaseModalOpenedForRef.current === latestRelease.id) {
+      return;
+    }
+
+    releaseModalOpenedForRef.current = latestRelease.id;
+    push(ReleaseNotesDialog, {
+      id: 'release-notes-dialog',
+      title: 'アップデート情報',
+      description: '更新内容をご確認ください。',
+      size: 'md',
+      showHeaderCloseButton: true,
+      payload: {
+        entries: unreadReleaseNotes
+      },
+      onClose: () => {
+        uiPreferencesStore.setLastSeenRelease(latestRelease.id, { persist: 'immediate' });
+      }
+    });
+  }, [location.pathname, push, uiPreferencesState, uiPreferencesStore]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
