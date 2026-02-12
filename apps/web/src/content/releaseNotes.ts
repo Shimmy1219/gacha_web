@@ -7,15 +7,24 @@ export interface ReleaseNoteEntry {
 
 export const RELEASE_NOTES: ReleaseNoteEntry[] = [
   {
-    id: '2026-02-12-release-notes-modal',
-    title: 'アップデート情報モーダルを追加',
+    id: '2026-02-12-initial-release',
+    title: 'β版リリース',
     publishedAt: '2026-02-12',
     items: [
-      'ガチャページ(/gacha)で更新内容を確認できるアップデート情報モーダルを追加しました。',
-      '前回確認したリリースIDを保存し、未読の更新がある時のみ表示するようにしました。',
-      '初回アクセス時も最新のアップデート情報が表示されるようにしました。'
+      '四遊楽ガチャツールのβ版をリリースしました。',
+      '基本的なすべての機能が利用可能です。',
+      'フィードバックは公式Xアカウント（@shiyuragacha）までお願いいたします。'
     ]
-  }
+  },
+  {
+    id: '2026-02-11-release-notes-modal',
+    title: 'アップデート情報モーダルを追加',
+    publishedAt: '2026-02-11',
+    items: [
+      'ガチャページ(/gacha)で更新内容を確認できるアップデート情報モーダルを追加しました。',
+      'Twitterの公式アカウントへのリンクを追加しました。'
+    ]
+  },
 ];
 
 export function getUnreadReleaseNotes(
