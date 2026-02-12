@@ -349,7 +349,7 @@ export function UserCard({
                 ref={toggleButtonRef}
                 type="button"
                 className={clsx(
-                  'user-card__toggle mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                  'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-200 ease-linear hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
                   open && 'text-accent'
                 )}
                 aria-label="ユーザー詳細の表示を切り替える"
