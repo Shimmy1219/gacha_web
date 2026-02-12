@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import { clsx } from 'clsx';
 
 import { XLogoIcon } from './icons/XLogoIcon';
@@ -5,9 +6,17 @@ import { XLogoIcon } from './icons/XLogoIcon';
 export const OFFICIAL_X_ACCOUNT_ID = '@shiyuragacha';
 export const OFFICIAL_X_ACCOUNT_URL = 'https://x.com/shiyuragacha';
 export const OFFICIAL_X_ACCOUNT_NAME = '四遊楽ガチャツール';
-const OFFICIAL_X_ACCOUNT_TOOL_ICON_URL = '/icons/icon-192.png';
 export const OFFICIAL_X_CONTACT_GUIDE_MESSAGE =
   'バグや不具合、エラー、改善項目、新機能提案がありましたら、公式XアカウントのDMまでお願いします。';
+
+function buildPublicIconPath(fileName: string): string {
+  const baseUrl = import.meta.env.BASE_URL ?? '/';
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBaseUrl}icons/${fileName}`;
+}
+
+const OFFICIAL_X_ACCOUNT_TOOL_ICON_PRIMARY_URL = buildPublicIconPath('icon-192.png');
+const OFFICIAL_X_ACCOUNT_TOOL_ICON_FALLBACK_URL = buildPublicIconPath('icon-512.png');
 
 interface OfficialXAccountPanelProps {
   className?: string;
@@ -19,6 +28,15 @@ export function OfficialXAccountPanel({
   variant = 'default'
 }: OfficialXAccountPanelProps): JSX.Element {
   const isCompact = variant === 'compact';
+  const [toolIconSrc, setToolIconSrc] = useState<string>(OFFICIAL_X_ACCOUNT_TOOL_ICON_PRIMARY_URL);
+  const handleToolIconError = useCallback(() => {
+    setToolIconSrc((currentSrc) => {
+      if (currentSrc === OFFICIAL_X_ACCOUNT_TOOL_ICON_PRIMARY_URL) {
+        return OFFICIAL_X_ACCOUNT_TOOL_ICON_FALLBACK_URL;
+      }
+      return '';
+    });
+  }, []);
 
   return (
     <section
@@ -37,13 +55,20 @@ export function OfficialXAccountPanel({
           )}
           aria-hidden="true"
         >
-          <img
-            src={OFFICIAL_X_ACCOUNT_TOOL_ICON_URL}
-            alt=""
-            className="official-x-account-panel__tool-icon h-full w-full object-cover"
-            loading="lazy"
-            decoding="async"
-          />
+          {toolIconSrc ? (
+            <img
+              src={toolIconSrc}
+              alt=""
+              className="official-x-account-panel__tool-icon h-full w-full object-cover"
+              loading="eager"
+              decoding="async"
+              onError={handleToolIconError}
+            />
+          ) : (
+            <span className="official-x-account-panel__tool-icon-fallback text-xs font-semibold text-muted-foreground">
+              四
+            </span>
+          )}
         </span>
         <div className="official-x-account-panel__header-text">
           <p
