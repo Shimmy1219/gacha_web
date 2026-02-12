@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
+
 export function HomePage(): JSX.Element {
   const [showPwaSuggestion, setShowPwaSuggestion] = useState(false);
 
@@ -52,6 +54,9 @@ export function HomePage(): JSX.Element {
         >
           景品受け取りページへ
         </Link>
+      </div>
+      <div className="home-page__official-x-contact mt-8 w-full max-w-2xl">
+        <OfficialXAccountPanel />
       </div>
     </main>
   );
