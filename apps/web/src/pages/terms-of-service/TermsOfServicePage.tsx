@@ -14,6 +14,7 @@ export function TermsOfServicePage(): JSX.Element {
           {termsOfServiceContent.lead}
         </p>
         <div className="terms-of-service-page__meta mt-4 space-y-1 text-xs text-muted-foreground sm:text-sm">
+          <p className="terms-of-service-page__operator-name">運営者: {termsOfServiceContent.operatorName}</p>
           <p className="terms-of-service-page__effective-date">{termsOfServiceContent.effectiveDateLabel}</p>
           <p className="terms-of-service-page__last-updated">{termsOfServiceContent.lastUpdatedLabel}</p>
         </div>
@@ -48,7 +49,7 @@ export function TermsOfServicePage(): JSX.Element {
       <footer className="terms-of-service-page__footer mt-10 border-t border-border pt-6 text-sm leading-7 text-muted-foreground sm:text-base">
         <h2 className="terms-of-service-page__contact-title text-lg font-semibold text-foreground">お問い合わせ</h2>
         <p className="terms-of-service-page__contact-note mt-2">{termsOfServiceContent.contactNote}</p>
-        <p className="terms-of-service-page__contact-email mt-1">{termsOfServiceContent.contactEmail}</p>
+        <p className="terms-of-service-page__contact-method mt-1">{termsOfServiceContent.contactMethodLabel}</p>
       </footer>
     </article>
   );

@@ -6,21 +6,23 @@ export interface TermsOfServiceSection {
 }
 
 export interface TermsOfServiceContent {
+  operatorName: string;
   title: string;
   lead: string;
   effectiveDateLabel: string;
   lastUpdatedLabel: string;
   sections: TermsOfServiceSection[];
-  contactEmail: string;
+  contactMethodLabel: string;
   contactNote: string;
 }
 
 export const termsOfServiceContent: TermsOfServiceContent = {
+  operatorName: '四遊楽（しゅら）',
   title: '利用規約',
   lead:
-    '本利用規約（以下「本規約」）は、四遊楽ガチャツール運営（以下「運営者」）が提供する「四遊楽ガチャツール」（以下「本サービス」）の利用条件を定めるものです。',
-  effectiveDateLabel: '施行日: 2026年2月12日',
-  lastUpdatedLabel: '最終更新日: 2026年2月12日',
+    '本利用規約（以下「本規約」）は、四遊楽（しゅら）（以下「運営者」）が提供する「四遊楽ガチャツール」（以下「本サービス」）の利用条件を定めるものです。',
+  effectiveDateLabel: '施行日: 2026/02/12',
+  lastUpdatedLabel: '最終更新日: 2026/02/12',
   sections: [
     {
       id: 'application',
@@ -103,6 +105,6 @@ export const termsOfServiceContent: TermsOfServiceContent = {
       ]
     }
   ],
-  contactEmail: 'support@example.com（※運用前に実連絡先へ変更してください）',
+  contactMethodLabel: 'X（旧Twitter）@shiyuragacha のDM',
   contactNote: '本規約に関するお問い合わせは、上記連絡先までご連絡ください。'
 };
