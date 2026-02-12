@@ -4,9 +4,6 @@ export function TermsOfServicePage(): JSX.Element {
   return (
     <article className="terms-of-service-page mx-auto w-full max-w-4xl px-6 py-12 text-foreground sm:py-16">
       <header className="terms-of-service-page__header mb-8 border-b border-border pb-6">
-        <span className="terms-of-service-page__label inline-flex rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Legal
-        </span>
         <h1 className="terms-of-service-page__title mt-4 text-3xl font-bold leading-tight sm:text-4xl">
           {termsOfServiceContent.title}
         </h1>

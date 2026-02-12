@@ -4,9 +4,6 @@ export function PrivacyPolicyPage(): JSX.Element {
   return (
     <article className="privacy-policy-page mx-auto w-full max-w-4xl px-6 py-12 text-foreground sm:py-16">
       <header className="privacy-policy-page__header mb-8 border-b border-border pb-6">
-        <span className="privacy-policy-page__label inline-flex rounded-full border border-border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Privacy
-        </span>
         <h1 className="privacy-policy-page__title mt-4 text-3xl font-bold leading-tight sm:text-4xl">
           {privacyPolicyContent.title}
         </h1>
