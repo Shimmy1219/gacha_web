@@ -135,9 +135,7 @@ export function App(): JSX.Element {
     push(ReleaseNotesDialog, {
       id: 'release-notes-dialog',
       title: 'アップデート情報',
-      description: '更新内容をご確認ください。',
       size: 'md',
-      showHeaderCloseButton: true,
       payload: {
         entries: unreadReleaseNotes
       },

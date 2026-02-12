@@ -32,11 +32,6 @@ export function ReleaseNotesDialog({ payload, close }: ModalComponentProps<Relea
   return (
     <>
       <ModalBody className="release-notes-dialog__body space-y-5">
-        <div className="release-notes-dialog__summary rounded-2xl border border-white/10 bg-surface/50 px-4 py-3">
-          <p className="release-notes-dialog__summary-text text-sm leading-relaxed text-muted-foreground">
-            前回アクセス時からの更新内容です。内容を確認したら閉じるを押してください。
-          </p>
-        </div>
         <div className="release-notes-dialog__entries space-y-4">
           {entries.map((entry) => (
             <section
