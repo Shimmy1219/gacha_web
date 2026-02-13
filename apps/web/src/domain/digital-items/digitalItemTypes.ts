@@ -2,6 +2,7 @@ export type DigitalItemTypeKey =
   | 'icon-ring'
   | 'normal-icon'
   | 'audio'
+  | 'pc-wallpaper'
   | 'iriam-header'
   | 'x-header'
   | 'nepuri'
@@ -19,6 +20,7 @@ export const DIGITAL_ITEM_TYPE_OPTIONS: DigitalItemTypeOption[] = [
   { value: 'icon-ring', label: 'アイコンリング' },
   { value: 'normal-icon', label: '通常アイコン' },
   { value: 'audio', label: '音声' },
+  { value: 'pc-wallpaper', label: 'PC壁紙' },
   { value: 'iriam-header', label: 'IRIAMヘッダー' },
   { value: 'x-header', label: 'Xヘッダー' },
   { value: 'nepuri', label: 'ネップリ' },
@@ -67,30 +69,35 @@ function inferFromImageAspectRatio(params: {
 
   const ratio = width / height;
 
-  // 1) wide headers
-  if (isCloseRatio(ratio, 3 / 1, 0.08)) {
+  // 1) wide headers / pc wallpapers
+  if (isCloseRatio(ratio, 3 / 1, 0.14)) {
     return 'x-header';
   }
-  if (isCloseRatio(ratio, 16 / 9, 0.08) || isCloseRatio(ratio, 21 / 9, 0.1)) {
+  if (isCloseRatio(ratio, 16 / 9, 0.12)) {
+    return 'pc-wallpaper';
+  }
+  if (isCloseRatio(ratio, 32 / 75, 0.12)) {
     return 'iriam-header';
   }
-  if (isCloseRatio(ratio, 7 / 5, 0.08)) {
+
+  // 2) nepuri
+  if (isCloseRatio(ratio, 7 / 5, 0.1) || isCloseRatio(ratio, 5 / 7, 0.1)) {
     return 'nepuri';
   }
 
-  // 2) portrait backgrounds
+  // 3) smartphone / ime backgrounds
   if (
-    isCloseRatio(ratio, 9 / 16, 0.14) ||
-    isCloseRatio(ratio, 9 / 19.5, 0.16) ||
-    isCloseRatio(ratio, 9 / 20, 0.16)
+    isCloseRatio(ratio, 9 / 16, 0.2) ||
+    isCloseRatio(ratio, 9 / 19.5, 0.22) ||
+    isCloseRatio(ratio, 9 / 20, 0.22)
   ) {
     return 'smartphone-wallpaper';
   }
-  if (isCloseRatio(ratio, 3 / 4, 0.14) || isCloseRatio(ratio, 2 / 3, 0.14)) {
+  if (isCloseRatio(ratio, 4 / 3, 0.12) || isCloseRatio(ratio, 5 / 4, 0.12)) {
     return 'simeji-background';
   }
 
-  // 3) square-like (icon/icon-ring)
+  // 4) square-like (icon/icon-ring)
   if (isCloseRatio(ratio, 1 / 1, 0.06)) {
     const normalizedMime = typeof mimeType === 'string' ? mimeType.toLowerCase() : '';
     // アイコンリングは透過PNGで配布されることが多い前提で、PNG/WebP/GIFを優先して推定する。
