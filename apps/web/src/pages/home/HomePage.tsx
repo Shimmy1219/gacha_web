@@ -55,6 +55,21 @@ export function HomePage(): JSX.Element {
           景品受け取りページへ
         </Link>
       </div>
+      <div className="home-page__legal-links mt-12 flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
+        <Link
+          to="/terms"
+          className="home-page__legal-link underline-offset-4 transition hover:text-foreground hover:underline"
+        >
+          利用規約
+        </Link>
+        <span className="home-page__legal-divider text-border">|</span>
+        <Link
+          to="/privacy-policy"
+          className="home-page__legal-link underline-offset-4 transition hover:text-foreground hover:underline"
+        >
+          プライバシーポリシー
+        </Link>
+      </div>
       <div className="home-page__official-x-contact mt-8 w-full max-w-2xl">
         <OfficialXAccountPanel />
       </div>

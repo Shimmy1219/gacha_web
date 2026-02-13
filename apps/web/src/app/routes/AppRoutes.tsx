@@ -3,9 +3,11 @@ import { Navigate, Outlet, useRoutes } from 'react-router-dom';
 import { GachaLayout, type GachaLayoutProps } from '../../layouts/GachaLayout';
 import { MarketingLayout } from '../../layouts/MarketingLayout';
 import { HomePage } from '../../pages/home/HomePage';
+import { PrivacyPolicyPage } from '../../pages/privacy-policy/PrivacyPolicyPage';
 import { ReceivePage } from '../../pages/receive/ReceivePage';
 import { ReceiveHistoryPage } from '../../pages/receive/ReceiveHistoryPage';
 import { ReceiveListPage } from '../../pages/receive/ReceiveListPage';
+import { TermsOfServicePage } from '../../pages/terms-of-service/TermsOfServicePage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
 import { GachaTestPage } from '../../pages/gachaTest/GachaTestPage';
 
@@ -35,8 +37,10 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
       path: '/',
       element: <MarketingLayoutContainer />,
       children: [
-        { index: true, element: <HomePage /> },
-        { path: 'home', element: <HomePage /> }
+        { index: true, element: <Navigate to="home" replace /> },
+        { path: 'home', element: <HomePage /> },
+        { path: 'terms', element: <TermsOfServicePage /> },
+        { path: 'privacy-policy', element: <PrivacyPolicyPage /> }
       ]
     },
     {
