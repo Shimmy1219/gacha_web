@@ -4,6 +4,7 @@ export type DigitalItemTypeKey =
   | 'audio'
   | 'iriam-header'
   | 'x-header'
+  | 'nepuri'
   | 'smartphone-wallpaper'
   | 'simeji-background'
   | 'video'
@@ -20,6 +21,7 @@ export const DIGITAL_ITEM_TYPE_OPTIONS: DigitalItemTypeOption[] = [
   { value: 'audio', label: '音声' },
   { value: 'iriam-header', label: 'IRIAMヘッダー' },
   { value: 'x-header', label: 'Xヘッダー' },
+  { value: 'nepuri', label: 'ネップリ' },
   { value: 'smartphone-wallpaper', label: 'スマホ壁紙' },
   { value: 'simeji-background', label: 'Simeji背景' },
   { value: 'video', label: '動画' },
@@ -71,6 +73,9 @@ function inferFromImageAspectRatio(params: {
   }
   if (isCloseRatio(ratio, 16 / 9, 0.08) || isCloseRatio(ratio, 21 / 9, 0.1)) {
     return 'iriam-header';
+  }
+  if (isCloseRatio(ratio, 7 / 5, 0.08)) {
+    return 'nepuri';
   }
 
   // 2) portrait backgrounds
@@ -185,4 +190,3 @@ export async function inferDigitalItemTypeFromImageUrl(params: {
   }
   return inferFromImageAspectRatio({ ...dimensions, mimeType: params.mimeType });
 }
-

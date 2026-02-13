@@ -32,7 +32,7 @@ interface ReceiveInventoryItem {
   isRiagu: boolean;
   obtainedCount: number;
   kind: ReceiveMediaKind;
-  digitalItemType: DigitalItemTypeKey;
+  digitalItemType: DigitalItemTypeKey | null;
   previewUrl: string | null;
   sourceItems: ReceiveMediaItem[];
   isOwned: boolean;
@@ -141,7 +141,9 @@ function ReceiveInventoryItemCard({
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="chip">x{item.obtainedCount}</span>
-                <span className="chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+                {item.digitalItemType ? (
+                  <span className="chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+                ) : null}
                 {item.isRiagu ? (
                   <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
                 ) : null}
@@ -321,7 +323,7 @@ export function ReceiveListPage(): JSX.Element {
                   isRiagu: Boolean(metadata.isRiagu),
                   obtainedCount: obtained,
                   kind: 'unknown',
-                  digitalItemType: metadata.digitalItemType ?? 'other',
+                  digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
                   previewUrl: null,
                   sourceItems: [],
                   isOwned: true
@@ -360,7 +362,9 @@ export function ReceiveListPage(): JSX.Element {
               const existing = itemMap.get(itemKey);
               if (existing) {
                 existing.kind = item.kind;
-                if (item.metadata?.digitalItemType) {
+                if (item.metadata?.isRiagu) {
+                  existing.digitalItemType = null;
+                } else if (item.metadata?.digitalItemType) {
                   existing.digitalItemType = item.metadata.digitalItemType;
                 }
                 if (!existing.previewUrl && item.kind === 'image') {
@@ -393,7 +397,7 @@ export function ReceiveListPage(): JSX.Element {
                   isRiagu: Boolean(item.metadata?.isRiagu),
                   obtainedCount: obtained,
                   kind: item.kind,
-                  digitalItemType: item.metadata?.digitalItemType ?? 'other',
+                  digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
                   previewUrl,
                   sourceItems: [item],
                   isOwned: true
@@ -445,6 +449,9 @@ export function ReceiveListPage(): JSX.Element {
                     existing.itemId = itemId;
                   }
                   existing.isRiagu = existing.isRiagu || Boolean(item.isRiagu);
+                  if (existing.isRiagu) {
+                    existing.digitalItemType = null;
+                  }
                 } else {
                   itemMap.set(itemKey, {
                     key: itemKey,
@@ -458,7 +465,7 @@ export function ReceiveListPage(): JSX.Element {
                     isRiagu: Boolean(item.isRiagu),
                     obtainedCount: 0,
                     kind: 'unknown',
-                    digitalItemType: 'other',
+                    digitalItemType: item.isRiagu ? null : 'other',
                     previewUrl: null,
                     sourceItems: [],
                     isOwned: false
@@ -546,7 +553,7 @@ export function ReceiveListPage(): JSX.Element {
 
     return groups
       .map((group) => {
-        const filteredItems = group.items.filter((item) => selected.has(item.digitalItemType));
+        const filteredItems = group.items.filter((item) => item.digitalItemType && selected.has(item.digitalItemType));
         if (filteredItems.length === 0) {
           return null;
         }

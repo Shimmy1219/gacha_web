@@ -145,6 +145,7 @@ function areAssetsEqual(left: PrizeSettingsAsset[], right: PrizeSettingsAsset[])
 interface AssetPreviewItemProps {
   asset: PrizeSettingsAsset;
   isPrimary: boolean;
+  enableDigitalItemType: boolean;
   onRemove?: (assetId: string) => void;
   onRequestDigitalItemTypeChange?: (assetId: string, currentType: DigitalItemTypeKey, assetName: string) => void;
   onInferredDigitalItemType?: (assetId: string, inferredType: DigitalItemTypeKey) => void;
@@ -153,6 +154,7 @@ interface AssetPreviewItemProps {
 function AssetPreviewItem({
   asset,
   isPrimary,
+  enableDigitalItemType,
   onRemove,
   onRequestDigitalItemTypeChange,
   onInferredDigitalItemType
@@ -170,6 +172,10 @@ function AssetPreviewItem({
   const [inferredType, setInferredType] = useState<DigitalItemTypeKey | null>(null);
 
   useEffect(() => {
+    if (!enableDigitalItemType) {
+      setInferredType(null);
+      return;
+    }
     if (normalizedExplicitType) {
       setInferredType(null);
       return;
@@ -215,6 +221,7 @@ function AssetPreviewItem({
     };
   }, [
     asset.assetId,
+    enableDigitalItemType,
     isAudioPreview,
     isImagePreview,
     isVideoPreview,
@@ -260,13 +267,15 @@ function AssetPreviewItem({
               メイン
             </span>
           ) : null}
-          <button
-            type="button"
-            className="prize-settings-dialog__asset-digital-type-button inline-flex items-center rounded-full border border-border/60 bg-surface/40 px-2 py-0.5 text-[10px] font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent"
-            onClick={() => onRequestDigitalItemTypeChange?.(asset.assetId, resolvedDigitalItemType, resolvedAssetName)}
-          >
-            {digitalItemTypeLabel}
-          </button>
+          {enableDigitalItemType ? (
+            <button
+              type="button"
+              className="prize-settings-dialog__asset-digital-type-button inline-flex items-center rounded-full border border-border/60 bg-surface/40 px-2 py-0.5 text-[10px] font-semibold text-surface-foreground transition hover:border-accent/60 hover:text-accent"
+              onClick={() => onRequestDigitalItemTypeChange?.(asset.assetId, resolvedDigitalItemType, resolvedAssetName)}
+            >
+              {digitalItemTypeLabel}
+            </button>
+          ) : null}
         </div>
       </div>
       {onRemove ? (
@@ -340,9 +349,28 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
   const currentRarityColor = selectedRarityOption?.color ??
     (rarityId === payload?.rarityId ? payload?.rarityColor : undefined);
 
+  const applyRiaguTarget = useCallback((nextValue: boolean) => {
+    setRiaguTarget(nextValue);
+    if (!nextValue) {
+      return;
+    }
+    inferredDigitalItemTypesRef.current.clear();
+    setAssetEntries((previous) =>
+      previous.map((entry) => {
+        if (!entry.digitalItemType) {
+          return entry;
+        }
+        return {
+          ...entry,
+          digitalItemType: null
+        };
+      })
+    );
+  }, []);
+
   const handleRiaguToggleChange = (nextValue: boolean) => {
     if (!payload) {
-      setRiaguTarget(nextValue);
+      applyRiaguTarget(nextValue);
       return;
     }
 
@@ -362,14 +390,14 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           itemName: payload.itemName,
           assignmentCount,
           onConfirm: () => {
-            setRiaguTarget(false);
+            applyRiaguTarget(false);
           }
         }
       });
       return;
     }
 
-    setRiaguTarget(nextValue);
+    applyRiaguTarget(nextValue);
   };
 
   const handleOriginalPrizeToggleChange = useCallback(
@@ -532,13 +560,22 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
       assets:
         originalPrize
           ? []
-          : normalizeAssets(assetEntries).map((entry) => ({
-              ...entry,
-              digitalItemType:
-                normalizeDigitalItemType(entry.digitalItemType) ??
-                inferredDigitalItemTypesRef.current.get(entry.assetId) ??
-                'other'
-            }))
+          : normalizeAssets(assetEntries).map((entry) => {
+              const normalizedAsset = {
+                assetId: entry.assetId,
+                thumbnailAssetId: entry.thumbnailAssetId ?? null
+              } satisfies PrizeSettingsAsset;
+              if (riaguTarget) {
+                return normalizedAsset;
+              }
+              return {
+                ...normalizedAsset,
+                digitalItemType:
+                  normalizeDigitalItemType(entry.digitalItemType) ??
+                  inferredDigitalItemTypesRef.current.get(entry.assetId) ??
+                  'other'
+              } satisfies PrizeSettingsAsset;
+            })
     });
 
     unsavedAssetIdsRef.current.clear();
@@ -688,11 +725,16 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
                 key={asset.assetId}
                 asset={asset}
                 isPrimary={index === 0}
+                enableDigitalItemType={!riaguTarget}
                 onRemove={handleRemoveAsset}
-                onRequestDigitalItemTypeChange={handleRequestDigitalItemTypeChange}
-                onInferredDigitalItemType={(assetId, inferredType) => {
-                  inferredDigitalItemTypesRef.current.set(assetId, inferredType);
-                }}
+                onRequestDigitalItemTypeChange={!riaguTarget ? handleRequestDigitalItemTypeChange : undefined}
+                onInferredDigitalItemType={
+                  !riaguTarget
+                    ? (assetId, inferredType) => {
+                        inferredDigitalItemTypesRef.current.set(assetId, inferredType);
+                      }
+                    : undefined
+                }
               />
             ))}
           </div>

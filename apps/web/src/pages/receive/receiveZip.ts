@@ -106,6 +106,7 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
     const mapped: Record<string, ReceiveItemMetadata> = {};
     for (const [id, metadata] of Object.entries(parsed)) {
       const digitalItemType = normalizeDigitalItemType((metadata as { digitalItemType?: unknown }).digitalItemType) ?? undefined;
+      const isRiagu = Boolean((metadata as { isRiagu?: unknown }).isRiagu);
       mapped[id] = {
         id,
         ...metadata,
@@ -113,7 +114,7 @@ async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItem
         gachaId: typeof metadata.gachaId === 'string' ? metadata.gachaId : metadata.gachaId ?? null,
         itemId: typeof metadata.itemId === 'string' ? metadata.itemId : metadata.itemId ?? null,
         rarityColor: metadata.rarityColor ?? null,
-        digitalItemType,
+        digitalItemType: isRiagu ? undefined : digitalItemType,
         isOmitted: Boolean(metadata.isOmitted)
       };
     }
@@ -199,15 +200,20 @@ async function extractReceiveMediaItemsFromZip(
     let processed = 0;
 
     for (const metadata of metadataEntries) {
+      const isRiaguItem = Boolean(metadata.isRiagu);
       if (!metadata.filePath) {
-        metadata.digitalItemType = normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
+        metadata.digitalItemType = isRiaguItem
+          ? undefined
+          : normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
       }
       const entry = findZipObjectByRelativePath(zip, metadata.filePath);
       if (!entry) {
-        metadata.digitalItemType = normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
+        metadata.digitalItemType = isRiaguItem
+          ? undefined
+          : normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
@@ -218,12 +224,14 @@ async function extractReceiveMediaItemsFromZip(
       const mimeType = blobEntry.type || undefined;
       const kind = detectMediaKind(filename, mimeType);
       const digitalItemType =
-        normalizeDigitalItemType(metadata.digitalItemType) ??
-        (await inferDigitalItemTypeFromBlob({
-          blob: blobEntry,
-          mimeType,
-          kindHint: kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'other'
-        }));
+        isRiaguItem
+          ? undefined
+          : normalizeDigitalItemType(metadata.digitalItemType) ??
+            (await inferDigitalItemTypeFromBlob({
+              blob: blobEntry,
+              mimeType,
+              kindHint: kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'other'
+            }));
       metadata.digitalItemType = digitalItemType;
       mediaItems.push({
         id: metadata.id,

@@ -109,6 +109,9 @@ export function CatalogDigitalItemTypeMigrationGate(): null {
 
         Object.values(state.byGacha ?? {}).forEach((gacha) => {
           Object.values(gacha?.items ?? {}).forEach((item) => {
+            if (Boolean(item?.riagu)) {
+              return;
+            }
             const assets = Array.isArray(item?.assets) ? item.assets : [];
             assets.forEach((asset) => {
               const assetId = typeof asset?.assetId === 'string' ? asset.assetId.trim() : '';
@@ -219,6 +222,25 @@ export function CatalogDigitalItemTypeMigrationGate(): null {
                 const assets = Array.isArray(item.assets) ? item.assets : [];
                 if (assets.length === 0) {
                   nextItems[itemId] = item;
+                  return;
+                }
+
+                if (Boolean(item.riagu)) {
+                  const nextAssets = assets.map((asset) => {
+                    const hasDigitalItemTypeKey = Object.prototype.hasOwnProperty.call(asset ?? {}, 'digitalItemType');
+                    const existing = normalizeDigitalItemType((asset as { digitalItemType?: unknown }).digitalItemType);
+                    if (!hasDigitalItemTypeKey && !existing) {
+                      return asset;
+                    }
+                    changed = true;
+                    const { digitalItemType: _removed, ...rest } = asset as {
+                      assetId: string;
+                      thumbnailAssetId?: string | null;
+                      digitalItemType?: unknown;
+                    };
+                    return rest;
+                  });
+                  nextItems[itemId] = { ...item, assets: nextAssets };
                   return;
                 }
 

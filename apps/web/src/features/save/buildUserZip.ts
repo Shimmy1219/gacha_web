@@ -50,7 +50,7 @@ interface ZipItemMetadata {
   rarityColor: string | null;
   isRiagu: boolean;
   riaguType: string | null;
-  digitalItemType: DigitalItemTypeKey;
+  digitalItemType?: DigitalItemTypeKey;
   obtainedCount: number;
   isNewForUser: boolean;
   isOmitted?: boolean;
@@ -249,7 +249,8 @@ function createSelectedAssets(
   const resolvedAssetEntries = assetEntries
     .map((asset) => ({
       assetId: typeof asset?.assetId === 'string' ? asset.assetId.trim() : '',
-      digitalItemType: normalizeDigitalItemType(asset?.digitalItemType) ?? undefined
+      digitalItemType:
+        Boolean(catalogItem.riagu) ? undefined : normalizeDigitalItemType(asset?.digitalItemType) ?? undefined
     }))
     .filter((entry) => entry.assetId.length > 0);
 
@@ -283,7 +284,7 @@ function createSelectedAssets(
       rarityId: catalogItem.rarityId ?? fallbackRarityId,
       count: normalizedCount,
       isRiagu: Boolean(catalogItem.riagu),
-      digitalItemType: entry.digitalItemType
+      digitalItemType: Boolean(catalogItem.riagu) ? undefined : entry.digitalItemType
     });
     return acc;
   }, []);
@@ -1256,9 +1257,10 @@ export async function buildUserZipFromSelection({
             : mimeType?.startsWith('audio/')
               ? 'audio'
               : 'other';
-      const digitalItemType =
-        normalizeDigitalItemType(item.digitalItemType) ??
-        (await inferDigitalItemTypeFromBlob({ blob: asset.blob, mimeType, kindHint }));
+      const digitalItemType = item.isRiagu
+        ? undefined
+        : normalizeDigitalItemType(item.digitalItemType) ??
+          (await inferDigitalItemTypeFromBlob({ blob: asset.blob, mimeType, kindHint }));
       const filePath = `items/${sanitizedGachaName}/${fileName}`;
       const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
@@ -1272,7 +1274,7 @@ export async function buildUserZipFromSelection({
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
-        digitalItemType,
+        digitalItemType: item.isRiagu ? undefined : digitalItemType,
         obtainedCount: item.count,
         isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
         isOmitted: false
@@ -1285,7 +1287,7 @@ export async function buildUserZipFromSelection({
       if (itemMetadataMap[item.assetId]) {
         return;
       }
-      const digitalItemType = normalizeDigitalItemType(item.digitalItemType) ?? 'other';
+      const digitalItemType = item.isRiagu ? undefined : normalizeDigitalItemType(item.digitalItemType) ?? 'other';
       const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
       itemMetadataMap[item.assetId] = {
@@ -1298,7 +1300,7 @@ export async function buildUserZipFromSelection({
         rarityColor,
         isRiagu: item.isRiagu,
         riaguType: resolveRiaguType(snapshot.riaguState, item.itemId),
-        digitalItemType,
+        digitalItemType: item.isRiagu ? undefined : digitalItemType,
         obtainedCount: item.count,
         isNewForUser: isItemNewForUser(snapshot.userInventories, userId, item.gachaId, item.itemId),
         isOmitted: omittedAssetIds.has(item.assetId)
