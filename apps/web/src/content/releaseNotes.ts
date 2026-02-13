@@ -27,6 +27,33 @@ export const RELEASE_NOTES: ReleaseNoteEntry[] = [
       'Twitterの公式アカウントへのリンクを追加しました。'
     ]
   },
+    {
+    id: '2026-02-10-release-notes-modal',
+    title: 'アップデート情報モーダルを追加',
+    publishedAt: '2026-02-10',
+    items: [
+      'ガチャページ(/gacha)で更新内容を確認できるアップデート情報モーダルを追加しました。',
+      'Twitterの公式アカウントへのリンクを追加しました。'
+    ]
+  },
+    {
+    id: '2026-02-09-release-notes-modal',
+    title: 'アップデート情報モーダルを追加',
+    publishedAt: '2026-02-09',
+    items: [
+      'ガチャページ(/gacha)で更新内容を確認できるアップデート情報モーダルを追加しました。',
+      'Twitterの公式アカウントへのリンクを追加しました。'
+    ]
+  },
+    {
+    id: '2026-02-08-release-notes-modal',
+    title: 'アップデート情報モーダルを追加',
+    publishedAt: '2026-02-08',
+    items: [
+      'ガチャページ(/gacha)で更新内容を確認できるアップデート情報モーダルを追加しました。',
+      'Twitterの公式アカウントへのリンクを追加しました。'
+    ]
+  },
 ];
 
 export function getUnreadReleaseNotes(
