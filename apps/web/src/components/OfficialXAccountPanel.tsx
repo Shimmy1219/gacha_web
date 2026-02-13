@@ -6,7 +6,7 @@ export const OFFICIAL_X_ACCOUNT_ID = '@shiyuragacha';
 export const OFFICIAL_X_ACCOUNT_URL = 'https://x.com/shiyuragacha';
 export const OFFICIAL_X_ACCOUNT_NAME = '四遊楽ガチャツール';
 export const OFFICIAL_X_CONTACT_GUIDE_MESSAGE =
-  'バグや不具合、エラー、改善項目、新機能提案がありましたら、公式XアカウントのDMまでお願いします。';
+  'バグやエラー報告、改善点、新機能提案がありましたら、公式Xアカウントまでお願いします。';
 const OFFICIAL_X_ACCOUNT_TOOL_ICON_URL = '/images/shiyuragacha-tool-icon-192.png';
 
 interface OfficialXAccountPanelProps {
