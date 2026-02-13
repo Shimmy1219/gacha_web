@@ -31,7 +31,7 @@ export function ReleaseNotesDialog({ payload, close }: ModalComponentProps<Relea
 
   return (
     <>
-      <ModalBody className="release-notes-dialog__body space-y-5">
+      <ModalBody className="release-notes-dialog__body max-h-[55vh] space-y-5 md:max-h-[60vh]">
         <div className="release-notes-dialog__entries space-y-4">
           {entries.map((entry) => (
             <section
