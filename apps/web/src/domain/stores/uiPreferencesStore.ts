@@ -203,7 +203,7 @@ function normalizeSiteTheme(value: unknown): SiteTheme | null {
   return null;
 }
 
-function detectPreferredSiteTheme(): SiteTheme {
+export function detectPreferredSiteTheme(): SiteTheme {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
     try {
       return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
