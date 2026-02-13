@@ -24,10 +24,28 @@ const RELEASE_FIXTURES: ReleaseNoteEntry[] = [
 ];
 
 describe('getUnreadReleaseNotes', () => {
-  it('returns latest entry on first visit', () => {
+  it('returns up to 10 latest entries on first visit', () => {
     const unread = getUnreadReleaseNotes(RELEASE_FIXTURES, null);
 
-    expect(unread).toEqual([RELEASE_FIXTURES[0]]);
+    expect(unread).toEqual(RELEASE_FIXTURES);
+  });
+
+  it('caps first-visit entries at 10', () => {
+    const manyFixtures: ReleaseNoteEntry[] = Array.from({ length: 12 }, (_, index) => {
+      const releaseNumber = String(12 - index).padStart(3, '0');
+
+      return {
+        id: `release-${releaseNumber}`,
+        title: `Release ${releaseNumber}`,
+        publishedAt: `2026-02-${String((index % 28) + 1).padStart(2, '0')}`,
+        items: [`item-${releaseNumber}`]
+      };
+    });
+
+    const unread = getUnreadReleaseNotes(manyFixtures, null);
+
+    expect(unread).toHaveLength(10);
+    expect(unread).toEqual(manyFixtures.slice(0, 10));
   });
 
   it('returns empty array when latest release is already seen', () => {

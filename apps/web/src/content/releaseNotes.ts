@@ -5,6 +5,8 @@ export interface ReleaseNoteEntry {
   items: string[];
 }
 
+const FIRST_VISIT_RELEASE_LIMIT = 10;
+
 export const RELEASE_NOTES: ReleaseNoteEntry[] = [
   {
     id: '2026-02-12-initial-release',
@@ -39,7 +41,7 @@ export function getUnreadReleaseNotes(
     typeof lastSeenReleaseId === 'string' ? lastSeenReleaseId.trim() : '';
 
   if (!normalizedLastSeenReleaseId) {
-    return [notes[0]];
+    return notes.slice(0, FIRST_VISIT_RELEASE_LIMIT);
   }
 
   const seenIndex = notes.findIndex((note) => note.id === normalizedLastSeenReleaseId);
