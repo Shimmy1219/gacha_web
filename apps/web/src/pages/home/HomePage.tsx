@@ -69,6 +69,7 @@ export function HomePage(): JSX.Element {
         >
           プライバシーポリシー
         </Link>
+      </div>
       <div className="home-page__official-x-contact mt-8 w-full max-w-2xl">
         <OfficialXAccountPanel />
       </div>
