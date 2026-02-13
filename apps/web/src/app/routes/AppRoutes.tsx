@@ -35,7 +35,7 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
       path: '/',
       element: <MarketingLayoutContainer />,
       children: [
-        { index: true, element: <Navigate to="home" replace /> },
+        { index: true, element: <HomePage /> },
         { path: 'home', element: <HomePage /> }
       ]
     },
