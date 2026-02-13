@@ -27,6 +27,7 @@ import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarSt
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
+import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
 import {
   DEFAULT_GACHA_OWNER_SHARE_RATE,
   type DashboardDesktopLayout
@@ -1310,6 +1311,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               );
             })}
           </ul>
+          <div className="page-settings-nav__official-x-contact mt-3">
+            <OfficialXAccountPanel variant="compact" />
+          </div>
         </nav>
         <div
           className={clsx(

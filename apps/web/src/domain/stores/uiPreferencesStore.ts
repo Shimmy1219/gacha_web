@@ -92,6 +92,15 @@ function normalizeKeyword(value: unknown): string {
   return '';
 }
 
+function normalizeReleaseId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -549,6 +558,14 @@ function readApplyLowerThresholdGuaranteesPreference(state: UiPreferencesStateV3
   return normalizeBoolean(guarantee.applyLowerThresholdGuarantees, false);
 }
 
+function readLastSeenRelease(state: UiPreferencesStateV3 | undefined): string | null {
+  if (!state) {
+    return null;
+  }
+
+  return normalizeReleaseId(state.lastSeenRelease);
+}
+
 function ensureState(previous: UiPreferencesStateV3 | undefined): UiPreferencesStateV3 {
   const nowIso = new Date().toISOString();
   if (!previous) {
@@ -747,6 +764,10 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readDrawDialogLastSelectedGachaId(this.state);
   }
 
+  getLastSeenRelease(): string | null {
+    return readLastSeenRelease(this.state);
+  }
+
   getQuickSendNewOnlyPreference(): boolean | null {
     return readQuickSendNewOnlyPreference(this.state);
   }
@@ -825,6 +846,38 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           delete nextState.gacha;
         }
 
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setLastSeenRelease(
+    nextReleaseId: string | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeReleaseId(nextReleaseId);
+
+    this.update(
+      (previous) => {
+        const current = readLastSeenRelease(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+
+        if (normalized) {
+          return {
+            ...base,
+            lastSeenRelease: normalized
+          };
+        }
+
+        const nextState: UiPreferencesStateV3 = { ...base };
+        delete nextState.lastSeenRelease;
         return nextState;
       },
       { persist: persistMode, emit }
