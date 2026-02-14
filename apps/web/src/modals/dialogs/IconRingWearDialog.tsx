@@ -5,7 +5,7 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import type { ReceiveMediaItem } from '../../pages/receive/types';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
-import { saveReceiveBlob } from '../../pages/receive/receiveSave';
+import { saveReceiveItem } from '../../pages/receive/receiveSave';
 import { ReceiveIconSettingsDialog } from './ReceiveIconSettingsDialog';
 
 export interface IconRingWearDialogPayload {
@@ -274,7 +274,15 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     setSavingKey(entry.iconAssetId);
     setError(null);
     try {
-      await saveReceiveBlob(entry.downloadName, entry.blob);
+      await saveReceiveItem({
+        id: `icon-ring-composite-${entry.iconAssetId}`,
+        path: '',
+        filename: entry.downloadName,
+        size: entry.blob.size,
+        blob: entry.blob,
+        kind: 'image',
+        mimeType: entry.blob.type || 'image/png'
+      });
     } catch (saveError) {
       console.error('Failed to save icon ring composite', saveError);
       setError('保存中にエラーが発生しました。もう一度お試しください。');
