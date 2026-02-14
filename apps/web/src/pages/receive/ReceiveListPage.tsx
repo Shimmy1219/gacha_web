@@ -126,10 +126,10 @@ function ReceiveInventoryItemCard({
       )}
     >
       <div className="receive-list-item-card__content-row flex items-start gap-3">
-        <div className="receive-list-item-card__preview-column flex w-16 flex-shrink-0 flex-col items-center gap-1">
+        <div className="receive-list-item-card__preview-column flex w-16 flex-shrink-0 flex-col items-start gap-1">
           {item.rarity ? (
             <span
-              className={clsx('receive-list-item-card__rarity text-sm font-bold', rarityPresentation.className)}
+              className={clsx('receive-list-item-card__rarity self-start text-base font-bold', rarityPresentation.className)}
               style={rarityPresentation.style}
             >
               {item.rarity}
