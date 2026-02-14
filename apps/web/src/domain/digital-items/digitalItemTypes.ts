@@ -57,6 +57,13 @@ function isCloseRatio(actual: number, target: number, relativeTolerance: number)
   return Math.abs(actual - target) / target <= relativeTolerance;
 }
 
+function ratioDistance(actual: number, target: number): number {
+  if (!Number.isFinite(actual) || !Number.isFinite(target) || target <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.abs(actual - target) / target;
+}
+
 function isTransparentCapableImageFormat(params: {
   mimeType?: string | null;
   fileName?: string | null;
@@ -93,12 +100,7 @@ export function inferDigitalItemTypeFromImageDimensions(params: {
     return 'iriam-header';
   }
 
-  // 2) nepuri
-  if (isCloseRatio(ratio, 7 / 5, 0.1) || isCloseRatio(ratio, 5 / 7, 0.1)) {
-    return 'nepuri';
-  }
-
-  // 3) smartphone / ime backgrounds
+  // 2) smartphone wallpapers
   if (
     isCloseRatio(ratio, 9 / 16, 0.2) ||
     isCloseRatio(ratio, 9 / 19.5, 0.22) ||
@@ -106,8 +108,26 @@ export function inferDigitalItemTypeFromImageDimensions(params: {
   ) {
     return 'smartphone-wallpaper';
   }
-  if (isCloseRatio(ratio, 4 / 3, 0.12) || isCloseRatio(ratio, 5 / 4, 0.12)) {
+
+  // 3) nepuri vs simeji conflict resolution
+  const nepuriTargets = ratio > 1 ? [7 / 5] : [5 / 7];
+  const simejiTargets = [4 / 3, 5 / 4];
+  const nepuriTolerance = 0.1;
+  const simejiTolerance = 0.12;
+
+  const nepuriDistance = Math.min(...nepuriTargets.map((target) => ratioDistance(ratio, target)));
+  const simejiDistance = Math.min(...simejiTargets.map((target) => ratioDistance(ratio, target)));
+  const matchesNepuri = nepuriDistance <= nepuriTolerance;
+  const matchesSimeji = ratio > 1 && simejiDistance <= simejiTolerance;
+
+  if (matchesNepuri && matchesSimeji) {
+    return simejiDistance <= nepuriDistance ? 'simeji-background' : 'nepuri';
+  }
+  if (matchesSimeji) {
     return 'simeji-background';
+  }
+  if (matchesNepuri) {
+    return 'nepuri';
   }
 
   // 4) square-like (icon/icon-ring)
