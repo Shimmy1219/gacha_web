@@ -20,6 +20,7 @@ import {
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
+import { IconRingWearDialog, useModal } from '../../modals';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -104,12 +105,18 @@ function ReceiveInventoryItemCard({
   onSave: () => void;
   isSaving: boolean;
 }): JSX.Element {
+  const { push } = useModal();
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.rarityColor ?? undefined),
     [item.rarityColor]
   );
   const previewKind = resolvePreviewKind(item.kind);
   const hasSource = item.sourceItems.length > 0;
+  const ringSourceItem = useMemo(
+    () => item.sourceItems.find((sourceItem) => sourceItem.kind === 'image') ?? item.sourceItems[0] ?? null,
+    [item.sourceItems]
+  );
+  const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
 
   return (
     <div
@@ -151,11 +158,33 @@ function ReceiveInventoryItemCard({
               </div>
             </div>
             {item.isOwned ? (
-              <ReceiveSaveButton
-                onClick={onSave}
-                disabled={isSaving || !hasSource}
-                className="h-8 px-3 text-xs"
-              />
+              <div className="receive-list-item-card__action-group flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                {canWearIconRing ? (
+                  <button
+                    type="button"
+                    className="receive-list-item-card__wear-button btn btn-muted h-8 px-3 text-xs"
+                    disabled={!ringSourceItem}
+                    onClick={() => {
+                      if (!ringSourceItem) {
+                        return;
+                      }
+                      push(IconRingWearDialog, {
+                        id: `icon-ring-wear-list-${item.key}`,
+                        title: 'アイコンリングを装着',
+                        size: 'lg',
+                        payload: { ringItem: ringSourceItem }
+                      });
+                    }}
+                  >
+                    装着
+                  </button>
+                ) : null}
+                <ReceiveSaveButton
+                  onClick={onSave}
+                  disabled={isSaving || !hasSource}
+                  className="receive-list-item-card__save-button h-8 px-3 text-xs"
+                />
+              </div>
             ) : null}
           </div>
         </div>
