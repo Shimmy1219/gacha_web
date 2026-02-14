@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
@@ -53,6 +53,170 @@ interface ReceiveGachaGroup {
 
 type PreviewKind = 'image' | 'video' | 'audio' | 'unknown';
 const PREVIEW_VISIBILITY_MARGIN_PX = 200;
+type VisibilityListener = (isIntersecting: boolean) => void;
+type SharedVisibilityObserver = {
+  observer: IntersectionObserver;
+  listeners: Map<Element, VisibilityListener>;
+};
+const sharedVisibilityObserverMap = new Map<string, SharedVisibilityObserver>();
+
+function resolveVisibilityObserverKey(rootMarginPx: number): string {
+  return `root:null|threshold:0|margin:${rootMarginPx}px`;
+}
+
+function getSharedVisibilityObserver(rootMarginPx: number): SharedVisibilityObserver | null {
+  if (typeof window === 'undefined' || typeof IntersectionObserver !== 'function') {
+    return null;
+  }
+
+  const key = resolveVisibilityObserverKey(rootMarginPx);
+  const existing = sharedVisibilityObserverMap.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const listeners = new Map<Element, VisibilityListener>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        listeners.get(entry.target)?.(entry.isIntersecting);
+      });
+    },
+    {
+      root: null,
+      rootMargin: `${rootMarginPx}px 0px`,
+      threshold: 0
+    }
+  );
+  const created = { observer, listeners };
+  sharedVisibilityObserverMap.set(key, created);
+  return created;
+}
+
+function releaseSharedVisibilityObserverTarget({
+  rootMarginPx,
+  target
+}: {
+  rootMarginPx: number;
+  target: Element;
+}): void {
+  const key = resolveVisibilityObserverKey(rootMarginPx);
+  const entry = sharedVisibilityObserverMap.get(key);
+  if (!entry) {
+    return;
+  }
+  entry.listeners.delete(target);
+  entry.observer.unobserve(target);
+  if (entry.listeners.size === 0) {
+    entry.observer.disconnect();
+    sharedVisibilityObserverMap.delete(key);
+  }
+}
+
+function useCardViewportVisibility(targetRef: RefObject<HTMLElement>, rootMarginPx: number): boolean {
+  const [isInViewport, setIsInViewport] = useState<boolean>(() => typeof window === 'undefined');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setIsInViewport(true);
+      return;
+    }
+    const target = targetRef.current;
+    if (!target) {
+      return;
+    }
+
+    const evaluateVisibility = () => {
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const intersectsViewport =
+        rect.bottom >= -rootMarginPx &&
+        rect.top <= viewportHeight + rootMarginPx &&
+        rect.right >= 0 &&
+        rect.left <= viewportWidth;
+      setIsInViewport((previous) => (previous === intersectsViewport ? previous : intersectsViewport));
+    };
+
+    // Initial fallback in case IntersectionObserver callback is delayed.
+    evaluateVisibility();
+
+    const sharedObserver = getSharedVisibilityObserver(rootMarginPx);
+    if (!sharedObserver) {
+      return;
+    }
+
+    const listener: VisibilityListener = (isIntersecting) => {
+      setIsInViewport((previous) => (previous === isIntersecting ? previous : isIntersecting));
+    };
+    sharedObserver.listeners.set(target, listener);
+    sharedObserver.observer.observe(target);
+
+    return () => {
+      releaseSharedVisibilityObserverTarget({ rootMarginPx, target });
+    };
+  }, [rootMarginPx, targetRef]);
+
+  return isInViewport;
+}
+
+function canUseObjectUrlApi(): boolean {
+  return (
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    typeof URL.revokeObjectURL === 'function'
+  );
+}
+
+function useViewportPreviewUrl(imageSourceItem: ReceiveMediaItem | null, isInViewport: boolean): string | null {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const revokePreviewUrl = useCallback(() => {
+    if (!canUseObjectUrlApi()) {
+      previewUrlRef.current = null;
+      setPreviewUrl(null);
+      return;
+    }
+    const currentPreviewUrl = previewUrlRef.current;
+    if (!currentPreviewUrl) {
+      return;
+    }
+    URL.revokeObjectURL(currentPreviewUrl);
+    previewUrlRef.current = null;
+    setPreviewUrl((previous) => (previous === currentPreviewUrl ? null : previous));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (!canUseObjectUrlApi()) {
+        return;
+      }
+      const currentPreviewUrl = previewUrlRef.current;
+      if (!currentPreviewUrl) {
+        return;
+      }
+      URL.revokeObjectURL(currentPreviewUrl);
+      previewUrlRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!canUseObjectUrlApi() || !imageSourceItem || !isInViewport) {
+      revokePreviewUrl();
+      return;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(imageSourceItem.blob);
+    const previousPreviewUrl = previewUrlRef.current;
+    previewUrlRef.current = nextPreviewUrl;
+    if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
+      URL.revokeObjectURL(previousPreviewUrl);
+    }
+    setPreviewUrl(nextPreviewUrl);
+  }, [imageSourceItem, isInViewport, revokePreviewUrl]);
+
+  return previewUrl;
+}
 
 function resolveGroupKey(gachaId: string | null | undefined, gachaName: string | null | undefined): string {
   const normalizedName = typeof gachaName === 'string' && gachaName.trim().length > 0 ? gachaName.trim() : '不明なガチャ';
@@ -158,93 +322,18 @@ function ReceiveInventoryItemCard({
   );
   const previewKind = resolvePreviewKind(item.kind);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const [isInViewport, setIsInViewport] = useState(true);
+  const isInViewport = useCardViewportVisibility(cardRef, PREVIEW_VISIBILITY_MARGIN_PX);
   const imageSourceItem = useMemo(
     () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
-  const [visiblePreviewUrl, setVisiblePreviewUrl] = useState<string | null>(null);
+  const visiblePreviewUrl = useViewportPreviewUrl(imageSourceItem, isInViewport);
   const hasSource = item.sourceItems.length > 0;
   const ringSourceItem = useMemo(
     () => imageSourceItem ?? item.sourceItems[0] ?? null,
     [imageSourceItem, item.sourceItems]
   );
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !cardRef.current) {
-      setIsInViewport(true);
-      return;
-    }
-    const target = cardRef.current;
-
-    const evaluateVisibility = () => {
-      const rect = target.getBoundingClientRect();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-      const intersectsViewport =
-        rect.bottom >= -PREVIEW_VISIBILITY_MARGIN_PX &&
-        rect.top <= viewportHeight + PREVIEW_VISIBILITY_MARGIN_PX &&
-        rect.right >= 0 &&
-        rect.left <= viewportWidth;
-      setIsInViewport(intersectsViewport);
-    };
-
-    // Fallback for environments where initial IntersectionObserver callback is delayed.
-    evaluateVisibility();
-
-    if (typeof IntersectionObserver !== 'function') {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsInViewport(entry.isIntersecting);
-      },
-      {
-        root: null,
-        rootMargin: `${PREVIEW_VISIBILITY_MARGIN_PX}px 0px`,
-        threshold: 0
-      }
-    );
-    observer.observe(target);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    const canManageObjectUrl =
-      typeof URL !== 'undefined' &&
-      typeof URL.createObjectURL === 'function' &&
-      typeof URL.revokeObjectURL === 'function';
-
-    if (!isInViewport || !imageSourceItem) {
-      setVisiblePreviewUrl((previous) => {
-        if (previous && canManageObjectUrl) {
-          URL.revokeObjectURL(previous);
-        }
-        return null;
-      });
-      return;
-    }
-    if (!canManageObjectUrl) {
-      setVisiblePreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(imageSourceItem.blob);
-    setVisiblePreviewUrl((previous) => {
-      if (previous) {
-        URL.revokeObjectURL(previous);
-      }
-      return objectUrl;
-    });
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
-  }, [imageSourceItem, isInViewport]);
 
   return (
     <div
