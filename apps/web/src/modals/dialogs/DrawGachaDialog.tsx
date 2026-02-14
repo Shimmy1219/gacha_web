@@ -19,7 +19,7 @@ import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
-import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -30,6 +30,7 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import {
+  pushCsrfTokenMismatchWarning,
   pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 import type {
@@ -1543,6 +1544,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
         setDiscordDeliveryCompleted(true);
       } catch (error) {
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        }
         const message =
           error instanceof DiscordGuildSelectionMissingError
             ? error.message

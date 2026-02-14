@@ -8,6 +8,7 @@
 import crypto from 'crypto';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
+const ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch';
 
 function vLog(...args) {
   if (VERBOSE) console.log('[blob/upload]', ...args);
@@ -145,6 +146,7 @@ function deriveUploadPolicy(req, payload) {
   if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
     const err = new Error('Forbidden: invalid CSRF token');
     err.statusCode = 403;
+    err.errorCode = ERROR_CODE_CSRF_TOKEN_MISMATCH;
     throw err;
   }
 
@@ -250,7 +252,11 @@ async function handlePrepareUpload(req, res, log, body) {
   } catch (error) {
     const status = error?.statusCode || error?.status || 500;
     log.error('failed to generate client token', { error, status });
-    return res.status(status).json({ ok: false, error: error?.message || 'Failed to generate upload token' });
+    return res.status(status).json({
+      ok: false,
+      error: error?.message || 'Failed to generate upload token',
+      errorCode: typeof error?.errorCode === 'string' ? error.errorCode : undefined
+    });
   }
 }
 

@@ -5,6 +5,7 @@ import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
+const ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch';
 
 // ===== Helpers =====
 function vLog(...args){ if (VERBOSE) console.log('[receive/token]', ...args); }
@@ -164,7 +165,11 @@ export default async function handler(req, res){
     const cookies = parseCookies(req.headers.cookie || '');
     if (!csrf || !cookies.csrf || cookies.csrf !== csrf) {
       log.warn('csrf mismatch');
-      return res.status(403).json({ ok:false, error:'Forbidden: CSRF token mismatch' });
+      return res.status(403).json({
+        ok: false,
+        error: 'Forbidden: CSRF token mismatch',
+        errorCode: ERROR_CODE_CSRF_TOKEN_MISMATCH
+      });
     }
 
     if (!url || typeof url !== 'string') {
