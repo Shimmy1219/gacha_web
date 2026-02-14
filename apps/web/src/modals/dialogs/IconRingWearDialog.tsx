@@ -5,7 +5,7 @@ import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import type { ReceiveMediaItem } from '../../pages/receive/types';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
-import { triggerReceiveBlobDownload } from '../../pages/receive/receiveSave';
+import { saveReceiveBlob } from '../../pages/receive/receiveSave';
 import { ReceiveIconSettingsDialog } from './ReceiveIconSettingsDialog';
 
 export interface IconRingWearDialogPayload {
@@ -119,8 +119,9 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
   const { iconAssetIds, isProcessing: isRegistryProcessing, error: registryError } = useReceiveIconRegistry();
   const [status, setStatus] = useState<'idle' | 'generating' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [composites, setComposites] = useState<
-    Array<{ iconAssetId: string; iconName: string; previewUrl: string; blob: Blob; downloadName: string }>
+    Array<{ iconAssetId: string; previewUrl: string; blob: Blob; downloadName: string }>
   >([]);
   const urlsRef = useRef<string[]>([]);
 
@@ -166,7 +167,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
           throw new Error('アイコンリング画像のサイズ取得に失敗しました。');
         }
 
-        const nextComposites: Array<{ iconAssetId: string; iconName: string; previewUrl: string; blob: Blob; downloadName: string }> = [];
+        const nextComposites: Array<{ iconAssetId: string; previewUrl: string; blob: Blob; downloadName: string }> = [];
         const loadErrors: string[] = [];
 
         for (const iconAssetId of iconAssetIds) {
@@ -211,7 +212,6 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
 
           nextComposites.push({
             iconAssetId,
-            iconName,
             previewUrl,
             blob,
             downloadName
@@ -263,6 +263,24 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     });
   };
 
+  const handleSaveComposite = async (entry: {
+    iconAssetId: string;
+    previewUrl: string;
+    blob: Blob;
+    downloadName: string;
+  }) => {
+    setSavingKey(entry.iconAssetId);
+    setError(null);
+    try {
+      await saveReceiveBlob(entry.downloadName, entry.blob);
+    } catch (saveError) {
+      console.error('Failed to save icon ring composite', saveError);
+      setError('保存中にエラーが発生しました。もう一度お試しください。');
+    } finally {
+      setSavingKey((current) => (current === entry.iconAssetId ? null : current));
+    }
+  };
+
   if (!ringItem) {
     return (
       <>
@@ -300,7 +318,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
         {shouldPromptRegister ? (
           <div className="icon-ring-wear-dialog__empty mt-4 space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4">
             <p className="icon-ring-wear-dialog__empty-text text-sm text-muted-foreground">
-              アイコンを登録すると、アイコンリングの装着プレビューを作成できます（最大10枚）。
+              普段から利用しているIRIAMアイコンを登録すると、アイコンリングを即座に装着出来ます。
             </p>
             <button
               type="button"
@@ -345,18 +363,33 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
                       className="icon-ring-wear-dialog__preview-image h-full w-full object-contain"
                     />
                   </div>
-                  <p className="icon-ring-wear-dialog__icon-name mt-1 truncate text-[11px] font-semibold text-surface-foreground">
-                    {entry.iconName}
-                  </p>
                   <button
                     type="button"
                     className="icon-ring-wear-dialog__save-button btn btn-primary mt-2 h-9 w-full px-3 text-xs"
-                    onClick={() => triggerReceiveBlobDownload(entry.blob, entry.downloadName)}
+                    onClick={() => {
+                      void handleSaveComposite(entry);
+                    }}
+                    disabled={savingKey === entry.iconAssetId}
                   >
-                    保存する
+                    {savingKey === entry.iconAssetId ? '保存中…' : '保存する'}
                   </button>
                 </div>
               ))}
+              <button
+                type="button"
+                className="icon-ring-wear-dialog__register-card icon-ring-wear-dialog__card icon-ring-wear-dialog__register-button w-40 flex-shrink-0 snap-start rounded-2xl border border-dashed border-accent/60 bg-accent/10 p-2 text-accent transition hover:bg-accent/20"
+                onClick={handleOpenIconSettings}
+                disabled={isRegistryProcessing}
+              >
+                <div className="icon-ring-wear-dialog__register-preview-container aspect-square w-full overflow-hidden rounded-xl border border-accent/50 bg-accent/5">
+                  <div className="icon-ring-wear-dialog__register-preview-inner flex h-full w-full items-center justify-center">
+                    <PlusCircleIcon className="icon-ring-wear-dialog__register-plus-icon h-12 w-12" aria-hidden="true" />
+                  </div>
+                </div>
+                <span className="icon-ring-wear-dialog__register-label mt-2 block text-xs font-semibold">
+                  アイコンを登録
+                </span>
+              </button>
             </div>
           </div>
         ) : null}
