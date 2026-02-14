@@ -34,7 +34,6 @@ interface ReceiveInventoryItem {
   obtainedCount: number;
   kind: ReceiveMediaKind;
   digitalItemType: DigitalItemTypeKey | null;
-  previewUrl: string | null;
   sourceItems: ReceiveMediaItem[];
   isOwned: boolean;
 }
@@ -147,15 +146,82 @@ function ReceiveInventoryItemCard({
     [item.rarityColor]
   );
   const previewKind = resolvePreviewKind(item.kind);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [isInViewport, setIsInViewport] = useState(false);
+  const imageSourceItem = useMemo(
+    () => item.sourceItems.find((sourceItem) => sourceItem.kind === 'image') ?? null,
+    [item.sourceItems]
+  );
+  const [visiblePreviewUrl, setVisiblePreviewUrl] = useState<string | null>(null);
   const hasSource = item.sourceItems.length > 0;
   const ringSourceItem = useMemo(
-    () => item.sourceItems.find((sourceItem) => sourceItem.kind === 'image') ?? item.sourceItems[0] ?? null,
-    [item.sourceItems]
+    () => imageSourceItem ?? item.sourceItems[0] ?? null,
+    [imageSourceItem, item.sourceItems]
   );
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !cardRef.current) {
+      setIsInViewport(true);
+      return;
+    }
+    if (typeof IntersectionObserver !== 'function') {
+      setIsInViewport(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInViewport(entry.isIntersecting);
+      },
+      {
+        root: null,
+        rootMargin: '200px 0px',
+        threshold: 0
+      }
+    );
+    observer.observe(cardRef.current);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const canManageObjectUrl =
+      typeof URL !== 'undefined' &&
+      typeof URL.createObjectURL === 'function' &&
+      typeof URL.revokeObjectURL === 'function';
+
+    if (!isInViewport || !imageSourceItem) {
+      setVisiblePreviewUrl((previous) => {
+        if (previous && canManageObjectUrl) {
+          URL.revokeObjectURL(previous);
+        }
+        return null;
+      });
+      return;
+    }
+    if (!canManageObjectUrl) {
+      setVisiblePreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(imageSourceItem.blob);
+    setVisiblePreviewUrl((previous) => {
+      if (previous) {
+        URL.revokeObjectURL(previous);
+      }
+      return objectUrl;
+    });
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [imageSourceItem, isInViewport]);
+
   return (
     <div
+      ref={cardRef}
       className={clsx(
         'receive-list-item-card__root rounded-2xl border border-border/60 bg-panel-muted/70 p-4',
         !item.isOwned && 'opacity-60 grayscale'
@@ -172,7 +238,7 @@ function ReceiveInventoryItemCard({
             </span>
           ) : null}
           <ItemPreview
-            previewUrl={item.previewUrl ?? null}
+            previewUrl={visiblePreviewUrl}
             alt={item.itemName}
             kindHint={previewKind}
             imageFit="contain"
@@ -244,7 +310,6 @@ export function ReceiveListPage(): JSX.Element {
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
   const collapsedGroupsRef = useRef<Record<string, boolean>>({});
-  const previewObjectUrlsRef = useRef<Set<string>>(new Set());
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
     () =>
@@ -262,13 +327,6 @@ export function ReceiveListPage(): JSX.Element {
   useEffect(() => {
     collapsedGroupsRef.current = collapsedGroups;
   }, [collapsedGroups]);
-
-  useEffect(() => {
-    return () => {
-      previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      previewObjectUrlsRef.current.clear();
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -417,7 +475,6 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: 'unknown',
                   digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
-                  previewUrl: null,
                   sourceItems: [],
                   isOwned: true
                 });
@@ -468,7 +525,6 @@ export function ReceiveListPage(): JSX.Element {
                 const nextIndex = (fallbackIndexMap.get(baseKey) ?? 0) + 1;
                 fallbackIndexMap.set(baseKey, nextIndex);
                 const itemDisplayName = totalCount > 1 ? `${itemName}（${nextIndex}）` : itemName;
-                const previewUrl = null;
                 const obtained = typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)
                   ? Math.max(0, item.metadata.obtainedCount)
                   : 1;
@@ -485,7 +541,6 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: item.kind,
                   digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
-                  previewUrl,
                   sourceItems: [item],
                   isOwned: true
                 });
@@ -554,7 +609,6 @@ export function ReceiveListPage(): JSX.Element {
                     obtainedCount: 0,
                     kind: 'unknown',
                     digitalItemType: item.isRiagu ? null : 'other',
-                    previewUrl: null,
                     sourceItems: [],
                     isOwned: false
                   });
@@ -798,16 +852,7 @@ export function ReceiveListPage(): JSX.Element {
             } else if (!existingPatch.item.digitalItemType && mediaItem.metadata?.digitalItemType) {
               existingPatch.item.digitalItemType = mediaItem.metadata.digitalItemType;
             }
-            if (!existingPatch.item.previewUrl && mediaItem.kind === 'image') {
-              const previewUrl = URL.createObjectURL(mediaItem.blob);
-              previewObjectUrlsRef.current.add(previewUrl);
-              existingPatch.item.previewUrl = previewUrl;
-            }
           } else {
-            const previewUrl = mediaItem.kind === 'image' ? URL.createObjectURL(mediaItem.blob) : null;
-            if (previewUrl) {
-              previewObjectUrlsRef.current.add(previewUrl);
-            }
             itemPatchMap.set(itemKey, {
               item: {
                 key: itemKey,
@@ -822,7 +867,6 @@ export function ReceiveListPage(): JSX.Element {
                 obtainedCount: obtained,
                 kind: mediaItem.kind,
                 digitalItemType: mediaItem.metadata?.isRiagu ? null : mediaItem.metadata?.digitalItemType ?? 'other',
-                previewUrl,
                 sourceItems: [mediaItem],
                 isOwned: true
               },
@@ -855,7 +899,6 @@ export function ReceiveListPage(): JSX.Element {
               ...item,
               kind: item.kind === 'unknown' ? patch.item.kind : item.kind,
               digitalItemType: item.isRiagu ? null : item.digitalItemType ?? patch.item.digitalItemType,
-              previewUrl: item.previewUrl ?? patch.item.previewUrl,
               sourceItems: Array.from(mergedSourceMap.values())
             };
           });
