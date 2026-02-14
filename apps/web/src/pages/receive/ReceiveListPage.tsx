@@ -337,6 +337,7 @@ export function ReceiveListPage(): JSX.Element {
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
   const collapsedGroupsRef = useRef<Record<string, boolean>>({});
+  const loadingGroupKeysRef = useRef<Record<string, boolean>>({});
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
     () =>
@@ -354,6 +355,10 @@ export function ReceiveListPage(): JSX.Element {
   useEffect(() => {
     collapsedGroupsRef.current = collapsedGroups;
   }, [collapsedGroups]);
+
+  useEffect(() => {
+    loadingGroupKeysRef.current = loadingGroupKeys;
+  }, [loadingGroupKeys]);
 
   useEffect(() => {
     let active = true;
@@ -781,20 +786,12 @@ export function ReceiveListPage(): JSX.Element {
       return;
     }
 
-    let shouldLoad = false;
-    setLoadingGroupKeys((prev) => {
-      if (prev[groupKey]) {
-        return prev;
-      }
-      shouldLoad = true;
-      return {
-        ...prev,
-        [groupKey]: true
-      };
-    });
-    if (!shouldLoad) {
+    if (loadingGroupKeysRef.current[groupKey]) {
       return;
     }
+    const nextLoadingGroupKeys = { ...loadingGroupKeysRef.current, [groupKey]: true };
+    loadingGroupKeysRef.current = nextLoadingGroupKeys;
+    setLoadingGroupKeys(nextLoadingGroupKeys);
 
     try {
       const itemPatchMap = new Map<
@@ -970,11 +967,10 @@ export function ReceiveListPage(): JSX.Element {
         })
       );
     } finally {
-      setLoadingGroupKeys((prev) => {
-        const next = { ...prev };
-        delete next[groupKey];
-        return next;
-      });
+      const next = { ...loadingGroupKeysRef.current };
+      delete next[groupKey];
+      loadingGroupKeysRef.current = next;
+      setLoadingGroupKeys(next);
     }
   }, []);
 
