@@ -957,6 +957,18 @@ export function ReceiveListPage(): JSX.Element {
       );
     } catch (loadError) {
       console.error('Failed to lazy-load receive list group media', { groupKey, loadError });
+      // Prevent infinite retry loop when a group media load fails.
+      setGroups((prev) =>
+        prev.map((group) => {
+          if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
+            return group;
+          }
+          if (group.mediaLoaded) {
+            return group;
+          }
+          return { ...group, mediaLoaded: true };
+        })
+      );
     } finally {
       setLoadingGroupKeys((prev) => {
         const next = { ...prev };

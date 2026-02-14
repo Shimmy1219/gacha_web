@@ -368,20 +368,28 @@ async function extractReceiveMediaItemsFromZip(
         continue;
       }
 
-      const blobEntry = await entry.async('blob');
-      const filename = entry.name.split('/').pop() ?? entry.name;
-      const mimeType = blobEntry.type || undefined;
-      const kind = detectMediaKind(filename, mimeType);
-      mediaItems.push({
-        id: metadata.id,
-        path: entry.name,
-        filename,
-        size: blobEntry.size,
-        blob: blobEntry,
-        mimeType,
-        kind,
-        metadata
-      });
+      try {
+        const blobEntry = await entry.async('blob');
+        const filename = entry.name.split('/').pop() ?? entry.name;
+        const mimeType = blobEntry.type || undefined;
+        const kind = detectMediaKind(filename, mimeType);
+        mediaItems.push({
+          id: metadata.id,
+          path: entry.name,
+          filename,
+          size: blobEntry.size,
+          blob: blobEntry,
+          mimeType,
+          kind,
+          metadata
+        });
+      } catch (error) {
+        console.warn('Failed to extract receive media entry', {
+          metadataId: metadata.id,
+          filePath: metadata.filePath,
+          error
+        });
+      }
       processed += 1;
       onProgress?.(processed, total);
     }
@@ -404,23 +412,30 @@ async function extractReceiveMediaItemsFromZip(
       continue;
     }
 
-    const blobEntry = await file.async('blob');
-    if (blobEntry.type === 'application/json') {
-      processed += 1;
-      onProgress?.(processed, total);
-      continue;
-    }
+    try {
+      const blobEntry = await file.async('blob');
+      if (blobEntry.type === 'application/json') {
+        processed += 1;
+        onProgress?.(processed, total);
+        continue;
+      }
 
-    const mimeType = blobEntry.type || undefined;
-    mediaItems.push({
-      id: path,
-      path,
-      filename,
-      size: blobEntry.size,
-      blob: blobEntry,
-      mimeType,
-      kind: detectMediaKind(filename, mimeType)
-    });
+      const mimeType = blobEntry.type || undefined;
+      mediaItems.push({
+        id: path,
+        path,
+        filename,
+        size: blobEntry.size,
+        blob: blobEntry,
+        mimeType,
+        kind: detectMediaKind(filename, mimeType)
+      });
+    } catch (error) {
+      console.warn('Failed to extract receive media fallback entry', {
+        path,
+        error
+      });
+    }
     processed += 1;
     onProgress?.(processed, total);
   }
