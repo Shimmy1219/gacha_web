@@ -176,8 +176,8 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
-        <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
-          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:aspect-[2/1] md:h-auto md:rounded-2xl">
+        <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink md:aspect-[2/1]">
+          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:h-full md:aspect-auto md:rounded-2xl">
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
