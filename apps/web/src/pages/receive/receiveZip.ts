@@ -69,6 +69,8 @@ type ReceiveZipProgressCallback = (processed: number, total: number) => void;
 interface LoadReceiveZipInventoryOptions {
   onProgress?: ReceiveZipProgressCallback;
   migrateDigitalItemTypes?: boolean;
+  includeMedia?: boolean;
+  metadataFilter?: (metadata: ReceiveItemMetadata) => boolean;
 }
 
 interface ItemsMetadataLoadResult {
@@ -454,6 +456,10 @@ export async function loadReceiveZipInventory(
   const metadataBundle = await loadItemsMetadataWithSource(zip);
   const metadataMap = metadataBundle.metadataMap;
   const metadataEntries = Object.values(metadataMap);
+  const filteredMetadataEntries =
+    typeof resolvedOptions.metadataFilter === 'function'
+      ? metadataEntries.filter((metadata) => resolvedOptions.metadataFilter?.(metadata))
+      : metadataEntries;
   let migratedBlob: Blob | undefined;
 
   if (resolvedOptions.migrateDigitalItemTypes) {
@@ -468,7 +474,19 @@ export async function loadReceiveZipInventory(
     }
   }
 
-  const mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataEntries, resolvedOptions.onProgress);
+  const includeMedia = resolvedOptions.includeMedia ?? true;
+  let mediaItems: ReceiveMediaItem[] = [];
+  if (includeMedia) {
+    // When metadata is missing and a metadata filter is provided, we cannot safely
+    // map fallback file entries to a group, so skip extraction.
+    if (metadataEntries.length === 0 && typeof resolvedOptions.metadataFilter === 'function') {
+      mediaItems = [];
+    } else {
+      const metadataForExtraction =
+        typeof resolvedOptions.metadataFilter === 'function' ? filteredMetadataEntries : metadataEntries;
+      mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataForExtraction, resolvedOptions.onProgress);
+    }
+  }
   const catalog = await loadCatalogMetadata(zip);
   return { metadataEntries, mediaItems, catalog, migratedBlob };
 }
