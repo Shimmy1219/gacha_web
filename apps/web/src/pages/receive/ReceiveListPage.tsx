@@ -243,6 +243,7 @@ export function ReceiveListPage(): JSX.Element {
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
+  const collapsedGroupsRef = useRef<Record<string, boolean>>({});
   const previewObjectUrlsRef = useRef<Set<string>>(new Set());
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
@@ -257,6 +258,10 @@ export function ReceiveListPage(): JSX.Element {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+
+  useEffect(() => {
+    collapsedGroupsRef.current = collapsedGroups;
+  }, [collapsedGroups]);
 
   useEffect(() => {
     return () => {
@@ -892,19 +897,34 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const toggleGroup = useCallback((groupKey: string) => {
-    let shouldLoad = false;
-    setCollapsedGroups((prev) => {
-      const isCollapsed = Boolean(prev[groupKey]);
-      shouldLoad = isCollapsed;
-      return {
-        ...prev,
-        [groupKey]: !isCollapsed
-      };
-    });
-    if (shouldLoad) {
+    const wasCollapsed = Boolean(collapsedGroupsRef.current[groupKey]);
+    const nextCollapsed = !wasCollapsed;
+    collapsedGroupsRef.current = {
+      ...collapsedGroupsRef.current,
+      [groupKey]: nextCollapsed
+    };
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupKey]: nextCollapsed
+    }));
+    if (wasCollapsed) {
       void loadGroupMedia(groupKey);
     }
   }, [loadGroupMedia]);
+
+  useEffect(() => {
+    if (status !== 'ready') {
+      return;
+    }
+    displayGroups.forEach((group) => {
+      const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+      const isCollapsed = Boolean(collapsedGroups[groupKey]);
+      const isLoading = Boolean(loadingGroupKeys[groupKey]);
+      if (!isCollapsed && !isLoading && !group.mediaLoaded) {
+        void loadGroupMedia(groupKey);
+      }
+    });
+  }, [collapsedGroups, displayGroups, loadGroupMedia, loadingGroupKeys, status]);
 
   const handleSaveItem = useCallback(async (item: ReceiveInventoryItem) => {
     const target = item.sourceItems[0];
