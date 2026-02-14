@@ -251,7 +251,12 @@ async function handlePrepareUpload(req, res, log, body) {
     });
   } catch (error) {
     const status = error?.statusCode || error?.status || 500;
-    log.error('failed to generate client token', { error, status });
+    const isKnownCsrfMismatch = typeof error?.errorCode === 'string' && error.errorCode === ERROR_CODE_CSRF_TOKEN_MISMATCH;
+    if (isKnownCsrfMismatch) {
+      log.error('【既知のエラー】failed to generate client token', { error, status });
+    } else {
+      log.error('failed to generate client token', { error, status });
+    }
     return res.status(status).json({
       ok: false,
       error: error?.message || 'Failed to generate upload token',

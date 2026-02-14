@@ -353,7 +353,7 @@ export default async function handler(req, res){
   function respondDiscordApiError(error, context){
     const message = error instanceof Error ? error.message : String(error);
     if (isDiscordUnknownGuildError(error)){
-      log.warn('discord guild is not accessible for bot operations', { context, message });
+      log.warn('【既知のエラー】discord guild is not accessible for bot operations', { context, message });
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
@@ -361,14 +361,14 @@ export default async function handler(req, res){
       });
     }
     if (isDiscordMissingPermissionsError(error)) {
-      log.warn('discord bot is missing permissions', { context, message });
+      log.warn('【既知のエラー】discord bot is missing permissions', { context, message });
       return res.status(403).json({
         ok: false,
         error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
         errorCode: DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS
       });
     }
-    log.error('discord api request failed', { context, message });
+    log.error('【既知のエラー】discord api request failed', { context, message });
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 

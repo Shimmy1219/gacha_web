@@ -164,7 +164,7 @@ export default async function handler(req, res){
     // CSRF（二重送信: Cookie + body）
     const cookies = parseCookies(req.headers.cookie || '');
     if (!csrf || !cookies.csrf || cookies.csrf !== csrf) {
-      log.warn('csrf mismatch');
+      log.warn('【既知のエラー】csrf mismatch');
       return res.status(403).json({
         ok: false,
         error: 'Forbidden: CSRF token mismatch',
