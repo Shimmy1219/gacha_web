@@ -121,72 +121,72 @@ function ReceiveInventoryItemCard({
   return (
     <div
       className={clsx(
-        'rounded-2xl border border-border/60 bg-panel-muted/70 p-4',
+        'receive-list-item-card__root rounded-2xl border border-border/60 bg-panel-muted/70 p-4',
         !item.isOwned && 'opacity-60 grayscale'
       )}
     >
-      <div className="flex items-start gap-3">
+      <p className="receive-list-item-card__item-name line-clamp-2 text-sm font-semibold text-surface-foreground">{item.itemName}</p>
+      <div className="receive-list-item-card__content-row mt-3 flex items-start gap-3">
         <ItemPreview
           previewUrl={item.previewUrl ?? null}
           alt={item.itemName}
           kindHint={previewKind}
           imageFit="contain"
-          className="h-16 w-16 flex-shrink-0 bg-surface-deep"
+          className="receive-list-item-card__preview h-16 w-16 flex-shrink-0 bg-surface-deep"
           iconClassName="h-6 w-6"
           emptyLabel="noImage"
         />
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-semibold text-surface-foreground">{item.itemName}</p>
-          <div className="mt-2 flex items-start justify-between gap-3 text-xs text-muted-foreground">
-            <div className="flex min-w-0 flex-col gap-1">
-              {item.rarity ? (
-                <span
-                  className={clsx('text-[11px] font-semibold', rarityPresentation.className)}
-                  style={rarityPresentation.style}
-                >
-                  {item.rarity}
-                </span>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="chip">x{item.obtainedCount}</span>
-                {item.digitalItemType ? (
-                  <span className="chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
-                ) : null}
-                {item.isRiagu ? (
-                  <span className="chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
-                ) : null}
-              </div>
-            </div>
-            {item.isOwned ? (
-              <div className="receive-list-item-card__action-group flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                {canWearIconRing ? (
-                  <button
-                    type="button"
-                    className="receive-list-item-card__wear-button btn btn-muted h-8 px-3 text-xs"
-                    disabled={!ringSourceItem}
-                    onClick={() => {
-                      if (!ringSourceItem) {
-                        return;
-                      }
-                      push(IconRingWearDialog, {
-                        id: `icon-ring-wear-list-${item.key}`,
-                        title: 'アイコンリングを装着',
-                        size: 'lg',
-                        payload: { ringItem: ringSourceItem }
-                      });
-                    }}
-                  >
-                    装着
-                  </button>
-                ) : null}
-                <ReceiveSaveButton
-                  onClick={onSave}
-                  disabled={isSaving || !hasSource}
-                  className="receive-list-item-card__save-button h-8 px-3 text-xs"
-                />
-              </div>
+        <div className="receive-list-item-card__details-column flex min-w-0 flex-1 flex-col gap-2">
+          <div className="receive-list-item-card__meta-row flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {item.rarity ? (
+              <span
+                className={clsx('receive-list-item-card__rarity text-[11px] font-semibold', rarityPresentation.className)}
+                style={rarityPresentation.style}
+              >
+                {item.rarity}
+              </span>
+            ) : null}
+            <span className="receive-list-item-card__count chip">x{item.obtainedCount}</span>
+          </div>
+          <div className="receive-list-item-card__type-row flex flex-wrap items-center gap-2">
+            {item.digitalItemType ? (
+              <span className="receive-list-item-card__digital-type chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+            ) : null}
+            {item.isRiagu ? (
+              <span className="receive-list-item-card__riagu chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
             ) : null}
           </div>
+          {item.isOwned ? (
+            <div className="receive-list-item-card__action-row mt-1 flex items-center gap-2">
+              {canWearIconRing ? (
+                <button
+                  type="button"
+                  className="receive-list-item-card__wear-button btn btn-muted h-8 px-3 text-xs"
+                  disabled={!ringSourceItem}
+                  onClick={() => {
+                    if (!ringSourceItem) {
+                      return;
+                    }
+                    push(IconRingWearDialog, {
+                      id: `icon-ring-wear-list-${item.key}`,
+                      title: 'アイコンリングを装着',
+                      size: 'lg',
+                      payload: { ringItem: ringSourceItem }
+                    });
+                  }}
+                >
+                  装着
+                </button>
+              ) : null}
+              <ReceiveSaveButton
+                onClick={onSave}
+                disabled={isSaving || !hasSource}
+                className="receive-list-item-card__save-button h-8 px-3 text-xs"
+              />
+            </div>
+          ) : (
+            <div className="receive-list-item-card__ownership-note text-[11px] text-muted-foreground">未所持</div>
+          )}
         </div>
       </div>
     </div>
