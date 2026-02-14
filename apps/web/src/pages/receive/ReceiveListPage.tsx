@@ -125,30 +125,30 @@ function ReceiveInventoryItemCard({
         !item.isOwned && 'opacity-60 grayscale'
       )}
     >
-      <p className="receive-list-item-card__item-name line-clamp-2 text-sm font-semibold text-surface-foreground">{item.itemName}</p>
       <div className="receive-list-item-card__content-row mt-3 flex items-start gap-3">
-        <ItemPreview
-          previewUrl={item.previewUrl ?? null}
-          alt={item.itemName}
-          kindHint={previewKind}
-          imageFit="contain"
-          className="receive-list-item-card__preview h-16 w-16 flex-shrink-0 bg-surface-deep"
-          iconClassName="h-6 w-6"
-          emptyLabel="noImage"
-        />
+        <div className="receive-list-item-card__preview-column flex w-16 flex-shrink-0 flex-col items-center gap-1">
+          {item.rarity ? (
+            <span
+              className={clsx('receive-list-item-card__rarity text-[11px] font-semibold', rarityPresentation.className)}
+              style={rarityPresentation.style}
+            >
+              {item.rarity}
+            </span>
+          ) : null}
+          <ItemPreview
+            previewUrl={item.previewUrl ?? null}
+            alt={item.itemName}
+            kindHint={previewKind}
+            imageFit="contain"
+            className="receive-list-item-card__preview h-16 w-16 flex-shrink-0 bg-surface-deep"
+            iconClassName="h-6 w-6"
+            emptyLabel="noImage"
+          />
+        </div>
         <div className="receive-list-item-card__details-column flex min-w-0 flex-1 flex-col gap-2">
+          <p className="receive-list-item-card__item-name line-clamp-2 text-sm font-semibold text-surface-foreground">{item.itemName}</p>
           <div className="receive-list-item-card__meta-row flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {item.rarity ? (
-              <span
-                className={clsx('receive-list-item-card__rarity text-[11px] font-semibold', rarityPresentation.className)}
-                style={rarityPresentation.style}
-              >
-                {item.rarity}
-              </span>
-            ) : null}
             <span className="receive-list-item-card__count chip">x{item.obtainedCount}</span>
-          </div>
-          <div className="receive-list-item-card__type-row flex flex-wrap items-center gap-2">
             {item.digitalItemType ? (
               <span className="receive-list-item-card__digital-type chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
             ) : null}
@@ -161,7 +161,7 @@ function ReceiveInventoryItemCard({
               {canWearIconRing ? (
                 <button
                   type="button"
-                  className="receive-list-item-card__wear-button btn btn-muted h-8 px-3 text-xs"
+                  className="receive-list-item-card__wear-button btn btn-muted h-8 flex-1 justify-center px-3 text-xs"
                   disabled={!ringSourceItem}
                   onClick={() => {
                     if (!ringSourceItem) {
@@ -181,7 +181,10 @@ function ReceiveInventoryItemCard({
               <ReceiveSaveButton
                 onClick={onSave}
                 disabled={isSaving || !hasSource}
-                className="receive-list-item-card__save-button h-8 px-3 text-xs"
+                className={clsx(
+                  'receive-list-item-card__save-button h-8 justify-center px-3 text-xs',
+                  canWearIconRing ? 'flex-1' : 'w-full'
+                )}
               />
             </div>
           ) : (
