@@ -52,6 +52,7 @@ interface ReceiveGachaGroup {
 }
 
 type PreviewKind = 'image' | 'video' | 'audio' | 'unknown';
+const PREVIEW_VISIBILITY_MARGIN_PX = 200;
 
 function resolveGroupKey(gachaId: string | null | undefined, gachaName: string | null | undefined): string {
   const normalizedName = typeof gachaName === 'string' && gachaName.trim().length > 0 ? gachaName.trim() : '不明なガチャ';
@@ -101,6 +102,16 @@ function resolvePreviewKind(kind: ReceiveMediaKind): PreviewKind {
   return 'unknown';
 }
 
+function isLikelyImageSource(sourceItem: ReceiveMediaItem): boolean {
+  if (sourceItem.kind === 'image') {
+    return true;
+  }
+  if (sourceItem.mimeType?.startsWith('image/')) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(sourceItem.filename);
+}
+
 function resolveItemKey(gachaKey: string, itemId: string | null, itemName: string, assetId?: string | null): string {
   if (itemId && itemId.trim()) {
     return assetId && assetId.trim() ? `${gachaKey}:${itemId.trim()}:${assetId.trim()}` : `${gachaKey}:${itemId.trim()}`;
@@ -147,9 +158,9 @@ function ReceiveInventoryItemCard({
   );
   const previewKind = resolvePreviewKind(item.kind);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const [isInViewport, setIsInViewport] = useState(false);
+  const [isInViewport, setIsInViewport] = useState(true);
   const imageSourceItem = useMemo(
-    () => item.sourceItems.find((sourceItem) => sourceItem.kind === 'image') ?? null,
+    () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
   const [visiblePreviewUrl, setVisiblePreviewUrl] = useState<string | null>(null);
@@ -165,8 +176,24 @@ function ReceiveInventoryItemCard({
       setIsInViewport(true);
       return;
     }
+    const target = cardRef.current;
+
+    const evaluateVisibility = () => {
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const intersectsViewport =
+        rect.bottom >= -PREVIEW_VISIBILITY_MARGIN_PX &&
+        rect.top <= viewportHeight + PREVIEW_VISIBILITY_MARGIN_PX &&
+        rect.right >= 0 &&
+        rect.left <= viewportWidth;
+      setIsInViewport(intersectsViewport);
+    };
+
+    // Fallback for environments where initial IntersectionObserver callback is delayed.
+    evaluateVisibility();
+
     if (typeof IntersectionObserver !== 'function') {
-      setIsInViewport(true);
       return;
     }
 
@@ -176,11 +203,11 @@ function ReceiveInventoryItemCard({
       },
       {
         root: null,
-        rootMargin: '200px 0px',
+        rootMargin: `${PREVIEW_VISIBILITY_MARGIN_PX}px 0px`,
         threshold: 0
       }
     );
-    observer.observe(cardRef.current);
+    observer.observe(target);
     return () => {
       observer.disconnect();
     };
