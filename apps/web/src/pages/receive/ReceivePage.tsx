@@ -574,17 +574,20 @@ export function ReceivePage(): JSX.Element {
         }
       });
       setDownloadPhase('unpacking');
-      const { metadataEntries, mediaItems: items } = await loadReceiveZipInventory(blob, (processed, total) => {
-        if (total === 0) {
-          setUnpackProgress(100);
-          return;
+      const { metadataEntries, mediaItems: items, migratedBlob } = await loadReceiveZipInventory(blob, {
+        migrateDigitalItemTypes: true,
+        onProgress: (processed, total) => {
+          if (total === 0) {
+            setUnpackProgress(100);
+            return;
+          }
+          setUnpackProgress(Math.round((processed / total) * 100));
         }
-        setUnpackProgress(Math.round((processed / total) * 100));
       });
       setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
       setMediaItems(items);
       setDownloadPhase('complete');
-      await persistHistoryEntry(blob, items, metadataEntries);
+      await persistHistoryEntry(migratedBlob ?? blob, items, metadataEntries);
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -659,13 +662,23 @@ export function ReceivePage(): JSX.Element {
         if (!blob) {
           throw new Error('保存済みのファイルが見つかりませんでした。履歴を削除して再度お試しください。');
         }
-        const { metadataEntries, mediaItems: items } = await loadReceiveZipInventory(blob, (processed, total) => {
-          if (total === 0) {
-            setUnpackProgress(100);
-            return;
+        const { metadataEntries, mediaItems: items, migratedBlob } = await loadReceiveZipInventory(blob, {
+          migrateDigitalItemTypes: true,
+          onProgress: (processed, total) => {
+            if (total === 0) {
+              setUnpackProgress(100);
+              return;
+            }
+            setUnpackProgress(Math.round((processed / total) * 100));
           }
-          setUnpackProgress(Math.round((processed / total) * 100));
         });
+        if (migratedBlob) {
+          try {
+            await saveHistoryFile(entry.id, migratedBlob);
+          } catch (error) {
+            console.warn('Failed to persist migrated receive history zip', { entryId: entry.id, error });
+          }
+        }
         setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
         setMediaItems(items);
         setDownloadPhase('complete');

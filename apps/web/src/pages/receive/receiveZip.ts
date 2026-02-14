@@ -1,7 +1,11 @@
 import JSZip, { JSZipObject } from 'jszip';
 
 import type { ReceiveItemMetadata, ReceiveMediaItem, ReceiveMediaKind } from './types';
-import { inferDigitalItemTypeFromBlob, normalizeDigitalItemType } from '@domain/digital-items/digitalItemTypes';
+import {
+  type DigitalItemTypeKey,
+  inferDigitalItemTypeFromBlob,
+  normalizeDigitalItemType
+} from '@domain/digital-items/digitalItemTypes';
 
 interface SelectionMetadataPayload {
   user?: { displayName?: string };
@@ -60,6 +64,21 @@ export interface ReceiveCatalogGacha {
   items: ReceiveCatalogItem[];
 }
 
+type ReceiveZipProgressCallback = (processed: number, total: number) => void;
+
+interface LoadReceiveZipInventoryOptions {
+  onProgress?: ReceiveZipProgressCallback;
+  migrateDigitalItemTypes?: boolean;
+}
+
+interface ItemsMetadataLoadResult {
+  metadataMap: Record<string, ReceiveItemMetadata>;
+  rawMap: Record<string, Record<string, unknown>> | null;
+  entryName: string | null;
+}
+
+type ReceiveZipInput = Blob | ArrayBuffer | Uint8Array;
+
 function detectMediaKind(filename: string, mimeType?: string): ReceiveMediaKind {
   const lower = filename.toLowerCase();
   if (mimeType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) {
@@ -73,6 +92,19 @@ function detectMediaKind(filename: string, mimeType?: string): ReceiveMediaKind 
   }
   if (/\.(txt|json|md)$/i.test(lower)) {
     return 'text';
+  }
+  return 'other';
+}
+
+function resolveKindHint(kind: ReceiveMediaKind): 'image' | 'video' | 'audio' | 'other' {
+  if (kind === 'image') {
+    return 'image';
+  }
+  if (kind === 'video') {
+    return 'video';
+  }
+  if (kind === 'audio') {
+    return 'audio';
   }
   return 'other';
 }
@@ -93,36 +125,153 @@ function findZipObjectByRelativePath(zip: JSZip, relativePath: string): JSZipObj
 }
 
 async function loadItemsMetadata(zip: JSZip): Promise<Record<string, ReceiveItemMetadata>> {
+  const result = await loadItemsMetadataWithSource(zip);
+  return result.metadataMap;
+}
+
+async function loadItemsMetadataWithSource(zip: JSZip): Promise<ItemsMetadataLoadResult> {
   const metaEntry = Object.values(zip.files).find(
     (entry) => !entry.dir && entry.name.endsWith('meta/items.json')
   );
   if (!metaEntry) {
-    return {};
+    return {
+      metadataMap: {},
+      rawMap: null,
+      entryName: null
+    };
   }
 
   try {
     const jsonText = await metaEntry.async('string');
-    const parsed = JSON.parse(jsonText) as Record<string, Omit<ReceiveItemMetadata, 'id'>>;
-    const mapped: Record<string, ReceiveItemMetadata> = {};
-    for (const [id, metadata] of Object.entries(parsed)) {
-      const digitalItemType = normalizeDigitalItemType((metadata as { digitalItemType?: unknown }).digitalItemType) ?? undefined;
-      const isRiagu = Boolean((metadata as { isRiagu?: unknown }).isRiagu);
-      mapped[id] = {
-        id,
-        ...metadata,
-        filePath: typeof metadata.filePath === 'string' ? metadata.filePath : null,
-        gachaId: typeof metadata.gachaId === 'string' ? metadata.gachaId : metadata.gachaId ?? null,
-        itemId: typeof metadata.itemId === 'string' ? metadata.itemId : metadata.itemId ?? null,
-        rarityColor: metadata.rarityColor ?? null,
-        digitalItemType: isRiagu ? undefined : digitalItemType,
-        isOmitted: Boolean(metadata.isOmitted)
+    const parsed = JSON.parse(jsonText) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {
+        metadataMap: {},
+        rawMap: null,
+        entryName: metaEntry.name
       };
     }
-    return mapped;
+
+    const sourceMap = parsed as Record<string, unknown>;
+    const mapped: Record<string, ReceiveItemMetadata> = {};
+    const rawMap: Record<string, Record<string, unknown>> = {};
+
+    for (const [id, metadata] of Object.entries(sourceMap)) {
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        continue;
+      }
+      const rawMetadata = { ...(metadata as Record<string, unknown>) };
+      rawMap[id] = rawMetadata;
+
+      const typedMetadata = rawMetadata as Omit<ReceiveItemMetadata, 'id'>;
+      const digitalItemType = normalizeDigitalItemType(rawMetadata.digitalItemType) ?? undefined;
+      const isRiagu = Boolean(rawMetadata.isRiagu);
+      mapped[id] = {
+        id,
+        ...typedMetadata,
+        filePath: typeof typedMetadata.filePath === 'string' ? typedMetadata.filePath : null,
+        gachaId: typeof typedMetadata.gachaId === 'string' ? typedMetadata.gachaId : typedMetadata.gachaId ?? null,
+        itemId: typeof typedMetadata.itemId === 'string' ? typedMetadata.itemId : typedMetadata.itemId ?? null,
+        rarityColor: typedMetadata.rarityColor ?? null,
+        digitalItemType: isRiagu ? undefined : digitalItemType,
+        isOmitted: Boolean(typedMetadata.isOmitted)
+      };
+    }
+
+    return {
+      metadataMap: mapped,
+      rawMap,
+      entryName: metaEntry.name
+    };
   } catch (error) {
     console.error('Failed to parse items metadata', error);
-    return {};
+    return {
+      metadataMap: {},
+      rawMap: null,
+      entryName: metaEntry.name
+    };
   }
+}
+
+async function migrateItemsMetadataDigitalItemTypes(
+  zip: JSZip,
+  metadataEntries: ReceiveItemMetadata[],
+  rawMap: Record<string, Record<string, unknown>> | null,
+  entryName: string | null
+): Promise<boolean> {
+  if (!rawMap || !entryName || metadataEntries.length === 0) {
+    return false;
+  }
+
+  let changed = false;
+
+  for (const metadata of metadataEntries) {
+    const rawMetadata = rawMap[metadata.id];
+    if (!rawMetadata) {
+      continue;
+    }
+
+    const hasDigitalItemTypeKey = Object.prototype.hasOwnProperty.call(rawMetadata, 'digitalItemType');
+    const isRiaguItem = Boolean(rawMetadata.isRiagu ?? metadata.isRiagu);
+    metadata.isRiagu = isRiaguItem;
+
+    if (isRiaguItem) {
+      metadata.digitalItemType = undefined;
+      if (hasDigitalItemTypeKey) {
+        delete rawMetadata.digitalItemType;
+        changed = true;
+      }
+      continue;
+    }
+
+    const normalizedType = normalizeDigitalItemType(rawMetadata.digitalItemType);
+    if (normalizedType) {
+      metadata.digitalItemType = normalizedType;
+      if (rawMetadata.digitalItemType !== normalizedType) {
+        rawMetadata.digitalItemType = normalizedType;
+        changed = true;
+      }
+      continue;
+    }
+
+    let inferred: DigitalItemTypeKey = 'other';
+    if (metadata.filePath) {
+      const entry = findZipObjectByRelativePath(zip, metadata.filePath);
+      if (entry) {
+        try {
+          const blobEntry = await entry.async('blob');
+          const filename = entry.name.split('/').pop() ?? entry.name;
+          const mimeType = blobEntry.type || undefined;
+          inferred = await inferDigitalItemTypeFromBlob({
+            blob: blobEntry,
+            mimeType,
+            kindHint: resolveKindHint(detectMediaKind(filename, mimeType))
+          });
+        } catch (error) {
+          console.warn('Failed to infer digital item type while migrating receive zip item metadata', {
+            metadataId: metadata.id,
+            error
+          });
+        }
+      }
+    }
+
+    if (!hasDigitalItemTypeKey || rawMetadata.digitalItemType !== inferred) {
+      changed = true;
+      rawMetadata.digitalItemType = inferred;
+    }
+    metadata.digitalItemType = inferred;
+  }
+
+  if (!changed) {
+    return false;
+  }
+
+  zip.file(entryName, JSON.stringify(rawMap, null, 2), {
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  return true;
 }
 
 async function loadCatalogMetadata(zip: JSZip): Promise<ReceiveCatalogGacha[]> {
@@ -192,7 +341,7 @@ async function loadCatalogMetadata(zip: JSZip): Promise<ReceiveCatalogGacha[]> {
 async function extractReceiveMediaItemsFromZip(
   zip: JSZip,
   metadataEntries: ReceiveItemMetadata[],
-  onProgress?: (processed: number, total: number) => void
+  onProgress?: ReceiveZipProgressCallback
 ): Promise<ReceiveMediaItem[]> {
   if (metadataEntries.length > 0) {
     const mediaItems: ReceiveMediaItem[] = [];
@@ -201,19 +350,16 @@ async function extractReceiveMediaItemsFromZip(
 
     for (const metadata of metadataEntries) {
       const isRiaguItem = Boolean(metadata.isRiagu);
+      metadata.digitalItemType = isRiaguItem
+        ? undefined
+        : normalizeDigitalItemType(metadata.digitalItemType) ?? undefined;
       if (!metadata.filePath) {
-        metadata.digitalItemType = isRiaguItem
-          ? undefined
-          : normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
       }
       const entry = findZipObjectByRelativePath(zip, metadata.filePath);
       if (!entry) {
-        metadata.digitalItemType = isRiaguItem
-          ? undefined
-          : normalizeDigitalItemType(metadata.digitalItemType) ?? 'other';
         processed += 1;
         onProgress?.(processed, total);
         continue;
@@ -223,16 +369,6 @@ async function extractReceiveMediaItemsFromZip(
       const filename = entry.name.split('/').pop() ?? entry.name;
       const mimeType = blobEntry.type || undefined;
       const kind = detectMediaKind(filename, mimeType);
-      const digitalItemType =
-        isRiaguItem
-          ? undefined
-          : normalizeDigitalItemType(metadata.digitalItemType) ??
-            (await inferDigitalItemTypeFromBlob({
-              blob: blobEntry,
-              mimeType,
-              kindHint: kind === 'image' ? 'image' : kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'other'
-            }));
-      metadata.digitalItemType = digitalItemType;
       mediaItems.push({
         id: metadata.id,
         path: entry.name,
@@ -290,8 +426,8 @@ async function extractReceiveMediaItemsFromZip(
 }
 
 export async function extractReceiveMediaItems(
-  blob: Blob,
-  onProgress?: (processed: number, total: number) => void
+  blob: ReceiveZipInput,
+  onProgress?: ReceiveZipProgressCallback
 ): Promise<ReceiveMediaItem[]> {
   const zip = await JSZip.loadAsync(blob);
   const metadataMap = await loadItemsMetadata(zip);
@@ -300,15 +436,40 @@ export async function extractReceiveMediaItems(
 }
 
 export async function loadReceiveZipInventory(
-  blob: Blob,
-  onProgress?: (processed: number, total: number) => void
-): Promise<{ metadataEntries: ReceiveItemMetadata[]; mediaItems: ReceiveMediaItem[]; catalog: ReceiveCatalogGacha[] }> {
+  blob: ReceiveZipInput,
+  options?: ReceiveZipProgressCallback | LoadReceiveZipInventoryOptions
+): Promise<{
+  metadataEntries: ReceiveItemMetadata[];
+  mediaItems: ReceiveMediaItem[];
+  catalog: ReceiveCatalogGacha[];
+  migratedBlob?: Blob;
+}> {
+  const resolvedOptions: LoadReceiveZipInventoryOptions =
+    typeof options === 'function'
+      ? { onProgress: options }
+      : options ?? {};
+
   const zip = await JSZip.loadAsync(blob);
-  const metadataMap = await loadItemsMetadata(zip);
+  const metadataBundle = await loadItemsMetadataWithSource(zip);
+  const metadataMap = metadataBundle.metadataMap;
   const metadataEntries = Object.values(metadataMap);
-  const mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataEntries, onProgress);
+  let migratedBlob: Blob | undefined;
+
+  if (resolvedOptions.migrateDigitalItemTypes) {
+    const migrated = await migrateItemsMetadataDigitalItemTypes(
+      zip,
+      metadataEntries,
+      metadataBundle.rawMap,
+      metadataBundle.entryName
+    );
+    if (migrated) {
+      migratedBlob = await zip.generateAsync({ type: 'blob' });
+    }
+  }
+
+  const mediaItems = await extractReceiveMediaItemsFromZip(zip, metadataEntries, resolvedOptions.onProgress);
   const catalog = await loadCatalogMetadata(zip);
-  return { metadataEntries, mediaItems, catalog };
+  return { metadataEntries, mediaItems, catalog, migratedBlob };
 }
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
@@ -357,7 +518,7 @@ async function loadSelectionMetadata(zip: JSZip): Promise<SelectionMetadataPaylo
   }
 }
 
-export async function loadReceiveZipPullIds(blob: Blob): Promise<string[]> {
+export async function loadReceiveZipPullIds(blob: ReceiveZipInput): Promise<string[]> {
   try {
     const zip = await JSZip.loadAsync(blob);
     const selection = await loadSelectionMetadata(zip);
@@ -368,7 +529,7 @@ export async function loadReceiveZipPullIds(blob: Blob): Promise<string[]> {
   }
 }
 
-export async function loadReceiveZipItemMetadata(blob: Blob): Promise<ReceiveItemMetadata[]> {
+export async function loadReceiveZipItemMetadata(blob: ReceiveZipInput): Promise<ReceiveItemMetadata[]> {
   try {
     const zip = await JSZip.loadAsync(blob);
     const metadataMap = await loadItemsMetadata(zip);
@@ -380,7 +541,7 @@ export async function loadReceiveZipItemMetadata(blob: Blob): Promise<ReceiveIte
 }
 
 export async function loadReceiveZipSelectionInfo(
-  blob: Blob
+  blob: ReceiveZipInput
 ): Promise<{ pullIds: string[]; ownerName: string | null }> {
   try {
     const zip = await JSZip.loadAsync(blob);
@@ -395,7 +556,7 @@ export async function loadReceiveZipSelectionInfo(
   }
 }
 
-export async function loadReceiveZipSummary(blob: Blob): Promise<ReceiveZipSummary | null> {
+export async function loadReceiveZipSummary(blob: ReceiveZipInput): Promise<ReceiveZipSummary | null> {
   try {
     const zip = await JSZip.loadAsync(blob);
     const metadataMap = await loadItemsMetadata(zip);

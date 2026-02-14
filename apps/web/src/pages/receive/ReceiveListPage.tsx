@@ -15,7 +15,8 @@ import {
   isHistoryStorageAvailable,
   loadHistoryFile,
   loadHistoryMetadata,
-  persistHistoryMetadata
+  persistHistoryMetadata,
+  saveHistoryFile
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
@@ -240,7 +241,19 @@ export function ReceiveListPage(): JSX.Element {
             }
           }
 
-          const { metadataEntries, mediaItems, catalog } = await loadReceiveZipInventory(blob);
+          const { metadataEntries, mediaItems, catalog, migratedBlob } = await loadReceiveZipInventory(blob, {
+            migrateDigitalItemTypes: true
+          });
+          if (migratedBlob) {
+            try {
+              await saveHistoryFile(entry.id, migratedBlob);
+            } catch (persistError) {
+              console.warn('Failed to persist migrated receive history zip from /receive/list', {
+                entryId: entry.id,
+                error: persistError
+              });
+            }
+          }
           const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
           const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
           pullIds.forEach((pullId) => seenPullIds.add(pullId));
