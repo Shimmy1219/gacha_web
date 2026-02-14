@@ -4,9 +4,11 @@ import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIcon
 
 export interface ReceiveIconSettingsDialogPayload {
   onCloseAfterSave?: boolean;
+  autoOpenFilePicker?: boolean;
 }
 
 export function ReceiveIconSettingsDialog({
+  payload,
   close
 }: ModalComponentProps<ReceiveIconSettingsDialogPayload>): JSX.Element {
   const { iconAssetIds, remainingSlots, isProcessing, error, addIcons, removeIcon } = useReceiveIconRegistry();
@@ -21,6 +23,7 @@ export function ReceiveIconSettingsDialog({
           error={error}
           addIcons={addIcons}
           removeIcon={removeIcon}
+          autoOpenFilePicker={Boolean(payload?.autoOpenFilePicker)}
         />
       </ModalBody>
 

@@ -1,4 +1,4 @@
-import { ArrowPathIcon, ExclamationTriangleIcon, PlusCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, ExclamationTriangleIcon, PlusCircleIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -259,7 +259,9 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
       id: 'receive-icon-settings',
       title: 'アイコン設定',
       size: 'lg',
-      payload: {}
+      payload: {
+        autoOpenFilePicker: true
+      }
     });
   };
 
@@ -303,7 +305,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
 
   return (
     <>
-      <ModalBody className="icon-ring-wear-dialog__body rounded-2xl bg-surface/20 p-0 md:pr-0">
+      <ModalBody className="icon-ring-wear-dialog__body rounded-2xl bg-surface/20 p-0 overflow-x-hidden md:pr-0">
         <div className="icon-ring-wear-dialog__header space-y-2">
           <p className="icon-ring-wear-dialog__target text-sm text-muted-foreground">
             対象アイテム: <span className="font-semibold text-surface-foreground">{ringItemName}</span>
@@ -346,10 +348,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
         ) : null}
 
         {status === 'ready' && composites.length > 0 ? (
-          <div
-            className="icon-ring-wear-dialog__cards-scroll mt-4 -mx-4 overflow-x-auto px-4 pb-2 snap-x snap-mandatory overscroll-x-contain"
-            aria-label="装着プレビュー一覧"
-          >
+          <div className="icon-ring-wear-dialog__cards-scroll mt-4 overflow-x-auto pb-2 snap-x snap-mandatory overscroll-x-contain" aria-label="装着プレビュー一覧">
             <div className="icon-ring-wear-dialog__cards-track flex w-max gap-3">
               {composites.map((entry) => (
                 <div
@@ -377,13 +376,13 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
               ))}
               <button
                 type="button"
-                className="icon-ring-wear-dialog__register-card icon-ring-wear-dialog__card icon-ring-wear-dialog__register-button w-40 flex-shrink-0 snap-start rounded-2xl border border-dashed border-accent/60 bg-accent/10 p-2 text-accent transition hover:bg-accent/20"
+                className="icon-ring-wear-dialog__register-card icon-ring-wear-dialog__card icon-ring-wear-dialog__register-button w-40 flex-shrink-0 snap-start rounded-2xl border border-dashed border-rose-500/60 bg-rose-500/10 p-2 text-rose-500 transition hover:bg-rose-500/20"
                 onClick={handleOpenIconSettings}
                 disabled={isRegistryProcessing}
               >
-                <div className="icon-ring-wear-dialog__register-preview-container aspect-square w-full overflow-hidden rounded-xl border border-accent/50 bg-accent/5">
-                  <div className="icon-ring-wear-dialog__register-preview-inner flex h-full w-full items-center justify-center">
-                    <PlusCircleIcon className="icon-ring-wear-dialog__register-plus-icon h-12 w-12" aria-hidden="true" />
+                <div className="icon-ring-wear-dialog__register-preview-container aspect-square w-full overflow-hidden rounded-xl border border-rose-500/50 bg-rose-500/5">
+                  <div className="icon-ring-wear-dialog__register-preview-inner flex h-full w-full items-center justify-center text-rose-500">
+                    <PlusIcon className="icon-ring-wear-dialog__register-plus-icon h-12 w-12" aria-hidden="true" />
                   </div>
                 </div>
                 <span className="icon-ring-wear-dialog__register-label mt-2 block text-xs font-semibold">

@@ -1,5 +1,5 @@
 import { PlusCircleIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useAssetPreview } from '../../features/assets/useAssetPreview';
 import { MAX_RECEIVE_ICON_COUNT } from '../../pages/receive/hooks/useReceiveIconRegistry';
@@ -60,6 +60,7 @@ export interface ReceiveIconRegistryPanelProps {
   error: string | null;
   addIcons: (files: FileList | File[] | null) => Promise<void>;
   removeIcon: (assetId: string) => Promise<void>;
+  autoOpenFilePicker?: boolean;
 }
 
 export function ReceiveIconRegistryPanel({
@@ -68,10 +69,12 @@ export function ReceiveIconRegistryPanel({
   isProcessing,
   error,
   addIcons,
-  removeIcon
+  removeIcon,
+  autoOpenFilePicker = false
 }: ReceiveIconRegistryPanelProps): JSX.Element {
   const canAdd = remainingSlots > 0 && !isProcessing;
   const registeredCount = iconAssetIds.length;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const helperText = useMemo(() => {
     if (registeredCount >= MAX_RECEIVE_ICON_COUNT) {
@@ -79,6 +82,18 @@ export function ReceiveIconRegistryPanel({
     }
     return `最大${MAX_RECEIVE_ICON_COUNT}枚まで登録できます（残り${remainingSlots}枚）。`;
   }, [registeredCount, remainingSlots]);
+
+  useEffect(() => {
+    if (!autoOpenFilePicker || !canAdd) {
+      return;
+    }
+    const handle = window.requestAnimationFrame(() => {
+      fileInputRef.current?.click();
+    });
+    return () => {
+      window.cancelAnimationFrame(handle);
+    };
+  }, [autoOpenFilePicker, canAdd]);
 
   return (
     <div className="receive-icon-registry-panel__root">
@@ -94,6 +109,7 @@ export function ReceiveIconRegistryPanel({
           <PlusCircleIcon className="h-4 w-4" />
           <span className="receive-icon-registry-panel__add-button-text">アイコン画像を追加</span>
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             multiple
