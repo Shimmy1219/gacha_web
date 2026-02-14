@@ -57,12 +57,25 @@ function isCloseRatio(actual: number, target: number, relativeTolerance: number)
   return Math.abs(actual - target) / target <= relativeTolerance;
 }
 
-function inferFromImageAspectRatio(params: {
+function isTransparentCapableImageFormat(params: {
+  mimeType?: string | null;
+  fileName?: string | null;
+}): boolean {
+  const normalizedMime = typeof params.mimeType === 'string' ? params.mimeType.toLowerCase() : '';
+  if (normalizedMime.includes('png') || normalizedMime.includes('webp') || normalizedMime.includes('gif')) {
+    return true;
+  }
+  const lowerFileName = typeof params.fileName === 'string' ? params.fileName.toLowerCase() : '';
+  return /\.(png|webp|gif)$/i.test(lowerFileName);
+}
+
+export function inferDigitalItemTypeFromImageDimensions(params: {
   width: number;
   height: number;
   mimeType?: string | null;
+  fileName?: string | null;
 }): DigitalItemTypeKey {
-  const { width, height, mimeType } = params;
+  const { width, height, mimeType, fileName } = params;
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return 'other';
   }
@@ -76,7 +89,7 @@ function inferFromImageAspectRatio(params: {
   if (isCloseRatio(ratio, 16 / 9, 0.12)) {
     return 'pc-wallpaper';
   }
-  if (isCloseRatio(ratio, 32 / 75, 0.12)) {
+  if (isCloseRatio(ratio, 75 / 32, 0.12)) {
     return 'iriam-header';
   }
 
@@ -99,9 +112,8 @@ function inferFromImageAspectRatio(params: {
 
   // 4) square-like (icon/icon-ring)
   if (isCloseRatio(ratio, 1 / 1, 0.06)) {
-    const normalizedMime = typeof mimeType === 'string' ? mimeType.toLowerCase() : '';
-    // アイコンリングは透過PNGで配布されることが多い前提で、PNG/WebP/GIFを優先して推定する。
-    if (normalizedMime.includes('png') || normalizedMime.includes('webp') || normalizedMime.includes('gif')) {
+    // アイコンリングは透過PNGで配布されることが多いため、MIMEと拡張子の両方で判定する。
+    if (isTransparentCapableImageFormat({ mimeType, fileName })) {
       return 'icon-ring';
     }
     return 'normal-icon';
@@ -159,6 +171,7 @@ async function loadImageDimensionsFromBlob(blob: Blob): Promise<{ width: number;
 export async function inferDigitalItemTypeFromBlob(params: {
   blob: Blob;
   mimeType?: string | null;
+  fileName?: string | null;
   kindHint?: 'image' | 'video' | 'audio' | 'text' | 'other';
 }): Promise<DigitalItemTypeKey> {
   const mimeType = params.mimeType ?? params.blob.type ?? null;
@@ -181,12 +194,17 @@ export async function inferDigitalItemTypeFromBlob(params: {
     return 'other';
   }
 
-  return inferFromImageAspectRatio({ ...dimensions, mimeType });
+  return inferDigitalItemTypeFromImageDimensions({
+    ...dimensions,
+    mimeType,
+    fileName: params.fileName
+  });
 }
 
 export async function inferDigitalItemTypeFromImageUrl(params: {
   url: string | null;
   mimeType?: string | null;
+  fileName?: string | null;
 }): Promise<DigitalItemTypeKey> {
   if (!params.url) {
     return 'other';
@@ -195,5 +213,9 @@ export async function inferDigitalItemTypeFromImageUrl(params: {
   if (!dimensions) {
     return 'other';
   }
-  return inferFromImageAspectRatio({ ...dimensions, mimeType: params.mimeType });
+  return inferDigitalItemTypeFromImageDimensions({
+    ...dimensions,
+    mimeType: params.mimeType,
+    fileName: params.fileName
+  });
 }

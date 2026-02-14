@@ -12,6 +12,7 @@ import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 import { ReceiveSaveButton } from './ReceiveSaveButtons';
 import { IconRingWearDialog, useModal } from '../../../modals';
+import { getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
@@ -211,6 +212,11 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               {typeof item.metadata?.obtainedCount === 'number' ? (
                 <span className="receive-item-card-attribute receive-item-card-attribute-count rounded-full border border-border/60 bg-surface/40 px-2 py-1 font-medium text-muted-foreground">
                   獲得数: {item.metadata.obtainedCount}
+                </span>
+              ) : null}
+              {item.metadata?.digitalItemType ? (
+                <span className="receive-item-card-attribute receive-item-card-attribute-digital-type rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 font-medium text-emerald-600">
+                  {getDigitalItemTypeLabel(item.metadata.digitalItemType)}
                 </span>
               ) : null}
               {item.metadata?.isRiagu ? (

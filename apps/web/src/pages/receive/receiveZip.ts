@@ -245,6 +245,7 @@ async function migrateItemsMetadataDigitalItemTypes(
           inferred = await inferDigitalItemTypeFromBlob({
             blob: blobEntry,
             mimeType,
+            fileName: filename,
             kindHint: resolveKindHint(detectMediaKind(filename, mimeType))
           });
         } catch (error) {

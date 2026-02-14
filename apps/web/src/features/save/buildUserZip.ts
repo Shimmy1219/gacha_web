@@ -1260,7 +1260,7 @@ export async function buildUserZipFromSelection({
       const digitalItemType = item.isRiagu
         ? undefined
         : normalizeDigitalItemType(item.digitalItemType) ??
-          (await inferDigitalItemTypeFromBlob({ blob: asset.blob, mimeType, kindHint }));
+          (await inferDigitalItemTypeFromBlob({ blob: asset.blob, mimeType, fileName, kindHint }));
       const filePath = `items/${sanitizedGachaName}/${fileName}`;
       const rarityLabel = resolveRarityLabel(rarityState, item.rarityId);
       const rarityColor = rarityState?.entities?.[item.rarityId]?.color ?? null;
