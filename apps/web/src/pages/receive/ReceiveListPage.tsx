@@ -9,7 +9,8 @@ import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSa
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import {
   loadReceiveZipInventory,
-  loadReceiveZipSelectionInfo
+  loadReceiveZipSelectionInfo,
+  updateReceiveZipDigitalItemType
 } from './receiveZip';
 import {
   createHistoryThumbnailKey,
@@ -17,11 +18,12 @@ import {
   loadHistoryFile,
   loadHistoryThumbnailBlobMap,
   loadHistoryMetadata,
-  persistHistoryMetadata
+  persistHistoryMetadata,
+  saveHistoryFile
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
-import { IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
+import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
 import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
 
 interface ReceiveInventoryItem {
@@ -37,6 +39,7 @@ interface ReceiveInventoryItem {
   obtainedCount: number;
   kind: ReceiveMediaKind;
   digitalItemType: DigitalItemTypeKey | null;
+  metadataIds: string[];
   sourceItems: ReceiveMediaItem[];
   previewThumbnailBlob: Blob | null;
   previewCacheKey: string | null;
@@ -500,14 +503,18 @@ function formatOwnerNames(names: string[]): string {
 function ReceiveInventoryItemCard({
   item,
   onSave,
+  onDigitalItemTypeChange,
   isSaving,
+  isUpdatingDigitalItemType,
   previewVisibilityMarginPx,
   previewReleaseDelayMs,
   previewCacheMaxEntries
 }: {
   item: ReceiveInventoryItem;
   onSave: () => void;
+  onDigitalItemTypeChange: (digitalItemType: DigitalItemTypeKey) => void | Promise<void>;
   isSaving: boolean;
+  isUpdatingDigitalItemType: boolean;
   previewVisibilityMarginPx: number;
   previewReleaseDelayMs: number;
   previewCacheMaxEntries: number;
@@ -616,7 +623,33 @@ function ReceiveInventoryItemCard({
           <div className="receive-list-item-card__meta-row flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="receive-list-item-card__count chip">x{item.obtainedCount}</span>
             {item.digitalItemType ? (
-              <span className="receive-list-item-card__digital-type chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+              <button
+                type="button"
+                className="receive-list-item-card__digital-type receive-list-item-card__digital-type-button chip cursor-pointer transition hover:border-accent/60 hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!item.isOwned || isUpdatingDigitalItemType}
+                onClick={() => {
+                  if (!item.isOwned || isUpdatingDigitalItemType) {
+                    return;
+                  }
+                  push(DigitalItemTypeDialog, {
+                    id: `receive-list-item-digital-type-${item.key}`,
+                    title: 'デジタルアイテムタイプ',
+                    size: 'sm',
+                    payload: {
+                      assetId: item.key,
+                      assetName: `${item.gachaName} / ${item.itemName}`,
+                      currentType: item.digitalItemType,
+                      onSave: ({ digitalItemType }) => {
+                        void onDigitalItemTypeChange(digitalItemType);
+                      }
+                    }
+                  });
+                }}
+                aria-label={`${item.itemName}のデジタルアイテムタイプを変更`}
+                title={item.isOwned ? 'タップしてデジタルアイテムタイプを変更' : '未所持アイテムは変更できません'}
+              >
+                <span className="receive-list-item-card__digital-type-label">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+              </button>
             ) : null}
             {item.isRiagu ? (
               <span className="receive-list-item-card__riagu chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
@@ -669,6 +702,7 @@ export function ReceiveListPage(): JSX.Element {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingGroupKey, setSavingGroupKey] = useState<string | null>(null);
   const [savingItemKey, setSavingItemKey] = useState<string | null>(null);
+  const [updatingDigitalTypeItemKey, setUpdatingDigitalTypeItemKey] = useState<string | null>(null);
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
@@ -852,6 +886,9 @@ export function ReceiveListPage(): JSX.Element {
               if (existing) {
                 existing.obtainedCount += obtained;
                 existing.isOwned = true;
+                if (!existing.metadataIds.includes(metadata.id)) {
+                  existing.metadataIds.push(metadata.id);
+                }
                 if (!existing.previewThumbnailBlob && thumbnailBlob) {
                   existing.previewThumbnailBlob = thumbnailBlob;
                 }
@@ -872,6 +909,7 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: 'unknown',
                   digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
+                  metadataIds: [metadata.id],
                   sourceItems: [],
                   previewThumbnailBlob: thumbnailBlob,
                   previewCacheKey,
@@ -920,6 +958,9 @@ export function ReceiveListPage(): JSX.Element {
                 } else if (item.metadata?.digitalItemType) {
                   existing.digitalItemType = item.metadata.digitalItemType;
                 }
+                if (!existing.metadataIds.includes(assetId)) {
+                  existing.metadataIds.push(assetId);
+                }
                 existing.sourceItems.push(item);
                 if (!existing.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(item)) {
                   existing.previewThumbnailBlob = previewThumbnailBlob;
@@ -948,6 +989,7 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: item.kind,
                   digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
+                  metadataIds: [assetId],
                   sourceItems: [item],
                   previewThumbnailBlob: isLikelyImageSource(item) ? previewThumbnailBlob : null,
                   previewCacheKey: isLikelyImageSource(item) ? previewCacheKey : null,
@@ -1018,6 +1060,7 @@ export function ReceiveListPage(): JSX.Element {
                     obtainedCount: 0,
                     kind: 'unknown',
                     digitalItemType: item.isRiagu ? null : 'other',
+                    metadataIds: [],
                     sourceItems: [],
                     previewThumbnailBlob: null,
                     previewCacheKey: null,
@@ -1146,7 +1189,7 @@ export function ReceiveListPage(): JSX.Element {
   const totalOwnedKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedKinds, 0), [displayGroups]);
   const totalKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.totalKinds, 0), [displayGroups]);
   const totalOwnedCount = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedCount, 0), [displayGroups]);
-  const hasSaving = Boolean(savingGroupKey || savingItemKey);
+  const hasSaving = Boolean(savingGroupKey || savingItemKey || updatingDigitalTypeItemKey);
 
   const loadGroupMedia = useCallback(async (groupKey: string) => {
     const targetGroup = groupsRef.current.find((group) => resolveGroupKey(group.gachaId, group.gachaName) === groupKey);
@@ -1264,6 +1307,9 @@ export function ReceiveListPage(): JSX.Element {
           const existingPatch = itemPatchMap.get(itemKey);
           if (existingPatch) {
             existingPatch.sourceItems.push(mediaItem);
+            if (!existingPatch.item.metadataIds.includes(assetId)) {
+              existingPatch.item.metadataIds.push(assetId);
+            }
             if (existingPatch.item.kind === 'unknown') {
               existingPatch.item.kind = mediaItem.kind;
             }
@@ -1294,6 +1340,7 @@ export function ReceiveListPage(): JSX.Element {
                 obtainedCount: obtained,
                 kind: mediaItem.kind,
                 digitalItemType: mediaItem.metadata?.isRiagu ? null : mediaItem.metadata?.digitalItemType ?? 'other',
+                metadataIds: [assetId],
                 sourceItems: [mediaItem],
                 previewThumbnailBlob: isLikelyImageSource(mediaItem) ? previewThumbnailBlob : null,
                 previewCacheKey: isLikelyImageSource(mediaItem) ? previewCacheKey : null,
@@ -1324,10 +1371,12 @@ export function ReceiveListPage(): JSX.Element {
             const mergedSourceMap = new Map<string, ReceiveMediaItem>();
             item.sourceItems.forEach((source) => mergedSourceMap.set(source.id, source));
             patch.sourceItems.forEach((source) => mergedSourceMap.set(source.id, source));
+            const mergedMetadataIds = Array.from(new Set([...item.metadataIds, ...patch.item.metadataIds]));
             return {
               ...item,
               kind: item.kind === 'unknown' ? patch.item.kind : item.kind,
               digitalItemType: item.isRiagu ? null : item.digitalItemType ?? patch.item.digitalItemType,
+              metadataIds: mergedMetadataIds,
               previewThumbnailBlob: item.previewThumbnailBlob ?? patch.item.previewThumbnailBlob,
               previewCacheKey: item.previewCacheKey ?? patch.item.previewCacheKey,
               sourceItems: Array.from(mergedSourceMap.values())
@@ -1452,6 +1501,113 @@ export function ReceiveListPage(): JSX.Element {
       setSavingGroupKey(null);
     }
   }, []);
+
+  const handleUpdateDigitalItemType = useCallback(
+    async (group: ReceiveGachaGroup, item: ReceiveInventoryItem, digitalItemType: DigitalItemTypeKey) => {
+      if (!item.isOwned || item.isRiagu || item.digitalItemType === digitalItemType) {
+        return;
+      }
+
+      const metadataIds = Array.from(
+        new Set(item.metadataIds.map((metadataId) => metadataId.trim()).filter((metadataId) => metadataId.length > 0))
+      );
+      if (metadataIds.length === 0) {
+        setSaveError('デジタルアイテムタイプを更新できませんでした。対象メタデータが見つかりません。');
+        return;
+      }
+      if (group.entryIds.length === 0) {
+        setSaveError('デジタルアイテムタイプを更新できませんでした。対象履歴が見つかりません。');
+        return;
+      }
+
+      setSaveError(null);
+      setUpdatingDigitalTypeItemKey(item.key);
+      const persistedMetadataIdSet = new Set<string>();
+
+      try {
+        for (const entryId of group.entryIds) {
+          const historyBlob = await loadHistoryFile(entryId);
+          if (!historyBlob) {
+            continue;
+          }
+
+          const { updatedBlob, updatedMetadataIds } = await updateReceiveZipDigitalItemType(historyBlob, {
+            metadataIds,
+            digitalItemType
+          });
+          updatedMetadataIds.forEach((metadataId) => {
+            persistedMetadataIdSet.add(metadataId);
+          });
+          if (updatedBlob) {
+            await saveHistoryFile(entryId, updatedBlob);
+          }
+        }
+
+        if (persistedMetadataIdSet.size === 0) {
+          setSaveError('デジタルアイテムタイプを更新できませんでした。対象メタデータが履歴内に見つかりません。');
+          return;
+        }
+
+        const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+        const applyDigitalTypeToSourceItem = (sourceItem: ReceiveMediaItem): ReceiveMediaItem => {
+          const sourceMetadataId = sourceItem.metadata?.id?.trim();
+          if (!sourceMetadataId || !persistedMetadataIdSet.has(sourceMetadataId) || !sourceItem.metadata) {
+            return sourceItem;
+          }
+          if (sourceItem.metadata.isRiagu || sourceItem.metadata.digitalItemType === digitalItemType) {
+            return sourceItem;
+          }
+          return {
+            ...sourceItem,
+            metadata: {
+              ...sourceItem.metadata,
+              digitalItemType
+            }
+          };
+        };
+
+        setGroups((previousGroups) =>
+          previousGroups.map((currentGroup) => {
+            if (resolveGroupKey(currentGroup.gachaId, currentGroup.gachaName) !== groupKey) {
+              return currentGroup;
+            }
+
+            const nextItems = currentGroup.items.map((currentItem) => {
+              if (currentItem.key !== item.key || currentItem.isRiagu) {
+                return currentItem;
+              }
+              const hasPersistedMetadata = currentItem.metadataIds.some((metadataId) =>
+                persistedMetadataIdSet.has(metadataId)
+              );
+              if (!hasPersistedMetadata) {
+                return currentItem;
+              }
+              return {
+                ...currentItem,
+                digitalItemType,
+                sourceItems: currentItem.sourceItems.map(applyDigitalTypeToSourceItem)
+              };
+            });
+
+            return {
+              ...currentGroup,
+              items: nextItems,
+              sourceItems: currentGroup.sourceItems.map(applyDigitalTypeToSourceItem)
+            };
+          })
+        );
+      } catch (updateError) {
+        console.error('Failed to update digital item type from receive list', {
+          itemKey: item.key,
+          updateError
+        });
+        setSaveError('デジタルアイテムタイプの更新に失敗しました。もう一度お試しください。');
+      } finally {
+        setUpdatingDigitalTypeItemKey(null);
+      }
+    },
+    []
+  );
 
   return (
     <div className="receive-list-page min-h-screen text-surface-foreground">
@@ -1593,7 +1749,11 @@ export function ReceiveListPage(): JSX.Element {
                             key={item.key}
                             item={item}
                             onSave={() => handleSaveItem(item)}
+                            onDigitalItemTypeChange={(digitalItemType) =>
+                              handleUpdateDigitalItemType(group, item, digitalItemType)
+                            }
                             isSaving={savingItemKey === item.key || Boolean(savingGroupKey)}
+                            isUpdatingDigitalItemType={updatingDigitalTypeItemKey === item.key}
                             previewVisibilityMarginPx={previewVisibilityMarginPx}
                             previewReleaseDelayMs={previewReleaseDelayMs}
                             previewCacheMaxEntries={previewCacheMaxEntries}

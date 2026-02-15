@@ -506,6 +506,75 @@ export async function loadReceiveZipInventory(
   return { metadataEntries, mediaItems, catalog, migratedBlob };
 }
 
+export async function updateReceiveZipDigitalItemType(
+  blob: ReceiveZipInput,
+  options: {
+    metadataIds: string[];
+    digitalItemType: DigitalItemTypeKey;
+  }
+): Promise<{
+  updatedBlob: Blob | null;
+  updatedMetadataIds: string[];
+}> {
+  const normalizedMetadataIds = Array.from(
+    new Set(
+      options.metadataIds
+        .map((metadataId) => metadataId.trim())
+        .filter((metadataId) => metadataId.length > 0)
+    )
+  );
+  if (normalizedMetadataIds.length === 0) {
+    return { updatedBlob: null, updatedMetadataIds: [] };
+  }
+
+  const zip = await JSZip.loadAsync(blob);
+  const metadataBundle = await loadItemsMetadataWithSource(zip);
+  const { rawMap, entryName } = metadataBundle;
+  if (!rawMap || !entryName) {
+    return { updatedBlob: null, updatedMetadataIds: [] };
+  }
+
+  let changed = false;
+  const updatedMetadataIdSet = new Set<string>();
+
+  normalizedMetadataIds.forEach((metadataId) => {
+    const rawMetadata = rawMap[metadataId];
+    if (!rawMetadata) {
+      return;
+    }
+
+    const isRiaguItem = Boolean(rawMetadata.isRiagu);
+    if (isRiaguItem) {
+      if (Object.prototype.hasOwnProperty.call(rawMetadata, 'digitalItemType')) {
+        delete rawMetadata.digitalItemType;
+        changed = true;
+      }
+      return;
+    }
+
+    const normalizedType = normalizeDigitalItemType(rawMetadata.digitalItemType);
+    if (normalizedType !== options.digitalItemType) {
+      rawMetadata.digitalItemType = options.digitalItemType;
+      changed = true;
+    }
+    updatedMetadataIdSet.add(metadataId);
+  });
+
+  if (!changed) {
+    return { updatedBlob: null, updatedMetadataIds: Array.from(updatedMetadataIdSet) };
+  }
+
+  zip.file(entryName, JSON.stringify(rawMap, null, 2), {
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  });
+  const updatedBlob = await zip.generateAsync({ type: 'blob' });
+  return {
+    updatedBlob,
+    updatedMetadataIds: Array.from(updatedMetadataIdSet)
+  };
+}
+
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   const unique = new Set<string>();
   values.forEach((value) => {
