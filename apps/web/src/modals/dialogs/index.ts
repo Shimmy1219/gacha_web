@@ -28,6 +28,7 @@ export * from './BackupImportConflictDialog';
 export * from './SaveTargetDialog';
 export * from './StartWizardDialog';
 export * from './ReceiveIconSettingsDialog';
+export * from './ReceiveMediaPreviewDialog';
 export * from './UserDiscordProfileDialog';
 export * from './UserHistoryDialog';
 export * from './WarningDialog';

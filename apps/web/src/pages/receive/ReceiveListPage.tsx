@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
-import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
 import { MultiSelectDropdown, type MultiSelectOption } from '../gacha/components/select/MultiSelectDropdown';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
@@ -19,7 +19,7 @@ import {
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
-import { IconRingWearDialog, useModal } from '../../modals';
+import { IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -329,10 +329,15 @@ function ReceiveInventoryItemCard({
   );
   const visiblePreviewUrl = useViewportPreviewUrl(imageSourceItem, isInViewport);
   const hasSource = item.sourceItems.length > 0;
-  const ringSourceItem = useMemo(
+  const previewSourceItem = useMemo(
     () => imageSourceItem ?? item.sourceItems[0] ?? null,
     [imageSourceItem, item.sourceItems]
   );
+  const ringSourceItem = useMemo(
+    () => previewSourceItem,
+    [previewSourceItem]
+  );
+  const canOpenPreview = item.isOwned && hasSource && Boolean(previewSourceItem);
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
 
   return (
@@ -353,7 +358,27 @@ function ReceiveInventoryItemCard({
               {item.rarity}
             </span>
           ) : null}
-          <ItemPreview
+          <ItemPreviewButton
+            onClick={() => {
+              if (!canOpenPreview || !previewSourceItem) {
+                return;
+              }
+              push(ReceiveMediaPreviewDialog, {
+                id: `receive-list-item-preview-${item.key}`,
+                title: item.itemName,
+                description: item.gachaName,
+                size: 'full',
+                payload: {
+                  itemName: item.itemName,
+                  gachaName: item.gachaName,
+                  rarityLabel: item.rarity,
+                  rarityColor: item.rarityColor,
+                  mediaItems: item.sourceItems,
+                  initialMediaItemId: previewSourceItem.id
+                }
+              });
+            }}
+            canPreview={canOpenPreview}
             previewUrl={visiblePreviewUrl}
             alt={item.itemName}
             kindHint={previewKind}
@@ -361,6 +386,8 @@ function ReceiveInventoryItemCard({
             className="receive-list-item-card__preview h-16 w-16 flex-shrink-0 bg-surface-deep"
             iconClassName="h-6 w-6"
             emptyLabel="noImage"
+            aria-label={canOpenPreview ? `${item.itemName}のプレビューを開く` : undefined}
+            title={canOpenPreview ? 'クリックしてプレビューを拡大' : undefined}
           />
         </div>
         <div className="receive-list-item-card__details-column flex min-w-0 flex-1 flex-col gap-2">
