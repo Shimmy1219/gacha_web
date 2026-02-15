@@ -3,7 +3,11 @@ import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
-import { getRarityTextPresentation, isWhiteRarityColor } from '../../features/rarity/utils/rarityColorPresentation';
+import {
+  getRarityTextPresentation,
+  getWhiteRarityTextOutlineStyle,
+  isWhiteRarityColor
+} from '../../features/rarity/utils/rarityColorPresentation';
 import { MultiSelectDropdown, type MultiSelectOption } from '../gacha/components/select/MultiSelectDropdown';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
@@ -531,7 +535,7 @@ function ReceiveInventoryItemCard({
 
     return {
       ...rarityPresentation.style,
-      WebkitTextStroke: '2px #000'
+      ...getWhiteRarityTextOutlineStyle()
     };
   }, [item.rarityColor, rarityPresentation.style]);
   const previewKind = resolvePreviewKind(item.kind);

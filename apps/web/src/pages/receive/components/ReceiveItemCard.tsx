@@ -2,7 +2,11 @@ import { useMemo, type CSSProperties } from 'react';
 import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-import { getRarityTextPresentation, isWhiteRarityColor } from '../../../features/rarity/utils/rarityColorPresentation';
+import {
+  getRarityTextPresentation,
+  getWhiteRarityTextOutlineStyle,
+  isWhiteRarityColor
+} from '../../../features/rarity/utils/rarityColorPresentation';
 import {
   GOLD_HEX,
   RAINBOW_VALUE,
@@ -98,7 +102,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     () => getRarityTextPresentation(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
   );
-  const shouldApplyWhiteRarityStroke = useMemo(
+  const shouldApplyWhiteRarityOutline = useMemo(
     () => isWhiteRarityColor(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
   );
@@ -117,12 +121,12 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       WebkitTextFillColor: '#fff'
     };
 
-    if (shouldApplyWhiteRarityStroke) {
-      mergedStyle.WebkitTextStroke = '2px #000';
+    if (shouldApplyWhiteRarityOutline) {
+      Object.assign(mergedStyle, getWhiteRarityTextOutlineStyle());
     }
 
     return mergedStyle;
-  }, [item.metadata?.rarityColor, rarityPresentation.style, shouldApplyWhiteRarityStroke]);
+  }, [item.metadata?.rarityColor, rarityPresentation.style, shouldApplyWhiteRarityOutline]);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
       return (
