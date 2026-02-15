@@ -1,8 +1,11 @@
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
   assertGuildOwner,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   isDiscordUnknownGuildError,
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
@@ -33,15 +36,16 @@ function normalizeMemberIds(queryValue){
   return collect;
 }
 
-export default async function handler(req, res){
+export default withApiGuards({
+  route: '/api/discord/list-gift-channels',
+  health: { enabled: true },
+  methods: ['GET'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:list-gift-channels', limit: 30, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/list-gift-channels', req);
   log.info('request received', { query: req.query });
-
-  if (req.method !== 'GET'){
-    res.setHeader('Allow','GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
 
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
@@ -51,6 +55,7 @@ export default async function handler(req, res){
   }
 
   const guildId = typeof req.query.guild_id === 'string' ? req.query.guild_id.trim() : '';
+  const categoryId = typeof req.query.category_id === 'string' ? req.query.category_id.trim() : '';
   if (!guildId){
     log.warn('missing guild identifier');
     return res.status(400).json({ ok:false, error:'guild_id required' });
@@ -63,6 +68,7 @@ export default async function handler(req, res){
 
   log.debug('request parameters normalized', {
     guildId,
+    categoryId: categoryId || null,
     memberIdFilterCount: memberIdCandidates.size,
   });
 
@@ -77,13 +83,14 @@ export default async function handler(req, res){
   function respondDiscordApiError(error, context){
     const message = error instanceof Error ? error.message : String(error);
     if (isDiscordUnknownGuildError(error)){
-      log.warn('discord guild is not accessible for bot operations', { context, message });
+      log.warn('【既知のエラー】discord guild is not accessible for bot operations', { context, message });
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
-    log.error('discord api request failed', { context, message });
+    log.error('【既知のエラー】discord api request failed', { context, message });
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
@@ -126,7 +133,11 @@ export default async function handler(req, res){
     ? candidates.filter((candidate) => memberIdCandidates.has(candidate.memberId))
     : candidates;
 
-  const payload = filtered.map((candidate) => ({
+  const categoryFiltered = categoryId
+    ? filtered.filter((candidate) => candidate.parentId === categoryId)
+    : filtered;
+
+  const payload = categoryFiltered.map((candidate) => ({
     channel_id: candidate.channelId,
     channel_name: candidate.channelName ?? null,
     parent_id: candidate.parentId ?? null,
@@ -136,6 +147,7 @@ export default async function handler(req, res){
 
   log.info('gift channel listing completed', {
     guildId,
+    categoryId: categoryId || null,
     returnedCount: payload.length,
   });
 
@@ -143,4 +155,4 @@ export default async function handler(req, res){
     ok: true,
     channels: payload,
   });
-}
+});

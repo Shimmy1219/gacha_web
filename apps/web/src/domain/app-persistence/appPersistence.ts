@@ -23,7 +23,7 @@ export const GACHA_STORAGE_UPDATED_EVENT = 'gacha-storage:updated' as const;
 
 export const STORAGE_KEYS = {
   appState: 'gacha:app-state:v3',
-  catalogState: 'gacha:catalog-state:v4',
+  catalogState: 'gacha:catalog-state:v5',
   rarityState: 'gacha:rarity-state:v3',
   userInventories: 'gacha:user-inventories:v3',
   userProfiles: 'gacha:user-profiles:v3',
@@ -37,6 +37,7 @@ export const STORAGE_KEYS = {
 } as const;
 
 const LEGACY_STORAGE_KEYS = {
+  catalogStateV4: 'gacha:catalog-state:v4',
   catalogStateV3: 'gacha:catalog-state:v3'
 } as const;
 
@@ -669,6 +670,7 @@ export class AppPersistence {
       Object.values(STORAGE_KEYS).forEach((key) => {
         storage.removeItem(key);
       });
+      storage.removeItem(LEGACY_STORAGE_KEYS.catalogStateV4);
       storage.removeItem(LEGACY_STORAGE_KEYS.catalogStateV3);
       storage.removeItem(SAVE_OPTIONS_STORAGE_KEY);
     } catch (error) {
@@ -776,6 +778,18 @@ export class AppPersistence {
     const current = this.readJson<GachaCatalogStateV4>('catalogState');
     if (current) {
       return current;
+    }
+
+    const legacyV4 = this.readRawJson<GachaCatalogStateV4>(LEGACY_STORAGE_KEYS.catalogStateV4);
+    if (legacyV4) {
+      this.persistValue('catalogState', legacyV4);
+      const storage = this.ensureStorage();
+      try {
+        storage?.removeItem(LEGACY_STORAGE_KEYS.catalogStateV4);
+      } catch (error) {
+        console.warn('Failed to remove legacy catalog state v4 after migration', error);
+      }
+      return legacyV4;
     }
 
     const legacy = this.readRawJson<GachaCatalogStateV3>(LEGACY_STORAGE_KEYS.catalogStateV3);

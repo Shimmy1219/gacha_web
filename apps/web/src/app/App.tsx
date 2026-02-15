@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
@@ -9,6 +10,10 @@ import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
+import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
+import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
+import { DiscordOauthErrorDialog } from '../modals/dialogs/DiscordOauthErrorDialog';
+import { ReleaseNotesDialog } from '../modals/dialogs/ReleaseNotesDialog';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -21,9 +26,13 @@ import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
 import { useHaptics } from '../features/haptics/HapticsProvider';
+import { getUnreadReleaseNotes, RELEASE_NOTES } from '../content/releaseNotes';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
+  const releaseModalOpenedForRef = useRef<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isMobile } = useResponsiveDashboard();
   const { push } = useModal();
   const persistence = useAppPersistence();
@@ -64,6 +73,77 @@ export function App(): JSX.Element {
       }),
     [push]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const params = new URLSearchParams(location.search);
+    const oauthError = params.get('discord_oauth_error');
+
+    if (!oauthError) {
+      return;
+    }
+
+    push(DiscordOauthErrorDialog, {
+      id: 'discord-oauth-error',
+      title: 'Discordとの連携に失敗しました',
+      size: 'sm',
+      intent: 'warning',
+      payload: {
+        oauthError
+      }
+    });
+
+    params.delete('discord_oauth_error');
+    const nextSearch = params.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch.length > 0 ? `?${nextSearch}` : '',
+        hash: location.hash
+      },
+      { replace: true }
+    );
+  }, [location.hash, location.pathname, location.search, navigate, push]);
+
+  useEffect(() => {
+    const isGachaRootPath = location.pathname === '/gacha' || location.pathname === '/gacha/';
+    if (!isGachaRootPath) {
+      releaseModalOpenedForRef.current = null;
+      return;
+    }
+
+    const latestRelease = RELEASE_NOTES[0];
+    if (!latestRelease) {
+      return;
+    }
+
+    const lastSeenRelease = uiPreferencesStore.getLastSeenRelease();
+    const unreadReleaseNotes = getUnreadReleaseNotes(RELEASE_NOTES, lastSeenRelease);
+    if (unreadReleaseNotes.length === 0) {
+      releaseModalOpenedForRef.current = null;
+      return;
+    }
+
+    if (releaseModalOpenedForRef.current === latestRelease.id) {
+      return;
+    }
+
+    releaseModalOpenedForRef.current = latestRelease.id;
+    push(ReleaseNotesDialog, {
+      id: 'release-notes-dialog',
+      title: 'アップデート情報',
+      size: 'md',
+      payload: {
+        entries: unreadReleaseNotes
+      },
+      onClose: () => {
+        uiPreferencesStore.setLastSeenRelease(latestRelease.id, { persist: 'immediate' });
+      }
+    });
+  }, [location.pathname, push, uiPreferencesState, uiPreferencesStore]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -201,7 +281,12 @@ export function App(): JSX.Element {
           }
         },
         onEnterTransferCode: () => {
-          console.info('引継ぎコード入力処理は未接続です');
+          push(TransferImportDialog, {
+            id: 'transfer-import-dialog',
+            title: '引継ぎコードで復元',
+            description: '発行された5桁の引継ぎコードと暗証番号（4桁）でデータを復元します。',
+            size: 'md'
+          });
         },
         onCreateNew: () => {
           push(CreateGachaWizardDialog, {
@@ -253,10 +338,13 @@ export function App(): JSX.Element {
           }
         },
         onSelectTransfer: () => {
-          console.info('引継ぎ処理は未接続です');
-          if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-            window.alert('引継ぎコードによる復元は準備中です。');
-          }
+          push(TransferCreateDialog, {
+            id: 'transfer-create-dialog',
+            title: '引継ぎコードを発行',
+            description:
+              'バックアップ(.shimmy)を生成して暗号化し、クラウドに保存します。引継ぐ際に4桁の暗証番号の設定が必要です。引継ぎコードと、暗証番号は引き継ぎ先で必要になります。',
+            size: 'md'
+          });
         }
       }
     });

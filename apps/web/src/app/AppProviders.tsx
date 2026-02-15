@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ModalProvider } from '../modals';
 import { ToolbarStateProvider } from '../features/toolbar/ToolbarStateProvider';
 import { AppPersistenceProvider } from '../features/storage/AppPersistenceProvider';
+import { CatalogDigitalItemTypeMigrationGate } from '../features/storage/CatalogDigitalItemTypeMigrationGate';
 import { SiteThemeProvider } from '../features/theme/SiteThemeProvider';
 import { HapticsProvider } from '../features/haptics/HapticsProvider';
 import { DiscordInfoStoreGate } from '../features/discord/DiscordInfoStoreGate';
@@ -30,6 +31,7 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
         >
         <AppPersistenceProvider>
+          <CatalogDigitalItemTypeMigrationGate />
           <SiteThemeProvider>
             <HapticsProvider>
               <ModalProvider>

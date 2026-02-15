@@ -1,18 +1,22 @@
 // /api/discord/send.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { dFetch } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
-export default async function handler(req, res){
+export default withApiGuards({
+  route: '/api/discord/send',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:send', limit: 20, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/send', req);
   log.info('request received');
 
-  if (req.method !== 'POST'){
-    res.setHeader('Allow','POST');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
   if (!sess) {
@@ -54,4 +58,4 @@ export default async function handler(req, res){
   });
   log.info('message sent via webhook', { channelId: channel_id, messageId: r.id || null });
   return res.json({ ok:true, message_id: r.id || null, via:'webhook' });
-}
+});

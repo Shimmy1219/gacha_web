@@ -223,3 +223,88 @@ export function extractGiftChannelCandidates({
 
   return results;
 }
+
+export function extractOwnerBotOnlyGiftChannelCandidates({
+  channels,
+  ownerId,
+  guildId,
+  botUserIdSet,
+}){
+  const ownerSnowflake = normalizeSnowflake(ownerId);
+  const guildSnowflake = normalizeSnowflake(guildId);
+  if (!ownerSnowflake || !guildSnowflake){
+    return [];
+  }
+
+  const results = [];
+  const textChannels = Array.isArray(channels) ? channels.filter((ch) => ch && ch.type === 0) : [];
+
+  for (const ch of textChannels){
+    const overwrites = Array.isArray(ch.permission_overwrites) ? ch.permission_overwrites : [];
+    if (overwrites.length === 0){
+      continue;
+    }
+
+    const userOverwrites = overwrites.filter((ow) => normalizeOverwriteType(ow) === 'member');
+    const ownerOverwrite = userOverwrites.find((ow) => normalizeSnowflake(ow?.id) === ownerSnowflake);
+    if (!ownerOverwrite){
+      continue;
+    }
+
+    const memberOverwrites = userOverwrites.filter((ow) => {
+      const targetId = normalizeSnowflake(ow?.id);
+      if (!targetId){
+        return false;
+      }
+      if (targetId === ownerSnowflake){
+        return false;
+      }
+      if (botUserIdSet.has(targetId)){
+        return false;
+      }
+      return true;
+    });
+
+    if (memberOverwrites.length !== 0){
+      continue;
+    }
+
+    const everyoneOverwrite = overwrites.find(
+      (ow) => normalizeOverwriteType(ow) === 'role' && normalizeSnowflake(ow?.id) === guildSnowflake
+    );
+    if (!everyoneOverwrite || !deniesView(everyoneOverwrite)){
+      continue;
+    }
+
+    if (!allowsView(ownerOverwrite)){
+      continue;
+    }
+
+    const botOverwrite = userOverwrites.find((ow) => {
+      const targetId = normalizeSnowflake(ow?.id);
+      return targetId ? botUserIdSet.has(targetId) : false;
+    });
+    if (!botOverwrite || !allowsView(botOverwrite)){
+      continue;
+    }
+
+    const channelId = normalizeSnowflake(ch.id);
+    if (!channelId){
+      continue;
+    }
+
+    const parentId = normalizeSnowflake(ch.parent_id);
+    const name = typeof ch.name === 'string' ? ch.name : null;
+
+    results.push({
+      channel: ch,
+      channelId,
+      channelName: name,
+      parentId: parentId || null,
+      botHasView: true,
+      botOverwritePresent: true,
+    });
+  }
+
+  return results;
+}

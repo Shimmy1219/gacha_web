@@ -23,10 +23,13 @@ function normalizeRecord(raw) {
     typeof raw.claimTokenDigest === 'string' && raw.claimTokenDigest.length > 0
       ? raw.claimTokenDigest
       : undefined;
+  const returnTo =
+    typeof raw.returnTo === 'string' && raw.returnTo.length > 0 ? raw.returnTo : undefined;
   return {
     verifier,
     loginContext: typeof raw.loginContext === 'string' ? raw.loginContext : undefined,
     claimTokenDigest,
+    returnTo,
   };
 }
 
@@ -77,6 +80,9 @@ export async function saveDiscordAuthState(state, payload) {
   };
   if (typeof payload.claimTokenDigest === 'string' && payload.claimTokenDigest.length > 0) {
     record.claimTokenDigest = payload.claimTokenDigest;
+  }
+  if (typeof payload.returnTo === 'string' && payload.returnTo.length > 0) {
+    record.returnTo = payload.returnTo;
   }
   await kv.set(getKey(state), record, { ex: DISCORD_AUTH_TTL_SEC });
   return record;

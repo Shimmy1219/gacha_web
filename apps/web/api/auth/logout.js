@@ -1,10 +1,18 @@
 // /api/auth/logout.js
 // 現在の端末のセッションだけ無効化
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies, setCookie } from '../_lib/cookies.js';
 import { deleteSession } from '../_lib/sessionStore.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
-export default async function handler(req, res) {
+export default withApiGuards({
+  route: '/api/auth/logout',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'auth:logout', limit: 30, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/auth/logout', req);
   log.info('request received');
 
@@ -20,4 +28,4 @@ export default async function handler(req, res) {
   }
   log.info('logout completed');
   return res.status(200).json({ ok: true });
-}
+});

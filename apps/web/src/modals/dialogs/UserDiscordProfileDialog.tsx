@@ -128,6 +128,7 @@ export function UserDiscordProfileDialog({
         mode: 'link',
         guildId: selection?.guildId ?? '',
         discordUserId: discordUserId ?? '',
+        initialCategory: selection?.privateChannelCategory ?? null,
         submitLabel: '追加',
         refreshLabel: 'メンバー情報の更新',
         onMemberPicked: async (member) => {

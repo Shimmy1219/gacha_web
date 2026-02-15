@@ -1,6 +1,8 @@
 import type { ModalComponentProps } from '../../modals';
+import { pushDiscordApiWarningByErrorCode } from '../../modals/dialogs/_lib/discordApiErrorHandling';
 import { ensurePrivateChannelCategory } from './ensurePrivateChannelCategory';
 import type { DiscordGuildSelection } from './discordGuildSelectionStorage';
+import { fetchDiscordApi } from './fetchDiscordApi';
 
 interface FindChannelsResponsePayload {
   ok: boolean;
@@ -9,6 +11,7 @@ interface FindChannelsResponsePayload {
   parent_id?: string | null;
   created?: boolean;
   error?: string;
+  errorCode?: string;
 }
 
 interface SendDiscordResponsePayload {
@@ -94,11 +97,8 @@ export async function sendDiscordShareToMember({
       params.set('display_name', normalizedDisplayName);
     }
 
-    const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-      headers: {
-        Accept: 'application/json'
-      },
-      credentials: 'include'
+    const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+      method: 'GET'
     });
 
     const findPayload = (await findResponse.json().catch(() => null)) as FindChannelsResponsePayload | null;
@@ -106,11 +106,18 @@ export async function sendDiscordShareToMember({
     if (!findResponse.ok || !findPayload) {
       const message =
         findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
+      if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+        throw new Error('Discordギルドの設定を確認してください。');
+      }
       throw new Error(message);
     }
 
     if (!findPayload.ok) {
-      throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
+      const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+      if (pushDiscordApiWarningByErrorCode(push, findPayload.errorCode, message)) {
+        throw new Error('Discordギルドの設定を確認してください。');
+      }
+      throw new Error(message);
     }
 
     resolvedChannelId = normalizeOptionalString(findPayload.channel_id);
@@ -133,13 +140,12 @@ export async function sendDiscordShareToMember({
     payload.comment = normalizedComment;
   }
 
-  const sendResponse = await fetch('/api/discord/send', {
+  const sendResponse = await fetchDiscordApi('/api/discord/send', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json'
     },
-    credentials: 'include',
     body: JSON.stringify(payload)
   });
 
