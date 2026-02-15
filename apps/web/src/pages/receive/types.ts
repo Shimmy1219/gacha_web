@@ -1,3 +1,5 @@
+import type { DigitalItemTypeKey } from '@domain/digital-items/digitalItemTypes';
+
 export type ReceiveMediaKind = 'image' | 'video' | 'audio' | 'text' | 'other';
 
 export interface ReceiveItemMetadata {
@@ -11,6 +13,7 @@ export interface ReceiveItemMetadata {
   rarityColor: string | null;
   isRiagu: boolean;
   riaguType: string | null;
+  digitalItemType?: DigitalItemTypeKey;
   obtainedCount: number;
   isNewForUser: boolean;
   isOmitted?: boolean;

@@ -1,3 +1,5 @@
+import type { DigitalItemTypeKey } from '../digital-items/digitalItemTypes';
+
 export interface GachaAppStateV3 {
   version: number;
   updatedAt: string;
@@ -43,6 +45,7 @@ export interface GachaCatalogStateV3 {
 export interface GachaCatalogItemAssetV4 {
   assetId: string;
   thumbnailAssetId?: string | null;
+  digitalItemType?: DigitalItemTypeKey;
 }
 
 export interface GachaCatalogItemV4 {
@@ -276,6 +279,7 @@ export interface ReceivePrefsStateV3 {
     lastConfirmedAt?: string;
   };
   ownerName?: string | null;
+  iconAssetIds?: string[];
 }
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';

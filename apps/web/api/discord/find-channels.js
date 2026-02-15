@@ -1,5 +1,7 @@
 // /api/discord/find-channel.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
@@ -302,15 +304,17 @@ function evaluateChannelForGiftMatching({
   return result;
 }
 
-export default async function handler(req, res){
+export default withApiGuards({
+  route: '/api/discord/find-channels',
+  health: { enabled: true },
+  methods: ['GET'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:find-channels', limit: 30, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/find-channels', req);
   log.info('request received', { query: req.query });
 
-  if (req.method !== 'GET'){
-    res.setHeader('Allow','GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
   if (!sess) {
@@ -600,4 +604,4 @@ export default async function handler(req, res){
     created:true,
     parent_id: category.id
   });
-}
+});

@@ -22,6 +22,10 @@ const importSettings = {
 };
 
 module.exports = [
+  // Global ignores: keeps `eslint .` fast by pruning huge folders during traversal.
+  {
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**'],
+  },
   {
     files: ['src/**/*.{ts,tsx}', 'vite.config.ts', 'tailwind.config.ts'],
     ignores: ['dist/**'],

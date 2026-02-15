@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { HomeIcon } from '@heroicons/react/24/outline';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 
+import { OfficialXAccountPanel } from '../../../../components/OfficialXAccountPanel';
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 import { HeaderBrand } from './HeaderBrand';
 import { MobileMenuButton } from './MobileMenuButton';
@@ -276,6 +277,9 @@ export function AppHeaderShell({
                   : 'border-border/60 bg-panel bg-opacity-95'
               )}
             >
+              <div className="app-header-shell__mobile-official-x-contact mb-3">
+                <OfficialXAccountPanel variant="compact" />
+              </div>
               <Link
                 to="/home"
                 className={clsx(

@@ -25,6 +25,7 @@ import {
   type DiscordGuildCategorySelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
+import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import {
   pushDiscordApiWarningByErrorCode
@@ -176,11 +177,8 @@ function useDiscordGuildMembers(
         params.set('q', trimmedQuery);
       }
 
-      const response = await fetch(`/api/discord/members?${params.toString()}`, {
-        headers: {
-          Accept: 'application/json'
-        },
-        credentials: 'include'
+      const response = await fetchDiscordApi(`/api/discord/members?${params.toString()}`, {
+        method: 'GET'
       });
 
       const payload = (await response.json().catch(() => null)) as DiscordMembersResponse | null;
@@ -233,11 +231,8 @@ function useDiscordGuildMembers(
             }
           }
 
-          const giftResponse = await fetch(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
-            headers: {
-              Accept: 'application/json'
-            },
-            credentials: 'include'
+          const giftResponse = await fetchDiscordApi(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
+            method: 'GET'
           });
 
           const giftPayload = (await giftResponse.json().catch(() => null)) as DiscordGiftChannelsResponse | null;
@@ -425,11 +420,8 @@ export function DiscordMemberPickerDialog({
       }
       params.set('category_id', category.id);
 
-      const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-        headers: {
-          Accept: 'application/json'
-        },
-        credentials: 'include'
+      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+        method: 'GET'
       });
 
       const findPayload = (await findResponse.json().catch(() => null)) as {
@@ -501,13 +493,12 @@ export function DiscordMemberPickerDialog({
           ? sharePayload.shareLabel
           : undefined;
 
-      const sendResponse = await fetch('/api/discord/send', {
+      const sendResponse = await fetchDiscordApi('/api/discord/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           channel_id: channelId,
           share_url: sharePayload.shareUrl,

@@ -1,5 +1,7 @@
 // /api/discord/members.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
@@ -9,15 +11,17 @@ import {
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
-export default async function handler(req, res){
+export default withApiGuards({
+  route: '/api/discord/members',
+  health: { enabled: true },
+  methods: ['GET'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:members', limit: 20, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/members', req);
   log.info('request received', { query: req.query });
 
-  if (req.method !== 'GET'){
-    res.setHeader('Allow','GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
   if (!sess) {
@@ -123,4 +127,4 @@ export default async function handler(req, res){
 
   log.info('members resolved', { count: filtered.length, mode: q?'scan+filter':'scan' });
   return res.json({ ok:true, members: filtered, mode: q?'scan+filter':'scan' });
-}
+});

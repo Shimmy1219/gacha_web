@@ -6,34 +6,13 @@
 // - トークン有効期限 (validUntil)
 // - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
 import crypto from 'crypto';
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 const ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch';
 
 function vLog(...args) {
   if (VERBOSE) console.log('[blob/upload]', ...args);
-}
-
-function parseCookies(header) {
-  const out = {};
-  (header || '')
-    .split(';')
-    .map(v => v.trim())
-    .filter(Boolean)
-    .forEach((kv) => {
-      const i = kv.indexOf('=');
-      if (i > -1) out[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
-    });
-  return out;
-}
-
-function uniq(arr) {
-  return Array.from(new Set(arr.filter(Boolean)));
-}
-
-function hostToOrigin(host, protoHint = 'https') {
-  if (!host) return '';
-  return `${protoHint}://${host}`;
 }
 
 // 許可文字: 英数・_・- のみ（その他は除去）
@@ -139,17 +118,6 @@ function ensureReceiverPrefixedFileName(fileName, receiverDirectory) {
 }
 
 function deriveUploadPolicy(req, payload) {
-  const cookies = parseCookies(req.headers.cookie);
-
-  const csrfFromCookie = cookies['csrf'] || '';
-  const csrfFromPayload = typeof payload?.csrf === 'string' ? payload.csrf : '';
-  if (!csrfFromCookie || !csrfFromPayload || csrfFromCookie !== csrfFromPayload) {
-    const err = new Error('Forbidden: invalid CSRF token');
-    err.statusCode = 403;
-    err.errorCode = ERROR_CODE_CSRF_TOKEN_MISMATCH;
-    throw err;
-  }
-
   const userId = sanitizeSegment(payload?.userId, 'anon');
   const purpose = sanitizeSegment(payload?.purpose, 'misc');
   const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
@@ -265,62 +233,16 @@ async function handlePrepareUpload(req, res, log, body) {
   }
 }
 
-export default async function handler(req, res) {
+const guarded = withApiGuards({
+  route: '/api/blob/upload',
+  health: { enabled: true },
+  methods: ['POST'],
+  origin: true,
+  csrf: { cookieName: 'csrf', source: 'body', field: 'csrf' },
+  rateLimit: { name: 'blob:upload', limit: 60, windowSec: 60 },
+})(async (req, res) => {
   const log = createRequestLogger('api/blob/upload', req);
   log.info('request received', { method: req.method, hasBody: Boolean(req.body) });
-
-  // ヘルスチェック
-  if (req.method === 'GET' && 'health' in (req.query || {})) {
-    log.info('health check ok');
-    return res.status(200).json({ ok: true, route: '/api/blob/upload' });
-  }
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-  }
-
-  // ====== 1) 同一オリジン検証 ======
-  const envOrigin = process.env.NEXT_PUBLIC_SITE_ORIGIN; // 例: https://shimmy3.com
-  const vercelUrl = process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`; // 例: https://xxx.vercel.app
-  const apex = envOrigin;
-  const www = envOrigin && envOrigin.replace('://', '://www.');
-  const selfOriginFromHost = hostToOrigin(req.headers.host);
-
-  const ALLOWED_ORIGINS = uniq([apex, www, vercelUrl, selfOriginFromHost]);
-  const originHdr = req.headers.origin || '';
-  const referer = req.headers.referer || '';
-  let derivedOrigin = '';
-  try {
-    derivedOrigin = referer ? new URL(referer).origin : '';
-  } catch (error) {
-    vLog('failed to parse referer URL', {
-      referer,
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-
-  const originToCheck = originHdr || derivedOrigin || '';
-  const isAllowed =
-    (!!originToCheck && ALLOWED_ORIGINS.includes(originToCheck))
-    || (!originToCheck && ALLOWED_ORIGINS.includes(selfOriginFromHost));
-
-  vLog('allowList:', ALLOWED_ORIGINS);
-  vLog('headers.origin:', originHdr);
-  vLog('headers.referer:', referer);
-  vLog('derivedOrigin:', derivedOrigin);
-  vLog('selfOriginFromHost:', selfOriginFromHost);
-  vLog('isAllowed:', isAllowed);
-
-  if (!isAllowed) {
-    log.warn('origin check failed', { originHdr, referer, derivedOrigin, selfOriginFromHost });
-    return res.status(403).json({
-      ok: false,
-      error: 'Forbidden: origin not allowed',
-      dbg: VERBOSE ? { originHdr, referer, derivedOrigin, ALLOWED_ORIGINS } : undefined,
-    });
-  }
 
   const body = req.body ?? {};
   if (body?.action === 'prepare-upload') {
@@ -329,4 +251,6 @@ export default async function handler(req, res) {
 
   log.warn('invalid upload request payload', { action: body?.action });
   return res.status(400).json({ ok: false, error: 'Bad Request' });
-}
+});
+
+export default guarded;
