@@ -7,6 +7,7 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { OFFICIAL_X_ACCOUNT_ID, OFFICIAL_X_ACCOUNT_URL } from '../../components/OfficialXAccountPanel';
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
@@ -84,6 +85,35 @@ function describeResolveError(status: number, payload?: ResolveResponsePayload |
     return 'このリンクの保存先が許可されていないためダウンロードできません。';
   }
   return payload?.error ?? '受け取りリンクの確認に失敗しました。しばらく待って再度お試しください。';
+}
+
+interface CsrfResponsePayload {
+  ok?: boolean;
+  token?: string;
+  error?: string;
+}
+
+async function requestCsrfToken(signal?: AbortSignal): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal
+    });
+  } catch {
+    throw new Error('CSRFトークンの取得に失敗しました (ネットワークエラー)');
+  }
+
+  const payload = (await response.json().catch(() => null)) as CsrfResponsePayload | null;
+  if (!response.ok || !payload?.ok || typeof payload.token !== 'string' || !payload.token) {
+    const reason = payload?.error ?? `status ${response.status}`;
+    throw new Error(`CSRFトークンの取得に失敗しました (${reason})`);
+  }
+
+  return payload.token;
 }
 
 async function resolveReceiveToken(token: string, signal?: AbortSignal): Promise<ResolveSuccessPayload> {
@@ -244,6 +274,7 @@ export function ReceivePage(): JSX.Element {
   const [omittedItemNames, setOmittedItemNames] = useState<string[]>([]);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const csrfRef = useRef<string | null>(null);
   const [hasAttemptedLoad, setHasAttemptedLoad] = useState<boolean>(() => {
     const tokenParam = searchParams.get('t');
     const historyParam = searchParams.get('history');
@@ -744,11 +775,14 @@ export function ReceivePage(): JSX.Element {
     setCleanupError(null);
 
     try {
+      const csrf = csrfRef.current ?? (await requestCsrfToken());
+      csrfRef.current = csrf;
+
       const response = await fetch('/api/receive/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ token: resolvedToken })
+        body: JSON.stringify({ token: resolvedToken, csrf })
       });
 
       let payload: { ok?: boolean; error?: string } | null = null;
@@ -833,6 +867,28 @@ export function ReceivePage(): JSX.Element {
               ) : null}
               <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
                 DiscordやXのアプリ内ブラウザから来た方は、safariやchromeなどで開きなおすことをオススメします。
+              </div>
+              <div className="receive-page-streamer-guidance rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-sky-700">
+                <p className="receive-page-streamer-guidance-heading font-semibold">配信者さんへ</p>
+                <p className="receive-page-streamer-guidance-message mt-1 leading-relaxed">
+                  四遊楽ガチャ（しゅらがちゃ）を使ってみませんか？RTやいいね不要で使えます！discordと連携でき、あなたの特典鯖、ファン鯖に景品を即座に直送出来ます！景品を受け取ったら、
+                  <Link
+                    to="/gacha"
+                    className="receive-page-streamer-guidance-tool-link font-semibold underline decoration-sky-700/70 underline-offset-2 transition hover:text-sky-900"
+                  >
+                    ガチャツール
+                  </Link>
+                  を覗いてみてください！質問やバグ報告などは
+                  <a
+                    href={OFFICIAL_X_ACCOUNT_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="receive-page-streamer-guidance-x-link font-semibold underline decoration-sky-700/70 underline-offset-2 transition hover:text-sky-900"
+                  >
+                    {OFFICIAL_X_ACCOUNT_ID}
+                  </a>
+                  へお願いします。
+                </p>
               </div>
               <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
             </div>

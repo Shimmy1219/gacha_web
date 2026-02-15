@@ -34,6 +34,7 @@ import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import {
   isDiscordMissingPermissionsErrorCode,
   pushDiscordMissingPermissionsWarning
@@ -952,12 +953,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             member_id: sharedMemberId,
             category_id: preferredCategory
           });
-          const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json'
-            },
-            credentials: 'include'
+          const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+            method: 'GET'
           });
 
           const findPayload = (await findResponse.json().catch(() => null)) as {
@@ -1014,13 +1011,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           payload.comment = shareComment;
         }
 
-        const sendResponse = await fetch('/api/discord/send', {
+        const sendResponse = await fetchDiscordApi('/api/discord/send', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Accept: 'application/json'
           },
-          credentials: 'include',
           body: JSON.stringify(payload)
         });
 

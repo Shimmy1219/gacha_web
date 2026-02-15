@@ -8,6 +8,7 @@ import {
 } from '../../_lib/discordAuthStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 import { resolveDiscordRedirectUri } from '../../_lib/discordAuthConfig.js';
+import { sanitizeReturnTo } from '../../_lib/returnTo.js';
 
 function createStatePreview(value) {
   if (typeof value !== 'string') {
@@ -51,6 +52,14 @@ export default async function handler(req, res) {
     normalizedContext,
   });
 
+  const returnToParam = Array.isArray(req.query.returnTo) ? req.query.returnTo[0] : req.query.returnTo;
+  const returnTo = sanitizeReturnTo(returnToParam);
+  if (returnTo) {
+    log.info('ログイン開始時のreturnToを受領しました', {
+      returnTo,
+    });
+  }
+
   let claimTokenDigest;
   if (normalizedContext === 'pwa') {
     const claimToken = crypto.randomBytes(32).toString('base64url');
@@ -68,6 +77,7 @@ export default async function handler(req, res) {
     verifier,
     loginContext: normalizedContext,
     claimTokenDigest,
+    returnTo,
   });
   log.info('kvにDiscord認証stateレコードを保存しました', {
     statePreview: `${state.slice(0, 4)}...`,

@@ -8,6 +8,7 @@ import {
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/discord/useDiscordOwnedGuilds';
+import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import {
   loadDiscordGuildSelection,
   saveDiscordGuildSelection,
@@ -137,11 +138,8 @@ export function DiscordBotInviteDialog({
 
       try {
         const params = new URLSearchParams({ guild_id: guild.id, limit: '1000' });
-        const response = await fetch(`/api/discord/members?${params.toString()}`, {
-          headers: {
-            Accept: 'application/json'
-          },
-          credentials: 'include'
+        const response = await fetchDiscordApi(`/api/discord/members?${params.toString()}`, {
+          method: 'GET'
         });
 
         const payload = (await response.json().catch(() => null)) as DiscordMembersResponse | null;
@@ -165,11 +163,8 @@ export function DiscordBotInviteDialog({
 
       try {
         const channelParams = new URLSearchParams({ guild_id: guild.id });
-        const response = await fetch(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
-          headers: {
-            Accept: 'application/json'
-          },
-          credentials: 'include'
+        const response = await fetchDiscordApi(`/api/discord/list-gift-channels?${channelParams.toString()}`, {
+          method: 'GET'
         });
 
         const payload = (await response.json().catch(() => null)) as DiscordGiftChannelsResponse | null;

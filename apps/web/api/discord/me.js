@@ -1,4 +1,5 @@
 // /api/discord/me.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { createRequestLogger } from '../_lib/logger.js';
@@ -13,16 +14,17 @@ function createSidPreview(value) {
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
-export default async function handler(req, res) {
+export default withApiGuards({
+  route: '/api/discord/me',
+  health: { enabled: true },
+  methods: ['GET'],
+  origin: true,
+  rateLimit: { name: 'discord:me', limit: 120, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/me', req);
   const soft = req.query?.soft === '1';
   log.info('リクエストを受信しました', { soft });
 
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    log.warn('許可されていないHTTPメソッドです', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
   const { sid } = getCookies(req);
   if (!sid) {
     log.info('セッション用クッキーが見つかりませんでした。');
@@ -47,4 +49,4 @@ export default async function handler(req, res) {
     loggedIn: true,
     user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
   });
-}
+});
