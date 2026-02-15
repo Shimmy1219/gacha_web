@@ -532,7 +532,6 @@ function ReceiveInventoryItemCard({
     () => item.previewCacheKey ?? imageSourceItem?.id ?? item.key,
     [imageSourceItem?.id, item.key, item.previewCacheKey]
   );
-  const isLowResolutionPreview = Boolean(item.previewThumbnailBlob);
   const visiblePreviewUrl = useViewportPreviewUrl(
     previewBlob,
     previewCacheKey,
@@ -604,11 +603,6 @@ function ReceiveInventoryItemCard({
         </div>
         <div className="receive-list-item-card__details-column flex min-w-0 flex-1 flex-col gap-2">
           <p className="receive-list-item-card__item-name line-clamp-2 text-base font-bold text-surface-foreground">{item.itemName}</p>
-          {isLowResolutionPreview ? (
-            <span className="receive-list-item-card__low-resolution-note text-[11px] font-semibold text-emerald-600">
-              低解像度表示中
-            </span>
-          ) : null}
           <div className="receive-list-item-card__meta-row flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="receive-list-item-card__count chip">x{item.obtainedCount}</span>
             {item.digitalItemType ? (
