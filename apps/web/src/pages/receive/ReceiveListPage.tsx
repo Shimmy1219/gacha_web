@@ -1635,20 +1635,36 @@ export function ReceiveListPage(): JSX.Element {
           {status === 'ready' && groups.length > 0 ? (
             <div className="receive-list-page__visibility-toggle-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="receive-list-page__visibility-toggle-label text-xs font-semibold text-muted-foreground">表示設定</p>
-              <button
-                type="button"
-                className={clsx(
-                  'receive-list-page__unowned-toggle-button btn btn-muted h-9 px-4 text-xs font-semibold',
-                  hideUnownedItems && 'border-accent/60 bg-accent/10 text-accent'
-                )}
-                aria-pressed={hideUnownedItems}
-                data-state={hideUnownedItems ? 'hidden' : 'visible'}
-                onClick={() => {
-                  setHideUnownedItems((previous) => !previous);
-                }}
-              >
-                {hideUnownedItems ? '未所持を表示する' : '未所持を非表示'}
-              </button>
+              <div className="receive-list-page__visibility-toggle-controls flex items-center gap-3">
+                <span className="receive-list-page__visibility-toggle-helper text-xs text-muted-foreground/80">
+                  {hideUnownedItems ? '未所持を非表示中' : '未所持を表示中'}
+                </span>
+                <button
+                  type="button"
+                  className={clsx(
+                    'receive-list-page__unowned-toggle-button relative inline-flex h-6 w-11 items-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                    hideUnownedItems
+                      ? 'border-accent bg-[rgb(var(--color-accent)/1)]'
+                      : 'border-border/60 bg-panel-muted'
+                  )}
+                  aria-pressed={hideUnownedItems}
+                  data-state={hideUnownedItems ? 'hidden' : 'visible'}
+                  aria-label="未所持アイテム表示の切り替え"
+                  title={hideUnownedItems ? '未所持アイテムを表示する' : '未所持アイテムを非表示にする'}
+                  onClick={() => {
+                    setHideUnownedItems((previous) => !previous);
+                  }}
+                >
+                  <span
+                    className={clsx(
+                      'receive-list-page__unowned-toggle-indicator inline-block h-4 w-4 rounded-full transition-all',
+                      hideUnownedItems
+                        ? 'translate-x-[22px] bg-[rgb(var(--color-accent-foreground)/1)]'
+                        : 'translate-x-[6px] bg-[rgb(var(--color-surface-foreground)/1)]'
+                    )}
+                  />
+                </button>
+              </div>
             </div>
           ) : null}
           {status === 'ready' && groups.length > 0 ? (
