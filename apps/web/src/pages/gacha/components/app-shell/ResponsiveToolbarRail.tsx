@@ -113,7 +113,7 @@ export function ResponsiveToolbarRail({
             aria-modal="true"
             aria-labelledby={labelledBy}
             className={clsx(
-              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 flex h-full w-[50vw] overflow-y-auto border-l px-6 pb-0 pt-16 shadow-2xl transition-transform duration-300 ease-in-out transform-gpu',
+              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 flex h-full w-auto max-w-[min(22rem,calc(100vw-1rem))] min-w-0 overflow-x-hidden overflow-y-auto border-l px-6 pb-0 pt-16 shadow-2xl transition-transform duration-300 ease-in-out transform-gpu',
               isActive ? 'translate-x-0' : 'translate-x-full',
               !isActive && 'motion-safe:will-change-transform',
               isDarkAppearance ? 'border-white/10 bg-slate-950 text-white' : 'border-border/60 bg-panel text-surface-foreground'
@@ -121,7 +121,7 @@ export function ResponsiveToolbarRail({
             ref={panelRef}
             tabIndex={-1}
           >
-            <div className="responsive-toolbar-rail__content flex h-full flex-col gap-6">
+            <div className="responsive-toolbar-rail__content flex h-full w-full min-w-0 flex-col gap-6 overflow-x-hidden">
               {children}
             </div>
           </aside>

@@ -10,7 +10,7 @@ const RECEIVE_MOBILE_TAB_ITEMS = [
 export function ReceiveMobileTabs(): JSX.Element {
   return (
     <nav
-      className="receive-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-surface/95 px-2 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3 md:hidden"
+      className="receive-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-surface/95 px-2 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3"
       aria-label="受け取りページタブナビゲーション"
     >
       <div className="receive-mobile-tabs__list grid grid-cols-3 gap-2">

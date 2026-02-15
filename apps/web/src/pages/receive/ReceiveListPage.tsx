@@ -812,12 +812,19 @@ export function ReceiveListPage(): JSX.Element {
 
           const [inventory, thumbnailBlobByAssetId] = await Promise.all([
             loadReceiveZipInventory(blob, {
-              migrateDigitalItemTypes: false,
+              migrateDigitalItemTypes: true,
               includeMedia: false
             }),
             loadHistoryThumbnailBlobMap(entry.id)
           ]);
-          const { metadataEntries, mediaItems, catalog } = inventory;
+          const { metadataEntries, mediaItems, catalog, migratedBlob } = inventory;
+          if (migratedBlob) {
+            try {
+              await saveHistoryFile(entry.id, migratedBlob);
+            } catch (error) {
+              console.warn('Failed to persist migrated receive history zip from receive/list', { entryId: entry.id, error });
+            }
+          }
           const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
           const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
           pullIds.forEach((pullId) => seenPullIds.add(pullId));
