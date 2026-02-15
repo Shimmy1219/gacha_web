@@ -25,6 +25,23 @@ const GRADIENTS: Record<string, GradientConfig> = {
   silver: { className: 'text-gradient-silver', caretColor: '#e5e7eb' }
 };
 
+const WHITE_COLOR_VALUES = new Set([
+  'white',
+  '#fff',
+  '#ffffff',
+  'rgb(255,255,255)',
+  'rgba(255,255,255,1)'
+]);
+
+export function isWhiteRarityColor(color?: string | null): boolean {
+  if (!color) {
+    return false;
+  }
+
+  const normalized = color.trim().toLowerCase().replace(/\s+/g, '');
+  return WHITE_COLOR_VALUES.has(normalized);
+}
+
 export function getRarityTextPresentation(color?: string | null): RarityTextPresentation {
   if (!color) {
     return {};

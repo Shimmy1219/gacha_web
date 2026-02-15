@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
-import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { getRarityTextPresentation, isWhiteRarityColor } from '../../features/rarity/utils/rarityColorPresentation';
 import { MultiSelectDropdown, type MultiSelectOption } from '../gacha/components/select/MultiSelectDropdown';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
@@ -517,6 +517,16 @@ function ReceiveInventoryItemCard({
     () => getRarityTextPresentation(item.rarityColor ?? undefined),
     [item.rarityColor]
   );
+  const rarityTextStyle = useMemo(() => {
+    if (!isWhiteRarityColor(item.rarityColor)) {
+      return rarityPresentation.style;
+    }
+
+    return {
+      ...rarityPresentation.style,
+      WebkitTextStroke: '2px #000'
+    };
+  }, [item.rarityColor, rarityPresentation.style]);
   const previewKind = resolvePreviewKind(item.kind);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const isInViewport = useCardViewportVisibility(cardRef, previewVisibilityMarginPx);
@@ -564,7 +574,7 @@ function ReceiveInventoryItemCard({
           {item.rarity ? (
             <span
               className={clsx('receive-list-item-card__rarity self-start text-base font-bold', rarityPresentation.className)}
-              style={rarityPresentation.style}
+              style={rarityTextStyle}
             >
               {item.rarity}
             </span>
