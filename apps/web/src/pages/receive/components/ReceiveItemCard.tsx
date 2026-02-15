@@ -2,7 +2,11 @@ import { useMemo, type CSSProperties } from 'react';
 import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
+import {
+  getRarityTextPresentation,
+  getWhiteRarityTextOutlineStyle,
+  isWhiteRarityColor
+} from '../../../features/rarity/utils/rarityColorPresentation';
 import {
   GOLD_HEX,
   RAINBOW_VALUE,
@@ -98,6 +102,10 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     () => getRarityTextPresentation(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
   );
+  const shouldApplyWhiteRarityOutline = useMemo(
+    () => isWhiteRarityColor(item.metadata?.rarityColor),
+    [item.metadata?.rarityColor]
+  );
   const rarityBadgeStyle = useMemo(() => {
     const badgeStyle = buildRarityBadgeStyle(item.metadata?.rarityColor);
     const textStyle = rarityPresentation.style;
@@ -106,13 +114,19 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       return undefined;
     }
 
-    return {
+    const mergedStyle: CSSProperties = {
       ...badgeStyle,
       ...textStyle,
       color: '#fff',
       WebkitTextFillColor: '#fff'
     };
-  }, [item.metadata?.rarityColor, rarityPresentation.style]);
+
+    if (shouldApplyWhiteRarityOutline) {
+      Object.assign(mergedStyle, getWhiteRarityTextOutlineStyle());
+    }
+
+    return mergedStyle;
+  }, [item.metadata?.rarityColor, rarityPresentation.style, shouldApplyWhiteRarityOutline]);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
       return (

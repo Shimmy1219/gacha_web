@@ -1,25 +1,34 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
-import { ItemPreview } from '../../components/ItemPreviewThumbnail';
-import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
+import {
+  getRarityTextPresentation,
+  getWhiteRarityTextOutlineStyle,
+  isWhiteRarityColor
+} from '../../features/rarity/utils/rarityColorPresentation';
 import { MultiSelectDropdown, type MultiSelectOption } from '../gacha/components/select/MultiSelectDropdown';
 import { ReceiveBulkSaveButton, ReceiveSaveButton } from './components/ReceiveSaveButtons';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import {
   loadReceiveZipInventory,
-  loadReceiveZipSelectionInfo
+  loadReceiveZipSelectionInfo,
+  updateReceiveZipDigitalItemType
 } from './receiveZip';
 import {
+  createHistoryThumbnailKey,
   isHistoryStorageAvailable,
   loadHistoryFile,
+  loadHistoryThumbnailBlobMap,
   loadHistoryMetadata,
-  persistHistoryMetadata
+  persistHistoryMetadata,
+  saveHistoryFile
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
-import { IconRingWearDialog, useModal } from '../../modals';
+import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
+import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -34,8 +43,10 @@ interface ReceiveInventoryItem {
   obtainedCount: number;
   kind: ReceiveMediaKind;
   digitalItemType: DigitalItemTypeKey | null;
-  previewUrl: string | null;
+  metadataIds: string[];
   sourceItems: ReceiveMediaItem[];
+  previewThumbnailBlob: Blob | null;
+  previewCacheKey: string | null;
   isOwned: boolean;
 }
 
@@ -53,6 +64,357 @@ interface ReceiveGachaGroup {
 }
 
 type PreviewKind = 'image' | 'video' | 'audio' | 'unknown';
+const MOBILE_PREVIEW_VISIBILITY_MARGIN_PX = 280;
+const DESKTOP_PREVIEW_VISIBILITY_MARGIN_PX = 720;
+const MOBILE_PREVIEW_RELEASE_DELAY_MS = 3000;
+const DESKTOP_PREVIEW_RELEASE_DELAY_MS = 10000;
+const MOBILE_PREVIEW_CACHE_MAX_ENTRIES = 90;
+const DESKTOP_PREVIEW_CACHE_MAX_ENTRIES = 220;
+const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
+type VisibilityListener = (isIntersecting: boolean) => void;
+type SharedVisibilityObserver = {
+  observer: IntersectionObserver;
+  listeners: Map<Element, VisibilityListener>;
+};
+interface SharedPreviewUrlCacheEntry {
+  cacheKey: string;
+  blob: Blob;
+  url: string;
+  retainCount: number;
+  lastUsedAt: number;
+  releaseTimerId: number | null;
+}
+
+const sharedVisibilityObserverMap = new Map<string, SharedVisibilityObserver>();
+const sharedPreviewUrlCacheMap = new Map<string, SharedPreviewUrlCacheEntry>();
+
+function resolveVisibilityObserverKey(rootMarginPx: number): string {
+  return `root:null|threshold:0|margin:${rootMarginPx}px`;
+}
+
+function getSharedVisibilityObserver(rootMarginPx: number): SharedVisibilityObserver | null {
+  if (typeof window === 'undefined' || typeof IntersectionObserver !== 'function') {
+    return null;
+  }
+
+  const key = resolveVisibilityObserverKey(rootMarginPx);
+  const existing = sharedVisibilityObserverMap.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const listeners = new Map<Element, VisibilityListener>();
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        listeners.get(entry.target)?.(entry.isIntersecting);
+      });
+    },
+    {
+      root: null,
+      rootMargin: `${rootMarginPx}px 0px`,
+      threshold: 0
+    }
+  );
+  const created = { observer, listeners };
+  sharedVisibilityObserverMap.set(key, created);
+  return created;
+}
+
+function releaseSharedVisibilityObserverTarget({
+  rootMarginPx,
+  target
+}: {
+  rootMarginPx: number;
+  target: Element;
+}): void {
+  const key = resolveVisibilityObserverKey(rootMarginPx);
+  const entry = sharedVisibilityObserverMap.get(key);
+  if (!entry) {
+    return;
+  }
+  entry.listeners.delete(target);
+  entry.observer.unobserve(target);
+  if (entry.listeners.size === 0) {
+    entry.observer.disconnect();
+    sharedVisibilityObserverMap.delete(key);
+  }
+}
+
+function useCardViewportVisibility(targetRef: RefObject<HTMLElement>, rootMarginPx: number): boolean {
+  const [isInViewport, setIsInViewport] = useState<boolean>(() => typeof window === 'undefined');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setIsInViewport(true);
+      return;
+    }
+    const target = targetRef.current;
+    if (!target) {
+      return;
+    }
+
+    const evaluateVisibility = () => {
+      const rect = target.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const intersectsViewport =
+        rect.bottom >= -rootMarginPx &&
+        rect.top <= viewportHeight + rootMarginPx &&
+        rect.right >= 0 &&
+        rect.left <= viewportWidth;
+      setIsInViewport((previous) => (previous === intersectsViewport ? previous : intersectsViewport));
+    };
+
+    // Initial fallback in case IntersectionObserver callback is delayed.
+    evaluateVisibility();
+
+    const sharedObserver = getSharedVisibilityObserver(rootMarginPx);
+    if (!sharedObserver) {
+      return;
+    }
+
+    const listener: VisibilityListener = (isIntersecting) => {
+      setIsInViewport((previous) => (previous === isIntersecting ? previous : isIntersecting));
+    };
+    sharedObserver.listeners.set(target, listener);
+    sharedObserver.observer.observe(target);
+
+    return () => {
+      releaseSharedVisibilityObserverTarget({ rootMarginPx, target });
+    };
+  }, [rootMarginPx, targetRef]);
+
+  return isInViewport;
+}
+
+function canUseObjectUrlApi(): boolean {
+  return (
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function' &&
+    typeof URL.revokeObjectURL === 'function'
+  );
+}
+
+function clearSharedPreviewReleaseTimer(entry: SharedPreviewUrlCacheEntry): void {
+  if (entry.releaseTimerId === null || typeof window === 'undefined') {
+    return;
+  }
+  window.clearTimeout(entry.releaseTimerId);
+  entry.releaseTimerId = null;
+}
+
+function revokeSharedPreviewEntry(entry: SharedPreviewUrlCacheEntry): void {
+  clearSharedPreviewReleaseTimer(entry);
+  try {
+    URL.revokeObjectURL(entry.url);
+  } catch (error) {
+    console.warn('Failed to revoke shared preview object URL', { cacheKey: entry.cacheKey, error });
+  }
+}
+
+function dropSharedPreviewCacheEntry(cacheKey: string): void {
+  const entry = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  revokeSharedPreviewEntry(entry);
+  sharedPreviewUrlCacheMap.delete(cacheKey);
+}
+
+function pruneSharedPreviewUrlCache(maxEntries: number): void {
+  if (sharedPreviewUrlCacheMap.size <= maxEntries) {
+    return;
+  }
+
+  const evictable = Array.from(sharedPreviewUrlCacheMap.values())
+    .filter((entry) => entry.retainCount === 0)
+    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+  while (sharedPreviewUrlCacheMap.size > maxEntries && evictable.length > 0) {
+    const oldest = evictable.shift();
+    if (!oldest) {
+      break;
+    }
+    dropSharedPreviewCacheEntry(oldest.cacheKey);
+  }
+}
+
+function retainSharedPreviewUrl({
+  cacheKey,
+  blob,
+  maxEntries
+}: {
+  cacheKey: string;
+  blob: Blob;
+  maxEntries: number;
+}): string | null {
+  if (!canUseObjectUrlApi()) {
+    return null;
+  }
+  const timestamp = Date.now();
+  const existing = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (existing) {
+    clearSharedPreviewReleaseTimer(existing);
+    if (existing.blob === blob) {
+      existing.retainCount += 1;
+      existing.lastUsedAt = timestamp;
+      return existing.url;
+    }
+    dropSharedPreviewCacheEntry(cacheKey);
+  }
+
+  const nextEntry: SharedPreviewUrlCacheEntry = {
+    cacheKey,
+    blob,
+    url: URL.createObjectURL(blob),
+    retainCount: 1,
+    lastUsedAt: timestamp,
+    releaseTimerId: null
+  };
+  sharedPreviewUrlCacheMap.set(cacheKey, nextEntry);
+  pruneSharedPreviewUrlCache(maxEntries);
+  return nextEntry.url;
+}
+
+function releaseSharedPreviewUrl({
+  cacheKey,
+  delayMs
+}: {
+  cacheKey: string;
+  delayMs: number;
+}): void {
+  const entry = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  clearSharedPreviewReleaseTimer(entry);
+  entry.retainCount = Math.max(0, entry.retainCount - 1);
+  entry.lastUsedAt = Date.now();
+  if (entry.retainCount > 0) {
+    return;
+  }
+
+  if (!canUseObjectUrlApi() || delayMs <= 0 || typeof window === 'undefined') {
+    dropSharedPreviewCacheEntry(cacheKey);
+    return;
+  }
+
+  entry.releaseTimerId = window.setTimeout(() => {
+    const latest = sharedPreviewUrlCacheMap.get(cacheKey);
+    if (!latest) {
+      return;
+    }
+    latest.releaseTimerId = null;
+    if (latest.retainCount > 0) {
+      return;
+    }
+    dropSharedPreviewCacheEntry(cacheKey);
+  }, Math.max(0, delayMs));
+}
+
+function clearSharedPreviewUrlCache(): void {
+  for (const entry of sharedPreviewUrlCacheMap.values()) {
+    revokeSharedPreviewEntry(entry);
+  }
+  sharedPreviewUrlCacheMap.clear();
+}
+
+function useDesktopViewport(): boolean {
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mediaQueryList = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsDesktopViewport(event.matches);
+    };
+    setIsDesktopViewport(mediaQueryList.matches);
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', handleChange);
+      return () => {
+        mediaQueryList.removeEventListener('change', handleChange);
+      };
+    }
+    mediaQueryList.onchange = handleChange;
+    return () => {
+      mediaQueryList.onchange = null;
+    };
+  }, []);
+
+  return isDesktopViewport;
+}
+
+function useViewportPreviewUrl(
+  previewBlob: Blob | null,
+  previewCacheKey: string | null,
+  isInViewport: boolean,
+  releaseDelayMs: number,
+  cacheMaxEntries: number
+): string | null {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const retainedCacheKeyRef = useRef<string | null>(null);
+  const retainedBlobRef = useRef<Blob | null>(null);
+
+  const releaseRetainedPreviewUrl = useCallback((delayMs: number) => {
+    const retainedCacheKey = retainedCacheKeyRef.current;
+    if (!retainedCacheKey) {
+      return;
+    }
+    releaseSharedPreviewUrl({ cacheKey: retainedCacheKey, delayMs });
+    retainedCacheKeyRef.current = null;
+    retainedBlobRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      releaseRetainedPreviewUrl(0);
+    };
+  }, [releaseRetainedPreviewUrl]);
+
+  useEffect(() => {
+    if (!canUseObjectUrlApi() || !previewBlob || !previewCacheKey || !isInViewport) {
+      releaseRetainedPreviewUrl(releaseDelayMs);
+      setPreviewUrl(null);
+      return;
+    }
+
+    const isRetainingSameKey =
+      retainedCacheKeyRef.current === previewCacheKey &&
+      retainedBlobRef.current === previewBlob;
+    if (isRetainingSameKey) {
+      const cached = sharedPreviewUrlCacheMap.get(previewCacheKey);
+      if (cached) {
+        cached.lastUsedAt = Date.now();
+        setPreviewUrl((previous) => (previous === cached.url ? previous : cached.url));
+        return;
+      }
+    }
+
+    releaseRetainedPreviewUrl(releaseDelayMs);
+
+    const nextPreviewUrl = retainSharedPreviewUrl({
+      cacheKey: previewCacheKey,
+      blob: previewBlob,
+      maxEntries: cacheMaxEntries
+    });
+    if (!nextPreviewUrl) {
+      setPreviewUrl(null);
+      return;
+    }
+    retainedCacheKeyRef.current = previewCacheKey;
+    retainedBlobRef.current = previewBlob;
+    setPreviewUrl(nextPreviewUrl);
+  }, [cacheMaxEntries, isInViewport, previewBlob, previewCacheKey, releaseDelayMs, releaseRetainedPreviewUrl]);
+
+  return previewUrl;
+}
 
 function resolveGroupKey(gachaId: string | null | undefined, gachaName: string | null | undefined): string {
   const normalizedName = typeof gachaName === 'string' && gachaName.trim().length > 0 ? gachaName.trim() : '不明なガチャ';
@@ -102,6 +464,16 @@ function resolvePreviewKind(kind: ReceiveMediaKind): PreviewKind {
   return 'unknown';
 }
 
+function isLikelyImageSource(sourceItem: ReceiveMediaItem): boolean {
+  if (sourceItem.kind === 'image') {
+    return true;
+  }
+  if (sourceItem.mimeType?.startsWith('image/')) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(sourceItem.filename);
+}
+
 function resolveItemKey(gachaKey: string, itemId: string | null, itemName: string, assetId?: string | null): string {
   if (itemId && itemId.trim()) {
     return assetId && assetId.trim() ? `${gachaKey}:${itemId.trim()}:${assetId.trim()}` : `${gachaKey}:${itemId.trim()}`;
@@ -135,27 +507,74 @@ function formatOwnerNames(names: string[]): string {
 function ReceiveInventoryItemCard({
   item,
   onSave,
-  isSaving
+  onDigitalItemTypeChange,
+  isSaving,
+  isUpdatingDigitalItemType,
+  previewVisibilityMarginPx,
+  previewReleaseDelayMs,
+  previewCacheMaxEntries
 }: {
   item: ReceiveInventoryItem;
   onSave: () => void;
+  onDigitalItemTypeChange: (digitalItemType: DigitalItemTypeKey) => void | Promise<void>;
   isSaving: boolean;
+  isUpdatingDigitalItemType: boolean;
+  previewVisibilityMarginPx: number;
+  previewReleaseDelayMs: number;
+  previewCacheMaxEntries: number;
 }): JSX.Element {
   const { push } = useModal();
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.rarityColor ?? undefined),
     [item.rarityColor]
   );
+  const rarityTextStyle = useMemo(() => {
+    if (!isWhiteRarityColor(item.rarityColor)) {
+      return rarityPresentation.style;
+    }
+
+    return {
+      ...rarityPresentation.style,
+      ...getWhiteRarityTextOutlineStyle()
+    };
+  }, [item.rarityColor, rarityPresentation.style]);
   const previewKind = resolvePreviewKind(item.kind);
-  const hasSource = item.sourceItems.length > 0;
-  const ringSourceItem = useMemo(
-    () => item.sourceItems.find((sourceItem) => sourceItem.kind === 'image') ?? item.sourceItems[0] ?? null,
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const isInViewport = useCardViewportVisibility(cardRef, previewVisibilityMarginPx);
+  const imageSourceItem = useMemo(
+    () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
+  const previewBlob = useMemo(
+    () => item.previewThumbnailBlob ?? imageSourceItem?.blob ?? null,
+    [imageSourceItem, item.previewThumbnailBlob]
+  );
+  const previewCacheKey = useMemo(
+    () => item.previewCacheKey ?? imageSourceItem?.id ?? item.key,
+    [imageSourceItem?.id, item.key, item.previewCacheKey]
+  );
+  const visiblePreviewUrl = useViewportPreviewUrl(
+    previewBlob,
+    previewCacheKey,
+    isInViewport,
+    previewReleaseDelayMs,
+    previewCacheMaxEntries
+  );
+  const hasSource = item.sourceItems.length > 0;
+  const previewSourceItem = useMemo(
+    () => imageSourceItem ?? item.sourceItems[0] ?? null,
+    [imageSourceItem, item.sourceItems]
+  );
+  const ringSourceItem = useMemo(
+    () => previewSourceItem,
+    [previewSourceItem]
+  );
+  const canOpenPreview = item.isOwned && hasSource && Boolean(previewSourceItem);
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
 
   return (
     <div
+      ref={cardRef}
       className={clsx(
         'receive-list-item-card__root rounded-2xl border border-border/60 bg-panel-muted/70 p-4',
         !item.isOwned && 'opacity-60 grayscale'
@@ -166,19 +585,41 @@ function ReceiveInventoryItemCard({
           {item.rarity ? (
             <span
               className={clsx('receive-list-item-card__rarity self-start text-base font-bold', rarityPresentation.className)}
-              style={rarityPresentation.style}
+              style={rarityTextStyle}
             >
               {item.rarity}
             </span>
           ) : null}
-          <ItemPreview
-            previewUrl={item.previewUrl ?? null}
+          <ItemPreviewButton
+            onClick={() => {
+              if (!canOpenPreview || !previewSourceItem) {
+                return;
+              }
+              push(ReceiveMediaPreviewDialog, {
+                id: `receive-list-item-preview-${item.key}`,
+                title: item.itemName,
+                description: item.gachaName,
+                size: 'full',
+                payload: {
+                  itemName: item.itemName,
+                  gachaName: item.gachaName,
+                  rarityLabel: item.rarity,
+                  rarityColor: item.rarityColor,
+                  mediaItems: item.sourceItems,
+                  initialMediaItemId: previewSourceItem.id
+                }
+              });
+            }}
+            canPreview={canOpenPreview}
+            previewUrl={visiblePreviewUrl}
             alt={item.itemName}
             kindHint={previewKind}
             imageFit="contain"
             className="receive-list-item-card__preview h-16 w-16 flex-shrink-0 bg-surface-deep"
             iconClassName="h-6 w-6"
             emptyLabel="noImage"
+            aria-label={canOpenPreview ? `${item.itemName}のプレビューを開く` : undefined}
+            title={canOpenPreview ? 'クリックしてプレビューを拡大' : undefined}
           />
         </div>
         <div className="receive-list-item-card__details-column flex min-w-0 flex-1 flex-col gap-2">
@@ -186,7 +627,33 @@ function ReceiveInventoryItemCard({
           <div className="receive-list-item-card__meta-row flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="receive-list-item-card__count chip">x{item.obtainedCount}</span>
             {item.digitalItemType ? (
-              <span className="receive-list-item-card__digital-type chip">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+              <button
+                type="button"
+                className="receive-list-item-card__digital-type receive-list-item-card__digital-type-button chip cursor-pointer transition hover:border-accent/60 hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!item.isOwned || isUpdatingDigitalItemType}
+                onClick={() => {
+                  if (!item.isOwned || isUpdatingDigitalItemType) {
+                    return;
+                  }
+                  push(DigitalItemTypeDialog, {
+                    id: `receive-list-item-digital-type-${item.key}`,
+                    title: 'デジタルアイテムタイプ',
+                    size: 'sm',
+                    payload: {
+                      assetId: item.key,
+                      assetName: `${item.gachaName} / ${item.itemName}`,
+                      currentType: item.digitalItemType,
+                      onSave: ({ digitalItemType }) => {
+                        void onDigitalItemTypeChange(digitalItemType);
+                      }
+                    }
+                  });
+                }}
+                aria-label={`${item.itemName}のデジタルアイテムタイプを変更`}
+                title={item.isOwned ? 'タップしてデジタルアイテムタイプを変更' : '未所持アイテムは変更できません'}
+              >
+                <span className="receive-list-item-card__digital-type-label">{getDigitalItemTypeLabel(item.digitalItemType)}</span>
+              </button>
             ) : null}
             {item.isRiagu ? (
               <span className="receive-list-item-card__riagu chip border-amber-500/40 bg-amber-500/10 text-amber-600">リアルグッズ</span>
@@ -239,11 +706,24 @@ export function ReceiveListPage(): JSX.Element {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingGroupKey, setSavingGroupKey] = useState<string | null>(null);
   const [savingItemKey, setSavingItemKey] = useState<string | null>(null);
+  const [updatingDigitalTypeItemKey, setUpdatingDigitalTypeItemKey] = useState<string | null>(null);
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
+  const [hideUnownedItems, setHideUnownedItems] = useState<boolean>(false);
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
-  const previewObjectUrlsRef = useRef<Set<string>>(new Set());
+  const collapsedGroupsRef = useRef<Record<string, boolean>>({});
+  const loadingGroupKeysRef = useRef<Record<string, boolean>>({});
+  const isDesktopViewport = useDesktopViewport();
+  const previewVisibilityMarginPx = isDesktopViewport
+    ? DESKTOP_PREVIEW_VISIBILITY_MARGIN_PX
+    : MOBILE_PREVIEW_VISIBILITY_MARGIN_PX;
+  const previewReleaseDelayMs = isDesktopViewport
+    ? DESKTOP_PREVIEW_RELEASE_DELAY_MS
+    : MOBILE_PREVIEW_RELEASE_DELAY_MS;
+  const previewCacheMaxEntries = isDesktopViewport
+    ? DESKTOP_PREVIEW_CACHE_MAX_ENTRIES
+    : MOBILE_PREVIEW_CACHE_MAX_ENTRIES;
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
     () =>
@@ -259,9 +739,16 @@ export function ReceiveListPage(): JSX.Element {
   }, [groups]);
 
   useEffect(() => {
+    collapsedGroupsRef.current = collapsedGroups;
+  }, [collapsedGroups]);
+
+  useEffect(() => {
+    loadingGroupKeysRef.current = loadingGroupKeys;
+  }, [loadingGroupKeys]);
+
+  useEffect(() => {
     return () => {
-      previewObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      previewObjectUrlsRef.current.clear();
+      clearSharedPreviewUrlCache();
     };
   }, []);
 
@@ -323,10 +810,14 @@ export function ReceiveListPage(): JSX.Element {
             }
           }
 
-          const { metadataEntries, mediaItems, catalog } = await loadReceiveZipInventory(blob, {
-            migrateDigitalItemTypes: false,
-            includeMedia: false
-          });
+          const [inventory, thumbnailBlobByAssetId] = await Promise.all([
+            loadReceiveZipInventory(blob, {
+              migrateDigitalItemTypes: false,
+              includeMedia: false
+            }),
+            loadHistoryThumbnailBlobMap(entry.id)
+          ]);
+          const { metadataEntries, mediaItems, catalog } = inventory;
           const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
           const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
           pullIds.forEach((pullId) => seenPullIds.add(pullId));
@@ -394,10 +885,21 @@ export function ReceiveListPage(): JSX.Element {
               const obtained = typeof metadata.obtainedCount === 'number' && Number.isFinite(metadata.obtainedCount)
                 ? Math.max(0, metadata.obtainedCount)
                 : 1;
+              const thumbnailBlob = thumbnailBlobByAssetId.get(metadata.id) ?? null;
+              const previewCacheKey = createHistoryThumbnailKey(entry.id, metadata.id);
 
               if (existing) {
                 existing.obtainedCount += obtained;
                 existing.isOwned = true;
+                if (!existing.metadataIds.includes(metadata.id)) {
+                  existing.metadataIds.push(metadata.id);
+                }
+                if (!existing.previewThumbnailBlob && thumbnailBlob) {
+                  existing.previewThumbnailBlob = thumbnailBlob;
+                }
+                if (!existing.previewCacheKey) {
+                  existing.previewCacheKey = previewCacheKey;
+                }
               } else {
                 itemMap.set(itemKey, {
                   key: itemKey,
@@ -412,8 +914,10 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: 'unknown',
                   digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
-                  previewUrl: null,
+                  metadataIds: [metadata.id],
                   sourceItems: [],
+                  previewThumbnailBlob: thumbnailBlob,
+                  previewCacheKey,
                   isOwned: true
                 });
               }
@@ -450,6 +954,8 @@ export function ReceiveListPage(): JSX.Element {
 
               const itemMap = existingGroup.itemMap;
               const existing = itemMap.get(itemKey);
+              const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
+              const previewCacheKey = createHistoryThumbnailKey(entry.id, assetId);
               if (existing) {
                 existing.kind = item.kind;
                 if (item.metadata?.isRiagu) {
@@ -457,13 +963,21 @@ export function ReceiveListPage(): JSX.Element {
                 } else if (item.metadata?.digitalItemType) {
                   existing.digitalItemType = item.metadata.digitalItemType;
                 }
+                if (!existing.metadataIds.includes(assetId)) {
+                  existing.metadataIds.push(assetId);
+                }
                 existing.sourceItems.push(item);
+                if (!existing.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(item)) {
+                  existing.previewThumbnailBlob = previewThumbnailBlob;
+                }
+                if (!existing.previewCacheKey && isLikelyImageSource(item)) {
+                  existing.previewCacheKey = previewCacheKey;
+                }
               } else {
                 const totalCount = fallbackTotalCounts.get(baseKey) ?? 1;
                 const nextIndex = (fallbackIndexMap.get(baseKey) ?? 0) + 1;
                 fallbackIndexMap.set(baseKey, nextIndex);
                 const itemDisplayName = totalCount > 1 ? `${itemName}（${nextIndex}）` : itemName;
-                const previewUrl = null;
                 const obtained = typeof item.metadata?.obtainedCount === 'number' && Number.isFinite(item.metadata.obtainedCount)
                   ? Math.max(0, item.metadata.obtainedCount)
                   : 1;
@@ -480,8 +994,10 @@ export function ReceiveListPage(): JSX.Element {
                   obtainedCount: obtained,
                   kind: item.kind,
                   digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
-                  previewUrl,
+                  metadataIds: [assetId],
                   sourceItems: [item],
+                  previewThumbnailBlob: isLikelyImageSource(item) ? previewThumbnailBlob : null,
+                  previewCacheKey: isLikelyImageSource(item) ? previewCacheKey : null,
                   isOwned: true
                 });
               }
@@ -549,8 +1065,10 @@ export function ReceiveListPage(): JSX.Element {
                     obtainedCount: 0,
                     kind: 'unknown',
                     digitalItemType: item.isRiagu ? null : 'other',
-                    previewUrl: null,
+                    metadataIds: [],
                     sourceItems: [],
+                    previewThumbnailBlob: null,
+                    previewCacheKey: null,
                     isOwned: false
                   });
                   existingGroup.baseKeySet.add(baseKey);
@@ -619,18 +1137,23 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const displayGroups = useMemo<ReceiveGachaGroup[]>(() => {
-    if (digitalItemTypeFilter === '*') {
-      return groups;
-    }
-
-    const selected = new Set(digitalItemTypeFilter);
-    if (selected.size === 0) {
+    const selectedDigitalTypeSet =
+      digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+    if (selectedDigitalTypeSet && selectedDigitalTypeSet.size === 0) {
       return [];
     }
 
     return groups
       .map((group) => {
-        const filteredItems = group.items.filter((item) => item.digitalItemType && selected.has(item.digitalItemType));
+        const filteredItems = group.items.filter((item) => {
+          if (hideUnownedItems && !item.isOwned) {
+            return false;
+          }
+          if (selectedDigitalTypeSet) {
+            return Boolean(item.digitalItemType) && selectedDigitalTypeSet.has(item.digitalItemType);
+          }
+          return true;
+        });
         if (filteredItems.length === 0) {
           return null;
         }
@@ -669,14 +1192,14 @@ export function ReceiveListPage(): JSX.Element {
         };
       })
       .filter((group): group is ReceiveGachaGroup => Boolean(group));
-  }, [digitalItemTypeFilter, groups]);
+  }, [digitalItemTypeFilter, groups, hideUnownedItems]);
 
   const isBaseEmpty = status === 'ready' && groups.length === 0;
   const isFilteredEmpty = status === 'ready' && groups.length > 0 && displayGroups.length === 0;
   const totalOwnedKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedKinds, 0), [displayGroups]);
   const totalKinds = useMemo(() => displayGroups.reduce((sum, group) => sum + group.totalKinds, 0), [displayGroups]);
   const totalOwnedCount = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedCount, 0), [displayGroups]);
-  const hasSaving = Boolean(savingGroupKey || savingItemKey);
+  const hasSaving = Boolean(savingGroupKey || savingItemKey || updatingDigitalTypeItemKey);
 
   const loadGroupMedia = useCallback(async (groupKey: string) => {
     const targetGroup = groupsRef.current.find((group) => resolveGroupKey(group.gachaId, group.gachaName) === groupKey);
@@ -695,20 +1218,12 @@ export function ReceiveListPage(): JSX.Element {
       return;
     }
 
-    let shouldLoad = false;
-    setLoadingGroupKeys((prev) => {
-      if (prev[groupKey]) {
-        return prev;
-      }
-      shouldLoad = true;
-      return {
-        ...prev,
-        [groupKey]: true
-      };
-    });
-    if (!shouldLoad) {
+    if (loadingGroupKeysRef.current[groupKey]) {
       return;
     }
+    const nextLoadingGroupKeys = { ...loadingGroupKeysRef.current, [groupKey]: true };
+    loadingGroupKeysRef.current = nextLoadingGroupKeys;
+    setLoadingGroupKeys(nextLoadingGroupKeys);
 
     try {
       const itemPatchMap = new Map<
@@ -731,6 +1246,22 @@ export function ReceiveListPage(): JSX.Element {
           includeMedia: true,
           metadataFilter: (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
         });
+        const thumbnailBlobByAssetId = await loadHistoryThumbnailBlobMap(entryId);
+        const hasMissingThumbnail = mediaItems.some((item) => {
+          if (!isLikelyImageSource(item)) {
+            return false;
+          }
+          const assetId = resolveReceiveMediaAssetId(item);
+          return Boolean(assetId) && !thumbnailBlobByAssetId.has(assetId);
+        });
+        if (hasMissingThumbnail) {
+          void ensureReceiveHistoryThumbnailsForEntry({
+            entryId,
+            mediaItems
+          }).catch((error) => {
+            console.warn('Failed to backfill receive history thumbnails from receive/list', { entryId, error });
+          });
+        }
 
         const groupMetadataEntries = metadataEntries.filter(
           (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
@@ -773,9 +1304,11 @@ export function ReceiveListPage(): JSX.Element {
           const mediaItemName = (mediaItem.metadata?.itemName ?? mediaItem.filename).trim() || '名称未設定';
           const mediaItemId = mediaItem.metadata?.itemId?.trim() || null;
           const baseKey = `${mediaGroupKey}:${mediaItemId ?? mediaItemName}`;
-          const assetId = mediaItem.metadata?.id ?? mediaItem.id;
+          const assetId = resolveReceiveMediaAssetId(mediaItem) ?? mediaItem.id;
           const mappedKey = assetKeyMap.get(assetId);
           const itemKey = mappedKey ?? resolveItemKey(mediaGroupKey, mediaItemId, mediaItemName, assetId);
+          const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
+          const previewCacheKey = createHistoryThumbnailKey(entryId, assetId);
           const obtained =
             typeof mediaItem.metadata?.obtainedCount === 'number' && Number.isFinite(mediaItem.metadata.obtainedCount)
               ? Math.max(0, mediaItem.metadata.obtainedCount)
@@ -784,6 +1317,9 @@ export function ReceiveListPage(): JSX.Element {
           const existingPatch = itemPatchMap.get(itemKey);
           if (existingPatch) {
             existingPatch.sourceItems.push(mediaItem);
+            if (!existingPatch.item.metadataIds.includes(assetId)) {
+              existingPatch.item.metadataIds.push(assetId);
+            }
             if (existingPatch.item.kind === 'unknown') {
               existingPatch.item.kind = mediaItem.kind;
             }
@@ -793,16 +1329,13 @@ export function ReceiveListPage(): JSX.Element {
             } else if (!existingPatch.item.digitalItemType && mediaItem.metadata?.digitalItemType) {
               existingPatch.item.digitalItemType = mediaItem.metadata.digitalItemType;
             }
-            if (!existingPatch.item.previewUrl && mediaItem.kind === 'image') {
-              const previewUrl = URL.createObjectURL(mediaItem.blob);
-              previewObjectUrlsRef.current.add(previewUrl);
-              existingPatch.item.previewUrl = previewUrl;
+            if (!existingPatch.item.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(mediaItem)) {
+              existingPatch.item.previewThumbnailBlob = previewThumbnailBlob;
+            }
+            if (!existingPatch.item.previewCacheKey && isLikelyImageSource(mediaItem)) {
+              existingPatch.item.previewCacheKey = previewCacheKey;
             }
           } else {
-            const previewUrl = mediaItem.kind === 'image' ? URL.createObjectURL(mediaItem.blob) : null;
-            if (previewUrl) {
-              previewObjectUrlsRef.current.add(previewUrl);
-            }
             itemPatchMap.set(itemKey, {
               item: {
                 key: itemKey,
@@ -817,8 +1350,10 @@ export function ReceiveListPage(): JSX.Element {
                 obtainedCount: obtained,
                 kind: mediaItem.kind,
                 digitalItemType: mediaItem.metadata?.isRiagu ? null : mediaItem.metadata?.digitalItemType ?? 'other',
-                previewUrl,
+                metadataIds: [assetId],
                 sourceItems: [mediaItem],
+                previewThumbnailBlob: isLikelyImageSource(mediaItem) ? previewThumbnailBlob : null,
+                previewCacheKey: isLikelyImageSource(mediaItem) ? previewCacheKey : null,
                 isOwned: true
               },
               sourceItems: [mediaItem]
@@ -846,11 +1381,14 @@ export function ReceiveListPage(): JSX.Element {
             const mergedSourceMap = new Map<string, ReceiveMediaItem>();
             item.sourceItems.forEach((source) => mergedSourceMap.set(source.id, source));
             patch.sourceItems.forEach((source) => mergedSourceMap.set(source.id, source));
+            const mergedMetadataIds = Array.from(new Set([...item.metadataIds, ...patch.item.metadataIds]));
             return {
               ...item,
               kind: item.kind === 'unknown' ? patch.item.kind : item.kind,
               digitalItemType: item.isRiagu ? null : item.digitalItemType ?? patch.item.digitalItemType,
-              previewUrl: item.previewUrl ?? patch.item.previewUrl,
+              metadataIds: mergedMetadataIds,
+              previewThumbnailBlob: item.previewThumbnailBlob ?? patch.item.previewThumbnailBlob,
+              previewCacheKey: item.previewCacheKey ?? patch.item.previewCacheKey,
               sourceItems: Array.from(mergedSourceMap.values())
             };
           });
@@ -882,29 +1420,55 @@ export function ReceiveListPage(): JSX.Element {
       );
     } catch (loadError) {
       console.error('Failed to lazy-load receive list group media', { groupKey, loadError });
+      // Prevent infinite retry loop when a group media load fails.
+      setGroups((prev) =>
+        prev.map((group) => {
+          if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
+            return group;
+          }
+          if (group.mediaLoaded) {
+            return group;
+          }
+          return { ...group, mediaLoaded: true };
+        })
+      );
     } finally {
-      setLoadingGroupKeys((prev) => {
-        const next = { ...prev };
-        delete next[groupKey];
-        return next;
-      });
+      const next = { ...loadingGroupKeysRef.current };
+      delete next[groupKey];
+      loadingGroupKeysRef.current = next;
+      setLoadingGroupKeys(next);
     }
   }, []);
 
   const toggleGroup = useCallback((groupKey: string) => {
-    let shouldLoad = false;
-    setCollapsedGroups((prev) => {
-      const isCollapsed = Boolean(prev[groupKey]);
-      shouldLoad = isCollapsed;
-      return {
-        ...prev,
-        [groupKey]: !isCollapsed
-      };
-    });
-    if (shouldLoad) {
+    const wasCollapsed = Boolean(collapsedGroupsRef.current[groupKey]);
+    const nextCollapsed = !wasCollapsed;
+    collapsedGroupsRef.current = {
+      ...collapsedGroupsRef.current,
+      [groupKey]: nextCollapsed
+    };
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [groupKey]: nextCollapsed
+    }));
+    if (wasCollapsed) {
       void loadGroupMedia(groupKey);
     }
   }, [loadGroupMedia]);
+
+  useEffect(() => {
+    if (status !== 'ready') {
+      return;
+    }
+    displayGroups.forEach((group) => {
+      const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+      const isCollapsed = Boolean(collapsedGroups[groupKey]);
+      const isLoading = Boolean(loadingGroupKeys[groupKey]);
+      if (!isCollapsed && !isLoading && !group.mediaLoaded) {
+        void loadGroupMedia(groupKey);
+      }
+    });
+  }, [collapsedGroups, displayGroups, loadGroupMedia, loadingGroupKeys, status]);
 
   const handleSaveItem = useCallback(async (item: ReceiveInventoryItem) => {
     const target = item.sourceItems[0];
@@ -948,6 +1512,113 @@ export function ReceiveListPage(): JSX.Element {
     }
   }, []);
 
+  const handleUpdateDigitalItemType = useCallback(
+    async (group: ReceiveGachaGroup, item: ReceiveInventoryItem, digitalItemType: DigitalItemTypeKey) => {
+      if (!item.isOwned || item.isRiagu || item.digitalItemType === digitalItemType) {
+        return;
+      }
+
+      const metadataIds = Array.from(
+        new Set(item.metadataIds.map((metadataId) => metadataId.trim()).filter((metadataId) => metadataId.length > 0))
+      );
+      if (metadataIds.length === 0) {
+        setSaveError('デジタルアイテムタイプを更新できませんでした。対象メタデータが見つかりません。');
+        return;
+      }
+      if (group.entryIds.length === 0) {
+        setSaveError('デジタルアイテムタイプを更新できませんでした。対象履歴が見つかりません。');
+        return;
+      }
+
+      setSaveError(null);
+      setUpdatingDigitalTypeItemKey(item.key);
+      const persistedMetadataIdSet = new Set<string>();
+
+      try {
+        for (const entryId of group.entryIds) {
+          const historyBlob = await loadHistoryFile(entryId);
+          if (!historyBlob) {
+            continue;
+          }
+
+          const { updatedBlob, updatedMetadataIds } = await updateReceiveZipDigitalItemType(historyBlob, {
+            metadataIds,
+            digitalItemType
+          });
+          updatedMetadataIds.forEach((metadataId) => {
+            persistedMetadataIdSet.add(metadataId);
+          });
+          if (updatedBlob) {
+            await saveHistoryFile(entryId, updatedBlob);
+          }
+        }
+
+        if (persistedMetadataIdSet.size === 0) {
+          setSaveError('デジタルアイテムタイプを更新できませんでした。対象メタデータが履歴内に見つかりません。');
+          return;
+        }
+
+        const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+        const applyDigitalTypeToSourceItem = (sourceItem: ReceiveMediaItem): ReceiveMediaItem => {
+          const sourceMetadataId = sourceItem.metadata?.id?.trim();
+          if (!sourceMetadataId || !persistedMetadataIdSet.has(sourceMetadataId) || !sourceItem.metadata) {
+            return sourceItem;
+          }
+          if (sourceItem.metadata.isRiagu || sourceItem.metadata.digitalItemType === digitalItemType) {
+            return sourceItem;
+          }
+          return {
+            ...sourceItem,
+            metadata: {
+              ...sourceItem.metadata,
+              digitalItemType
+            }
+          };
+        };
+
+        setGroups((previousGroups) =>
+          previousGroups.map((currentGroup) => {
+            if (resolveGroupKey(currentGroup.gachaId, currentGroup.gachaName) !== groupKey) {
+              return currentGroup;
+            }
+
+            const nextItems = currentGroup.items.map((currentItem) => {
+              if (currentItem.key !== item.key || currentItem.isRiagu) {
+                return currentItem;
+              }
+              const hasPersistedMetadata = currentItem.metadataIds.some((metadataId) =>
+                persistedMetadataIdSet.has(metadataId)
+              );
+              if (!hasPersistedMetadata) {
+                return currentItem;
+              }
+              return {
+                ...currentItem,
+                digitalItemType,
+                sourceItems: currentItem.sourceItems.map(applyDigitalTypeToSourceItem)
+              };
+            });
+
+            return {
+              ...currentGroup,
+              items: nextItems,
+              sourceItems: currentGroup.sourceItems.map(applyDigitalTypeToSourceItem)
+            };
+          })
+        );
+      } catch (updateError) {
+        console.error('Failed to update digital item type from receive list', {
+          itemKey: item.key,
+          updateError
+        });
+        setSaveError('デジタルアイテムタイプの更新に失敗しました。もう一度お試しください。');
+      } finally {
+        setUpdatingDigitalTypeItemKey(null);
+      }
+    },
+    []
+  );
+
   return (
     <div className="receive-list-page min-h-screen text-surface-foreground">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
@@ -962,7 +1633,26 @@ export function ReceiveListPage(): JSX.Element {
             </p>
           ) : null}
           {status === 'ready' && groups.length > 0 ? (
-            <div className="receive-list-page__filter-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="receive-list-page__visibility-toggle-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="receive-list-page__visibility-toggle-label text-xs font-semibold text-muted-foreground">表示設定</p>
+              <button
+                type="button"
+                className={clsx(
+                  'receive-list-page__unowned-toggle-button btn btn-muted h-9 px-4 text-xs font-semibold',
+                  hideUnownedItems && 'border-accent/60 bg-accent/10 text-accent'
+                )}
+                aria-pressed={hideUnownedItems}
+                data-state={hideUnownedItems ? 'hidden' : 'visible'}
+                onClick={() => {
+                  setHideUnownedItems((previous) => !previous);
+                }}
+              >
+                {hideUnownedItems ? '未所持を表示する' : '未所持を非表示'}
+              </button>
+            </div>
+          ) : null}
+          {status === 'ready' && groups.length > 0 ? (
+            <div className="receive-list-page__filter-row mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="receive-list-page__filter-label text-xs font-semibold text-muted-foreground">フィルタ</p>
               <div className="receive-list-page__filter-control w-full sm:w-[320px]">
                 <MultiSelectDropdown<DigitalItemTypeKey>
@@ -1088,7 +1778,14 @@ export function ReceiveListPage(): JSX.Element {
                             key={item.key}
                             item={item}
                             onSave={() => handleSaveItem(item)}
+                            onDigitalItemTypeChange={(digitalItemType) =>
+                              handleUpdateDigitalItemType(group, item, digitalItemType)
+                            }
                             isSaving={savingItemKey === item.key || Boolean(savingGroupKey)}
+                            isUpdatingDigitalItemType={updatingDigitalTypeItemKey === item.key}
+                            previewVisibilityMarginPx={previewVisibilityMarginPx}
+                            previewReleaseDelayMs={previewReleaseDelayMs}
+                            previewCacheMaxEntries={previewCacheMaxEntries}
                           />
                         ))}
                       </div>

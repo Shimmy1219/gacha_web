@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 
-import { loadReceiveZipInventory } from './receiveZip';
+import { loadReceiveZipInventory, updateReceiveZipDigitalItemType } from './receiveZip';
 
 interface TestZipItemMetadata {
   filePath: string | null;
@@ -135,5 +135,73 @@ describe('loadReceiveZipInventory digital item type migration', () => {
     expect(itemsEntry).toBeDefined();
     const raw = JSON.parse(await itemsEntry!.async('string')) as Record<string, { digitalItemType?: string }>;
     expect(Object.prototype.hasOwnProperty.call(raw['asset-1'] ?? {}, 'digitalItemType')).toBe(false);
+  });
+
+  it('updates digital item type in receive zip items metadata', async () => {
+    const metadataMap: Record<string, TestZipItemMetadata> = {
+      'asset-1': {
+        filePath: 'items/TestGacha/item.png',
+        gachaId: 'gacha-1',
+        gachaName: 'TestGacha',
+        itemId: 'item-1',
+        itemName: '画像景品',
+        rarity: 'SR',
+        rarityColor: '#6366f1',
+        isRiagu: false,
+        riaguType: null,
+        obtainedCount: 1,
+        isNewForUser: false
+      }
+    };
+    const blob = await buildReceiveZipWithItemMetadata(
+      metadataMap,
+      'items/TestGacha/item.png',
+      new Uint8Array([137, 80, 78, 71])
+    );
+
+    const updateResult = await updateReceiveZipDigitalItemType(blob, {
+      metadataIds: ['asset-1'],
+      digitalItemType: 'nepuri'
+    });
+
+    expect(updateResult.updatedMetadataIds).toContain('asset-1');
+    expect(updateResult.updatedBlob).toBeInstanceOf(Blob);
+
+    const updatedInput = updateResult.updatedBlob instanceof Blob
+      ? await updateResult.updatedBlob.arrayBuffer()
+      : blob;
+    const reloaded = await loadReceiveZipInventory(updatedInput);
+    expect(reloaded.metadataEntries[0]?.digitalItemType).toBe('nepuri');
+  });
+
+  it('skips update when metadata id does not exist in receive zip', async () => {
+    const metadataMap: Record<string, TestZipItemMetadata> = {
+      'asset-1': {
+        filePath: 'items/TestGacha/item.png',
+        gachaId: 'gacha-1',
+        gachaName: 'TestGacha',
+        itemId: 'item-1',
+        itemName: '画像景品',
+        rarity: 'SR',
+        rarityColor: '#6366f1',
+        isRiagu: false,
+        riaguType: null,
+        obtainedCount: 1,
+        isNewForUser: false
+      }
+    };
+    const blob = await buildReceiveZipWithItemMetadata(
+      metadataMap,
+      'items/TestGacha/item.png',
+      new Uint8Array([137, 80, 78, 71])
+    );
+
+    const updateResult = await updateReceiveZipDigitalItemType(blob, {
+      metadataIds: ['missing-asset-id'],
+      digitalItemType: 'nepuri'
+    });
+
+    expect(updateResult.updatedMetadataIds).toHaveLength(0);
+    expect(updateResult.updatedBlob).toBeNull();
   });
 });
