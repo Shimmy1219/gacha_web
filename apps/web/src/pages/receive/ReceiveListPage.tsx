@@ -55,7 +55,11 @@ interface ReceiveGachaGroup {
 }
 
 type PreviewKind = 'image' | 'video' | 'audio' | 'unknown';
-const PREVIEW_VISIBILITY_MARGIN_PX = 200;
+const MOBILE_PREVIEW_VISIBILITY_MARGIN_PX = 280;
+const DESKTOP_PREVIEW_VISIBILITY_MARGIN_PX = 720;
+const MOBILE_PREVIEW_RELEASE_DELAY_MS = 400;
+const DESKTOP_PREVIEW_RELEASE_DELAY_MS = 1000;
+const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 type VisibilityListener = (isIntersecting: boolean) => void;
 type SharedVisibilityObserver = {
   observer: IntersectionObserver;
@@ -171,12 +175,59 @@ function canUseObjectUrlApi(): boolean {
   );
 }
 
-function useViewportPreviewUrl(previewBlob: Blob | null, isInViewport: boolean): string | null {
+function useDesktopViewport(): boolean {
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return window.matchMedia(DESKTOP_MEDIA_QUERY).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mediaQueryList = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsDesktopViewport(event.matches);
+    };
+    setIsDesktopViewport(mediaQueryList.matches);
+    if (typeof mediaQueryList.addEventListener === 'function') {
+      mediaQueryList.addEventListener('change', handleChange);
+      return () => {
+        mediaQueryList.removeEventListener('change', handleChange);
+      };
+    }
+    mediaQueryList.onchange = handleChange;
+    return () => {
+      mediaQueryList.onchange = null;
+    };
+  }, []);
+
+  return isDesktopViewport;
+}
+
+function useViewportPreviewUrl(
+  previewBlob: Blob | null,
+  isInViewport: boolean,
+  releaseDelayMs: number
+): string | null {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const previewBlobRef = useRef<Blob | null>(null);
+  const releaseTimerIdRef = useRef<number | null>(null);
+  const clearReleaseTimer = useCallback(() => {
+    if (releaseTimerIdRef.current === null || typeof window === 'undefined') {
+      return;
+    }
+    window.clearTimeout(releaseTimerIdRef.current);
+    releaseTimerIdRef.current = null;
+  }, []);
   const revokePreviewUrl = useCallback(() => {
+    clearReleaseTimer();
     if (!canUseObjectUrlApi()) {
       previewUrlRef.current = null;
+      previewBlobRef.current = null;
       setPreviewUrl(null);
       return;
     }
@@ -186,11 +237,13 @@ function useViewportPreviewUrl(previewBlob: Blob | null, isInViewport: boolean):
     }
     URL.revokeObjectURL(currentPreviewUrl);
     previewUrlRef.current = null;
+    previewBlobRef.current = null;
     setPreviewUrl((previous) => (previous === currentPreviewUrl ? null : previous));
-  }, []);
+  }, [clearReleaseTimer]);
 
   useEffect(() => {
     return () => {
+      clearReleaseTimer();
       if (!canUseObjectUrlApi()) {
         return;
       }
@@ -200,23 +253,47 @@ function useViewportPreviewUrl(previewBlob: Blob | null, isInViewport: boolean):
       }
       URL.revokeObjectURL(currentPreviewUrl);
       previewUrlRef.current = null;
+      previewBlobRef.current = null;
     };
-  }, []);
+  }, [clearReleaseTimer]);
 
   useEffect(() => {
-    if (!canUseObjectUrlApi() || !previewBlob || !isInViewport) {
+    if (!canUseObjectUrlApi() || !previewBlob) {
       revokePreviewUrl();
       return;
     }
 
+    if (!isInViewport) {
+      if (releaseTimerIdRef.current !== null) {
+        return;
+      }
+      if (typeof window === 'undefined') {
+        revokePreviewUrl();
+        return;
+      }
+      releaseTimerIdRef.current = window.setTimeout(() => {
+        releaseTimerIdRef.current = null;
+        revokePreviewUrl();
+      }, Math.max(0, releaseDelayMs));
+      return;
+    }
+
+    clearReleaseTimer();
+    const existingPreviewUrl = previewUrlRef.current;
+    if (existingPreviewUrl && previewBlobRef.current === previewBlob) {
+      setPreviewUrl((previous) => (previous === existingPreviewUrl ? previous : existingPreviewUrl));
+      return;
+    }
+
     const nextPreviewUrl = URL.createObjectURL(previewBlob);
-    const previousPreviewUrl = previewUrlRef.current;
+    const previousPreviewUrl = existingPreviewUrl;
     previewUrlRef.current = nextPreviewUrl;
+    previewBlobRef.current = previewBlob;
     if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
       URL.revokeObjectURL(previousPreviewUrl);
     }
     setPreviewUrl(nextPreviewUrl);
-  }, [isInViewport, previewBlob, revokePreviewUrl]);
+  }, [clearReleaseTimer, isInViewport, previewBlob, releaseDelayMs, revokePreviewUrl]);
 
   return previewUrl;
 }
@@ -312,11 +389,15 @@ function formatOwnerNames(names: string[]): string {
 function ReceiveInventoryItemCard({
   item,
   onSave,
-  isSaving
+  isSaving,
+  previewVisibilityMarginPx,
+  previewReleaseDelayMs
 }: {
   item: ReceiveInventoryItem;
   onSave: () => void;
   isSaving: boolean;
+  previewVisibilityMarginPx: number;
+  previewReleaseDelayMs: number;
 }): JSX.Element {
   const { push } = useModal();
   const rarityPresentation = useMemo(
@@ -325,7 +406,7 @@ function ReceiveInventoryItemCard({
   );
   const previewKind = resolvePreviewKind(item.kind);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const isInViewport = useCardViewportVisibility(cardRef, PREVIEW_VISIBILITY_MARGIN_PX);
+  const isInViewport = useCardViewportVisibility(cardRef, previewVisibilityMarginPx);
   const imageSourceItem = useMemo(
     () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
@@ -335,7 +416,7 @@ function ReceiveInventoryItemCard({
     [imageSourceItem, item.previewThumbnailBlob]
   );
   const isLowResolutionPreview = Boolean(item.previewThumbnailBlob);
-  const visiblePreviewUrl = useViewportPreviewUrl(previewBlob, isInViewport);
+  const visiblePreviewUrl = useViewportPreviewUrl(previewBlob, isInViewport, previewReleaseDelayMs);
   const hasSource = item.sourceItems.length > 0;
   const previewSourceItem = useMemo(
     () => imageSourceItem ?? item.sourceItems[0] ?? null,
@@ -467,6 +548,13 @@ export function ReceiveListPage(): JSX.Element {
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
   const collapsedGroupsRef = useRef<Record<string, boolean>>({});
   const loadingGroupKeysRef = useRef<Record<string, boolean>>({});
+  const isDesktopViewport = useDesktopViewport();
+  const previewVisibilityMarginPx = isDesktopViewport
+    ? DESKTOP_PREVIEW_VISIBILITY_MARGIN_PX
+    : MOBILE_PREVIEW_VISIBILITY_MARGIN_PX;
+  const previewReleaseDelayMs = isDesktopViewport
+    ? DESKTOP_PREVIEW_RELEASE_DELAY_MS
+    : MOBILE_PREVIEW_RELEASE_DELAY_MS;
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
     () =>
@@ -1353,6 +1441,8 @@ export function ReceiveListPage(): JSX.Element {
                             item={item}
                             onSave={() => handleSaveItem(item)}
                             isSaving={savingItemKey === item.key || Boolean(savingGroupKey)}
+                            previewVisibilityMarginPx={previewVisibilityMarginPx}
+                            previewReleaseDelayMs={previewReleaseDelayMs}
                           />
                         ))}
                       </div>
