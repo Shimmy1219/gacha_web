@@ -4,7 +4,7 @@ import {
   CheckCircleIcon,
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
@@ -14,10 +14,13 @@ import {
   normalizeDiscordMemberGiftChannels,
   saveDiscordMemberCache,
   mergeDiscordMemberGiftChannels,
+  mergeDiscordGuildMembersGiftChannelMetadata,
   applyGiftChannelMetadataFromCache,
   type DiscordMemberCacheEntry,
+  type DiscordMemberGiftChannelInfo,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
+import { sortDiscordGuildMembers, type DiscordGuildMemberSortMode } from '../../features/discord/discordMemberSorting';
 import {
   type DiscordGuildCategorySelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
@@ -25,8 +28,7 @@ import {
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import {
-  isDiscordMissingPermissionsErrorCode,
-  pushDiscordMissingPermissionsWarning
+  pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
 export interface DiscordMemberShareResult {
@@ -52,12 +54,14 @@ interface DiscordMembersResponse {
   ok: boolean;
   members?: DiscordGuildMemberSummary[];
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordGiftChannelsResponse {
   ok: boolean;
   channels?: unknown;
   error?: string;
+  errorCode?: string;
 }
 
 type DiscordMemberPickerMode = 'share' | 'link';
@@ -123,7 +127,9 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 function useDiscordGuildMembers(
   discordUserId: string | null | undefined,
   guildId: string | null | undefined,
-  query: string
+  query: string,
+  categoryId: string | null | undefined,
+  push: ModalComponentProps['push']
 ) {
   const trimmedQuery = query.trim();
   const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
@@ -160,7 +166,7 @@ function useDiscordGuildMembers(
   }, [cacheEntry]);
 
   return useQuery<DiscordGuildMemberSummary[]>({
-    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery],
+    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryId ?? null],
     queryFn: async () => {
       if (!discordUserId || !guildId) {
         return [];
@@ -179,6 +185,11 @@ function useDiscordGuildMembers(
 
       if (!response.ok) {
         const message = payload?.error?.trim();
+        pushDiscordApiWarningByErrorCode(
+          push,
+          payload?.errorCode,
+          message && message.length > 0 ? message : `Discordメンバー一覧の取得に失敗しました (${response.status})`
+        );
         throw new Error(
           message && message.length > 0
             ? `Discordメンバー一覧の取得に失敗しました: ${message}`
@@ -187,6 +198,7 @@ function useDiscordGuildMembers(
       }
 
       if (!payload?.ok || !Array.isArray(payload.members)) {
+        pushDiscordApiWarningByErrorCode(push, payload?.errorCode, payload?.error);
         throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
@@ -203,12 +215,19 @@ function useDiscordGuildMembers(
       }
 
       if (guildId && normalizedMembers.length > 0) {
+        let latestChannels: DiscordMemberGiftChannelInfo[] | null = null;
+        const channelMemberIds = trimmedQuery
+          ? normalizedMembers.map((member) => member.id).filter(Boolean)
+          : null;
+
         try {
           const channelParams = new URLSearchParams({ guild_id: guildId });
+          if (categoryId) {
+            channelParams.set('category_id', categoryId);
+          }
           if (trimmedQuery) {
-            const memberIds = normalizedMembers.map((member) => member.id).filter(Boolean);
-            if (memberIds.length > 0) {
-              channelParams.set('member_ids', memberIds.join(','));
+            if (channelMemberIds && channelMemberIds.length > 0) {
+              channelParams.set('member_ids', channelMemberIds.join(','));
             }
           }
 
@@ -220,6 +239,11 @@ function useDiscordGuildMembers(
 
           if (!giftResponse.ok || !giftPayload?.ok) {
             const message = giftPayload?.error?.trim();
+            pushDiscordApiWarningByErrorCode(
+              push,
+              giftPayload?.errorCode,
+              message && message.length > 0 ? message : `お渡しチャンネル一覧の取得に失敗しました (${giftResponse.status})`
+            );
             if (message) {
               console.warn(`Failed to update Discord gift channel cache: ${message}`);
             } else {
@@ -227,7 +251,14 @@ function useDiscordGuildMembers(
             }
           } else if (discordUserId) {
             const normalizedChannels = normalizeDiscordMemberGiftChannels(giftPayload.channels);
-            const mergedEntry = mergeDiscordMemberGiftChannels(discordUserId, guildId, normalizedChannels);
+            latestChannels = normalizedChannels;
+            const mergeOptions = channelMemberIds ? { memberIds: channelMemberIds } : undefined;
+            const mergedEntry = mergeDiscordMemberGiftChannels(
+              discordUserId,
+              guildId,
+              normalizedChannels,
+              mergeOptions
+            );
             if (mergedEntry) {
               channelCacheEntry = mergedEntry;
             }
@@ -235,14 +266,21 @@ function useDiscordGuildMembers(
         } catch (error) {
           console.warn('Failed to update Discord gift channel cache', error);
         }
-      }
 
-      if (!channelCacheEntry && discordUserId && guildId) {
-        channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
-      }
+        if (!channelCacheEntry && discordUserId && guildId) {
+          channelCacheEntry = loadDiscordMemberCache(discordUserId, guildId);
+        }
 
-      if (channelCacheEntry) {
-        normalizedMembers = applyGiftChannelMetadataFromCache(normalizedMembers, channelCacheEntry.members);
+        if (channelCacheEntry) {
+          normalizedMembers = applyGiftChannelMetadataFromCache(normalizedMembers, channelCacheEntry.members);
+        }
+
+        if (latestChannels) {
+          normalizedMembers = mergeDiscordGuildMembersGiftChannelMetadata(normalizedMembers, latestChannels, {
+            memberIds: channelMemberIds,
+            mode: 'replace'
+          });
+        }
       }
 
       return normalizedMembers;
@@ -252,7 +290,8 @@ function useDiscordGuildMembers(
     gcTime: 5 * 60 * 1000,
     keepPreviousData: true,
     initialData,
-    initialDataUpdatedAt
+    initialDataUpdatedAt,
+    retry: false
   });
 }
 
@@ -261,6 +300,7 @@ export function DiscordMemberPickerDialog({
   close,
   push
 }: ModalComponentProps<DiscordMemberPickerPayload>): JSX.Element {
+  const queryClient = useQueryClient();
   const mode: DiscordMemberPickerMode = payload?.mode === 'link' ? 'link' : 'share';
   const isLinkMode = mode === 'link';
   const sharePayload = !isLinkMode ? (payload as DiscordMemberPickerSharePayload | undefined) : undefined;
@@ -272,12 +312,21 @@ export function DiscordMemberPickerDialog({
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sortMode, setSortMode] = useState<DiscordGuildMemberSortMode>('newest');
   const [selectedCategory, setSelectedCategory] = useState<DiscordGuildCategorySelection | null>(
     !isLinkMode ? payload?.initialCategory ?? null : null
   );
+  const categoryFilterId = useMemo(() => {
+    const selectedId = selectedCategory?.id?.trim();
+    if (selectedId) {
+      return selectedId;
+    }
+    const initialId = payload?.initialCategory?.id?.trim();
+    return initialId && initialId.length > 0 ? initialId : null;
+  }, [payload?.initialCategory?.id, selectedCategory?.id]);
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery);
+  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId, push);
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
@@ -292,18 +341,8 @@ export function DiscordMemberPickerDialog({
   }, [members, selectedMemberId]);
 
   const sortedMembers = useMemo(() => {
-    return [...members].sort((a, b) => {
-      const nameA = a.displayName.toLowerCase();
-      const nameB = b.displayName.toLowerCase();
-      if (nameA < nameB) {
-        return -1;
-      }
-      if (nameA > nameB) {
-        return 1;
-      }
-      return a.id.localeCompare(b.id);
-    });
-  }, [members]);
+    return sortDiscordGuildMembers(members, sortMode);
+  }, [members, sortMode]);
 
   const handleSelect = (memberId: string) => {
     setSelectedMemberId(memberId);
@@ -397,18 +436,18 @@ export function DiscordMemberPickerDialog({
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
-          throw new Error('Discord botの権限が不足しています。');
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
         }
         throw new Error(message);
       }
 
       if (!findPayload.ok) {
         const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-        if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-          pushDiscordMissingPermissionsWarning(push, message);
-          throw new Error('Discord botの権限が不足しています。');
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
         }
         throw new Error(message);
       }
@@ -417,6 +456,35 @@ export function DiscordMemberPickerDialog({
       if (!channelId) {
         throw new Error('お渡しチャンネルの作成に失敗しました。');
       }
+
+      const nextGiftChannelInfo: DiscordMemberGiftChannelInfo = {
+        memberId: selectedMemberId,
+        channelId,
+        channelName: findPayload.channel_name ?? null,
+        channelParentId: findPayload.parent_id ?? null,
+        botHasView: true
+      };
+
+      // Gift channel creation can succeed even if the subsequent send fails.
+      // Update cache so the member list reflects "お渡しチャンネル未作成" -> created.
+      mergeDiscordMemberGiftChannels(discordUserId, guildId, [nextGiftChannelInfo], {
+        memberIds: [selectedMemberId],
+        mode: 'upsert'
+      });
+
+      const trimmedQuery = debouncedQuery.trim();
+      queryClient.setQueryData<DiscordGuildMemberSummary[]>(
+        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterId ?? null],
+        (current) => {
+          if (!Array.isArray(current)) {
+            return current;
+          }
+          return mergeDiscordGuildMembersGiftChannelMetadata(current, [nextGiftChannelInfo], {
+            memberIds: [selectedMemberId],
+            mode: 'upsert'
+          });
+        }
+      );
 
       const title =
         sharePayload?.shareTitle ?? `${sharePayload?.receiverName ?? '景品'}のお渡しリンクです`;
@@ -548,12 +616,13 @@ export function DiscordMemberPickerDialog({
   };
 
   const refreshLabel = linkPayload?.refreshLabel ?? '再取得';
+  const refreshButtonLabel = membersQuery.isFetching ? '更新中' : refreshLabel;
   const submitLabel = linkPayload?.submitLabel ?? 'Discordに共有';
 
   return (
     <>
-      <ModalBody className="space-y-6">
-        <section className="rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
+      <ModalBody className="discord-member-picker-dialog__body space-y-6">
+        <section className="discord-member-picker-dialog__intro rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
           {isLinkMode ? (
             <>
               <p>Discordギルドのメンバーから連携するユーザーを選択し、ユーザープロフィールに保存します。</p>
@@ -582,24 +651,42 @@ export function DiscordMemberPickerDialog({
           )}
         </section>
 
-        <section className="space-y-4">
+        <section className="discord-member-picker-dialog__member-section space-y-4">
           {isLinkMode && !discordUserId ? (
             <p className="text-xs text-danger">Discordにログインしてからメンバー一覧を読み込んでください。</p>
           ) : null}
           {isLinkMode && discordUserId && !guildId ? (
             <p className="text-xs text-danger">Discord設定からギルドを選択するとメンバー一覧を利用できます。</p>
           ) : null}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h3 className="text-sm font-semibold text-surface-foreground">
+          <div className="discord-member-picker-dialog__member-header flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h3 className="discord-member-picker-dialog__member-title text-sm font-semibold text-surface-foreground">
               ギルドメンバー一覧
             </h3>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {membersQuery.isFetching ? (
-                <span className="inline-flex items-center gap-1" aria-live="polite">
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  更新中…
-                </span>
-              ) : null}
+            <div className="discord-member-picker-dialog__member-controls flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <div className="discord-member-picker-dialog__sort flex items-center gap-2">
+                <label
+                  htmlFor="discord-member-picker-sort-select"
+                  className="discord-member-picker-dialog__sort-label text-xs font-medium text-muted-foreground"
+                >
+                  並び替え
+                </label>
+                <select
+                  id="discord-member-picker-sort-select"
+                  className="discord-member-picker-dialog__sort-select rounded-full border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  value={sortMode}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next === 'name' || next === 'id' || next === 'newest' || next === 'oldest') {
+                      setSortMode(next);
+                    }
+                  }}
+                >
+                  <option value="name">名前順</option>
+                  <option value="id">ID順</option>
+                  <option value="newest">新規加入順</option>
+                  <option value="oldest">古参順</option>
+                </select>
+              </div>
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 font-medium text-surface-foreground transition hover:bg-surface/60"
@@ -610,19 +697,21 @@ export function DiscordMemberPickerDialog({
                 aria-busy={membersQuery.isFetching}
               >
                 <ArrowPathIcon className={`h-4 w-4 ${membersQuery.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
-                {refreshLabel}
+                <span aria-live="polite">{refreshButtonLabel}</span>
               </button>
             </div>
           </div>
 
-          <div className="relative">
+          <div className="discord-member-picker-dialog__search relative">
             <MagnifyingGlassIcon
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              className="discord-member-picker-dialog__search-icon pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <input
               type="search"
-              className="w-full rounded-full border border-border/70 bg-surface/30 py-2 pl-10 pr-4 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+              id="discord-member-picker-search-input"
+              aria-label="メンバー検索"
+              className="discord-member-picker-dialog__search-input w-full rounded-full border border-border/70 bg-surface/30 py-2 pl-10 pr-4 text-sm text-surface-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
               placeholder="メンバーを検索 (ニックネーム / ユーザー名)"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
@@ -652,7 +741,7 @@ export function DiscordMemberPickerDialog({
           ) : null}
 
           {!membersQuery.isLoading && !membersQuery.isError && sortedMembers.length > 0 ? (
-            <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            <ul className="discord-member-picker-dialog__member-list max-h-80 space-y-2 overflow-y-auto pr-1">
               {sortedMembers.map((member) => {
                 const isSelected = member.id === selectedMemberId;
                 const avatarUrl = getMemberAvatarUrl(member);
@@ -690,26 +779,26 @@ export function DiscordMemberPickerDialog({
                     <button
                       type="button"
                       onClick={() => handleSelect(member.id)}
-                      className="flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
+                      className="discord-member-picker-dialog__member-button flex w-full items-center gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
                       aria-pressed={isSelected}
                     >
-                      <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface text-base font-semibold text-muted-foreground">
+                      <span className="discord-member-picker-dialog__member-avatar relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface text-base font-semibold text-muted-foreground">
                         {avatarUrl ? (
                           <img src={avatarUrl} alt="Member avatar" className="h-full w-full object-cover" />
                         ) : (
                           displayName.slice(0, 2)
                         )}
                       </span>
-                      <div className="flex flex-1 flex-col">
-                        <span className="text-sm font-semibold text-surface-foreground">
+                      <div className="discord-member-picker-dialog__member-info flex flex-1 flex-col">
+                        <span className="discord-member-picker-dialog__member-name text-sm font-semibold text-surface-foreground">
                           {displayName}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="discord-member-picker-dialog__member-username text-xs text-muted-foreground">
                           @
                           {fallbackLabel}
                           {member.nick ? ` ／ サーバーニックネーム: ${member.nick}` : ''}
                         </span>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div className="discord-member-picker-dialog__member-meta flex flex-wrap items-center gap-2">
                           <span className={giftBadgeClass}>{giftLabel}</span>
                           {categoryLabel ? (
                             <span className="inline-flex items-center rounded-full bg-surface/60 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">

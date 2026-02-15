@@ -166,6 +166,7 @@ function enforceCsrf(req, ctx, config) {
   if (!cookieValue || !provided || cookieValue !== provided) {
     const err = new Error('Forbidden: invalid CSRF token');
     err.statusCode = 403;
+    err.errorCode = 'csrf_token_mismatch';
     return err;
   }
 
@@ -201,7 +202,18 @@ export function withApiGuards(config) {
 
       const csrfErr = enforceCsrf(req, ctx, config?.csrf);
       if (csrfErr) {
-        return json(res, csrfErr.statusCode || 403, { ok: false, error: csrfErr.message });
+        if (csrfErr.errorCode === 'csrf_token_mismatch') {
+          const routeLabel = route ? route.replace(/^\/+/u, '') : 'api';
+          console.warn(`[${routeLabel}] 【既知のエラー】csrf mismatch`, {
+            method: req?.method,
+            url: req?.url,
+          });
+        }
+        return json(res, csrfErr.statusCode || 403, {
+          ok: false,
+          error: csrfErr.message,
+          errorCode: typeof csrfErr.errorCode === 'string' ? csrfErr.errorCode : undefined,
+        });
       }
 
       try {

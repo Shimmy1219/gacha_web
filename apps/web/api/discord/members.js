@@ -3,7 +3,12 @@ import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
 import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
-import { dFetch, assertGuildOwner, isDiscordUnknownGuildError } from '../_lib/discordApi.js';
+import {
+  dFetch,
+  assertGuildOwner,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
+  isDiscordUnknownGuildError
+} from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
 export default withApiGuards({
@@ -44,13 +49,14 @@ export default withApiGuards({
   function respondDiscordApiError(error, context){
     const message = error instanceof Error ? error.message : String(error);
     if (isDiscordUnknownGuildError(error)){
-      log.warn('discord guild is not accessible for bot operations', { context, message });
+      log.warn('【既知のエラー】discord guild is not accessible for bot operations', { context, message });
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
-    log.error('discord api request failed', { context, message });
+    log.error('【既知のエラー】discord api request failed', { context, message });
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
@@ -62,6 +68,7 @@ export default withApiGuards({
       username,
       globalName: m?.user?.global_name || null,
       nick: m?.nick || null,
+      joinedAt: typeof m?.joined_at === 'string' ? m.joined_at : null,
       avatar: m?.user?.avatar || null,
       displayName:
         m?.display_name ||

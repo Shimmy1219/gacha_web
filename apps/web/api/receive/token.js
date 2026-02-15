@@ -6,7 +6,6 @@ import { createRequestLogger } from '../_lib/logger.js';
 import { kv } from '../_lib/kv.js';
 
 const VERBOSE = process.env.VERBOSE_RECEIVE_LOG === '1';
-
 // ===== Helpers =====
 function vLog(...args){ if (VERBOSE) console.log('[receive/token]', ...args); }
 

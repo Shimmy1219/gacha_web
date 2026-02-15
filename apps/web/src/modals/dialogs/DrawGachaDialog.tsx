@@ -19,7 +19,7 @@ import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
-import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -31,8 +31,8 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import {
-  isDiscordMissingPermissionsErrorCode,
-  pushDiscordMissingPermissionsWarning
+  pushCsrfTokenMismatchWarning,
+  pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
@@ -1442,18 +1442,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           if (!findResponse.ok || !findPayload) {
             const message =
               findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-              pushDiscordMissingPermissionsWarning(push, message);
-              throw new Error('Discord botの権限が不足しています。');
+            if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+              throw new Error('Discordギルドの設定を確認してください。');
             }
             throw new Error(message);
           }
 
           if (!findPayload.ok) {
             const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-              pushDiscordMissingPermissionsWarning(push, message);
-              throw new Error('Discord botの権限が不足しています。');
+            if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+              throw new Error('Discordギルドの設定を確認してください。');
             }
             throw new Error(message);
           }
@@ -1543,6 +1541,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
         setDiscordDeliveryCompleted(true);
       } catch (error) {
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        }
         const message =
           error instanceof DiscordGuildSelectionMissingError
             ? error.message
@@ -1689,6 +1690,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         mode: 'link',
         guildId: guildSelection.guildId,
         discordUserId: staffDiscordId,
+        initialCategory: guildSelection.privateChannelCategory ?? null,
         submitLabel: '追加',
         refreshLabel: 'メンバー情報の更新',
         onMemberPicked: async (member) => {

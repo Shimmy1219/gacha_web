@@ -72,6 +72,8 @@ export function parseDiscordApiError(error) {
   return extractDiscordApiErrorInfo(error);
 }
 
+export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild';
+
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions';
 
 export const DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA =

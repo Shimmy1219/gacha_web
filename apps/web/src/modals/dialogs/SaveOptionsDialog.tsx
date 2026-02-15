@@ -21,7 +21,7 @@ import {
   type OriginalPrizeMissingItem,
   type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
-import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
@@ -36,8 +36,8 @@ import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordPro
 import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import {
-  isDiscordMissingPermissionsErrorCode,
-  pushDiscordMissingPermissionsWarning
+  pushCsrfTokenMismatchWarning,
+  pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import {
@@ -789,6 +789,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         return;
       }
       console.error('ZIPアップロード処理に失敗しました', error);
+      if (isBlobUploadCsrfTokenMismatchError(error)) {
+        pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        setErrorBanner(null);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`アップロードに失敗しました: ${message}`);
     } finally {
@@ -851,6 +856,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         console.info('Discord共有用ZIPアップロードがキャンセルされました');
       } else {
         console.error('Discord共有用ZIPの生成またはアップロードに失敗しました', error);
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          setErrorBanner(null);
+          setIsDiscordSharing(false);
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         setErrorBanner(`Discord共有の準備に失敗しました: ${message}`);
       }
@@ -970,18 +981,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           if (!findResponse.ok || !findPayload) {
             const message =
               findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-              pushDiscordMissingPermissionsWarning(push, message);
-              throw new Error('Discord botの権限が不足しています。');
+            if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+              throw new Error('Discordギルドの設定を確認してください。');
             }
             throw new Error(message);
           }
 
           if (!findPayload.ok) {
             const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-            if (isDiscordMissingPermissionsErrorCode(findPayload?.errorCode)) {
-              pushDiscordMissingPermissionsWarning(push, message);
-              throw new Error('Discord botの権限が不足しています。');
+            if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+              throw new Error('Discordギルドの設定を確認してください。');
             }
             throw new Error(message);
           }

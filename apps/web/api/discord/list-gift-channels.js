@@ -5,6 +5,7 @@ import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import {
   dFetch,
   assertGuildOwner,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   isDiscordUnknownGuildError,
 } from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
@@ -54,6 +55,7 @@ export default withApiGuards({
   }
 
   const guildId = typeof req.query.guild_id === 'string' ? req.query.guild_id.trim() : '';
+  const categoryId = typeof req.query.category_id === 'string' ? req.query.category_id.trim() : '';
   if (!guildId){
     log.warn('missing guild identifier');
     return res.status(400).json({ ok:false, error:'guild_id required' });
@@ -66,6 +68,7 @@ export default withApiGuards({
 
   log.debug('request parameters normalized', {
     guildId,
+    categoryId: categoryId || null,
     memberIdFilterCount: memberIdCandidates.size,
   });
 
@@ -80,13 +83,14 @@ export default withApiGuards({
   function respondDiscordApiError(error, context){
     const message = error instanceof Error ? error.message : String(error);
     if (isDiscordUnknownGuildError(error)){
-      log.warn('discord guild is not accessible for bot operations', { context, message });
+      log.warn('【既知のエラー】discord guild is not accessible for bot operations', { context, message });
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
-    log.error('discord api request failed', { context, message });
+    log.error('【既知のエラー】discord api request failed', { context, message });
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
@@ -129,7 +133,11 @@ export default withApiGuards({
     ? candidates.filter((candidate) => memberIdCandidates.has(candidate.memberId))
     : candidates;
 
-  const payload = filtered.map((candidate) => ({
+  const categoryFiltered = categoryId
+    ? filtered.filter((candidate) => candidate.parentId === categoryId)
+    : filtered;
+
+  const payload = categoryFiltered.map((candidate) => ({
     channel_id: candidate.channelId,
     channel_name: candidate.channelName ?? null,
     parent_id: candidate.parentId ?? null,
@@ -139,6 +147,7 @@ export default withApiGuards({
 
   log.info('gift channel listing completed', {
     guildId,
+    categoryId: categoryId || null,
     returnedCount: payload.length,
   });
 

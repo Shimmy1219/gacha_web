@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { withApiGuards } from '../_lib/apiGuards.js';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
+const ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch';
 
 function vLog(...args) {
   if (VERBOSE) console.log('[blob/upload]', ...args);
@@ -218,8 +219,17 @@ async function handlePrepareUpload(req, res, log, body) {
     });
   } catch (error) {
     const status = error?.statusCode || error?.status || 500;
-    log.error('failed to generate client token', { error, status });
-    return res.status(status).json({ ok: false, error: error?.message || 'Failed to generate upload token' });
+    const isKnownCsrfMismatch = typeof error?.errorCode === 'string' && error.errorCode === ERROR_CODE_CSRF_TOKEN_MISMATCH;
+    if (isKnownCsrfMismatch) {
+      log.error('【既知のエラー】failed to generate client token', { error, status });
+    } else {
+      log.error('failed to generate client token', { error, status });
+    }
+    return res.status(status).json({
+      ok: false,
+      error: error?.message || 'Failed to generate upload token',
+      errorCode: typeof error?.errorCode === 'string' ? error.errorCode : undefined
+    });
   }
 }
 
