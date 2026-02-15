@@ -23,7 +23,7 @@ export function WarningDialog({ payload, close }: ModalComponentProps<WarningDia
       <ModalBody className="space-y-4">
         <div className="flex items-start gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-700">
           <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 text-amber-500" aria-hidden="true" />
-          <p>{message}</p>
+          <p className="whitespace-pre-line">{message}</p>
         </div>
       </ModalBody>
       <ModalFooter>

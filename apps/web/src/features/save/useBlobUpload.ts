@@ -18,8 +18,14 @@ export interface UploadZipResult {
   pathname?: string;
 }
 
+export const BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch' as const;
+
+export type BlobUploadErrorCode = typeof BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH;
+
 export class BlobUploadError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  code?: BlobUploadErrorCode;
+
+  constructor(message: string, options?: { cause?: unknown; code?: BlobUploadErrorCode }) {
     super(message);
     if (options?.cause) {
       try {
@@ -27,6 +33,9 @@ export class BlobUploadError extends Error {
       } catch {
         // noop
       }
+    }
+    if (typeof options?.code === 'string') {
+      this.code = options.code;
     }
     this.name = 'BlobUploadError';
   }
@@ -43,6 +52,7 @@ interface ReceiveTokenResponse {
   token?: string;
   exp?: number | string;
   error?: string;
+  errorCode?: string;
 }
 
 interface PrepareUploadResponsePayload {
@@ -52,6 +62,7 @@ interface PrepareUploadResponsePayload {
   fileName?: string;
   expiresAt?: string;
   error?: string;
+  errorCode?: string;
 }
 
 interface PrepareUploadArgs {
@@ -68,6 +79,27 @@ const CSRF_ENDPOINT = '/api/blob/csrf';
 const UPLOAD_ENDPOINT = '/api/blob/upload';
 const RECEIVE_TOKEN_ENDPOINT = '/api/receive/token';
 const DEFAULT_PURPOSE = 'zips';
+
+function isCsrfTokenMismatchResponse(errorCode?: unknown, message?: unknown): boolean {
+  if (errorCode === BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH) {
+    return true;
+  }
+  if (typeof message !== 'string') {
+    return false;
+  }
+  const normalized = message.toLowerCase();
+  return normalized.includes('csrf token mismatch') || normalized.includes('invalid csrf token');
+}
+
+export function isBlobUploadCsrfTokenMismatchError(error: unknown): boolean {
+  if (error instanceof BlobUploadError && error.code === BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH) {
+    return true;
+  }
+  if (error instanceof Error) {
+    return isCsrfTokenMismatchResponse(undefined, error.message);
+  }
+  return false;
+}
 
 function ensureZipFileName(fileName: string): void {
   if (typeof fileName !== 'string' || !fileName.trim()) {
@@ -155,6 +187,11 @@ async function issueReceiveShareUrl(
 
   if (!response.ok || !payload?.ok || !payload.shareUrl || !payload.token) {
     const reason = payload?.error ?? `status ${response.status}`;
+    if (isCsrfTokenMismatchResponse(payload?.errorCode, reason)) {
+      throw new BlobUploadError(`共有リンクの発行に失敗しました (${reason})`, {
+        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH
+      });
+    }
     throw new BlobUploadError(`共有リンクの発行に失敗しました (${reason})`);
   }
 
@@ -199,6 +236,11 @@ async function requestUploadAuthorization(
 
   if (!response.ok || !payload?.ok || !payload.token || !payload.pathname) {
     const reason = payload?.error ?? `status ${response.status}`;
+    if (isCsrfTokenMismatchResponse(payload?.errorCode, reason)) {
+      throw new BlobUploadError(`アップロードポリシーの取得に失敗しました (${reason})`, {
+        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH
+      });
+    }
     throw new BlobUploadError(`アップロードポリシーの取得に失敗しました (${reason})`);
   }
 

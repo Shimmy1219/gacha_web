@@ -21,19 +21,21 @@ import {
   type OriginalPrizeMissingItem,
   type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
-import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
+import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
-import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import {
   applyLegacyAssetsToInstances,
@@ -640,22 +642,16 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   };
 
   const runZipUpload = useCallback(async (ownerName: string) => {
-    const zip = await buildUserZipFromSelection({
+    const { zip, uploadResponse } = await buildAndUploadSelectionZip({
       snapshot: resolveZipSnapshot(),
       selection,
       userId,
       userName: receiverDisplayName,
       ownerName,
-      excludeRiaguImages
-    });
-
-    const uploadResponse = await uploadZip({
-      file: zip.blob,
-      fileName: zip.fileName,
-      userId,
-      receiverName: receiverDisplayName,
+      uploadZip,
       ownerDiscordId: discordSession?.user?.id,
-      ownerDiscordName: discordSession?.user?.name
+      ownerDiscordName: discordSession?.user?.name,
+      excludeRiaguImages
     });
 
     const expiresAtDisplay = uploadResponse.expiresAt
@@ -717,15 +713,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
     });
     try {
-      await runZipUpload(ownerName);
-      const zip = await buildUserZipFromSelection({
-        snapshot: resolveZipSnapshot(),
-        selection,
-        userId,
-        userName: receiverDisplayName,
-        ownerName,
-        excludeRiaguImages
-      });
+      const { zip } = await runZipUpload(ownerName);
 
       const pullIdsForStatus = resolvePullIdsForStatus(zip.pullIds);
       if (pullIdsForStatus.length > 0) {
@@ -734,43 +722,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           pullIdsForStatus,
           zip.originalPrizeMissingPullIds
         );
-      }
-
-      const uploadResponse = await uploadZip({
-        file: zip.blob,
-        fileName: zip.fileName,
-        userId,
-        receiverName: receiverDisplayName,
-        ownerDiscordId: discordSession?.user?.id,
-        ownerDiscordName: discordSession?.user?.name
-      });
-
-      const expiresAtDisplay = uploadResponse.expiresAt
-        ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
-        : undefined;
-
-      const savedAt = new Date().toISOString();
-
-      persistence.savePartial({
-        saveOptions: {
-          [userId]: {
-            version: 3,
-            key: uploadResponse.token,
-            shareUrl: uploadResponse.shareUrl,
-            downloadUrl: uploadResponse.downloadUrl,
-            expiresAt: uploadResponse.expiresAt,
-            pathname: uploadResponse.pathname,
-            savedAt
-          }
-        }
-      });
-
-      setUploadResult({
-        url: uploadResponse.shareUrl,
-        label: uploadResponse.shareUrl,
-        expiresAt: expiresAtDisplay
-      });
-      if (pullIdsForStatus.length > 0) {
         pullHistoryStore.markPullStatus(pullIdsForStatus, 'uploaded');
         pullHistoryStore.markPullOriginalPrizeMissing(
           pullIdsForStatus,
@@ -784,6 +735,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         return;
       }
       console.error('ZIPアップロード処理に失敗しました', error);
+      if (isBlobUploadCsrfTokenMismatchError(error)) {
+        pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        setErrorBanner(null);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`アップロードに失敗しました: ${message}`);
     } finally {
@@ -846,6 +802,12 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         console.info('Discord共有用ZIPアップロードがキャンセルされました');
       } else {
         console.error('Discord共有用ZIPの生成またはアップロードに失敗しました', error);
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          setErrorBanner(null);
+          setIsDiscordSharing(false);
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         setErrorBanner(`Discord共有の準備に失敗しました: ${message}`);
       }
@@ -910,116 +872,24 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           profile?.id
         );
 
-        let channelId = trimOrNull(profile?.discordLastShareChannelId);
-        const storedChannelName = profile?.discordLastShareChannelName;
-        let channelName =
-          storedChannelName === null ? null : trimOrNull(storedChannelName ?? undefined);
-        const storedParentId = profile?.discordLastShareChannelParentId;
-        let channelParentId =
-          storedParentId === null ? null : trimOrNull(storedParentId ?? undefined);
-
         const shareUrl = uploadData.url;
         const shareLabelCandidate = uploadData.label ?? shareUrl;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
-
-        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
-
-        if (!channelId && !preferredCategory) {
-          const category = await ensurePrivateChannelCategory({
-            push,
-            discordUserId,
-            guildSelection,
-            dialogTitle: 'お渡しカテゴリの設定'
-          });
-          preferredCategory = category.id;
-        }
-
-        if (!channelId) {
-          if (!preferredCategory) {
-            throw new Error(
-              'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。'
-            );
-          }
-
-          const params = new URLSearchParams({
-            guild_id: guildSelection.guildId,
-            member_id: sharedMemberId,
-            category_id: preferredCategory
-          });
-          const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json'
-            },
-            credentials: 'include'
-          });
-
-          const findPayload = (await findResponse.json().catch(() => null)) as {
-            ok: boolean;
-            channel_id?: string | null;
-            channel_name?: string | null;
-            parent_id?: string | null;
-            created?: boolean;
-            error?: string;
-          } | null;
-
-          if (!findResponse.ok || !findPayload) {
-            const message =
-              findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-            throw new Error(message);
-          }
-
-          if (!findPayload.ok) {
-            throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
-          }
-
-          channelId = trimOrNull(findPayload.channel_id);
-          channelName =
-            findPayload.channel_name === null
-              ? null
-              : trimOrNull(findPayload.channel_name ?? undefined);
-          channelParentId =
-            findPayload.parent_id === null
-              ? null
-              : trimOrNull(findPayload.parent_id ?? undefined);
-        }
-
-        if (!channelId) {
-          throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
-        }
-
-        const payload: Record<string, unknown> = {
-          channel_id: channelId,
-          share_url: shareUrl,
-          title: shareTitle,
-          mode: 'bot'
-        };
-        if (shareComment) {
-          payload.comment = shareComment;
-        }
-
-        const sendResponse = await fetch('/api/discord/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify(payload)
+        const { channelId, channelName, channelParentId } = await sendDiscordShareToMember({
+          push,
+          discordUserId,
+          guildSelection,
+          memberId: sharedMemberId,
+          channelId: profile?.discordLastShareChannelId,
+          channelName: profile?.discordLastShareChannelName,
+          channelParentId: profile?.discordLastShareChannelParentId,
+          shareUrl,
+          shareTitle,
+          shareComment,
+          categoryDialogTitle: 'お渡しカテゴリの設定'
         });
-
-        const sendPayload = (await sendResponse
-          .json()
-          .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
-          ok?: boolean;
-          error?: string;
-        };
-
-        if (!sendResponse.ok || !sendPayload.ok) {
-          throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
-        }
 
         const sharedAt = new Date().toISOString();
         const rawShareUrl = shareUrl || '';

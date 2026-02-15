@@ -421,9 +421,10 @@ export async function loadAssetPreview({
   }
 
   const requestedAssetId = assetId ?? null;
-  const requestedPreviewId = previewId ?? requestedAssetId ?? null;
+  const explicitPreviewId = previewId ?? null;
+  const fallbackPreviewId = requestedAssetId ? generatePreviewId(requestedAssetId) : null;
 
-  if (!requestedAssetId && !requestedPreviewId) {
+  if (!requestedAssetId && !explicitPreviewId) {
     return null;
   }
 
@@ -442,11 +443,25 @@ export async function loadAssetPreview({
 
       let previewRecord: AssetPreviewBlobRecord | null = null;
 
-      if (requestedPreviewId) {
+      const previewIdCandidates = new Set<string>();
+      if (explicitPreviewId) {
+        previewIdCandidates.add(explicitPreviewId);
+      }
+      if (metadata?.previewId) {
+        previewIdCandidates.add(metadata.previewId);
+      }
+      if (fallbackPreviewId) {
+        previewIdCandidates.add(fallbackPreviewId);
+      }
+
+      for (const candidateId of previewIdCandidates) {
         previewRecord = (await wrapRequest<AssetPreviewBlobRecord | undefined>(
-          previewStore.get(requestedPreviewId),
+          previewStore.get(candidateId),
           'Failed to load asset preview blob'
         )) ?? null;
+        if (previewRecord) {
+          break;
+        }
       }
 
       if (!metadata && previewRecord?.assetId) {

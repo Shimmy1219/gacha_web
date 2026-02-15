@@ -11,7 +11,11 @@ import {
   saveDiscordGuildSelection,
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
+import {
+  pushDiscordApiWarningByErrorCode
+} from './_lib/discordApiErrorHandling';
 
 interface DiscordCategorySummary {
   id: string;
@@ -23,12 +27,14 @@ interface DiscordCategoriesResponse {
   ok: boolean;
   categories?: DiscordCategorySummary[];
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordCategoryCreateResponse {
   ok: boolean;
   category?: DiscordCategorySummary;
   error?: string;
+  errorCode?: string;
 }
 
 interface DiscordPrivateChannelCategoryDialogPayload {
@@ -38,7 +44,10 @@ interface DiscordPrivateChannelCategoryDialogPayload {
   onCategorySelected?: (category: DiscordGuildCategorySelection) => void;
 }
 
-function useDiscordGuildCategories(guildId: string | null | undefined) {
+function useDiscordGuildCategories(
+  guildId: string | null | undefined,
+  push: ModalComponentProps['push']
+) {
   return useQuery({
     queryKey: ['discord', 'categories', guildId],
     queryFn: async () => {
@@ -46,15 +55,17 @@ function useDiscordGuildCategories(guildId: string | null | undefined) {
         return [] as DiscordCategorySummary[];
       }
       const params = new URLSearchParams({ guild_id: guildId });
-      const response = await fetch(`/api/discord/categories?${params.toString()}`, {
-        headers: {
-          Accept: 'application/json'
-        },
-        credentials: 'include'
+      const response = await fetchDiscordApi(`/api/discord/categories?${params.toString()}`, {
+        method: 'GET'
       });
       const payload = (await response.json().catch(() => null)) as DiscordCategoriesResponse | null;
       if (!response.ok) {
         const message = payload?.error?.trim();
+        pushDiscordApiWarningByErrorCode(
+          push,
+          payload?.errorCode,
+          message && message.length > 0 ? message : `カテゴリ情報の取得に失敗しました (${response.status})`
+        );
         throw new Error(
           message && message.length > 0
             ? `カテゴリ情報の取得に失敗しました: ${message}`
@@ -69,13 +80,15 @@ function useDiscordGuildCategories(guildId: string | null | undefined) {
     enabled: Boolean(guildId),
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
-    keepPreviousData: true
+    keepPreviousData: true,
+    retry: false
   });
 }
 
 export function DiscordPrivateChannelCategoryDialog({
   payload,
-  close
+  close,
+  push
 }: ModalComponentProps<DiscordPrivateChannelCategoryDialogPayload>): JSX.Element {
   const guildId = payload?.guildId ?? null;
   const discordUserId = payload?.discordUserId ?? '';
@@ -92,7 +105,7 @@ export function DiscordPrivateChannelCategoryDialog({
 
   const isSubmitting = submitStage !== 'idle';
 
-  const categoriesQuery = useDiscordGuildCategories(guildId);
+  const categoriesQuery = useDiscordGuildCategories(guildId, push);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
 
   useEffect(() => {
@@ -115,18 +128,21 @@ export function DiscordPrivateChannelCategoryDialog({
     setCreateError(null);
     setIsCreating(true);
     try {
-      const response = await fetch('/api/discord/categories', {
+      const response = await fetchDiscordApi('/api/discord/categories', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({ guild_id: guildId, name: trimmed })
       });
       const payload = (await response.json().catch(() => null)) as DiscordCategoryCreateResponse | null;
       if (!response.ok || !payload?.ok || !payload.category) {
         const message = payload?.error || 'カテゴリの作成に失敗しました。';
+        if (pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message)) {
+          setCreateError(null);
+          return;
+        }
         throw new Error(message);
       }
       setNewCategoryName('');
@@ -176,11 +192,8 @@ export function DiscordPrivateChannelCategoryDialog({
       params.set('category_id', category.id);
       params.set('display_name', 'カテゴリ確認用チャンネル');
 
-      const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-        headers: {
-          Accept: 'application/json'
-        },
-        credentials: 'include'
+      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+        method: 'GET'
       });
 
       const findPayload = (await findResponse.json().catch(() => null)) as {
@@ -190,15 +203,25 @@ export function DiscordPrivateChannelCategoryDialog({
         parent_id?: string | null;
         created?: boolean;
         error?: string;
+        errorCode?: string;
       } | null;
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
+        }
         throw new Error(message);
       }
 
       if (!findPayload.ok) {
-        throw new Error(findPayload.error || 'テスト用チャンネルの作成に失敗しました');
+        const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          setSubmitError(null);
+          return;
+        }
+        throw new Error(message);
       }
 
       createdChannelId = findPayload.channel_id ?? null;
@@ -208,13 +231,12 @@ export function DiscordPrivateChannelCategoryDialog({
 
       setSubmitStage('sending-message');
 
-      const sendResponse = await fetch('/api/discord/send', {
+      const sendResponse = await fetchDiscordApi('/api/discord/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({
           channel_id: createdChannelId,
           share_url: 'https://discord.com',

@@ -1,5 +1,6 @@
 import { SparklesIcon } from '@heroicons/react/24/outline';
 
+import { OfficialXAccountPanel } from '../../../../components/OfficialXAccountPanel';
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 
 interface GachaSplashScreenProps {
@@ -42,6 +43,9 @@ export function GachaSplashScreen({
             onOpenPageSettings={onOpenPageSettings}
             className="w-full justify-center"
           />
+        </div>
+        <div className="gacha-splash__official-x-contact w-full max-w-2xl">
+          <OfficialXAccountPanel />
         </div>
       </div>
     </section>

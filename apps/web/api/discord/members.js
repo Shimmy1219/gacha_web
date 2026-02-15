@@ -1,18 +1,27 @@
 // /api/discord/members.js
+import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies } from '../_lib/cookies.js';
+import { DEFAULT_CSRF_HEADER_NAME } from '../_lib/csrf.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
-import { dFetch, assertGuildOwner, isDiscordUnknownGuildError } from '../_lib/discordApi.js';
+import {
+  dFetch,
+  assertGuildOwner,
+  DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
+  isDiscordUnknownGuildError
+} from '../_lib/discordApi.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
-export default async function handler(req, res){
+export default withApiGuards({
+  route: '/api/discord/members',
+  health: { enabled: true },
+  methods: ['GET'],
+  origin: true,
+  csrf: { cookieName: 'discord_csrf', source: 'header', headerName: DEFAULT_CSRF_HEADER_NAME },
+  rateLimit: { name: 'discord:members', limit: 20, windowSec: 60 },
+})(async function handler(req, res) {
   const log = createRequestLogger('api/discord/members', req);
   log.info('request received', { query: req.query });
 
-  if (req.method !== 'GET'){
-    res.setHeader('Allow','GET');
-    log.warn('method not allowed', { method: req.method });
-    return res.status(405).json({ ok:false, error:'Method Not Allowed' });
-  }
   const { sid } = getCookies(req);
   const sess = await getSessionWithRefresh(sid);
   if (!sess) {
@@ -40,13 +49,14 @@ export default async function handler(req, res){
   function respondDiscordApiError(error, context){
     const message = error instanceof Error ? error.message : String(error);
     if (isDiscordUnknownGuildError(error)){
-      log.warn('discord guild is not accessible for bot operations', { context, message });
+      log.warn('【既知のエラー】discord guild is not accessible for bot operations', { context, message });
       return res.status(404).json({
         ok:false,
         error:'選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。',
+        errorCode: DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
       });
     }
-    log.error('discord api request failed', { context, message });
+    log.error('【既知のエラー】discord api request failed', { context, message });
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
@@ -58,6 +68,7 @@ export default async function handler(req, res){
       username,
       globalName: m?.user?.global_name || null,
       nick: m?.nick || null,
+      joinedAt: typeof m?.joined_at === 'string' ? m.joined_at : null,
       avatar: m?.user?.avatar || null,
       displayName:
         m?.display_name ||
@@ -116,4 +127,4 @@ export default async function handler(req, res){
 
   log.info('members resolved', { count: filtered.length, mode: q?'scan+filter':'scan' });
   return res.json({ ok:true, members: filtered, mode: q?'scan+filter':'scan' });
-}
+});

@@ -6,6 +6,7 @@ export interface DiscordGuildMemberSummary {
   username: string;
   globalName: string | null;
   nick: string | null;
+  joinedAt: string | null;
   avatar: string | null;
   avatarUrl: string | null;
   displayName: string;
@@ -39,6 +40,13 @@ export interface DiscordMemberGiftChannelInfo {
   channelName: string | null;
   channelParentId: string | null;
   botHasView: boolean | null;
+}
+
+export type DiscordMemberGiftChannelMergeMode = 'replace' | 'upsert';
+
+export interface DiscordMemberGiftChannelMergeOptions {
+  memberIds?: string[] | null;
+  mode?: DiscordMemberGiftChannelMergeMode;
 }
 
 function cloneWithGiftChannelMetadata(
@@ -113,6 +121,8 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
   const globalName =
     typeof record.globalName === 'string' || record.globalName === null ? (record.globalName as string | null) : null;
   const nick = typeof record.nick === 'string' || record.nick === null ? (record.nick as string | null) : null;
+  const joinedAt =
+    typeof record.joinedAt === 'string' || record.joinedAt === null ? (record.joinedAt as string | null) : null;
   const avatar = typeof record.avatar === 'string' ? (record.avatar as string) : null;
   const displayName = typeof record.displayName === 'string' ? (record.displayName as string) : '';
   const avatarUrlCandidate =
@@ -169,6 +179,7 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
     username,
     globalName,
     nick,
+    joinedAt,
     avatar,
     avatarUrl: avatarUrlCandidate ?? buildMemberAvatarUrl(id, avatar),
     displayName
@@ -300,17 +311,25 @@ function sanitizeGiftChannelInfo(candidate: unknown): DiscordMemberGiftChannelIn
   };
 }
 
-export function mergeDiscordMemberGiftChannels(
-  discordUserId: string | undefined | null,
-  guildId: string | undefined | null,
-  channels: DiscordMemberGiftChannelInfo[]
-): DiscordMemberCacheEntry | null {
-  if (
-    !discordUserId ||
-    !guildId ||
-    typeof window === 'undefined'
-  ) {
+function normalizeMemberIdList(value: string[] | null | undefined): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
     return null;
+  }
+
+  const normalized = value
+    .map((candidate) => (typeof candidate === 'string' ? candidate.trim() : ''))
+    .filter(Boolean);
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function mergeDiscordGuildMembersGiftChannelMetadata(
+  members: DiscordGuildMemberSummary[],
+  channels: DiscordMemberGiftChannelInfo[],
+  options?: DiscordMemberGiftChannelMergeOptions
+): DiscordGuildMemberSummary[] {
+  if (!Array.isArray(members) || members.length === 0) {
+    return [];
   }
 
   const sanitizedChannels = Array.isArray(channels)
@@ -320,6 +339,53 @@ export function mergeDiscordMemberGiftChannels(
     : [];
 
   const channelMap = new Map(sanitizedChannels.map((entry) => [entry.memberId, entry]));
+
+  const targetMemberIds = normalizeMemberIdList(options?.memberIds);
+  const targetIdSet = targetMemberIds ? new Set(targetMemberIds) : null;
+  const mode: DiscordMemberGiftChannelMergeMode = options?.mode === 'upsert' ? 'upsert' : 'replace';
+
+  return members.map((member) => {
+    if (targetIdSet && !targetIdSet.has(member.id)) {
+      return member;
+    }
+
+    const info = channelMap.get(member.id);
+    if (info) {
+      return {
+        ...member,
+        giftChannelId: info.channelId,
+        giftChannelName: info.channelName ?? null,
+        giftChannelParentId: info.channelParentId ?? null,
+        giftChannelBotHasView: info.botHasView ?? null
+      };
+    }
+
+    if (mode === 'upsert') {
+      return member;
+    }
+
+    const nextMember: DiscordGuildMemberSummary = { ...member };
+    delete nextMember.giftChannelId;
+    delete nextMember.giftChannelName;
+    delete nextMember.giftChannelParentId;
+    delete nextMember.giftChannelBotHasView;
+    return nextMember;
+  });
+}
+
+export function mergeDiscordMemberGiftChannels(
+  discordUserId: string | undefined | null,
+  guildId: string | undefined | null,
+  channels: DiscordMemberGiftChannelInfo[],
+  options?: DiscordMemberGiftChannelMergeOptions
+): DiscordMemberCacheEntry | null {
+  if (
+    !discordUserId ||
+    !guildId ||
+    typeof window === 'undefined'
+  ) {
+    return null;
+  }
 
   updateDiscordUserState(discordUserId, (state) => {
     if (!state.memberCache || !isRecord(state.memberCache)) {
@@ -341,22 +407,7 @@ export function mergeDiscordMemberGiftChannels(
       return state;
     }
 
-    const updatedMembers = normalizedMembers.map((member) => {
-      const info = channelMap.get(member.id);
-      const nextMember: DiscordGuildMemberSummary = { ...member };
-      if (info) {
-        nextMember.giftChannelId = info.channelId;
-        nextMember.giftChannelName = info.channelName ?? null;
-        nextMember.giftChannelParentId = info.channelParentId ?? null;
-        nextMember.giftChannelBotHasView = info.botHasView ?? null;
-      } else {
-        delete nextMember.giftChannelId;
-        delete nextMember.giftChannelName;
-        delete nextMember.giftChannelParentId;
-        delete nextMember.giftChannelBotHasView;
-      }
-      return nextMember;
-    });
+    const updatedMembers = mergeDiscordGuildMembersGiftChannelMetadata(normalizedMembers, channels, options);
 
     const nextEntry = { ...entryCandidate, members: updatedMembers };
     const memberCache = { ...state.memberCache, [guildId]: nextEntry };

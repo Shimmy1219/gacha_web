@@ -18,8 +18,8 @@ import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { resolveSafeUrl } from '../../utils/safeUrl';
-import { buildUserZipFromSelection } from '../../features/save/buildUserZip';
-import { useBlobUpload } from '../../features/save/useBlobUpload';
+import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
+import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -28,7 +28,8 @@ import {
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
-import { ensurePrivateChannelCategory } from '../../features/discord/ensurePrivateChannelCategory';
+import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV4,
@@ -1320,25 +1321,20 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         const filteredItemIds =
           itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
-        const zip = await buildUserZipFromSelection({
+        const { zip, uploadResponse } = await buildAndUploadSelectionZip({
           snapshot,
           selection,
           userId: targetUserId,
           userName: receiverDisplayName,
           ownerName,
           itemIdFilter: filteredItemIds,
-          excludeRiaguImages
-        });
-
-        setDiscordDeliveryStage('uploading');
-
-        const uploadResponse = await uploadZip({
-          file: zip.blob,
-          fileName: zip.fileName,
-          userId: targetUserId,
-          receiverName: receiverDisplayName,
+          uploadZip,
           ownerDiscordId: staffDiscordId,
-          ownerDiscordName: staffDiscordName ?? undefined
+          ownerDiscordName: staffDiscordName ?? undefined,
+          excludeRiaguImages,
+          onZipBuilt: () => {
+            setDiscordDeliveryStage('uploading');
+          }
         });
 
         if (!uploadResponse?.shareUrl) {
@@ -1374,125 +1370,32 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           profile.id
         );
 
-        let channelId = trimOrNull(profile.discordLastShareChannelId);
-        const storedChannelName = profile.discordLastShareChannelName;
-        let channelName =
-          storedChannelName === null ? null : trimOrNull(storedChannelName ?? undefined);
-        const storedParentId = profile.discordLastShareChannelParentId;
-        let channelParentId =
-          storedParentId === null ? null : trimOrNull(storedParentId ?? undefined);
-
         const shareUrl = uploadResponse.shareUrl;
         const shareLabelCandidate = shareUrl ?? null;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
         const shareComment =
           shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
-
-        let preferredCategory = channelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
-
-        if (!channelId && !preferredCategory) {
-          const category = await ensurePrivateChannelCategory({
-            push,
-            discordUserId: staffDiscordId,
-            guildSelection,
-            dialogTitle: 'お渡しカテゴリの設定'
-          });
-          preferredCategory = category.id;
-        }
-
-        if (!channelId) {
-          if (!preferredCategory) {
-            throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
-          }
-
-          const params = new URLSearchParams({
-            guild_id: guildSelection.guildId,
-            member_id: sharedMemberId,
-            create: '1'
-          });
-          params.set('category_id', preferredCategory);
-          const displayNameForChannel = pickDisplayName(
-            profile.discordDisplayName,
-            receiverDisplayName,
-            profile.displayName
-          );
-          if (displayNameForChannel) {
-            params.set('display_name', displayNameForChannel);
-          }
-
-          const findResponse = await fetch(`/api/discord/find-channels?${params.toString()}`, {
-            headers: {
-              Accept: 'application/json'
-            },
-            credentials: 'include'
-          });
-
-          const findPayload = (await findResponse.json().catch(() => null)) as {
-            ok: boolean;
-            channel_id?: string | null;
-            channel_name?: string | null;
-            parent_id?: string | null;
-            created?: boolean;
-            error?: string;
-          } | null;
-
-          if (!findResponse.ok || !findPayload) {
-            const message =
-              findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-            throw new Error(message);
-          }
-
-          if (!findPayload.ok) {
-            throw new Error(findPayload.error || 'お渡しチャンネルの確認に失敗しました');
-          }
-
-          channelId = trimOrNull(findPayload.channel_id);
-          channelName =
-            findPayload.channel_name === null
-              ? null
-              : trimOrNull(findPayload.channel_name ?? undefined);
-          channelParentId =
-            findPayload.parent_id === null
-              ? null
-              : trimOrNull(findPayload.parent_id ?? undefined);
-        }
-
-        if (!channelId) {
-          throw new Error('お渡しチャンネルの情報が見つかりませんでした。');
-        }
-
+        const displayNameForChannel = pickDisplayName(
+          profile.discordDisplayName,
+          receiverDisplayName,
+          profile.displayName
+        );
         setDiscordDeliveryStage('sending');
-
-        const payload: Record<string, unknown> = {
-          channel_id: channelId,
-          share_url: shareUrl,
-          title: shareTitle,
-          mode: 'bot'
-        };
-        if (shareComment) {
-          payload.comment = shareComment;
-        }
-
-        const sendResponse = await fetch('/api/discord/send', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify(payload)
+        const { channelId, channelName, channelParentId } = await sendDiscordShareToMember({
+          push,
+          discordUserId: staffDiscordId,
+          guildSelection,
+          memberId: sharedMemberId,
+          channelId: profile.discordLastShareChannelId,
+          channelName: profile.discordLastShareChannelName,
+          channelParentId: profile.discordLastShareChannelParentId,
+          displayNameForChannel,
+          shareUrl,
+          shareTitle,
+          shareComment,
+          createChannelIfMissing: true,
+          categoryDialogTitle: 'お渡しカテゴリの設定'
         });
-
-        const sendPayload = (await sendResponse
-          .json()
-          .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
-          ok?: boolean;
-          error?: string;
-        };
-
-        if (!sendResponse.ok || !sendPayload.ok) {
-          throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
-        }
 
         if (zip.pullIds.length > 0) {
           pullHistory.markPullStatus(zip.pullIds, 'discord_shared');
@@ -1532,6 +1435,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
         setDiscordDeliveryCompleted(true);
       } catch (error) {
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        }
         const message =
           error instanceof DiscordGuildSelectionMissingError
             ? error.message
@@ -1678,6 +1584,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         mode: 'link',
         guildId: guildSelection.guildId,
         discordUserId: staffDiscordId,
+        initialCategory: guildSelection.privateChannelCategory ?? null,
         submitLabel: '追加',
         refreshLabel: 'メンバー情報の更新',
         onMemberPicked: async (member) => {
