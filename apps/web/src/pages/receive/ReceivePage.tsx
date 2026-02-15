@@ -7,6 +7,7 @@ import {
   ClockIcon,
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
+import { OFFICIAL_X_ACCOUNT_ID, OFFICIAL_X_ACCOUNT_URL } from '../../components/OfficialXAccountPanel';
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
@@ -24,6 +25,7 @@ import {
 import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
+
 interface ResolveSuccessPayload {
   url: string;
   name?: string;
@@ -835,6 +837,28 @@ export function ReceivePage(): JSX.Element {
               ) : null}
               <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
                 DiscordやXのアプリ内ブラウザから来た方は、safariやchromeなどで開きなおすことをオススメします。
+              </div>
+              <div className="receive-page-streamer-guidance rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-sky-700">
+                <p className="receive-page-streamer-guidance-heading font-semibold">配信者さんへ</p>
+                <p className="receive-page-streamer-guidance-message mt-1 leading-relaxed">
+                  四遊楽ガチャ（しゅらがちゃ）を使ってみませんか？RTやいいね不要で使えます！discordと連携でき、あなたの特典鯖、ファン鯖に景品を即座に直送出来ます！景品を受け取ったら、
+                  <Link
+                    to="/gacha"
+                    className="receive-page-streamer-guidance-tool-link font-semibold underline decoration-sky-700/70 underline-offset-2 transition hover:text-sky-900"
+                  >
+                    ガチャツール
+                  </Link>
+                  を覗いてみてください！質問やバグ報告などは
+                  <a
+                    href={OFFICIAL_X_ACCOUNT_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="receive-page-streamer-guidance-x-link font-semibold underline decoration-sky-700/70 underline-offset-2 transition hover:text-sky-900"
+                  >
+                    {OFFICIAL_X_ACCOUNT_ID}
+                  </a>
+                  へお願いします。
+                </p>
               </div>
               <div className="receive-page-hero-status-wrapper">{renderResolveStatus()}</div>
             </div>
