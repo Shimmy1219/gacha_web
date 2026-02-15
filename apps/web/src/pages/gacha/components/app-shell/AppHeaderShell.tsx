@@ -236,36 +236,38 @@ export function AppHeaderShell({
                 >
                   ツールバー
                 </h2>
-              <button
-                type="button"
-                onClick={handleClose}
-                className={clsx(
-                  'text-sm transition',
-                  isDarkAppearance ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-surface-foreground'
-                )}
-              >
-                閉じる
-              </button>
-            </div>
-            {resolvedMobileNavActions ? (
-              <div className="app-header-shell__mobile-nav min-w-0">
-                {resolvedMobileNavActions}
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className={clsx(
+                    'text-sm transition',
+                    isDarkAppearance
+                      ? 'text-white/60 hover:text-white'
+                      : 'text-muted-foreground hover:text-surface-foreground'
+                  )}
+                >
+                  閉じる
+                </button>
               </div>
-            ) : null}
-            {hasToolbarActions ? (
-              <ToolbarActions
-                mode="mobile"
-                onDrawGacha={onDrawGacha}
-                onRegisterGacha={onRegisterGacha}
-                onExportAll={onExportAll}
-                showDrawGachaButton={showDrawGachaButton}
-                showRegisterGachaButton={showRegisterGachaButton}
-                showExportButton={showExportButton}
-              />
-            ) : null}
-            {showDiscordLoginButton ? (
-              <div className="app-header-shell__mobile-login min-w-0">
-                <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+              {resolvedMobileNavActions ? (
+                <div className="app-header-shell__mobile-nav min-w-0">
+                  {resolvedMobileNavActions}
+                </div>
+              ) : null}
+              {hasToolbarActions ? (
+                <ToolbarActions
+                  mode="mobile"
+                  onDrawGacha={onDrawGacha}
+                  onRegisterGacha={onRegisterGacha}
+                  onExportAll={onExportAll}
+                  showDrawGachaButton={showDrawGachaButton}
+                  showRegisterGachaButton={showRegisterGachaButton}
+                  showExportButton={showExportButton}
+                />
+              ) : null}
+              {showDiscordLoginButton ? (
+                <div className="app-header-shell__mobile-login min-w-0">
+                  <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
                 </div>
               ) : null}
             </div>
