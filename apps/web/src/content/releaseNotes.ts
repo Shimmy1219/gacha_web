@@ -10,8 +10,8 @@ const FIRST_VISIT_RELEASE_LIMIT = 10;
 export const RELEASE_NOTES: ReleaseNoteEntry[] = [
   {
     id: '2026-02-15-stg-main-merge-update',
-    title: '機能アップデート',
-    publishedAt: '2026-02-15',
+    title: 'β版ver2アップデート',
+    publishedAt: '2026-02-16',
     items: [
       '【受け取り画面】画面下に受け取り履歴、景品一覧のタブを表示するようにしました。',
       '【受け取り画面】普段利用しているアイコンを登録出来るようになりました。アイコンリングをその場で装着出来ます。',
