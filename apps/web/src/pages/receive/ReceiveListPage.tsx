@@ -14,12 +14,14 @@ import {
 import {
   isHistoryStorageAvailable,
   loadHistoryFile,
+  loadHistoryThumbnailBlobMap,
   loadHistoryMetadata,
   persistHistoryMetadata
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 import { IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
+import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -35,6 +37,7 @@ interface ReceiveInventoryItem {
   kind: ReceiveMediaKind;
   digitalItemType: DigitalItemTypeKey | null;
   sourceItems: ReceiveMediaItem[];
+  previewThumbnailBlob: Blob | null;
   isOwned: boolean;
 }
 
@@ -168,7 +171,7 @@ function canUseObjectUrlApi(): boolean {
   );
 }
 
-function useViewportPreviewUrl(imageSourceItem: ReceiveMediaItem | null, isInViewport: boolean): string | null {
+function useViewportPreviewUrl(previewBlob: Blob | null, isInViewport: boolean): string | null {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const revokePreviewUrl = useCallback(() => {
@@ -201,19 +204,19 @@ function useViewportPreviewUrl(imageSourceItem: ReceiveMediaItem | null, isInVie
   }, []);
 
   useEffect(() => {
-    if (!canUseObjectUrlApi() || !imageSourceItem || !isInViewport) {
+    if (!canUseObjectUrlApi() || !previewBlob || !isInViewport) {
       revokePreviewUrl();
       return;
     }
 
-    const nextPreviewUrl = URL.createObjectURL(imageSourceItem.blob);
+    const nextPreviewUrl = URL.createObjectURL(previewBlob);
     const previousPreviewUrl = previewUrlRef.current;
     previewUrlRef.current = nextPreviewUrl;
     if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
       URL.revokeObjectURL(previousPreviewUrl);
     }
     setPreviewUrl(nextPreviewUrl);
-  }, [imageSourceItem, isInViewport, revokePreviewUrl]);
+  }, [isInViewport, previewBlob, revokePreviewUrl]);
 
   return previewUrl;
 }
@@ -327,7 +330,11 @@ function ReceiveInventoryItemCard({
     () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
-  const visiblePreviewUrl = useViewportPreviewUrl(imageSourceItem, isInViewport);
+  const previewBlob = useMemo(
+    () => item.previewThumbnailBlob ?? imageSourceItem?.blob ?? null,
+    [imageSourceItem, item.previewThumbnailBlob]
+  );
+  const visiblePreviewUrl = useViewportPreviewUrl(previewBlob, isInViewport);
   const hasSource = item.sourceItems.length > 0;
   const previewSourceItem = useMemo(
     () => imageSourceItem ?? item.sourceItems[0] ?? null,
@@ -534,10 +541,14 @@ export function ReceiveListPage(): JSX.Element {
             }
           }
 
-          const { metadataEntries, mediaItems, catalog } = await loadReceiveZipInventory(blob, {
-            migrateDigitalItemTypes: false,
-            includeMedia: false
-          });
+          const [inventory, thumbnailBlobByAssetId] = await Promise.all([
+            loadReceiveZipInventory(blob, {
+              migrateDigitalItemTypes: false,
+              includeMedia: false
+            }),
+            loadHistoryThumbnailBlobMap(entry.id)
+          ]);
+          const { metadataEntries, mediaItems, catalog } = inventory;
           const ownerLabel = ownerName?.trim() || entry.ownerName?.trim() || 'オーナー不明';
           const hasOverlap = pullIds.some((pullId) => seenPullIds.has(pullId));
           pullIds.forEach((pullId) => seenPullIds.add(pullId));
@@ -605,10 +616,14 @@ export function ReceiveListPage(): JSX.Element {
               const obtained = typeof metadata.obtainedCount === 'number' && Number.isFinite(metadata.obtainedCount)
                 ? Math.max(0, metadata.obtainedCount)
                 : 1;
+              const thumbnailBlob = thumbnailBlobByAssetId.get(metadata.id) ?? null;
 
               if (existing) {
                 existing.obtainedCount += obtained;
                 existing.isOwned = true;
+                if (!existing.previewThumbnailBlob && thumbnailBlob) {
+                  existing.previewThumbnailBlob = thumbnailBlob;
+                }
               } else {
                 itemMap.set(itemKey, {
                   key: itemKey,
@@ -624,6 +639,7 @@ export function ReceiveListPage(): JSX.Element {
                   kind: 'unknown',
                   digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
                   sourceItems: [],
+                  previewThumbnailBlob: thumbnailBlob,
                   isOwned: true
                 });
               }
@@ -660,6 +676,7 @@ export function ReceiveListPage(): JSX.Element {
 
               const itemMap = existingGroup.itemMap;
               const existing = itemMap.get(itemKey);
+              const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
               if (existing) {
                 existing.kind = item.kind;
                 if (item.metadata?.isRiagu) {
@@ -668,6 +685,9 @@ export function ReceiveListPage(): JSX.Element {
                   existing.digitalItemType = item.metadata.digitalItemType;
                 }
                 existing.sourceItems.push(item);
+                if (!existing.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(item)) {
+                  existing.previewThumbnailBlob = previewThumbnailBlob;
+                }
               } else {
                 const totalCount = fallbackTotalCounts.get(baseKey) ?? 1;
                 const nextIndex = (fallbackIndexMap.get(baseKey) ?? 0) + 1;
@@ -690,6 +710,7 @@ export function ReceiveListPage(): JSX.Element {
                   kind: item.kind,
                   digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
                   sourceItems: [item],
+                  previewThumbnailBlob: isLikelyImageSource(item) ? previewThumbnailBlob : null,
                   isOwned: true
                 });
               }
@@ -758,6 +779,7 @@ export function ReceiveListPage(): JSX.Element {
                     kind: 'unknown',
                     digitalItemType: item.isRiagu ? null : 'other',
                     sourceItems: [],
+                    previewThumbnailBlob: null,
                     isOwned: false
                   });
                   existingGroup.baseKeySet.add(baseKey);
@@ -930,6 +952,22 @@ export function ReceiveListPage(): JSX.Element {
           includeMedia: true,
           metadataFilter: (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
         });
+        const thumbnailBlobByAssetId = await loadHistoryThumbnailBlobMap(entryId);
+        const hasMissingThumbnail = mediaItems.some((item) => {
+          if (!isLikelyImageSource(item)) {
+            return false;
+          }
+          const assetId = resolveReceiveMediaAssetId(item);
+          return Boolean(assetId) && !thumbnailBlobByAssetId.has(assetId);
+        });
+        if (hasMissingThumbnail) {
+          void ensureReceiveHistoryThumbnailsForEntry({
+            entryId,
+            mediaItems
+          }).catch((error) => {
+            console.warn('Failed to backfill receive history thumbnails from receive/list', { entryId, error });
+          });
+        }
 
         const groupMetadataEntries = metadataEntries.filter(
           (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
@@ -972,9 +1010,10 @@ export function ReceiveListPage(): JSX.Element {
           const mediaItemName = (mediaItem.metadata?.itemName ?? mediaItem.filename).trim() || '名称未設定';
           const mediaItemId = mediaItem.metadata?.itemId?.trim() || null;
           const baseKey = `${mediaGroupKey}:${mediaItemId ?? mediaItemName}`;
-          const assetId = mediaItem.metadata?.id ?? mediaItem.id;
+          const assetId = resolveReceiveMediaAssetId(mediaItem) ?? mediaItem.id;
           const mappedKey = assetKeyMap.get(assetId);
           const itemKey = mappedKey ?? resolveItemKey(mediaGroupKey, mediaItemId, mediaItemName, assetId);
+          const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
           const obtained =
             typeof mediaItem.metadata?.obtainedCount === 'number' && Number.isFinite(mediaItem.metadata.obtainedCount)
               ? Math.max(0, mediaItem.metadata.obtainedCount)
@@ -992,6 +1031,9 @@ export function ReceiveListPage(): JSX.Element {
             } else if (!existingPatch.item.digitalItemType && mediaItem.metadata?.digitalItemType) {
               existingPatch.item.digitalItemType = mediaItem.metadata.digitalItemType;
             }
+            if (!existingPatch.item.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(mediaItem)) {
+              existingPatch.item.previewThumbnailBlob = previewThumbnailBlob;
+            }
           } else {
             itemPatchMap.set(itemKey, {
               item: {
@@ -1008,6 +1050,7 @@ export function ReceiveListPage(): JSX.Element {
                 kind: mediaItem.kind,
                 digitalItemType: mediaItem.metadata?.isRiagu ? null : mediaItem.metadata?.digitalItemType ?? 'other',
                 sourceItems: [mediaItem],
+                previewThumbnailBlob: isLikelyImageSource(mediaItem) ? previewThumbnailBlob : null,
                 isOwned: true
               },
               sourceItems: [mediaItem]
@@ -1039,6 +1082,7 @@ export function ReceiveListPage(): JSX.Element {
               ...item,
               kind: item.kind === 'unknown' ? patch.item.kind : item.kind,
               digitalItemType: item.isRiagu ? null : item.digitalItemType ?? patch.item.digitalItemType,
+              previewThumbnailBlob: item.previewThumbnailBlob ?? patch.item.previewThumbnailBlob,
               sourceItems: Array.from(mergedSourceMap.values())
             };
           });

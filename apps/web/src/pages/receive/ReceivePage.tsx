@@ -24,6 +24,7 @@ import {
 import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZip';
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
+import { ensureReceiveHistoryThumbnailsForEntry } from './receiveThumbnails';
 
 interface ResolveSuccessPayload {
   url: string;
@@ -422,6 +423,14 @@ export function ReceivePage(): JSX.Element {
       setHistorySaveError(null);
 
       const hasToken = Boolean(activeToken && activeToken.trim());
+      const queueThumbnailGeneration = (entryId: string) => {
+        void ensureReceiveHistoryThumbnailsForEntry({
+          entryId,
+          mediaItems: items
+        }).catch((error) => {
+          console.warn('Failed to generate receive thumbnails for history entry', { entryId, error });
+        });
+      };
       const existingEntry = hasToken
         ? historyEntries.find((entry) => entry.token && entry.token === activeToken)
         : null;
@@ -434,6 +443,7 @@ export function ReceivePage(): JSX.Element {
         } catch (error) {
           console.error('Failed to reuse receive history entry', error);
         } finally {
+          queueThumbnailGeneration(existingEntry.id);
           setActiveHistoryId(existingEntry.id);
           setDuplicateHistoryEntry(existingEntry);
           setDuplicateReason('token');
@@ -529,6 +539,7 @@ export function ReceivePage(): JSX.Element {
 
       try {
         await saveHistoryFile(entryId, zipBlob);
+        queueThumbnailGeneration(entryId);
         const nextEntries = [entry, ...historyEntries.filter((h) => h.id !== entryId)].slice(0, 50);
         setHistoryEntries(nextEntries);
         persistHistoryMetadata(nextEntries);
@@ -679,6 +690,12 @@ export function ReceivePage(): JSX.Element {
             console.warn('Failed to persist migrated receive history zip', { entryId: entry.id, error });
           }
         }
+        void ensureReceiveHistoryThumbnailsForEntry({
+          entryId: entry.id,
+          mediaItems: items
+        }).catch((error) => {
+          console.warn('Failed to backfill receive thumbnails from history restore', { entryId: entry.id, error });
+        });
         setOmittedItemNames(resolveOmittedItemNames(metadataEntries));
         setMediaItems(items);
         setDownloadPhase('complete');

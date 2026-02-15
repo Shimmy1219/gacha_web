@@ -1,8 +1,10 @@
 const HISTORY_STORAGE_KEY = 'receive:receive-history:v1';
 const HISTORY_STORAGE_FALLBACK_KEY = 'receive:receive-hisotry:v1';
 const DB_NAME = 'receive-history-store';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const FILE_STORE_NAME = 'receiveFiles';
+const THUMBNAIL_STORE_NAME = 'receiveThumbnails';
+const THUMBNAIL_ENTRY_INDEX_NAME = 'entryId';
 
 export interface ReceiveHistoryEntryMetadata {
   id: string;
@@ -26,6 +28,33 @@ export interface ReceiveHistoryEntryMetadata {
     kind: string;
     size: number;
   }>;
+}
+
+interface ReceiveHistoryThumbnailStoredRecord {
+  key: string;
+  entryId: string;
+  assetId: string;
+  blob: Blob;
+  width: number;
+  height: number;
+  mimeType: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReceiveHistoryThumbnailRecord {
+  entryId: string;
+  assetId: string;
+  blob: Blob;
+  width: number;
+  height: number;
+  mimeType: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function createHistoryThumbnailKey(entryId: string, assetId: string): string {
+  return `${entryId}:${assetId}`;
 }
 
 function isBrowser(): boolean {
@@ -179,6 +208,15 @@ function openHistoryDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(FILE_STORE_NAME)) {
         db.createObjectStore(FILE_STORE_NAME, { keyPath: 'id' });
       }
+      let thumbnailStore: IDBObjectStore | null = null;
+      if (!db.objectStoreNames.contains(THUMBNAIL_STORE_NAME)) {
+        thumbnailStore = db.createObjectStore(THUMBNAIL_STORE_NAME, { keyPath: 'key' });
+      } else {
+        thumbnailStore = request.transaction?.objectStore(THUMBNAIL_STORE_NAME) ?? null;
+      }
+      if (thumbnailStore && !thumbnailStore.indexNames.contains(THUMBNAIL_ENTRY_INDEX_NAME)) {
+        thumbnailStore.createIndex(THUMBNAIL_ENTRY_INDEX_NAME, THUMBNAIL_ENTRY_INDEX_NAME, { unique: false });
+      }
     };
 
     request.onsuccess = () => {
@@ -195,35 +233,64 @@ async function runFileTransaction<T>(
   mode: IDBTransactionMode,
   handler: (store: IDBObjectStore) => Promise<T>
 ): Promise<T> {
+  return runStoreTransaction(FILE_STORE_NAME, mode, handler);
+}
+
+async function runThumbnailTransaction<T>(
+  mode: IDBTransactionMode,
+  handler: (store: IDBObjectStore) => Promise<T>
+): Promise<T> {
+  return runStoreTransaction(THUMBNAIL_STORE_NAME, mode, handler);
+}
+
+async function runStoreTransaction<T>(
+  storeName: string,
+  mode: IDBTransactionMode,
+  handler: (store: IDBObjectStore) => Promise<T>
+): Promise<T> {
   const db = await openHistoryDatabase();
   return await new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction([FILE_STORE_NAME], mode);
-    const store = transaction.objectStore(FILE_STORE_NAME);
+    const transaction = db.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
 
     let settled = false;
+    let hasHandlerResult = false;
+    let handlerResult: T | undefined;
 
-    const fail = (error: unknown) => {
+    const settle = (callback: () => void) => {
       if (settled) {
         return;
       }
       settled = true;
-      reject(error instanceof Error ? error : new Error(String(error)));
+      try {
+        db.close();
+      } catch (error) {
+        console.warn('Failed to close receive history database', error);
+      }
+      callback();
+    };
+
+    const fail = (error: unknown) => {
+      settle(() => {
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
     };
 
     transaction.oncomplete = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve(undefined as T);
+      settle(() => {
+        resolve(hasHandlerResult ? (handlerResult as T) : (undefined as T));
+      });
     };
 
-    transaction.onerror = () => fail(transaction.error ?? new Error('Receive history transaction failed'));
-    transaction.onabort = () => fail(transaction.error ?? new Error('Receive history transaction aborted'));
+    transaction.onerror = () => fail(transaction.error ?? new Error(`Receive history transaction failed (${storeName})`));
+    transaction.onabort = () => fail(transaction.error ?? new Error(`Receive history transaction aborted (${storeName})`));
 
-    handler(store)
+    void Promise.resolve()
+      .then(() => handler(store))
       .then((result) => {
-        if (typeof transaction.commit === 'function') {
+        hasHandlerResult = true;
+        handlerResult = result;
+        if (mode === 'readwrite' && typeof transaction.commit === 'function') {
           try {
             transaction.commit();
           } catch (error) {
@@ -231,7 +298,6 @@ async function runFileTransaction<T>(
             return;
           }
         }
-        resolve(result);
       })
       .catch((error) => {
         fail(error);
@@ -284,6 +350,7 @@ export async function deleteHistoryFile(entryId: string): Promise<void> {
       });
       return undefined;
     });
+    await deleteHistoryThumbnailsByEntry(entryId);
   } catch (error) {
     console.error('Failed to delete receive history file', error);
   }
@@ -299,8 +366,201 @@ export async function clearHistoryFiles(): Promise<void> {
       });
       return undefined;
     });
+    await clearHistoryThumbnails();
   } catch (error) {
     console.error('Failed to clear receive history files', error);
+  }
+}
+
+function sanitizeThumbnailRecord(record: ReceiveHistoryThumbnailStoredRecord | undefined): ReceiveHistoryThumbnailRecord | null {
+  if (!record) {
+    return null;
+  }
+  if (!(record.blob instanceof Blob)) {
+    return null;
+  }
+  if (!record.entryId || !record.assetId) {
+    return null;
+  }
+  return {
+    entryId: record.entryId,
+    assetId: record.assetId,
+    blob: record.blob,
+    width: Number.isFinite(record.width) ? Number(record.width) : 0,
+    height: Number.isFinite(record.height) ? Number(record.height) : 0,
+    mimeType: typeof record.mimeType === 'string' ? record.mimeType : null,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : '',
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : ''
+  };
+}
+
+function toStoredThumbnailRecord(record: ReceiveHistoryThumbnailRecord): ReceiveHistoryThumbnailStoredRecord {
+  return {
+    key: createHistoryThumbnailKey(record.entryId, record.assetId),
+    entryId: record.entryId,
+    assetId: record.assetId,
+    blob: record.blob,
+    width: record.width,
+    height: record.height,
+    mimeType: record.mimeType ?? null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
+}
+
+export async function saveHistoryThumbnail(record: ReceiveHistoryThumbnailRecord): Promise<void> {
+  await saveHistoryThumbnails([record]);
+}
+
+export async function saveHistoryThumbnails(records: ReceiveHistoryThumbnailRecord[]): Promise<void> {
+  if (records.length === 0) {
+    return;
+  }
+
+  const deduped = new Map<string, ReceiveHistoryThumbnailStoredRecord>();
+  records.forEach((record) => {
+    if (!record.entryId || !record.assetId || !(record.blob instanceof Blob)) {
+      return;
+    }
+    deduped.set(createHistoryThumbnailKey(record.entryId, record.assetId), toStoredThumbnailRecord(record));
+  });
+  if (deduped.size === 0) {
+    return;
+  }
+
+  try {
+    await runThumbnailTransaction('readwrite', async (store) => {
+      for (const record of deduped.values()) {
+        await new Promise<void>((resolve, reject) => {
+          const request = store.put(record);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error ?? new Error('Failed to save receive thumbnail'));
+        });
+      }
+      return undefined;
+    });
+  } catch (error) {
+    console.error('Failed to save receive history thumbnails', error);
+  }
+}
+
+export async function loadHistoryThumbnail(entryId: string, assetId: string): Promise<ReceiveHistoryThumbnailRecord | null> {
+  if (!entryId || !assetId) {
+    return null;
+  }
+  try {
+    return await runThumbnailTransaction('readonly', async (store) => {
+      const key = createHistoryThumbnailKey(entryId, assetId);
+      const record = await new Promise<ReceiveHistoryThumbnailStoredRecord | undefined>((resolve, reject) => {
+        const request = store.get(key);
+        request.onsuccess = () => resolve(request.result as ReceiveHistoryThumbnailStoredRecord | undefined);
+        request.onerror = () => reject(request.error ?? new Error('Failed to load receive thumbnail'));
+      });
+      return sanitizeThumbnailRecord(record);
+    });
+  } catch (error) {
+    console.error('Failed to load receive history thumbnail', error);
+    return null;
+  }
+}
+
+export async function loadHistoryThumbnailsByEntry(entryId: string): Promise<ReceiveHistoryThumbnailRecord[]> {
+  if (!entryId) {
+    return [];
+  }
+  try {
+    return await runThumbnailTransaction('readonly', async (store) => {
+      const records = await new Promise<ReceiveHistoryThumbnailStoredRecord[]>((resolve, reject) => {
+        if (store.indexNames.contains(THUMBNAIL_ENTRY_INDEX_NAME)) {
+          const index = store.index(THUMBNAIL_ENTRY_INDEX_NAME);
+          const request = index.getAll(IDBKeyRange.only(entryId));
+          request.onsuccess = () => resolve((request.result ?? []) as ReceiveHistoryThumbnailStoredRecord[]);
+          request.onerror = () => reject(request.error ?? new Error('Failed to load receive thumbnails by entry'));
+          return;
+        }
+        const fallbackRequest = store.getAll();
+        fallbackRequest.onsuccess = () => {
+          const allRecords = (fallbackRequest.result ?? []) as ReceiveHistoryThumbnailStoredRecord[];
+          resolve(allRecords.filter((record) => record.entryId === entryId));
+        };
+        fallbackRequest.onerror = () => reject(fallbackRequest.error ?? new Error('Failed to load receive thumbnails'));
+      });
+      return records
+        .map((record) => sanitizeThumbnailRecord(record))
+        .filter((record): record is ReceiveHistoryThumbnailRecord => Boolean(record));
+    });
+  } catch (error) {
+    console.error('Failed to load receive history thumbnails', error);
+    return [];
+  }
+}
+
+export async function loadHistoryThumbnailBlobMap(entryId: string): Promise<Map<string, Blob>> {
+  const records = await loadHistoryThumbnailsByEntry(entryId);
+  const map = new Map<string, Blob>();
+  records.forEach((record) => {
+    map.set(record.assetId, record.blob);
+  });
+  return map;
+}
+
+export async function listHistoryThumbnailAssetIds(entryId: string): Promise<string[]> {
+  const records = await loadHistoryThumbnailsByEntry(entryId);
+  return records.map((record) => record.assetId);
+}
+
+export async function deleteHistoryThumbnailsByEntry(entryId: string): Promise<void> {
+  if (!entryId) {
+    return;
+  }
+  try {
+    await runThumbnailTransaction('readwrite', async (store) => {
+      const keysToDelete = await new Promise<string[]>((resolve, reject) => {
+        if (store.indexNames.contains(THUMBNAIL_ENTRY_INDEX_NAME)) {
+          const index = store.index(THUMBNAIL_ENTRY_INDEX_NAME);
+          const request = index.getAllKeys(IDBKeyRange.only(entryId));
+          request.onsuccess = () => resolve((request.result ?? []) as string[]);
+          request.onerror = () => reject(request.error ?? new Error('Failed to list thumbnail keys for deletion'));
+          return;
+        }
+        const fallback = store.getAll();
+        fallback.onsuccess = () => {
+          const records = (fallback.result ?? []) as ReceiveHistoryThumbnailStoredRecord[];
+          resolve(
+            records
+              .filter((record) => record.entryId === entryId)
+              .map((record) => record.key)
+          );
+        };
+        fallback.onerror = () => reject(fallback.error ?? new Error('Failed to list thumbnail keys'));
+      });
+
+      for (const key of keysToDelete) {
+        await new Promise<void>((resolve, reject) => {
+          const request = store.delete(key);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error ?? new Error('Failed to delete receive thumbnail'));
+        });
+      }
+      return undefined;
+    });
+  } catch (error) {
+    console.error('Failed to delete receive history thumbnails', error);
+  }
+}
+
+export async function clearHistoryThumbnails(): Promise<void> {
+  try {
+    await runThumbnailTransaction('readwrite', async (store) => {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error ?? new Error('Failed to clear receive thumbnails'));
+      });
+      return undefined;
+    });
+  } catch (error) {
+    console.error('Failed to clear receive history thumbnails', error);
   }
 }
 
