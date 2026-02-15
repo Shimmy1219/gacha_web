@@ -32,6 +32,8 @@ import {
   DEFAULT_GACHA_OWNER_SHARE_RATE,
   type DashboardDesktopLayout
 } from '@domain/stores/uiPreferencesStore';
+import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
+import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
 
 interface MenuItem {
   id: SettingsMenuKey;
@@ -39,7 +41,7 @@ interface MenuItem {
   description: string;
 }
 
-type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'misc';
+type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'receive' | 'misc';
 
 const MENU_ITEMS: MenuItem[] = [
   {
@@ -56,6 +58,11 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'layout',
     label: 'レイアウト',
     description: 'ページ全体のレイアウトや表示方法を切り替えます。'
+  },
+  {
+    id: 'receive',
+    label: '受け取り設定',
+    description: '受け取りページで使うアイコン登録などを調整します。'
   },
   {
     id: 'misc',
@@ -103,6 +110,34 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewBackground: string;
   previewForeground: string;
 }>;
+
+function ReceiveSettingsContent(): JSX.Element {
+  const { iconAssetIds, remainingSlots, isProcessing, error, addIcons, removeIcon } = useReceiveIconRegistry();
+
+  return (
+    <div className="page-settings-dialog__receive-settings space-y-6">
+      <div className="page-settings-dialog__receive-header">
+        <h2 className="page-settings-dialog__receive-title text-base font-semibold text-surface-foreground">
+          受け取り設定
+        </h2>
+        <p className="page-settings-dialog__receive-description mt-1 text-sm text-muted-foreground">
+          受け取りページで使うアイコン登録などを設定します。変更内容はすぐに適用されます。
+        </p>
+      </div>
+
+      <div className="page-settings-dialog__receive-icon-panel rounded-2xl border border-border/60 bg-panel/70 p-4">
+        <ReceiveIconRegistryPanel
+          iconAssetIds={iconAssetIds}
+          remainingSlots={remainingSlots}
+          isProcessing={isProcessing}
+          error={error}
+          addIcons={addIcons}
+          removeIcon={removeIcon}
+        />
+      </div>
+    </div>
+  );
+}
 
 function formatOwnerShareRateInput(value: number): string {
   if (!Number.isFinite(value)) {
@@ -872,6 +907,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
           </div>
         );
       }
+      case 'receive':
+        return <ReceiveSettingsContent />;
       case 'layout':
         return (
           <div className="space-y-6">

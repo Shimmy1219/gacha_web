@@ -2,7 +2,11 @@ import { useMemo, type CSSProperties } from 'react';
 import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
-import { getRarityTextPresentation } from '../../../features/rarity/utils/rarityColorPresentation';
+import {
+  getRarityTextPresentation,
+  getWhiteRarityTextOutlineStyle,
+  isWhiteRarityColor
+} from '../../../features/rarity/utils/rarityColorPresentation';
 import {
   GOLD_HEX,
   RAINBOW_VALUE,
@@ -11,6 +15,8 @@ import {
 import { useObjectUrl } from '../hooks/useObjectUrl';
 import type { ReceiveMediaItem } from '../types';
 import { ReceiveSaveButton } from './ReceiveSaveButtons';
+import { IconRingWearDialog, useModal } from '../../../modals';
+import { getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
@@ -91,8 +97,13 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
 
 export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Element {
   const objectUrl = useObjectUrl(item.blob);
+  const { push } = useModal();
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.metadata?.rarityColor),
+    [item.metadata?.rarityColor]
+  );
+  const shouldApplyWhiteRarityOutline = useMemo(
+    () => isWhiteRarityColor(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
   );
   const rarityBadgeStyle = useMemo(() => {
@@ -103,13 +114,19 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       return undefined;
     }
 
-    return {
+    const mergedStyle: CSSProperties = {
       ...badgeStyle,
       ...textStyle,
       color: '#fff',
       WebkitTextFillColor: '#fff'
     };
-  }, [item.metadata?.rarityColor, rarityPresentation.style]);
+
+    if (shouldApplyWhiteRarityOutline) {
+      Object.assign(mergedStyle, getWhiteRarityTextOutlineStyle());
+    }
+
+    return mergedStyle;
+  }, [item.metadata?.rarityColor, rarityPresentation.style, shouldApplyWhiteRarityOutline]);
   const previewNode = useMemo(() => {
     if (!objectUrl) {
       return (
@@ -168,22 +185,27 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     </>
   );
 
+  const canWearIconRing = item.kind === 'image' && item.metadata?.digitalItemType === 'icon-ring';
+
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
         <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
-          <div className="receive-item-card-preview-container relative flex aspect-square h-24 w-full items-center justify-center overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:aspect-[2/1] md:h-auto md:rounded-2xl">
+          <div className="receive-item-card-preview-container relative w-full overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:rounded-2xl">
+            <div className="receive-item-card-preview-spacer block h-0 pb-[100%] md:pb-[50%]" />
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
-                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/20'
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] z-10 rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/20'
                 )}
                 style={rarityBadgeStyle}
               >
                 {item.metadata.rarity}
               </span>
             ) : null}
-            {previewNode}
+            <div className="receive-item-card-preview-stage absolute inset-0 flex items-center justify-center">
+              {previewNode}
+            </div>
           </div>
           <div className="receive-item-card-kind-chip-mobile-container md:hidden">
             <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -209,6 +231,11 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
                   獲得数: {item.metadata.obtainedCount}
                 </span>
               ) : null}
+              {item.metadata?.digitalItemType ? (
+                <span className="receive-item-card-attribute receive-item-card-attribute-digital-type rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 font-medium text-emerald-600">
+                  {getDigitalItemTypeLabel(item.metadata.digitalItemType)}
+                </span>
+              ) : null}
               {item.metadata?.isRiagu ? (
                 <span className="receive-item-card-attribute receive-item-card-attribute-riagu rounded-full border border-amber-500/50 bg-amber-500/15 px-2 py-1 font-medium text-amber-600">
                   リアルグッズ
@@ -228,6 +255,22 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               </div>
             </div>
             <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+              {canWearIconRing ? (
+                <button
+                  type="button"
+                  className="receive-item-card-wear-button btn btn-muted"
+                  onClick={() =>
+                    push(IconRingWearDialog, {
+                      id: `icon-ring-wear-${item.id}`,
+                      title: 'アイコンリングを装着',
+                      size: 'lg',
+                      payload: { ringItem: item }
+                    })
+                  }
+                >
+                  装着
+                </button>
+              ) : null}
               <ReceiveSaveButton
                 onClick={() => onSave(item)}
                 className="receive-item-card-save-button"

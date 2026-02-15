@@ -41,6 +41,14 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+export function triggerReceiveBlobDownload(blob: Blob, filename: string): void {
+  triggerBlobDownload(blob, filename);
+}
+
+export async function saveReceiveBlob(filename: string, blob: Blob): Promise<void> {
+  await saveOneWithShare(filename, blob);
+}
+
 function createShareFile(filename: string, blob: Blob): File | null {
   if (typeof File === 'undefined') {
     return null;
@@ -81,7 +89,7 @@ async function saveOneWithShare(filename: string, blob: Blob): Promise<void> {
 
 export async function saveReceiveItem(item: ReceiveMediaItem): Promise<void> {
   const filename = deriveReceiveDownloadFilename(item);
-  await saveOneWithShare(filename, item.blob);
+  await saveReceiveBlob(filename, item.blob);
 }
 
 export async function saveReceiveItems(items: ReceiveMediaItem[]): Promise<void> {

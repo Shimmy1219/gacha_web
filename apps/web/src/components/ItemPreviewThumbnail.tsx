@@ -86,7 +86,15 @@ function ItemPreviewVisual({
             : 'object-contain';
 
   if (hasImage && url) {
-    return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
+    return (
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className={clsx('h-full w-full', fitClassName, imageClassName)}
+      />
+    );
   }
 
   if (kind === 'video') {
@@ -98,7 +106,15 @@ function ItemPreviewVisual({
   }
 
   if (url) {
-    return <img src={url} alt={alt} className={clsx('h-full w-full', fitClassName, imageClassName)} />;
+    return (
+      <img
+        src={url}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className={clsx('h-full w-full', fitClassName, imageClassName)}
+      />
+    );
   }
 
   if (emptyLabel) {
