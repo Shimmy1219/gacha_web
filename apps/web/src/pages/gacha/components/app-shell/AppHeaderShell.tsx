@@ -224,8 +224,8 @@ export function AppHeaderShell({
           labelledBy={drawerTitleId}
           appearance={appearance}
         >
-          <div className="app-header-shell__mobile-layout flex h-full flex-col">
-            <div className="app-header-shell__mobile-main flex flex-col gap-6 pb-6">
+          <div className="app-header-shell__mobile-layout flex h-full w-full min-w-0 flex-col">
+            <div className="app-header-shell__mobile-main flex min-w-0 flex-col gap-6 pb-6">
               <div className="app-header-shell__mobile-header flex items-center justify-between">
                 <h2
                   id={drawerTitleId}
@@ -236,48 +236,50 @@ export function AppHeaderShell({
                 >
                   ツールバー
                 </h2>
-              <button
-                type="button"
-                onClick={handleClose}
-                className={clsx(
-                  'text-sm transition',
-                  isDarkAppearance ? 'text-white/60 hover:text-white' : 'text-muted-foreground hover:text-surface-foreground'
-                )}
-              >
-                閉じる
-              </button>
-            </div>
-            {resolvedMobileNavActions ? (
-              <div className="app-header-shell__mobile-nav">
-                {resolvedMobileNavActions}
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className={clsx(
+                    'text-sm transition',
+                    isDarkAppearance
+                      ? 'text-white/60 hover:text-white'
+                      : 'text-muted-foreground hover:text-surface-foreground'
+                  )}
+                >
+                  閉じる
+                </button>
               </div>
-            ) : null}
-            {hasToolbarActions ? (
-              <ToolbarActions
-                mode="mobile"
-                onDrawGacha={onDrawGacha}
-                onRegisterGacha={onRegisterGacha}
-                onExportAll={onExportAll}
-                showDrawGachaButton={showDrawGachaButton}
-                showRegisterGachaButton={showRegisterGachaButton}
-                showExportButton={showExportButton}
-              />
-            ) : null}
-            {showDiscordLoginButton ? (
-              <div className="app-header-shell__mobile-login">
-                <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
+              {resolvedMobileNavActions ? (
+                <div className="app-header-shell__mobile-nav min-w-0">
+                  {resolvedMobileNavActions}
+                </div>
+              ) : null}
+              {hasToolbarActions ? (
+                <ToolbarActions
+                  mode="mobile"
+                  onDrawGacha={onDrawGacha}
+                  onRegisterGacha={onRegisterGacha}
+                  onExportAll={onExportAll}
+                  showDrawGachaButton={showDrawGachaButton}
+                  showRegisterGachaButton={showRegisterGachaButton}
+                  showExportButton={showExportButton}
+                />
+              ) : null}
+              {showDiscordLoginButton ? (
+                <div className="app-header-shell__mobile-login min-w-0">
+                  <DiscordLoginButton onOpenPageSettings={onOpenPageSettings} />
                 </div>
               ) : null}
             </div>
             <div
               className={clsx(
-                'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
+                'app-header-shell__mobile-home sticky bottom-0 -mx-6 mt-auto min-w-0 border-t px-6 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 backdrop-blur',
                 isDarkAppearance
                   ? 'border-white/10 bg-slate-950/90'
                   : 'border-border/60 bg-panel bg-opacity-95'
               )}
             >
-              <div className="app-header-shell__mobile-official-x-contact mb-3">
+              <div className="app-header-shell__mobile-official-x-contact mb-3 min-w-0">
                 <OfficialXAccountPanel variant="compact" />
               </div>
               <Link
