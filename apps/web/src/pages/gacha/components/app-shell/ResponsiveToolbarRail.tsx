@@ -113,7 +113,7 @@ export function ResponsiveToolbarRail({
             aria-modal="true"
             aria-labelledby={labelledBy}
             className={clsx(
-              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 flex h-full w-[50vw] overflow-y-auto border-l px-6 pb-0 pt-16 shadow-2xl transition-transform duration-300 ease-in-out transform-gpu',
+              'responsive-toolbar-rail__panel fixed inset-y-0 right-0 z-50 flex h-full w-auto max-w-md overflow-y-auto border-l px-6 pb-0 pt-16 shadow-2xl transition-transform duration-300 ease-in-out transform-gpu',
               isActive ? 'translate-x-0' : 'translate-x-full',
               !isActive && 'motion-safe:will-change-transform',
               isDarkAppearance ? 'border-white/10 bg-slate-950 text-white' : 'border-border/60 bg-panel text-surface-foreground'
