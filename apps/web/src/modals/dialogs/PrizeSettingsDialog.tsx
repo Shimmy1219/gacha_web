@@ -925,9 +925,6 @@ export function PrizeSettingsDialog({ payload, close, push }: ModalComponentProp
           </div>
         </div>
       </ModalBody>
-      <p className="modal-description mt-6 w-full text-xs text-muted-foreground">
-        画像を保存すると、自動的にカタログの該当アイテムへ反映されます。ZIP出力時は登録済みの全ファイルが含まれます。
-      </p>
       <ModalFooter className="flex flex-wrap justify-end gap-3">
         <button
           type="button"

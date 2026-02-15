@@ -266,7 +266,7 @@ export function ModalFooter({ className, ...props }: ModalFooterProps): JSX.Elem
     <div
       {...props}
       className={clsx(
-        'modal-footer mt-8 flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-white/5 pt-4',
+        'modal-footer flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-white/5 pt-4',
         className
       )}
     />
