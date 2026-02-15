@@ -1634,11 +1634,8 @@ export function ReceiveListPage(): JSX.Element {
           ) : null}
           {status === 'ready' && groups.length > 0 ? (
             <div className="receive-list-page__visibility-toggle-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="receive-list-page__visibility-toggle-label text-xs font-semibold text-muted-foreground">表示設定</p>
+              <p className="receive-list-page__visibility-toggle-label text-xs font-semibold text-muted-foreground">未所持分を表示する</p>
               <div className="receive-list-page__visibility-toggle-controls flex items-center gap-3">
-                <span className="receive-list-page__visibility-toggle-helper text-xs text-muted-foreground/80">
-                  {hideUnownedItems ? '未所持を非表示中' : '未所持を表示中'}
-                </span>
                 <button
                   type="button"
                   className={clsx(
