@@ -706,6 +706,7 @@ export function ReceiveListPage(): JSX.Element {
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
+  const [hideUnownedItems, setHideUnownedItems] = useState<boolean>(false);
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
   const collapsedGroupsRef = useRef<Record<string, boolean>>({});
   const loadingGroupKeysRef = useRef<Record<string, boolean>>({});
@@ -1132,18 +1133,23 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const displayGroups = useMemo<ReceiveGachaGroup[]>(() => {
-    if (digitalItemTypeFilter === '*') {
-      return groups;
-    }
-
-    const selected = new Set(digitalItemTypeFilter);
-    if (selected.size === 0) {
+    const selectedDigitalTypeSet =
+      digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+    if (selectedDigitalTypeSet && selectedDigitalTypeSet.size === 0) {
       return [];
     }
 
     return groups
       .map((group) => {
-        const filteredItems = group.items.filter((item) => item.digitalItemType && selected.has(item.digitalItemType));
+        const filteredItems = group.items.filter((item) => {
+          if (hideUnownedItems && !item.isOwned) {
+            return false;
+          }
+          if (selectedDigitalTypeSet) {
+            return Boolean(item.digitalItemType) && selectedDigitalTypeSet.has(item.digitalItemType);
+          }
+          return true;
+        });
         if (filteredItems.length === 0) {
           return null;
         }
@@ -1182,7 +1188,7 @@ export function ReceiveListPage(): JSX.Element {
         };
       })
       .filter((group): group is ReceiveGachaGroup => Boolean(group));
-  }, [digitalItemTypeFilter, groups]);
+  }, [digitalItemTypeFilter, groups, hideUnownedItems]);
 
   const isBaseEmpty = status === 'ready' && groups.length === 0;
   const isFilteredEmpty = status === 'ready' && groups.length > 0 && displayGroups.length === 0;
@@ -1623,7 +1629,26 @@ export function ReceiveListPage(): JSX.Element {
             </p>
           ) : null}
           {status === 'ready' && groups.length > 0 ? (
-            <div className="receive-list-page__filter-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="receive-list-page__visibility-toggle-row mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="receive-list-page__visibility-toggle-label text-xs font-semibold text-muted-foreground">表示設定</p>
+              <button
+                type="button"
+                className={clsx(
+                  'receive-list-page__unowned-toggle-button btn btn-muted h-9 px-4 text-xs font-semibold',
+                  hideUnownedItems && 'border-accent/60 bg-accent/10 text-accent'
+                )}
+                aria-pressed={hideUnownedItems}
+                data-state={hideUnownedItems ? 'hidden' : 'visible'}
+                onClick={() => {
+                  setHideUnownedItems((previous) => !previous);
+                }}
+              >
+                {hideUnownedItems ? '未所持を表示する' : '未所持を非表示'}
+              </button>
+            </div>
+          ) : null}
+          {status === 'ready' && groups.length > 0 ? (
+            <div className="receive-list-page__filter-row mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="receive-list-page__filter-label text-xs font-semibold text-muted-foreground">フィルタ</p>
               <div className="receive-list-page__filter-control w-full sm:w-[320px]">
                 <MultiSelectDropdown<DigitalItemTypeKey>
