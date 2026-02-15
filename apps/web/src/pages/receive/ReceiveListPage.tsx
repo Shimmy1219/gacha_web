@@ -12,6 +12,7 @@ import {
   loadReceiveZipSelectionInfo
 } from './receiveZip';
 import {
+  createHistoryThumbnailKey,
   isHistoryStorageAvailable,
   loadHistoryFile,
   loadHistoryThumbnailBlobMap,
@@ -38,6 +39,7 @@ interface ReceiveInventoryItem {
   digitalItemType: DigitalItemTypeKey | null;
   sourceItems: ReceiveMediaItem[];
   previewThumbnailBlob: Blob | null;
+  previewCacheKey: string | null;
   isOwned: boolean;
 }
 
@@ -57,15 +59,27 @@ interface ReceiveGachaGroup {
 type PreviewKind = 'image' | 'video' | 'audio' | 'unknown';
 const MOBILE_PREVIEW_VISIBILITY_MARGIN_PX = 280;
 const DESKTOP_PREVIEW_VISIBILITY_MARGIN_PX = 720;
-const MOBILE_PREVIEW_RELEASE_DELAY_MS = 400;
-const DESKTOP_PREVIEW_RELEASE_DELAY_MS = 1000;
+const MOBILE_PREVIEW_RELEASE_DELAY_MS = 3000;
+const DESKTOP_PREVIEW_RELEASE_DELAY_MS = 10000;
+const MOBILE_PREVIEW_CACHE_MAX_ENTRIES = 90;
+const DESKTOP_PREVIEW_CACHE_MAX_ENTRIES = 220;
 const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)';
 type VisibilityListener = (isIntersecting: boolean) => void;
 type SharedVisibilityObserver = {
   observer: IntersectionObserver;
   listeners: Map<Element, VisibilityListener>;
 };
+interface SharedPreviewUrlCacheEntry {
+  cacheKey: string;
+  blob: Blob;
+  url: string;
+  retainCount: number;
+  lastUsedAt: number;
+  releaseTimerId: number | null;
+}
+
 const sharedVisibilityObserverMap = new Map<string, SharedVisibilityObserver>();
+const sharedPreviewUrlCacheMap = new Map<string, SharedPreviewUrlCacheEntry>();
 
 function resolveVisibilityObserverKey(rootMarginPx: number): string {
   return `root:null|threshold:0|margin:${rootMarginPx}px`;
@@ -175,6 +189,129 @@ function canUseObjectUrlApi(): boolean {
   );
 }
 
+function clearSharedPreviewReleaseTimer(entry: SharedPreviewUrlCacheEntry): void {
+  if (entry.releaseTimerId === null || typeof window === 'undefined') {
+    return;
+  }
+  window.clearTimeout(entry.releaseTimerId);
+  entry.releaseTimerId = null;
+}
+
+function revokeSharedPreviewEntry(entry: SharedPreviewUrlCacheEntry): void {
+  clearSharedPreviewReleaseTimer(entry);
+  try {
+    URL.revokeObjectURL(entry.url);
+  } catch (error) {
+    console.warn('Failed to revoke shared preview object URL', { cacheKey: entry.cacheKey, error });
+  }
+}
+
+function dropSharedPreviewCacheEntry(cacheKey: string): void {
+  const entry = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  revokeSharedPreviewEntry(entry);
+  sharedPreviewUrlCacheMap.delete(cacheKey);
+}
+
+function pruneSharedPreviewUrlCache(maxEntries: number): void {
+  if (sharedPreviewUrlCacheMap.size <= maxEntries) {
+    return;
+  }
+
+  const evictable = Array.from(sharedPreviewUrlCacheMap.values())
+    .filter((entry) => entry.retainCount === 0)
+    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+  while (sharedPreviewUrlCacheMap.size > maxEntries && evictable.length > 0) {
+    const oldest = evictable.shift();
+    if (!oldest) {
+      break;
+    }
+    dropSharedPreviewCacheEntry(oldest.cacheKey);
+  }
+}
+
+function retainSharedPreviewUrl({
+  cacheKey,
+  blob,
+  maxEntries
+}: {
+  cacheKey: string;
+  blob: Blob;
+  maxEntries: number;
+}): string | null {
+  if (!canUseObjectUrlApi()) {
+    return null;
+  }
+  const timestamp = Date.now();
+  const existing = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (existing) {
+    clearSharedPreviewReleaseTimer(existing);
+    if (existing.blob === blob) {
+      existing.retainCount += 1;
+      existing.lastUsedAt = timestamp;
+      return existing.url;
+    }
+    dropSharedPreviewCacheEntry(cacheKey);
+  }
+
+  const nextEntry: SharedPreviewUrlCacheEntry = {
+    cacheKey,
+    blob,
+    url: URL.createObjectURL(blob),
+    retainCount: 1,
+    lastUsedAt: timestamp,
+    releaseTimerId: null
+  };
+  sharedPreviewUrlCacheMap.set(cacheKey, nextEntry);
+  pruneSharedPreviewUrlCache(maxEntries);
+  return nextEntry.url;
+}
+
+function releaseSharedPreviewUrl({
+  cacheKey,
+  delayMs
+}: {
+  cacheKey: string;
+  delayMs: number;
+}): void {
+  const entry = sharedPreviewUrlCacheMap.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  clearSharedPreviewReleaseTimer(entry);
+  entry.retainCount = Math.max(0, entry.retainCount - 1);
+  entry.lastUsedAt = Date.now();
+  if (entry.retainCount > 0) {
+    return;
+  }
+
+  if (!canUseObjectUrlApi() || delayMs <= 0 || typeof window === 'undefined') {
+    dropSharedPreviewCacheEntry(cacheKey);
+    return;
+  }
+
+  entry.releaseTimerId = window.setTimeout(() => {
+    const latest = sharedPreviewUrlCacheMap.get(cacheKey);
+    if (!latest) {
+      return;
+    }
+    latest.releaseTimerId = null;
+    if (latest.retainCount > 0) {
+      return;
+    }
+    dropSharedPreviewCacheEntry(cacheKey);
+  }, Math.max(0, delayMs));
+}
+
+function clearSharedPreviewUrlCache(): void {
+  for (const entry of sharedPreviewUrlCacheMap.values()) {
+    revokeSharedPreviewEntry(entry);
+  }
+  sharedPreviewUrlCacheMap.clear();
+}
+
 function useDesktopViewport(): boolean {
   const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -209,91 +346,65 @@ function useDesktopViewport(): boolean {
 
 function useViewportPreviewUrl(
   previewBlob: Blob | null,
+  previewCacheKey: string | null,
   isInViewport: boolean,
-  releaseDelayMs: number
+  releaseDelayMs: number,
+  cacheMaxEntries: number
 ): string | null {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
-  const previewBlobRef = useRef<Blob | null>(null);
-  const releaseTimerIdRef = useRef<number | null>(null);
-  const clearReleaseTimer = useCallback(() => {
-    if (releaseTimerIdRef.current === null || typeof window === 'undefined') {
+  const retainedCacheKeyRef = useRef<string | null>(null);
+  const retainedBlobRef = useRef<Blob | null>(null);
+
+  const releaseRetainedPreviewUrl = useCallback((delayMs: number) => {
+    const retainedCacheKey = retainedCacheKeyRef.current;
+    if (!retainedCacheKey) {
       return;
     }
-    window.clearTimeout(releaseTimerIdRef.current);
-    releaseTimerIdRef.current = null;
+    releaseSharedPreviewUrl({ cacheKey: retainedCacheKey, delayMs });
+    retainedCacheKeyRef.current = null;
+    retainedBlobRef.current = null;
   }, []);
-  const revokePreviewUrl = useCallback(() => {
-    clearReleaseTimer();
-    if (!canUseObjectUrlApi()) {
-      previewUrlRef.current = null;
-      previewBlobRef.current = null;
-      setPreviewUrl(null);
-      return;
-    }
-    const currentPreviewUrl = previewUrlRef.current;
-    if (!currentPreviewUrl) {
-      return;
-    }
-    URL.revokeObjectURL(currentPreviewUrl);
-    previewUrlRef.current = null;
-    previewBlobRef.current = null;
-    setPreviewUrl((previous) => (previous === currentPreviewUrl ? null : previous));
-  }, [clearReleaseTimer]);
 
   useEffect(() => {
     return () => {
-      clearReleaseTimer();
-      if (!canUseObjectUrlApi()) {
-        return;
-      }
-      const currentPreviewUrl = previewUrlRef.current;
-      if (!currentPreviewUrl) {
-        return;
-      }
-      URL.revokeObjectURL(currentPreviewUrl);
-      previewUrlRef.current = null;
-      previewBlobRef.current = null;
+      releaseRetainedPreviewUrl(0);
     };
-  }, [clearReleaseTimer]);
+  }, [releaseRetainedPreviewUrl]);
 
   useEffect(() => {
-    if (!canUseObjectUrlApi() || !previewBlob) {
-      revokePreviewUrl();
+    if (!canUseObjectUrlApi() || !previewBlob || !previewCacheKey || !isInViewport) {
+      releaseRetainedPreviewUrl(releaseDelayMs);
+      setPreviewUrl(null);
       return;
     }
 
-    if (!isInViewport) {
-      if (releaseTimerIdRef.current !== null) {
+    const isRetainingSameKey =
+      retainedCacheKeyRef.current === previewCacheKey &&
+      retainedBlobRef.current === previewBlob;
+    if (isRetainingSameKey) {
+      const cached = sharedPreviewUrlCacheMap.get(previewCacheKey);
+      if (cached) {
+        cached.lastUsedAt = Date.now();
+        setPreviewUrl((previous) => (previous === cached.url ? previous : cached.url));
         return;
       }
-      if (typeof window === 'undefined') {
-        revokePreviewUrl();
-        return;
-      }
-      releaseTimerIdRef.current = window.setTimeout(() => {
-        releaseTimerIdRef.current = null;
-        revokePreviewUrl();
-      }, Math.max(0, releaseDelayMs));
-      return;
     }
 
-    clearReleaseTimer();
-    const existingPreviewUrl = previewUrlRef.current;
-    if (existingPreviewUrl && previewBlobRef.current === previewBlob) {
-      setPreviewUrl((previous) => (previous === existingPreviewUrl ? previous : existingPreviewUrl));
+    releaseRetainedPreviewUrl(releaseDelayMs);
+
+    const nextPreviewUrl = retainSharedPreviewUrl({
+      cacheKey: previewCacheKey,
+      blob: previewBlob,
+      maxEntries: cacheMaxEntries
+    });
+    if (!nextPreviewUrl) {
+      setPreviewUrl(null);
       return;
     }
-
-    const nextPreviewUrl = URL.createObjectURL(previewBlob);
-    const previousPreviewUrl = existingPreviewUrl;
-    previewUrlRef.current = nextPreviewUrl;
-    previewBlobRef.current = previewBlob;
-    if (previousPreviewUrl && previousPreviewUrl !== nextPreviewUrl) {
-      URL.revokeObjectURL(previousPreviewUrl);
-    }
+    retainedCacheKeyRef.current = previewCacheKey;
+    retainedBlobRef.current = previewBlob;
     setPreviewUrl(nextPreviewUrl);
-  }, [clearReleaseTimer, isInViewport, previewBlob, releaseDelayMs, revokePreviewUrl]);
+  }, [cacheMaxEntries, isInViewport, previewBlob, previewCacheKey, releaseDelayMs, releaseRetainedPreviewUrl]);
 
   return previewUrl;
 }
@@ -391,13 +502,15 @@ function ReceiveInventoryItemCard({
   onSave,
   isSaving,
   previewVisibilityMarginPx,
-  previewReleaseDelayMs
+  previewReleaseDelayMs,
+  previewCacheMaxEntries
 }: {
   item: ReceiveInventoryItem;
   onSave: () => void;
   isSaving: boolean;
   previewVisibilityMarginPx: number;
   previewReleaseDelayMs: number;
+  previewCacheMaxEntries: number;
 }): JSX.Element {
   const { push } = useModal();
   const rarityPresentation = useMemo(
@@ -415,8 +528,18 @@ function ReceiveInventoryItemCard({
     () => item.previewThumbnailBlob ?? imageSourceItem?.blob ?? null,
     [imageSourceItem, item.previewThumbnailBlob]
   );
+  const previewCacheKey = useMemo(
+    () => item.previewCacheKey ?? imageSourceItem?.id ?? item.key,
+    [imageSourceItem?.id, item.key, item.previewCacheKey]
+  );
   const isLowResolutionPreview = Boolean(item.previewThumbnailBlob);
-  const visiblePreviewUrl = useViewportPreviewUrl(previewBlob, isInViewport, previewReleaseDelayMs);
+  const visiblePreviewUrl = useViewportPreviewUrl(
+    previewBlob,
+    previewCacheKey,
+    isInViewport,
+    previewReleaseDelayMs,
+    previewCacheMaxEntries
+  );
   const hasSource = item.sourceItems.length > 0;
   const previewSourceItem = useMemo(
     () => imageSourceItem ?? item.sourceItems[0] ?? null,
@@ -555,6 +678,9 @@ export function ReceiveListPage(): JSX.Element {
   const previewReleaseDelayMs = isDesktopViewport
     ? DESKTOP_PREVIEW_RELEASE_DELAY_MS
     : MOBILE_PREVIEW_RELEASE_DELAY_MS;
+  const previewCacheMaxEntries = isDesktopViewport
+    ? DESKTOP_PREVIEW_CACHE_MAX_ENTRIES
+    : MOBILE_PREVIEW_CACHE_MAX_ENTRIES;
 
   const digitalItemTypeOptions = useMemo<MultiSelectOption<DigitalItemTypeKey>[]>(
     () =>
@@ -576,6 +702,12 @@ export function ReceiveListPage(): JSX.Element {
   useEffect(() => {
     loadingGroupKeysRef.current = loadingGroupKeys;
   }, [loadingGroupKeys]);
+
+  useEffect(() => {
+    return () => {
+      clearSharedPreviewUrlCache();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -711,12 +843,16 @@ export function ReceiveListPage(): JSX.Element {
                 ? Math.max(0, metadata.obtainedCount)
                 : 1;
               const thumbnailBlob = thumbnailBlobByAssetId.get(metadata.id) ?? null;
+              const previewCacheKey = createHistoryThumbnailKey(entry.id, metadata.id);
 
               if (existing) {
                 existing.obtainedCount += obtained;
                 existing.isOwned = true;
                 if (!existing.previewThumbnailBlob && thumbnailBlob) {
                   existing.previewThumbnailBlob = thumbnailBlob;
+                }
+                if (!existing.previewCacheKey) {
+                  existing.previewCacheKey = previewCacheKey;
                 }
               } else {
                 itemMap.set(itemKey, {
@@ -734,6 +870,7 @@ export function ReceiveListPage(): JSX.Element {
                   digitalItemType: metadata.isRiagu ? null : metadata.digitalItemType ?? 'other',
                   sourceItems: [],
                   previewThumbnailBlob: thumbnailBlob,
+                  previewCacheKey,
                   isOwned: true
                 });
               }
@@ -771,6 +908,7 @@ export function ReceiveListPage(): JSX.Element {
               const itemMap = existingGroup.itemMap;
               const existing = itemMap.get(itemKey);
               const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
+              const previewCacheKey = createHistoryThumbnailKey(entry.id, assetId);
               if (existing) {
                 existing.kind = item.kind;
                 if (item.metadata?.isRiagu) {
@@ -781,6 +919,9 @@ export function ReceiveListPage(): JSX.Element {
                 existing.sourceItems.push(item);
                 if (!existing.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(item)) {
                   existing.previewThumbnailBlob = previewThumbnailBlob;
+                }
+                if (!existing.previewCacheKey && isLikelyImageSource(item)) {
+                  existing.previewCacheKey = previewCacheKey;
                 }
               } else {
                 const totalCount = fallbackTotalCounts.get(baseKey) ?? 1;
@@ -805,6 +946,7 @@ export function ReceiveListPage(): JSX.Element {
                   digitalItemType: item.metadata?.isRiagu ? null : item.metadata?.digitalItemType ?? 'other',
                   sourceItems: [item],
                   previewThumbnailBlob: isLikelyImageSource(item) ? previewThumbnailBlob : null,
+                  previewCacheKey: isLikelyImageSource(item) ? previewCacheKey : null,
                   isOwned: true
                 });
               }
@@ -874,6 +1016,7 @@ export function ReceiveListPage(): JSX.Element {
                     digitalItemType: item.isRiagu ? null : 'other',
                     sourceItems: [],
                     previewThumbnailBlob: null,
+                    previewCacheKey: null,
                     isOwned: false
                   });
                   existingGroup.baseKeySet.add(baseKey);
@@ -1108,6 +1251,7 @@ export function ReceiveListPage(): JSX.Element {
           const mappedKey = assetKeyMap.get(assetId);
           const itemKey = mappedKey ?? resolveItemKey(mediaGroupKey, mediaItemId, mediaItemName, assetId);
           const previewThumbnailBlob = thumbnailBlobByAssetId.get(assetId) ?? null;
+          const previewCacheKey = createHistoryThumbnailKey(entryId, assetId);
           const obtained =
             typeof mediaItem.metadata?.obtainedCount === 'number' && Number.isFinite(mediaItem.metadata.obtainedCount)
               ? Math.max(0, mediaItem.metadata.obtainedCount)
@@ -1128,6 +1272,9 @@ export function ReceiveListPage(): JSX.Element {
             if (!existingPatch.item.previewThumbnailBlob && previewThumbnailBlob && isLikelyImageSource(mediaItem)) {
               existingPatch.item.previewThumbnailBlob = previewThumbnailBlob;
             }
+            if (!existingPatch.item.previewCacheKey && isLikelyImageSource(mediaItem)) {
+              existingPatch.item.previewCacheKey = previewCacheKey;
+            }
           } else {
             itemPatchMap.set(itemKey, {
               item: {
@@ -1145,6 +1292,7 @@ export function ReceiveListPage(): JSX.Element {
                 digitalItemType: mediaItem.metadata?.isRiagu ? null : mediaItem.metadata?.digitalItemType ?? 'other',
                 sourceItems: [mediaItem],
                 previewThumbnailBlob: isLikelyImageSource(mediaItem) ? previewThumbnailBlob : null,
+                previewCacheKey: isLikelyImageSource(mediaItem) ? previewCacheKey : null,
                 isOwned: true
               },
               sourceItems: [mediaItem]
@@ -1177,6 +1325,7 @@ export function ReceiveListPage(): JSX.Element {
               kind: item.kind === 'unknown' ? patch.item.kind : item.kind,
               digitalItemType: item.isRiagu ? null : item.digitalItemType ?? patch.item.digitalItemType,
               previewThumbnailBlob: item.previewThumbnailBlob ?? patch.item.previewThumbnailBlob,
+              previewCacheKey: item.previewCacheKey ?? patch.item.previewCacheKey,
               sourceItems: Array.from(mergedSourceMap.values())
             };
           });
@@ -1443,6 +1592,7 @@ export function ReceiveListPage(): JSX.Element {
                             isSaving={savingItemKey === item.key || Boolean(savingGroupKey)}
                             previewVisibilityMarginPx={previewVisibilityMarginPx}
                             previewReleaseDelayMs={previewReleaseDelayMs}
+                            previewCacheMaxEntries={previewCacheMaxEntries}
                           />
                         ))}
                       </div>
