@@ -185,7 +185,7 @@ async function runWithConcurrency<T, R>(
 export async function ensureReceiveHistoryThumbnailsForEntry({
   entryId,
   mediaItems,
-  maxSize = 128,
+  maxSize = 256,
   concurrency = 2
 }: EnsureReceiveHistoryThumbnailsParams): Promise<EnsureReceiveHistoryThumbnailsResult> {
   const thumbnailBlobByAssetId = await loadHistoryThumbnailBlobMap(entryId);

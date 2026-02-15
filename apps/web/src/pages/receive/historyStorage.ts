@@ -1,7 +1,7 @@
 const HISTORY_STORAGE_KEY = 'receive:receive-history:v1';
 const HISTORY_STORAGE_FALLBACK_KEY = 'receive:receive-hisotry:v1';
 const DB_NAME = 'receive-history-store';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const FILE_STORE_NAME = 'receiveFiles';
 const THUMBNAIL_STORE_NAME = 'receiveThumbnails';
 const THUMBNAIL_ENTRY_INDEX_NAME = 'entryId';
@@ -208,15 +208,12 @@ function openHistoryDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(FILE_STORE_NAME)) {
         db.createObjectStore(FILE_STORE_NAME, { keyPath: 'id' });
       }
-      let thumbnailStore: IDBObjectStore | null = null;
-      if (!db.objectStoreNames.contains(THUMBNAIL_STORE_NAME)) {
-        thumbnailStore = db.createObjectStore(THUMBNAIL_STORE_NAME, { keyPath: 'key' });
-      } else {
-        thumbnailStore = request.transaction?.objectStore(THUMBNAIL_STORE_NAME) ?? null;
+      // v3: drop old thumbnail store to regenerate all previews at 256px.
+      if (db.objectStoreNames.contains(THUMBNAIL_STORE_NAME)) {
+        db.deleteObjectStore(THUMBNAIL_STORE_NAME);
       }
-      if (thumbnailStore && !thumbnailStore.indexNames.contains(THUMBNAIL_ENTRY_INDEX_NAME)) {
-        thumbnailStore.createIndex(THUMBNAIL_ENTRY_INDEX_NAME, THUMBNAIL_ENTRY_INDEX_NAME, { unique: false });
-      }
+      const thumbnailStore = db.createObjectStore(THUMBNAIL_STORE_NAME, { keyPath: 'key' });
+      thumbnailStore.createIndex(THUMBNAIL_ENTRY_INDEX_NAME, THUMBNAIL_ENTRY_INDEX_NAME, { unique: false });
     };
 
     request.onsuccess = () => {
