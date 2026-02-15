@@ -710,7 +710,7 @@ export function ReceiveListPage(): JSX.Element {
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
-  const [hideUnownedItems, setHideUnownedItems] = useState<boolean>(false);
+  const [showUnownedItems, setShowUnownedItems] = useState<boolean>(true);
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
   const collapsedGroupsRef = useRef<Record<string, boolean>>({});
   const loadingGroupKeysRef = useRef<Record<string, boolean>>({});
@@ -1146,7 +1146,7 @@ export function ReceiveListPage(): JSX.Element {
     return groups
       .map((group) => {
         const filteredItems = group.items.filter((item) => {
-          if (hideUnownedItems && !item.isOwned) {
+          if (!showUnownedItems && !item.isOwned) {
             return false;
           }
           if (selectedDigitalTypeSet) {
@@ -1192,7 +1192,7 @@ export function ReceiveListPage(): JSX.Element {
         };
       })
       .filter((group): group is ReceiveGachaGroup => Boolean(group));
-  }, [digitalItemTypeFilter, groups, hideUnownedItems]);
+  }, [digitalItemTypeFilter, groups, showUnownedItems]);
 
   const isBaseEmpty = status === 'ready' && groups.length === 0;
   const isFilteredEmpty = status === 'ready' && groups.length > 0 && displayGroups.length === 0;
@@ -1640,22 +1640,22 @@ export function ReceiveListPage(): JSX.Element {
                   type="button"
                   className={clsx(
                     'receive-list-page__unowned-toggle-button relative inline-flex h-6 w-11 items-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
-                    hideUnownedItems
+                    showUnownedItems
                       ? 'border-accent bg-[rgb(var(--color-accent)/1)]'
                       : 'border-border/60 bg-panel-muted'
                   )}
-                  aria-pressed={hideUnownedItems}
-                  data-state={hideUnownedItems ? 'hidden' : 'visible'}
+                  aria-pressed={showUnownedItems}
+                  data-state={showUnownedItems ? 'visible' : 'hidden'}
                   aria-label="未所持アイテム表示の切り替え"
-                  title={hideUnownedItems ? '未所持アイテムを表示する' : '未所持アイテムを非表示にする'}
+                  title={showUnownedItems ? '未所持アイテムを非表示にする' : '未所持アイテムを表示する'}
                   onClick={() => {
-                    setHideUnownedItems((previous) => !previous);
+                    setShowUnownedItems((previous) => !previous);
                   }}
                 >
                   <span
                     className={clsx(
                       'receive-list-page__unowned-toggle-indicator inline-block h-4 w-4 rounded-full transition-all',
-                      hideUnownedItems
+                      showUnownedItems
                         ? 'translate-x-[22px] bg-[rgb(var(--color-accent-foreground)/1)]'
                         : 'translate-x-[6px] bg-[rgb(var(--color-surface-foreground)/1)]'
                     )}
