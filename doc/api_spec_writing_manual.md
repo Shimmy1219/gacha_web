@@ -53,6 +53,16 @@
 仕様書の内容は、必ず実装から確認した事実で書きます。  
 推測で書かないこと。確認できないものは「未確認項目」として列挙します。
 
+### 2.4 利用フロー（道筋）記述の原則
+各APIに対して「どの機能の、どの道筋で呼ばれるか」を必ず記述します。  
+最低でも次を明記します。
+
+1. 起点（どの画面、どの操作、どのバッチ処理か）。
+2. 前段（このAPIの直前で何をしているか）。
+3. 当API（何を受け取り、何を返すか）。
+4. 後段（レスポンス後に何を呼ぶか、画面や状態がどう変わるか）。
+5. 失敗時の代替経路（再試行、別画面案内、問い合わせ導線など）。
+
 ---
 
 ## 3. 必須セクション定義（エンドポイント単位）
@@ -61,16 +71,17 @@
 
 1. `Endpoint Summary`
 2. `Non-IT向け説明`
-3. `Request`（Query / Body / Headers / Cookies）
-4. `Response`（Statusごと）
-5. `Response Headers`
-6. `Set-Cookie`
-7. `認証・認可`
-8. `エラーと利用者影響`
-9. `業務影響`
-10. `OpenAPI snippet`
-11. `未確認項目`
-12. `Glossary`
+3. `利用フロー（どの機能のどの道筋で呼ばれるか）`
+4. `Request`（Query / Body / Headers / Cookies）
+5. `Response`（Statusごと）
+6. `Response Headers`
+7. `Set-Cookie`
+8. `認証・認可`
+9. `エラーと利用者影響`
+10. `業務影響`
+11. `OpenAPI snippet`
+12. `未確認項目`
+13. `Glossary`
 
 ---
 
@@ -360,11 +371,12 @@ API実装に以下の変更がある場合、同一PRで仕様書更新を必須
 
 ### 10.2 PRチェック項目
 1. 対象エンドポイントの仕様更新があるか。
-2. Request Headers / Cookies が記載されているか。
-3. Response Headers / Set-Cookie が記載されているか。
-4. Non-IT向け説明があるか。
-5. OpenAPI断片が本文と一致しているか。
-6. 未確認項目が適切に列挙されているか。
+2. 利用フロー（起点〜終点、失敗時経路）が記載されているか。
+3. Request Headers / Cookies が記載されているか。
+4. Response Headers / Set-Cookie が記載されているか。
+5. Non-IT向け説明があるか。
+6. OpenAPI断片が本文と一致しているか。
+7. 未確認項目が適切に列挙されているか。
 
 ---
 
@@ -394,6 +406,36 @@ API実装に以下の変更がある場合、同一PRで仕様書更新を必須
 このAPIは<何ができるか>ための窓口です。  
 利用者にとっては<価値>があり、失敗時は<現象>が起きます。  
 業務上は<業務影響>に関わるため、運用で<対応方針>を定めます。
+
+## 利用フロー（Flow / 道筋）
+| Item | Example |
+| --- | --- |
+| 起点機能/画面 | `<例: SaveOptionsDialog の「アップロード」ボタン>` |
+| 呼び出しトリガー | `<例: ボタン押下後にZIP生成が成功した時>` |
+| 前段API/処理 | `<例: /api/blob/csrf -> /api/blob/upload>` |
+| 当APIの役割 | `<例: 共有用トークンを発行し、shareUrl を返す>` |
+| 後段API/処理 | `<例: /api/receive/resolve で受け取り側が解決>` |
+| 失敗時経路 | `<例: 403ならCSRF再取得、410なら再発行UIへ誘導>` |
+| 利用者への見え方 | `<例: URLが表示される / エラー文言が表示される>` |
+
+必要に応じて以下のような簡易シーケンス図を追記する。
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Frontend
+  participant CurrentApi as <Current API>
+  participant NextStep as <Next API or UI>
+  User->>Frontend: 操作
+  Frontend->>CurrentApi: request
+  alt success
+    CurrentApi-->>Frontend: response
+    Frontend->>NextStep: 後段処理
+  else error
+    CurrentApi-->>Frontend: error response
+    Frontend-->>User: 再試行/案内
+  end
+```
 
 ## Request
 
@@ -561,6 +603,13 @@ paths:
 ログインの安全性を保つため、短時間だけ有効な検証情報をクッキーに保存します。  
 業務上は「ログイン不能による利用停止」を防ぐ最重要APIの一つです。
 
+### 利用フロー（道筋）
+1. 起点: ログインボタン押下。
+2. 前段: フロントが `/api/auth/discord/start` を呼ぶ。
+3. 当API: 認証URLと検証用クッキーを発行する。
+4. 後段: Discord認証画面へ遷移し、`/api/auth/discord/callback` へ戻る。
+5. 失敗時: 405/500はログイン開始失敗として再試行導線を出す。
+
 ### Request Headers（例）
 | Header Name | Required | Purpose |
 | --- | --- | --- |
@@ -590,6 +639,13 @@ paths:
 利用者は複雑なURLを意識せず、短い共有URLだけで受け取り操作ができます。  
 期限切れや不正トークンは明確なエラーで判別されます。  
 業務上は「誤配布や期限切れの問い合わせ対応」に直結します。
+
+### 利用フロー（道筋）
+1. 起点: 受け取りURL（`/receive?t=...`）へアクセス。
+2. 前段: フロントまたは受け取りページがトークンを取得。
+3. 当API: 短縮トークンを実URLへ解決する。
+4. 後段: `redirect=1` ならダウンロード先へ遷移、未指定ならJSONを返す。
+5. 失敗時: 410なら期限切れ案内、403なら不正リンクとして再発行案内。
 
 ### Request Headers（例）
 | Header Name | Required | Purpose |
@@ -623,6 +679,13 @@ paths:
 利用者は明示的にログアウトでき、共有端末利用時の情報残存リスクを下げられます。  
 CSRF検証と同一オリジン検証により、不正なログアウト要求を防ぎます。  
 業務上は「意図しないログイン継続による情報漏えい抑止」に重要です。
+
+### 利用フロー（道筋）
+1. 起点: ユーザーが「ログアウト」操作を実行。
+2. 前段: フロントが `csrf` を本文に載せてPOST送信。
+3. 当API: `sid` を無効化し、削除用 `Set-Cookie` を返す。
+4. 後段: フロントでログイン状態再取得を実施。
+5. 失敗時: 403はCSRF不一致として再読み込み案内、429は待機後再試行。
 
 ### Request Headers（例）
 | Header Name | Required | Purpose |
@@ -691,12 +754,14 @@ CSRF検証と同一オリジン検証により、不正なログアウト要求�
 
 ## C. 非IT部門向けチェック
 - [ ] 各API冒頭に2〜4行の平易説明がある。
+- [ ] 利用フロー（起点、前段、当API、後段、失敗時経路）がある。
 - [ ] 専門用語の初出説明がある。
 - [ ] ヘッダー/クッキーの目的説明がある。
 - [ ] エラー説明が「利用者影響」と「運用対応」で分離されている。
 - [ ] 各セクションに業務影響の1文がある。
 
 ## D. 契約整合チェック
+- [ ] 本文の利用フローと図（Mermaid/PlantUML）が矛盾していない。
 - [ ] 本文とOpenAPI断片に不一致がない。
 - [ ] 成功系と主要エラー（`401`, `403`, `404`, `409`, `410`, `429`, `500`）が記載されている。
 - [ ] `security` / `parameters/header` の方針が記載されている。
