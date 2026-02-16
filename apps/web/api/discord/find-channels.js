@@ -7,9 +7,11 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
+  DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED,
   DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS,
   DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
+  isDiscordCategoryChannelLimitReachedError,
   isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError,
   PERM
@@ -370,6 +372,14 @@ export default withApiGuards({
         ok: false,
         error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
         errorCode: DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS
+      });
+    }
+    if (isDiscordCategoryChannelLimitReachedError(error)) {
+      log.warn('【既知のエラー】discord category channel limit reached', { context, message });
+      return res.status(409).json({
+        ok: false,
+        error: 'カテゴリ内のチャンネル数が50に到達しました。',
+        errorCode: DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED
       });
     }
     log.error('【既知のエラー】discord api request failed', { context, message });
