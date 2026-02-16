@@ -21,9 +21,11 @@
 
 ### 1.4 本マニュアルでの基本方針
 1. 文章はMarkdownで記述する。
-2. 図はMermaidを標準とし、表現が難しい場合のみPlantUMLを使う。
-3. 「未確認」は `TBD` ではなく「未確認項目」として明記する。
-4. 実APIの挙動は変更しない。変更対象はドキュメント契約のみ。
+2. 図はMermaidを標準かつ推奨とし、原則としてMermaidを使う。
+3. 複雑なアルゴリズムがあるAPIは、Mermaidのフロー図（flowchart）で処理分岐を記述する。
+4. PlantUMLはMermaidで表現が難しい場合の代替として使う。
+5. 「未確認」は `TBD` ではなく「未確認項目」として明記する。
+6. 実APIの挙動は変更しない。変更対象はドキュメント契約のみ。
 
 ---
 
@@ -247,9 +249,11 @@ const retryAfterSecondsValue = 60;
 ## 8. Mermaid / PlantUML 図表ルール
 
 ### 8.1 基本方針
-1. 状態遷移があるAPIはMermaidシーケンス図を必須とする。
-2. Mermaidで表現しづらい複雑図のみPlantUMLを許可する。
-3. 図には「登場人物」「入力」「出力」「失敗時分岐」を必ず含める。
+1. API仕様書ではMermaidを積極採用し、原則として各APIにMermaid図を1つ以上入れる。
+2. 時系列・呼び出し順の説明はMermaidシーケンス図を使う。
+3. 複雑な分岐・判定・反復がある処理はMermaidフロー図（flowchart）を使う。
+4. Mermaidで表現しづらい複雑図のみPlantUMLを許可する。
+5. 図には「入力」「出力」「失敗時分岐」を必ず含める。
 
 ### 8.2 Mermaid例（必須）
 
@@ -288,6 +292,32 @@ else 正常
   API --> FE: 302 Location: download URL
 end
 @enduml
+```
+
+### 8.4 複雑アルゴリズム向けMermaidフロー図（必須条件付き）
+複雑なアルゴリズムがあるAPIは、以下のようなフロー図を必ず追加します。  
+複雑の目安は次のいずれかを満たす場合です。
+
+1. 分岐条件が3つ以上ある。
+2. ループ（再試行、ページング、スキャン）がある。
+3. 状態遷移（`reserved -> ready -> consumed` など）がある。
+4. 複数の失敗コード（403/404/409/429 など）へ分岐する。
+
+```mermaid
+flowchart TD
+  Start([Start]) --> Input[Read input]
+  Input --> Validate{Input valid?}
+  Validate -- No --> E400[Return 400]
+  Validate -- Yes --> Auth{Auth/CSRF/Origin OK?}
+  Auth -- No --> E403[Return 403]
+  Auth -- Yes --> Rate{Rate limit exceeded?}
+  Rate -- Yes --> E429[Return 429]
+  Rate -- No --> Process[Main algorithm]
+  Process --> Branch{Business condition}
+  Branch -- Case A --> A[Handle A]
+  Branch -- Case B --> B[Handle B]
+  A --> Success[Return 200]
+  B --> Success
 ```
 
 ---
@@ -386,7 +416,7 @@ API実装に以下の変更がある場合、同一PRで仕様書更新を必須
 2. 実装で確認できたヘッダー・クッキーを網羅している。
 3. 非IT部門が読んでも用途と影響を理解できる。
 4. Mermaid図が1つ以上ある。
-5. PlantUML図が1つ以上ある。
+5. 複雑アルゴリズムがある場合、Mermaidフロー図がある（無い場合は「該当なし」と明記）。
 6. OpenAPI断片がある。
 7. レビューチェックリストが全項目 `Yes` になっている。
 
@@ -435,6 +465,20 @@ sequenceDiagram
     CurrentApi-->>Frontend: error response
     Frontend-->>User: 再試行/案内
   end
+```
+
+## アルゴリズムフロー（複雑ロジックがある場合）
+複雑な分岐やループがある場合は、処理ロジックをMermaidフロー図で記述する。  
+該当しない場合は「該当なし（単純処理）」と明記する。
+
+```mermaid
+flowchart TD
+  S([Start]) --> V{Valid request?}
+  V -- No --> E400[Return 400]
+  V -- Yes --> G{Guard checks pass?}
+  G -- No --> E403[Return 403/429]
+  G -- Yes --> M[Main logic]
+  M --> R[Return success]
 ```
 
 ## Request
@@ -740,7 +784,7 @@ CSRF検証と同一オリジン検証により、不正なログアウト要求�
 - [ ] APIテンプレートが同一ファイル内にある。
 - [ ] OpenAPI断片テンプレートが同一ファイル内にある。
 - [ ] Mermaid図が1つ以上ある。
-- [ ] PlantUML例が1つ以上ある。
+- [ ] PlantUMLを使った場合、Mermaidでは表現しづらい理由を補足している。
 
 ## B. ヘッダー/クッキーチェック
 - [ ] `Request Headers` テーブルがある。
@@ -755,6 +799,7 @@ CSRF検証と同一オリジン検証により、不正なログアウト要求�
 ## C. 非IT部門向けチェック
 - [ ] 各API冒頭に2〜4行の平易説明がある。
 - [ ] 利用フロー（起点、前段、当API、後段、失敗時経路）がある。
+- [ ] 複雑アルゴリズムがある場合、Mermaidフロー図がある（または該当なし明記）。
 - [ ] 専門用語の初出説明がある。
 - [ ] ヘッダー/クッキーの目的説明がある。
 - [ ] エラー説明が「利用者影響」と「運用対応」で分離されている。
