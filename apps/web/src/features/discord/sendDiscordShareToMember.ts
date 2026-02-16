@@ -94,7 +94,8 @@ export async function sendDiscordShareToMember({
     }
 
     const normalizedDisplayName = normalizeOptionalString(displayNameForChannel);
-    let triedCategoryLimitRecovery = false;
+    const exhaustedCategoryIds = new Set<string>();
+    let confirmationRequired = true;
 
     while (!resolvedChannelId) {
       const params = new URLSearchParams({
@@ -122,23 +123,25 @@ export async function sendDiscordShareToMember({
 
         if (
           createChannelIfMissing &&
-          !triedCategoryLimitRecovery &&
           preferredCategory &&
           isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)
         ) {
+          exhaustedCategoryIds.add(preferredCategory);
           const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
             push,
             discordUserId,
             guildSelection,
             currentCategoryId: preferredCategory,
-            currentCategoryName: preferredCategoryName
+            currentCategoryName: preferredCategoryName,
+            exhaustedCategoryIds,
+            confirmationRequired
           });
           if (!nextCategory?.id) {
             throw new Error('Discord共有を中断しました。');
           }
           preferredCategory = nextCategory.id;
           preferredCategoryName = normalizeOptionalString(nextCategory.name);
-          triedCategoryLimitRecovery = true;
+          confirmationRequired = false;
           continue;
         }
 

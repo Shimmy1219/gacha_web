@@ -414,7 +414,8 @@ export function DiscordMemberPickerDialog({
     try {
       const selectedMemberSummary = members.find((member) => member.id === selectedMemberId);
       let activeCategory = category;
-      let triedCategoryLimitRecovery = false;
+      const exhaustedCategoryIds = new Set<string>();
+      let confirmationRequired = true;
       let findPayload: {
         ok: boolean;
         channel_id?: string | null;
@@ -457,7 +458,6 @@ export function DiscordMemberPickerDialog({
               : findPayload.error || 'お渡しチャンネルの確認に失敗しました';
 
           if (
-            !triedCategoryLimitRecovery &&
             isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)
           ) {
             const storedSelection = loadDiscordGuildSelection(discordUserId);
@@ -465,12 +465,15 @@ export function DiscordMemberPickerDialog({
               throw new Error('Discordギルドの選択情報を再取得してください。');
             }
 
+            exhaustedCategoryIds.add(activeCategory.id);
             const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
               push,
               discordUserId,
               guildSelection: storedSelection,
               currentCategoryId: activeCategory.id,
-              currentCategoryName: activeCategory.name
+              currentCategoryName: activeCategory.name,
+              exhaustedCategoryIds,
+              confirmationRequired
             });
             if (!nextCategory?.id) {
               throw new Error('Discord共有を中断しました。');
@@ -479,7 +482,7 @@ export function DiscordMemberPickerDialog({
             activeCategory = nextCategory;
             setSelectedCategory(nextCategory);
             setSubmitError(null);
-            triedCategoryLimitRecovery = true;
+            confirmationRequired = false;
             continue;
           }
 

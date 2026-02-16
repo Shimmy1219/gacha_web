@@ -33,6 +33,8 @@ interface RecoverDiscordCategoryLimitParams {
   guildSelection: DiscordGuildSelection;
   currentCategoryId: string;
   currentCategoryName?: string | null;
+  exhaustedCategoryIds?: Iterable<string>;
+  confirmationRequired?: boolean;
 }
 
 const CATEGORY_LIMIT_CONFIRM_MESSAGE =
@@ -66,8 +68,23 @@ function resolveCategorySeriesBaseName(currentCategoryName: string): string {
   return base && base.length > 0 ? base : trimmed;
 }
 
-function resolveNextCategoryName(currentCategoryName: string, existingCategoryNames: string[]): string {
-  const baseName = resolveCategorySeriesBaseName(currentCategoryName);
+function resolveCategorySeriesIndex(currentCategoryName: string): number {
+  const trimmed = currentCategoryName.trim();
+  if (!trimmed) {
+    return 1;
+  }
+  const match = /^(.*)_([0-9]+)つ目$/u.exec(trimmed);
+  if (!match) {
+    return 1;
+  }
+  const parsed = Number.parseInt(match[2] ?? '', 10);
+  if (Number.isNaN(parsed) || parsed < 1) {
+    return 1;
+  }
+  return parsed;
+}
+
+function resolveNextCategoryName(baseName: string, existingCategoryNames: string[]): string {
   const usedNames = new Set<string>();
   for (const name of existingCategoryNames) {
     const normalized = normalizeOptionalString(name);
@@ -76,20 +93,7 @@ function resolveNextCategoryName(currentCategoryName: string, existingCategoryNa
     }
   }
 
-  let highestIndex = usedNames.has(baseName) ? 1 : 0;
-  const pattern = new RegExp(`^${escapeRegExp(baseName)}_(\\d+)つ目$`, 'u');
-  for (const name of usedNames) {
-    const match = pattern.exec(name);
-    if (!match) {
-      continue;
-    }
-    const parsed = Number.parseInt(match[1] ?? '', 10);
-    if (!Number.isNaN(parsed) && parsed > highestIndex) {
-      highestIndex = parsed;
-    }
-  }
-
-  let nextIndex = Math.max(2, highestIndex + 1);
+  let nextIndex = 2;
   while (nextIndex < 10000) {
     const candidate = `${baseName}_${nextIndex}つ目`;
     if (!usedNames.has(candidate)) {
@@ -126,6 +130,60 @@ function requestCategoryLimitRecoveryConfirmation(push: ModalComponentProps['pus
       onClose: () => finalize(false)
     });
   });
+}
+
+function resolveCategorySeriesCandidates(params: {
+  categories: DiscordCategorySummary[];
+  baseName: string;
+  currentCategoryId: string;
+  currentIndex: number;
+  exhaustedCategoryIds: Set<string>;
+}): DiscordCategorySummary[] {
+  const { categories, baseName, currentCategoryId, currentIndex, exhaustedCategoryIds } = params;
+  const pattern = new RegExp(`^${escapeRegExp(baseName)}_(\\d+)つ目$`, 'u');
+
+  const seriesEntries: Array<{ category: DiscordCategorySummary; index: number }> = [];
+  for (const category of categories) {
+    const categoryName = normalizeOptionalString(category.name);
+    if (!categoryName) {
+      continue;
+    }
+    if (category.id === currentCategoryId) {
+      continue;
+    }
+    if (exhaustedCategoryIds.has(category.id)) {
+      continue;
+    }
+
+    if (categoryName === baseName) {
+      seriesEntries.push({ category, index: 1 });
+      continue;
+    }
+
+    const match = pattern.exec(categoryName);
+    if (!match) {
+      continue;
+    }
+    const parsedIndex = Number.parseInt(match[1] ?? '', 10);
+    if (Number.isNaN(parsedIndex) || parsedIndex < 2) {
+      continue;
+    }
+    seriesEntries.push({ category, index: parsedIndex });
+  }
+
+  seriesEntries.sort((a, b) => {
+    const aForward = a.index > currentIndex ? 0 : 1;
+    const bForward = b.index > currentIndex ? 0 : 1;
+    if (aForward !== bForward) {
+      return aForward - bForward;
+    }
+    if (a.index !== b.index) {
+      return a.index - b.index;
+    }
+    return a.category.id.localeCompare(b.category.id);
+  });
+
+  return seriesEntries.map((entry) => entry.category);
 }
 
 async function fetchGuildCategories(
@@ -181,11 +239,15 @@ export async function recoverDiscordCategoryLimitByCreatingNextCategory({
   discordUserId,
   guildSelection,
   currentCategoryId,
-  currentCategoryName
+  currentCategoryName,
+  exhaustedCategoryIds,
+  confirmationRequired = true
 }: RecoverDiscordCategoryLimitParams): Promise<DiscordGuildCategorySelection | null> {
-  const confirmed = await requestCategoryLimitRecoveryConfirmation(push);
-  if (!confirmed) {
-    return null;
+  if (confirmationRequired) {
+    const confirmed = await requestCategoryLimitRecoveryConfirmation(push);
+    if (!confirmed) {
+      return null;
+    }
   }
 
   if (!guildSelection.guildId) {
@@ -198,12 +260,38 @@ export async function recoverDiscordCategoryLimitByCreatingNextCategory({
     normalizeOptionalString(categories.find((category) => category.id === currentCategoryId)?.name) ||
     normalizeOptionalString(guildSelection.privateChannelCategory?.name) ||
     CATEGORY_NAME_FALLBACK;
-  const nextCategoryName = resolveNextCategoryName(currentName, categories.map((category) => category.name));
-  const createdCategory = await createGuildCategory(guildSelection.guildId, nextCategoryName, push);
+  const baseName = resolveCategorySeriesBaseName(currentName);
+  const currentIndex = resolveCategorySeriesIndex(currentName);
+  const exhaustedSet = new Set<string>();
+  if (exhaustedCategoryIds) {
+    for (const categoryId of exhaustedCategoryIds) {
+      const normalized = normalizeOptionalString(categoryId);
+      if (normalized) {
+        exhaustedSet.add(normalized);
+      }
+    }
+  }
+  exhaustedSet.add(currentCategoryId);
+
+  const seriesCandidates = resolveCategorySeriesCandidates({
+    categories,
+    baseName,
+    currentCategoryId,
+    currentIndex,
+    exhaustedCategoryIds: exhaustedSet
+  });
+
+  const selectedCategory = seriesCandidates[0]
+    ? seriesCandidates[0]
+    : await createGuildCategory(
+        guildSelection.guildId,
+        resolveNextCategoryName(baseName, categories.map((category) => category.name)),
+        push
+      );
 
   const nextCategorySelection: DiscordGuildCategorySelection = {
-    id: createdCategory.id,
-    name: createdCategory.name,
+    id: selectedCategory.id,
+    name: selectedCategory.name,
     selectedAt: new Date().toISOString()
   };
 

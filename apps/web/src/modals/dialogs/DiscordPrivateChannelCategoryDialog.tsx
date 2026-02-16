@@ -12,8 +12,10 @@ import {
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
+import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
+  isDiscordCategoryChannelLimitReachedErrorCode,
   pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
@@ -183,45 +185,84 @@ export function DiscordPrivateChannelCategoryDialog({
     }
     setSubmitStage('creating-channel');
     let createdChannelId: string | null = null;
+    let activeCategory = category;
+    const exhaustedCategoryIds = new Set<string>();
+    let confirmationRequired = true;
+    let findPayload: {
+      ok: boolean;
+      channel_id?: string | null;
+      channel_name?: string | null;
+      parent_id?: string | null;
+      created?: boolean;
+      error?: string;
+      errorCode?: string;
+    } | null = null;
+
     try {
-      const params = new URLSearchParams({
-        guild_id: guildId,
-        member_id: discordUserId,
-        create: '1'
-      });
-      params.set('category_id', category.id);
-      params.set('display_name', 'カテゴリ確認用チャンネル');
+      while (true) {
+        const params = new URLSearchParams({
+          guild_id: guildId,
+          member_id: discordUserId,
+          create: '1'
+        });
+        params.set('category_id', activeCategory.id);
+        params.set('display_name', 'カテゴリ確認用チャンネル');
 
-      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
-        method: 'GET'
-      });
+        const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+          method: 'GET'
+        });
 
-      const findPayload = (await findResponse.json().catch(() => null)) as {
-        ok: boolean;
-        channel_id?: string | null;
-        channel_name?: string | null;
-        parent_id?: string | null;
-        created?: boolean;
-        error?: string;
-        errorCode?: string;
-      } | null;
+        findPayload = (await findResponse.json().catch(() => null)) as {
+          ok: boolean;
+          channel_id?: string | null;
+          channel_name?: string | null;
+          parent_id?: string | null;
+          created?: boolean;
+          error?: string;
+          errorCode?: string;
+        } | null;
 
-      if (!findResponse.ok || !findPayload) {
-        const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
-          setSubmitError(null);
-          return;
+        if (!findResponse.ok || !findPayload || !findPayload.ok) {
+          const message =
+            !findResponse.ok || !findPayload
+              ? findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`
+              : findPayload.error || 'テスト用チャンネルの作成に失敗しました';
+
+          if (isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)) {
+            exhaustedCategoryIds.add(activeCategory.id);
+            const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
+              push,
+              discordUserId,
+              guildSelection: selection,
+              currentCategoryId: activeCategory.id,
+              currentCategoryName: activeCategory.name,
+              exhaustedCategoryIds,
+              confirmationRequired
+            });
+            if (!nextCategory?.id) {
+              setSubmitError('カテゴリ設定を中断しました。');
+              return;
+            }
+
+            activeCategory = nextCategory;
+            setSelectedCategoryId(nextCategory.id);
+            setSubmitError(null);
+            confirmationRequired = false;
+            continue;
+          }
+
+          if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+            setSubmitError(null);
+            return;
+          }
+          throw new Error(message);
         }
-        throw new Error(message);
+
+        break;
       }
 
-      if (!findPayload.ok) {
-        const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
-          setSubmitError(null);
-          return;
-        }
-        throw new Error(message);
+      if (!findPayload) {
+        throw new Error('テスト用チャンネルの作成に失敗しました');
       }
 
       createdChannelId = findPayload.channel_id ?? null;
@@ -260,8 +301,8 @@ export function DiscordPrivateChannelCategoryDialog({
       setSubmitStage('saving-selection');
 
       const categorySelection: DiscordGuildCategorySelection = {
-        id: category.id,
-        name: category.name,
+        id: activeCategory.id,
+        name: activeCategory.name,
         selectedAt: new Date().toISOString()
       };
       saveDiscordGuildSelection(discordUserId, {
