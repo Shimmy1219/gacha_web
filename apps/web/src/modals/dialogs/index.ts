@@ -12,6 +12,7 @@ export * from './IconRingWearDialog';
 export * from './ItemAssetPreviewDialog';
 export * from './ItemDeleteConfirmDialog';
 export * from './InventoryHistoryDialog';
+export * from './ItemsRarityFileUploadDialog';
 export * from './LivePasteCatalogErrorDialog';
 export * from './LivePasteDialog';
 export * from './LivePasteGachaPickerDialog';

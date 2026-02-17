@@ -36,6 +36,7 @@ import {
   type SingleSelectOption
 } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { RarityFileUploadControls } from '../../components/RarityFileUploadControls';
 import { RarityRateErrorDialog } from './RarityRateErrorDialog';
 import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
 
@@ -1062,48 +1063,16 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             {assetError}
           </div>
         ) : null}
-        <div className="create-gacha-wizard__upload-controls space-y-3 rounded-2xl border border-border/60 bg-surface/50 p-4">
-          <button
-            type="button"
-            className="create-gacha-wizard__upload-all-button flex w-full flex-col items-start gap-1 rounded-xl border border-border/70 bg-surface/40 px-4 py-3 text-left transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            onClick={() => handleRequestAssetSelection(null)}
-            disabled={isProcessingAssets}
-          >
-            <span className="create-gacha-wizard__upload-all-button-title text-sm font-semibold text-surface-foreground">
-              {isProcessingAssets ? '処理中…' : '全てのファイルを一括で登録'}
-            </span>
-            <span className="create-gacha-wizard__upload-all-button-description text-xs text-muted-foreground">
-              （レアリティは後から選択）
-            </span>
-          </button>
-          <div className="create-gacha-wizard__rarity-upload-controls space-y-2">
-            <p className="create-gacha-wizard__rarity-upload-label text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              レアリティごとにファイルを登録
-            </p>
-            <div className="create-gacha-wizard__rarity-upload-buttons flex flex-wrap items-stretch gap-2">
-              {sortedRarities.map((rarity) => {
-                const buttonLabel = rarity.label.trim() || rarity.id;
-                return (
-                  <button
-                    key={rarity.id}
-                    id={`create-gacha-rarity-upload-${rarity.id}`}
-                    type="button"
-                    className="create-gacha-wizard__rarity-upload-button inline-flex min-w-[8rem] flex-1 basis-[8rem] items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs font-semibold transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => handleRequestAssetSelection(rarity.id)}
-                    disabled={isProcessingAssets}
-                  >
-                    <span
-                      className="create-gacha-wizard__rarity-upload-button-label"
-                      style={rarity.color ? { color: rarity.color } : undefined}
-                    >
-                      {buttonLabel}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <RarityFileUploadControls
+          options={sortedRarities.map((rarity) => ({
+            id: rarity.id,
+            label: rarity.label.trim() || rarity.id,
+            color: rarity.color
+          }))}
+          isProcessing={isProcessingAssets}
+          onSelectAll={() => handleRequestAssetSelection(null)}
+          onSelectRarity={handleRequestAssetSelection}
+        />
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground">選択済みの画像</h3>
