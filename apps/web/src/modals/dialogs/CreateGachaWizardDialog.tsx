@@ -1027,9 +1027,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             コンプガチャを有効にする
           </span>
           <div className="create-gacha-wizard__complete-toggle-controls flex items-center justify-end gap-3">
-            <span className="create-gacha-wizard__complete-toggle-description text-[11px] text-muted-foreground/80">
-              OFFでステップ3の「コンプpt」を無効化
-            </span>
             <button
               type="button"
               onClick={() => handleToggleCompleteGacha(!isCompleteGachaEnabled)}
