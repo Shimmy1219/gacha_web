@@ -501,6 +501,11 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     if (checked) {
       return;
     }
+    setItems((previous) =>
+      previous.map((item) =>
+        item.isCompleteTarget ? { ...item, isCompleteTarget: false } : item
+      )
+    );
     setPtSettings((previous) => removeCompleteFromPtSettings(previous));
   }, []);
 
@@ -553,7 +558,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             name: '',
             originalFilename: file?.name ?? null,
             isRiagu: false,
-            isCompleteTarget: true,
+            isCompleteTarget: isCompleteGachaEnabled,
             rarityId: assignedRarityId
           });
         });
@@ -566,7 +571,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     } finally {
       setIsProcessingAssets(false);
     }
-  }, [applyItemNamingStrategy, createDraftAssetEntry, createdAssetIdsRef, sortedRarities]);
+  }, [applyItemNamingStrategy, createDraftAssetEntry, createdAssetIdsRef, isCompleteGachaEnabled, sortedRarities]);
 
   const handleRemoveItem = useCallback(
     (draftItemId: string) => {
@@ -706,13 +711,13 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           name: '',
           originalFilename: null,
           isRiagu: false,
-          isCompleteTarget: true,
+          isCompleteTarget: isCompleteGachaEnabled,
           rarityId: defaultRarityId
         }
       ];
       return applyItemNamingStrategy(nextItems);
     });
-  }, [applyItemNamingStrategy, sortedRarities]);
+  }, [applyItemNamingStrategy, isCompleteGachaEnabled, sortedRarities]);
 
   useEffect(() => {
     const availableRarityIds = new Set(sortedRarities.map((rarity) => rarity.id));
@@ -886,7 +891,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           order: index,
           ...(assets.length > 0 ? { assets } : {}),
           ...(item.isRiagu ? { riagu: true } : {}),
-          ...(item.isCompleteTarget ? { completeTarget: true } : {}),
+          ...(isCompleteGachaEnabled && item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
         } satisfies GachaCatalogItemV4;
 
