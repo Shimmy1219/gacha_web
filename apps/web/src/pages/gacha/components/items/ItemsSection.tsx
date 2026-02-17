@@ -83,6 +83,24 @@ function getSequentialItemName(position: number): string {
   return name || 'A';
 }
 
+function formatFilenameAsItemName(filename: string | null | undefined): string {
+  if (!filename) {
+    return '';
+  }
+
+  const trimmed = filename.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const lastDotIndex = trimmed.lastIndexOf('.');
+  if (lastDotIndex <= 0) {
+    return trimmed;
+  }
+
+  return trimmed.slice(0, lastDotIndex);
+}
+
 export function ItemsSection(): JSX.Element {
   const { catalog: catalogStore, pullHistory: pullHistoryStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
@@ -889,8 +907,12 @@ export function ItemsSection(): JSX.Element {
   );
 
   const handleAddItemsWithAssets = useCallback(
-    async (params: { files: File[]; rarityId: string | null }) => {
-      const { files, rarityId } = params;
+    async (params: {
+      files: File[];
+      rarityId: string | null;
+      useFilenameAsItemName: boolean;
+    }) => {
+      const { files, rarityId, useFilenameAsItemName } = params;
 
       if (!activeGachaId) {
         throw new Error('有効なガチャが見つかりません。');
@@ -934,7 +956,10 @@ export function ItemsSection(): JSX.Element {
         const timestamp = new Date().toISOString();
         const itemsToAdd: GachaCatalogItemV4[] = assetRecords.map((record, index) => ({
           itemId: generateItemId(),
-          name: getSequentialItemName(baseOrder + index),
+          name:
+            (useFilenameAsItemName
+              ? formatFilenameAsItemName(files[index]?.name ?? record.name)
+              : '') || getSequentialItemName(baseOrder + index),
           rarityId: resolvedRarityId,
           order: baseOrder + index + 1,
           pickupTarget: false,
@@ -966,6 +991,41 @@ export function ItemsSection(): JSX.Element {
     ]
   );
 
+  const handleAddItemWithoutAsset = useCallback(async () => {
+    if (!activeGachaId) {
+      throw new Error('ファイルなしの追加時に有効なガチャが見つかりませんでした。');
+    }
+
+    const catalogState = catalogStore.getState() ?? data?.catalogState;
+    const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
+    if (!gachaCatalog) {
+      throw new Error(`ガチャ ${activeGachaId} のカタログが見つかりませんでした。`);
+    }
+
+    const rarityId = getDefaultRarityId(activeGachaId);
+    if (!rarityId) {
+      throw new Error('追加可能なレアリティが見つかりませんでした。');
+    }
+
+    const baseOrder = gachaCatalog.order?.length ?? 0;
+    const timestamp = new Date().toISOString();
+
+    const item: GachaCatalogItemV4 = {
+      itemId: generateItemId(),
+      name: getSequentialItemName(baseOrder),
+      rarityId,
+      order: baseOrder + 1,
+      pickupTarget: false,
+      completeTarget: false,
+      originalPrize: false,
+      assets: [],
+      riagu: false,
+      updatedAt: timestamp
+    };
+
+    catalogStore.addItems({ gachaId: activeGachaId, items: [item], updatedAt: timestamp });
+  }, [activeGachaId, catalogStore, data?.catalogState, getDefaultRarityId]);
+
   const handleAddCardClick = useCallback(() => {
     if (!showAddCard || !canAddItems) {
       return;
@@ -985,12 +1045,14 @@ export function ItemsSection(): JSX.Element {
           label: option.label || option.id,
           color: option.color
         })),
-        onSelectFiles: handleAddItemsWithAssets
+        onSelectFiles: handleAddItemsWithAssets,
+        onAddItemWithoutFile: handleAddItemWithoutAsset
       }
     });
   }, [
     activeGachaId,
     canAddItems,
+    handleAddItemWithoutAsset,
     handleAddItemsWithAssets,
     push,
     rarityOptionsForActiveGacha,
