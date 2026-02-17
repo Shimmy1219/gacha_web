@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clsx } from 'clsx';
 
 import {
   type GachaAppStateV3,
@@ -1019,28 +1020,37 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   };
 
   const renderAssetStep = () => {
-    const completeToggleInputId = 'create-gacha-wizard-complete-gacha-toggle';
     return (
       <div className="create-gacha-wizard__asset-step space-y-5">
-        <div className="create-gacha-wizard__complete-toggle flex items-center justify-between rounded-2xl border border-border/60 bg-surface/50 px-4 py-3">
-          <label
-            htmlFor={completeToggleInputId}
-            className="create-gacha-wizard__complete-toggle-label inline-flex flex-col gap-1 text-left"
-          >
-            <span className="create-gacha-wizard__complete-toggle-title text-sm font-semibold text-surface-foreground">
-              コンプガチャを有効にする
+        <div className="create-gacha-wizard__complete-toggle-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 sm:gap-2">
+          <span className="create-gacha-wizard__complete-toggle-title text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            コンプガチャを有効にする
+          </span>
+          <div className="create-gacha-wizard__complete-toggle-controls flex items-center justify-end gap-3">
+            <span className="create-gacha-wizard__complete-toggle-description text-[11px] text-muted-foreground/80">
+              OFFでステップ3の「コンプpt」を無効化
             </span>
-            <span className="create-gacha-wizard__complete-toggle-description text-xs text-muted-foreground">
-              OFFにするとステップ3の「コンプpt」は入力できません。
-            </span>
-          </label>
-          <input
-            id={completeToggleInputId}
-            type="checkbox"
-            className="create-gacha-wizard__complete-toggle-input h-5 w-5 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
-            checked={isCompleteGachaEnabled}
-            onChange={(event) => handleToggleCompleteGacha(event.target.checked)}
-          />
+            <button
+              type="button"
+              onClick={() => handleToggleCompleteGacha(!isCompleteGachaEnabled)}
+              className={clsx(
+                'create-gacha-wizard__complete-toggle-button relative inline-flex h-6 w-11 items-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                isCompleteGachaEnabled
+                  ? 'border-accent bg-[rgb(var(--color-accent)/1)]'
+                  : 'border-border/60 bg-panel-muted'
+              )}
+              aria-pressed={isCompleteGachaEnabled}
+            >
+              <span
+                className={clsx(
+                  'create-gacha-wizard__complete-toggle-indicator inline-block h-4 w-4 rounded-full transition-all',
+                  isCompleteGachaEnabled
+                    ? 'translate-x-[22px] bg-[rgb(var(--color-accent-foreground)/1)]'
+                    : 'translate-x-[6px] bg-[rgb(var(--color-surface-foreground)/1)]'
+                )}
+              />
+            </button>
+          </div>
         </div>
         {assetError ? (
           <div className="create-gacha-wizard__asset-error rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -1065,7 +1075,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             <p className="create-gacha-wizard__rarity-upload-label text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
               レアリティごとに登録
             </p>
-            <div className="create-gacha-wizard__rarity-upload-buttons flex flex-wrap items-center gap-2">
+            <div className="create-gacha-wizard__rarity-upload-buttons flex flex-wrap items-stretch gap-2">
               {sortedRarities.map((rarity) => {
                 const buttonLabel = rarity.label.trim() || rarity.id;
                 return (
@@ -1073,7 +1083,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                     key={rarity.id}
                     id={`create-gacha-rarity-upload-${rarity.id}`}
                     type="button"
-                    className="create-gacha-wizard__rarity-upload-button inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs font-semibold transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                    className="create-gacha-wizard__rarity-upload-button inline-flex min-w-[8rem] flex-1 basis-[8rem] items-center justify-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs font-semibold transition hover:border-accent/60 hover:text-surface-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => handleRequestAssetSelection(rarity.id)}
                     disabled={isProcessingAssets}
                   >
@@ -1201,17 +1211,19 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                             />
                             <span>リアグとして登録</span>
                           </label>
-                          <label className="inline-flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
-                              checked={item.isCompleteTarget}
-                              onChange={(event) =>
-                                handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
-                              }
-                            />
-                            <span>コンプ対象</span>
-                          </label>
+                          {isCompleteGachaEnabled ? (
+                            <label className="inline-flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                                checked={item.isCompleteTarget}
+                                onChange={(event) =>
+                                  handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
+                                }
+                              />
+                              <span>コンプ対象</span>
+                            </label>
+                          ) : null}
                         </div>
                         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                           <button
