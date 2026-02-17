@@ -204,4 +204,38 @@ describe('loadReceiveZipInventory digital item type migration', () => {
     expect(updateResult.updatedMetadataIds).toHaveLength(0);
     expect(updateResult.updatedBlob).toBeNull();
   });
+
+  it.each([
+    { fileName: 'item.mp3', expectedMimeType: 'audio/mpeg' },
+    { fileName: 'item.m4a', expectedMimeType: 'audio/mp4' }
+  ])('restores audio mime type from extension for $fileName', async ({ fileName, expectedMimeType }) => {
+    const filePath = `items/TestGacha/${fileName}`;
+    const metadataMap: Record<string, TestZipItemMetadata> = {
+      'asset-1': {
+        filePath,
+        gachaId: 'gacha-1',
+        gachaName: 'TestGacha',
+        itemId: 'item-1',
+        itemName: '音声景品',
+        rarity: 'R',
+        rarityColor: '#ffffff',
+        isRiagu: false,
+        riaguType: null,
+        obtainedCount: 1,
+        isNewForUser: false,
+        digitalItemType: 'audio'
+      }
+    };
+    const blob = await buildReceiveZipWithItemMetadata(
+      metadataMap,
+      filePath,
+      new Uint8Array([1, 2, 3])
+    );
+
+    const inventory = await loadReceiveZipInventory(blob);
+    expect(inventory.mediaItems).toHaveLength(1);
+    expect(inventory.mediaItems[0]?.kind).toBe('audio');
+    expect(inventory.mediaItems[0]?.mimeType).toBe(expectedMimeType);
+    expect(inventory.mediaItems[0]?.blob.type).toBe(expectedMimeType);
+  });
 });
