@@ -1070,7 +1070,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           </button>
           <div className="create-gacha-wizard__rarity-upload-controls space-y-2">
             <p className="create-gacha-wizard__rarity-upload-label text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-              レアリティごとに登録
+              レアリティごとにファイルを登録
             </p>
             <div className="create-gacha-wizard__rarity-upload-buttons flex flex-wrap items-stretch gap-2">
               {sortedRarities.map((rarity) => {
@@ -1115,7 +1115,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 onClick={handleAddEmptyItem}
                 disabled={isProcessingAssets}
               >
-                画像なしで追加
+                ファイル無しで追加
               </button>
             </div>
           </div>
@@ -1293,7 +1293,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
+          １回の消費ptやお得バンドル・天井保証を任意で設定出来ます。後から変更も出来ます。
         </p>
         <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
           <PtControlsPanel
@@ -1301,6 +1301,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             rarityOptions={rarityOptions}
             itemOptionsByRarity={guaranteeItemOptions}
             isCompleteEnabled={isCompleteGachaEnabled}
+            showOptionalHints
             onSettingsChange={setPtSettings}
           />
         </div>

@@ -85,6 +85,7 @@ interface PtControlsPanelProps {
   rarityOptions: RarityOption[];
   itemOptionsByRarity?: GuaranteeItemOptionsByRarity;
   isCompleteEnabled?: boolean;
+  showOptionalHints?: boolean;
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
@@ -111,11 +112,13 @@ function createGuaranteeRow(seed?: string, overrides?: Partial<PtGuaranteeRowSta
 
 function ControlsRow({
   label,
+  labelClassName,
   children,
   action,
   alignTop = false
 }: {
   label: string;
+  labelClassName?: string;
   children?: ReactNode;
   action?: ReactNode;
   alignTop?: boolean;
@@ -130,7 +133,7 @@ function ControlsRow({
         alignTop ? 'items-start' : 'items-center'
       )}
     >
-      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className={clsx('text-xs font-semibold text-muted-foreground', labelClassName)}>{label}</p>
       <div
         className={clsx(
           'pt-controls-panel__row-fields flex flex-nowrap gap-2 whitespace-nowrap text-xs text-muted-foreground',
@@ -458,6 +461,7 @@ export function PtControlsPanel({
   rarityOptions,
   itemOptionsByRarity,
   isCompleteEnabled = true,
+  showOptionalHints = false,
   onSettingsChange
 }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
@@ -591,7 +595,10 @@ export function PtControlsPanel({
         />
       </ControlsRow>
 
-      <ControlsRow label="コンプpt">
+      <ControlsRow
+        label="コンプpt"
+        labelClassName={clsx(!isCompleteEnabled && 'text-muted-foreground/50')}
+      >
         <InlineNumberField
           value={complete}
           onChange={(value) => {
@@ -607,7 +614,7 @@ export function PtControlsPanel({
       </ControlsRow>
 
       <ControlsRow
-        label="お得バンドル（n ptで m 連）"
+        label={showOptionalHints ? '（任意）お得バンドル（ｎptでｍ連）' : 'お得バンドル（n ptで m 連）'}
         action={
           <AddButton
             onClick={() =>
@@ -720,7 +727,7 @@ export function PtControlsPanel({
       ) : null}
 
       <ControlsRow
-        label="天井保証"
+        label={showOptionalHints ? '（任意）天井保証' : '天井保証'}
         action={
           <AddButton
             onClick={() =>
