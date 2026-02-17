@@ -1007,7 +1007,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
-          <p className="text-xs text-muted-foreground">ダッシュボードでの表示名として利用されます。</p>
         </div>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
