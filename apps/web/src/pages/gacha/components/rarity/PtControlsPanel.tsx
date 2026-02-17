@@ -84,6 +84,7 @@ interface PtControlsPanelProps {
   settings?: PtSettingV3;
   rarityOptions: RarityOption[];
   itemOptionsByRarity?: GuaranteeItemOptionsByRarity;
+  isCompleteEnabled?: boolean;
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
@@ -148,12 +149,14 @@ function InlineNumberField({
   onChange,
   placeholder,
   min = 0,
+  disabled = false,
   className
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   min?: number;
+  disabled?: boolean;
   className?: string;
 }): JSX.Element {
   return (
@@ -162,9 +165,11 @@ function InlineNumberField({
       min={min}
       value={value}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       className={clsx(
         'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-panel-contrast px-2 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        disabled && 'cursor-not-allowed border-border/40 bg-panel-muted/70 text-muted-foreground opacity-80',
         className
       )}
     />
@@ -374,7 +379,8 @@ function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSetti
 function buildSettingsFromSnapshot(
   snapshot: PanelSnapshot,
   previous: PtSettingV3 | undefined,
-  defaultRarityId: string
+  defaultRarityId: string,
+  isCompleteEnabled: boolean
 ): PtSettingV3 | undefined {
   const next: PtSettingV3 = {};
 
@@ -387,9 +393,11 @@ function buildSettingsFromSnapshot(
     };
   }
 
-  const completePrice = parseNonNegativeNumber(snapshot.complete);
-  if (completePrice != null) {
-    next.complete = { price: completePrice };
+  if (isCompleteEnabled) {
+    const completePrice = parseNonNegativeNumber(snapshot.complete);
+    if (completePrice != null) {
+      next.complete = { price: completePrice };
+    }
   }
 
   const bundles = snapshot.bundles
@@ -449,6 +457,7 @@ export function PtControlsPanel({
   settings,
   rarityOptions,
   itemOptionsByRarity,
+  isCompleteEnabled = true,
   onSettingsChange
 }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
@@ -533,7 +542,12 @@ export function PtControlsPanel({
       if (hasWarnings) {
         return;
       }
-      const nextSetting = buildSettingsFromSnapshot(snapshot, settings, defaultRarityId);
+      const nextSetting = buildSettingsFromSnapshot(
+        snapshot,
+        settings,
+        defaultRarityId,
+        isCompleteEnabled
+      );
       const serialized = nextSetting ? JSON.stringify(nextSetting) : '';
       if (lastEmittedRef.current === serialized) {
         return;
@@ -541,7 +555,7 @@ export function PtControlsPanel({
       lastEmittedRef.current = serialized;
       onSettingsChange(nextSetting);
     },
-    [defaultRarityId, onSettingsChange, settings]
+    [defaultRarityId, isCompleteEnabled, onSettingsChange, settings]
   );
 
   useEffect(() => {
@@ -583,8 +597,12 @@ export function PtControlsPanel({
           onChange={(value) => {
             setComplete(value);
           }}
+          disabled={!isCompleteEnabled}
           placeholder="1000"
-          className="ml-auto w-[12ch]"
+          className={clsx(
+            'ml-auto w-[12ch]',
+            !isCompleteEnabled && 'pt-controls-panel__number-field--disabled'
+          )}
         />
       </ControlsRow>
 
