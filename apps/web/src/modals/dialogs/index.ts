@@ -18,6 +18,7 @@ export * from './LivePasteGachaPickerDialog';
 export * from './OriginalPrizeSettingsDialog';
 export * from './PageSettingsDialog';
 export * from './PrizeSettingsDialog';
+export * from './PtBundleGuaranteeGuideDialog';
 export * from './RarityInUseDialog';
 export * from './RarityRateErrorDialog';
 export * from './RaritySimulationDialog';

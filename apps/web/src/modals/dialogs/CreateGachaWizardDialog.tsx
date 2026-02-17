@@ -37,6 +37,7 @@ import {
 } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { RarityRateErrorDialog } from './RarityRateErrorDialog';
+import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -193,7 +194,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [items, setItems] = useState<DraftItem[]>([]);
   const [ptSettings, setPtSettings] = useState<PtSettingV3 | undefined>(undefined);
   const [isCompleteGachaEnabled, setIsCompleteGachaEnabled] = useState(true);
-  const [isPtGuideOpen, setIsPtGuideOpen] = useState(false);
   const [isProcessingAssets, setIsProcessingAssets] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1301,7 +1301,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   };
 
   const renderPtStep = () => {
-    const ptGuidePanelId = 'create-gacha-wizard-pt-guide-panel';
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -1311,25 +1310,16 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           type="button"
           id="create-gacha-wizard-pt-guide-button"
           className="create-gacha-wizard__pt-guide-button inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
-          aria-expanded={isPtGuideOpen}
-          aria-controls={ptGuidePanelId}
-          onClick={() => setIsPtGuideOpen((previous) => !previous)}
+          onClick={() =>
+            push(PtBundleGuaranteeGuideDialog, {
+              id: 'pt-bundle-guarantee-guide',
+              title: '天井保証・お得バンドルについて',
+              size: 'md'
+            })
+          }
         >
           天井保証・お得バンドルについて
         </button>
-        {isPtGuideOpen ? (
-          <div
-            id={ptGuidePanelId}
-            className="create-gacha-wizard__pt-guide-panel space-y-2 rounded-2xl border border-border/60 bg-surface/40 px-4 py-3 text-xs text-muted-foreground"
-          >
-            <p className="create-gacha-wizard__pt-guide-summary leading-relaxed">
-              お得バンドルは「n ptでm連」をまとめて設定できる任意機能です。通常より損になる設定は無効扱いになります。
-            </p>
-            <p className="create-gacha-wizard__pt-guide-summary leading-relaxed">
-              天井保証は、指定連数以上で特定レアリティ（または特定景品）を確定させる任意機能です。
-            </p>
-          </div>
-        ) : null}
         <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
           <PtControlsPanel
             settings={ptSettings}
