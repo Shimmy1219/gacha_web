@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import {
+  createCsrfRetryRequestHeaders,
   fetchWithCsrfRetry,
   getCsrfMismatchGuideMessageJa,
   inspectCsrfFailurePayload,
@@ -161,10 +162,13 @@ export function useTransferApi(): {
           fetcher: fetch,
           getToken: async () => ensureCsrfToken(),
           refreshToken: async () => refreshCsrfToken(),
-          performRequest: async (csrf, currentFetcher) =>
+          performRequest: async (csrf, currentFetcher, meta) =>
             currentFetcher(options.url, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...createCsrfRetryRequestHeaders(meta)
+              },
               credentials: 'include',
               body: JSON.stringify(options.buildBody(csrf))
             }),

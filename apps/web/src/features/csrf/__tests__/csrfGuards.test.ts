@@ -50,6 +50,8 @@ describe('inspectCsrfFailurePayload', () => {
 describe('fetchWithCsrfRetry', () => {
   it('retries once when csrf mismatch is retryable', async () => {
     const requestedTokens: string[] = [];
+    const retryAttempts: number[] = [];
+    const retryFlags: boolean[] = [];
     let refreshCalled = 0;
 
     const response = await fetchWithCsrfRetry({
@@ -58,8 +60,10 @@ describe('fetchWithCsrfRetry', () => {
         refreshCalled += 1;
         return 'token-b';
       },
-      performRequest: async (token) => {
+      performRequest: async (token, _fetcher, meta) => {
         requestedTokens.push(token);
+        retryAttempts.push(meta.attempt);
+        retryFlags.push(meta.retryEnabled);
         if (requestedTokens.length === 1) {
           return jsonResponse(403, {
             ok: false,
@@ -75,6 +79,8 @@ describe('fetchWithCsrfRetry', () => {
 
     expect(refreshCalled).toBe(1);
     expect(requestedTokens).toEqual(['token-a', 'token-b']);
+    expect(retryAttempts).toEqual([0, 1]);
+    expect(retryFlags).toEqual([true, true]);
     expect(response.status).toBe(200);
   });
 

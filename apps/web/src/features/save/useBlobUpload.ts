@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { put } from '@vercel/blob/client';
 import {
   API_ERROR_CODE_CSRF_TOKEN_MISMATCH,
+  createCsrfRetryRequestHeaders,
   fetchWithCsrfRetry,
   getCsrfMismatchGuideMessageJa,
   inspectCsrfFailurePayload,
@@ -212,10 +213,13 @@ async function issueReceiveShareUrl(
       fetcher,
       getToken: async () => args.getCsrfToken(),
       refreshToken: async () => args.refreshCsrfToken(),
-      performRequest: async (csrf, currentFetcher) =>
+      performRequest: async (csrf, currentFetcher, meta) =>
         currentFetcher(RECEIVE_TOKEN_ENDPOINT, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...createCsrfRetryRequestHeaders(meta)
+          },
           credentials: 'include',
           body: JSON.stringify({
             url: args.downloadUrl,
@@ -266,10 +270,13 @@ async function requestUploadAuthorization(
       fetcher,
       getToken: async () => args.getCsrfToken(),
       refreshToken: async () => args.refreshCsrfToken(),
-      performRequest: async (csrf, currentFetcher) =>
+      performRequest: async (csrf, currentFetcher, meta) =>
         currentFetcher(UPLOAD_ENDPOINT, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...createCsrfRetryRequestHeaders(meta)
+          },
           credentials: 'include',
           body: JSON.stringify({
             action: 'prepare-upload',

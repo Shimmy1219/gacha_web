@@ -10,6 +10,7 @@ import {
   getDiscordInfoStore
 } from './discordInfoStore';
 import {
+  createCsrfRetryRequestHeaders,
   fetchWithCsrfRetry,
   getCsrfMismatchGuideMessageJa,
   inspectCsrfFailurePayload
@@ -553,11 +554,15 @@ export function useDiscordSession(): UseDiscordSessionResult {
           csrfToken = await issueCsrf();
           return csrfToken;
         },
-        performRequest: async (csrf, currentFetcher) =>
+        performRequest: async (csrf, currentFetcher, meta) =>
           currentFetcher('/api/auth/logout', {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              ...createCsrfRetryRequestHeaders(meta)
+            },
             body: JSON.stringify({ csrf })
           }),
         maxRetry: 1

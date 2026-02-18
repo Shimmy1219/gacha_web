@@ -27,6 +27,7 @@ import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import { ensureReceiveHistoryThumbnailsForEntry } from './receiveThumbnails';
 import {
+  createCsrfRetryRequestHeaders,
   fetchWithCsrfRetry,
   getCsrfMismatchGuideMessageJa,
   inspectCsrfFailurePayload
@@ -792,10 +793,13 @@ export function ReceivePage(): JSX.Element {
           csrfRef.current = token;
           return token;
         },
-        performRequest: async (csrf, currentFetcher) =>
+        performRequest: async (csrf, currentFetcher, meta) =>
           currentFetcher('/api/receive/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...createCsrfRetryRequestHeaders(meta)
+            },
             credentials: 'include',
             body: JSON.stringify({ token: resolvedToken, csrf })
           }),

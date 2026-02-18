@@ -1,4 +1,4 @@
-import { fetchWithCsrfRetry } from '../csrf/csrfGuards';
+import { createCsrfRetryRequestHeaders, fetchWithCsrfRetry } from '../csrf/csrfGuards';
 
 const DISCORD_CSRF_ENDPOINT = '/api/discord/csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
@@ -73,8 +73,12 @@ export async function fetchDiscordApi(input: string, init: RequestInit = {}): Pr
     fetcher: fetch,
     getToken: ensureDiscordCsrfToken,
     refreshToken: refreshDiscordCsrfToken,
-    performRequest: async (token, fetcher) => {
-      const headers = mergeHeaders(init.headers, { [CSRF_HEADER_NAME]: token, Accept: 'application/json' });
+    performRequest: async (token, fetcher, meta) => {
+      const headers = mergeHeaders(init.headers, {
+        [CSRF_HEADER_NAME]: token,
+        Accept: 'application/json',
+        ...createCsrfRetryRequestHeaders(meta)
+      });
       return fetcher(input, {
         ...init,
         credentials: init.credentials ?? 'include',

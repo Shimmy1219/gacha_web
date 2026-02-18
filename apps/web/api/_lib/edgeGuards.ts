@@ -39,6 +39,31 @@ type CsrfValidationError = Error & {
   csrfRetryable?: boolean;
 };
 
+function parseBooleanHeaderValue(value: string | null): boolean | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
+function parseIntegerHeaderValue(value: string | null): number | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 function jsonResponse(status: number, body: Record<string, unknown>, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers ?? undefined);
   headers.set('Content-Type', 'application/json; charset=utf-8');
@@ -134,11 +159,18 @@ function enforceCsrf(request: Request, config: CsrfConfig): CsrfValidationError 
 
 function logCsrfMismatch(route: string | undefined, request: Request, error: CsrfValidationError): void {
   const routeLabel = typeof route === 'string' && route.length > 0 ? route.replace(/^\/+/u, '') : 'api';
+  const csrfRetryEnabled = parseBooleanHeaderValue(request.headers.get('x-csrf-retry-enabled'));
+  const csrfRetryAttempt = parseIntegerHeaderValue(request.headers.get('x-csrf-retry-attempt'));
+  const csrfAutoRetryPrompted =
+    csrfRetryEnabled === true && csrfRetryAttempt === 0 && error.csrfRetryable === true;
   console.warn(`[${routeLabel}] 【既知のエラー】csrf mismatch`, {
     method: request.method,
     url: request.url,
     csrfReason: error.csrfReason,
     csrfSource: error.csrfSource,
+    csrfRetryEnabled,
+    csrfRetryAttempt,
+    csrfAutoRetryPrompted,
   });
 }
 

@@ -10,12 +10,20 @@ export type CsrfFailureReason =
 
 export type CsrfFailureSource = 'header' | 'body';
 
+export const CSRF_RETRY_ENABLED_HEADER = 'X-CSRF-Retry-Enabled' as const;
+export const CSRF_RETRY_ATTEMPT_HEADER = 'X-CSRF-Retry-Attempt' as const;
+
 export interface CsrfFailureInspection {
   isMismatch: boolean;
   reason: CsrfFailureReason | null;
   source: CsrfFailureSource | null;
   retryable: boolean;
   message: string | null;
+}
+
+export interface CsrfRetryRequestMeta {
+  attempt: number;
+  retryEnabled: true;
 }
 
 type CsrfErrorPayload = {
@@ -138,9 +146,16 @@ export interface FetchWithCsrfRetryOptions {
   fetcher?: typeof fetch;
   getToken: (fetcher: typeof fetch) => Promise<string>;
   refreshToken: (fetcher: typeof fetch) => Promise<string>;
-  performRequest: (token: string, fetcher: typeof fetch) => Promise<Response>;
+  performRequest: (token: string, fetcher: typeof fetch, meta: CsrfRetryRequestMeta) => Promise<Response>;
   shouldRetry?: (inspection: CsrfFailureInspection, attempt: number) => boolean;
   maxRetry?: number;
+}
+
+export function createCsrfRetryRequestHeaders(meta: CsrfRetryRequestMeta): Record<string, string> {
+  return {
+    [CSRF_RETRY_ENABLED_HEADER]: '1',
+    [CSRF_RETRY_ATTEMPT_HEADER]: String(meta.attempt)
+  };
 }
 
 export async function fetchWithCsrfRetry(options: FetchWithCsrfRetryOptions): Promise<Response> {
@@ -152,7 +167,7 @@ export async function fetchWithCsrfRetry(options: FetchWithCsrfRetryOptions): Pr
   const maxRetry = Number.isInteger(options.maxRetry) && (options.maxRetry as number) >= 0 ? Number(options.maxRetry) : 1;
   let attempt = 0;
   let token = await options.getToken(fetcher);
-  let response = await options.performRequest(token, fetcher);
+  let response = await options.performRequest(token, fetcher, { attempt, retryEnabled: true });
 
   while (attempt < maxRetry) {
     const inspection = await inspectCsrfFailureResponse(response);
@@ -163,9 +178,9 @@ export async function fetchWithCsrfRetry(options: FetchWithCsrfRetryOptions): Pr
     if (!shouldRetry) {
       break;
     }
-    token = await options.refreshToken(fetcher);
-    response = await options.performRequest(token, fetcher);
     attempt += 1;
+    token = await options.refreshToken(fetcher);
+    response = await options.performRequest(token, fetcher, { attempt, retryEnabled: true });
   }
 
   return response;

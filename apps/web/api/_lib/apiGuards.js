@@ -41,6 +41,31 @@ function getHeader(req, name) {
   return normalizeHeaderValue(direct);
 }
 
+function parseBooleanHeader(value) {
+  if (typeof value !== 'string' || !value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
+function parseIntegerHeader(value) {
+  if (typeof value !== 'string' || !value) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 export function parseJsonBody(req) {
   if (!req) return {};
   if (req.body && typeof req.body === 'object') {
@@ -221,11 +246,18 @@ export function withApiGuards(config) {
       if (csrfErr) {
         if (csrfErr.errorCode === CSRF_ERROR_CODE) {
           const routeLabel = route ? route.replace(/^\/+/u, '') : 'api';
+          const csrfRetryEnabled = parseBooleanHeader(getHeader(req, 'x-csrf-retry-enabled'));
+          const csrfRetryAttempt = parseIntegerHeader(getHeader(req, 'x-csrf-retry-attempt'));
+          const csrfAutoRetryPrompted =
+            csrfRetryEnabled === true && csrfRetryAttempt === 0 && csrfErr.csrfRetryable === true;
           console.warn(`[${routeLabel}] 【既知のエラー】csrf mismatch`, {
             method: req?.method,
             url: req?.url,
             csrfReason: csrfErr.csrfReason,
             csrfSource: csrfErr.csrfSource,
+            csrfRetryEnabled,
+            csrfRetryAttempt,
+            csrfAutoRetryPrompted,
           });
         }
         return json(res, csrfErr.statusCode || 403, {
