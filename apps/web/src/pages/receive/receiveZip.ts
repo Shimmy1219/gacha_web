@@ -81,6 +81,57 @@ interface ItemsMetadataLoadResult {
 
 type ReceiveZipInput = Blob | ArrayBuffer | Uint8Array;
 
+const FILE_EXTENSION_MIME_TYPE_MAP: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  bmp: 'image/bmp',
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  avi: 'video/x-msvideo',
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  txt: 'text/plain',
+  json: 'application/json',
+  md: 'text/markdown'
+};
+
+function inferMimeTypeFromFileName(fileName: string): string | undefined {
+  const trimmed = fileName.trim().toLowerCase();
+  if (!trimmed) {
+    return undefined;
+  }
+  const dotIndex = trimmed.lastIndexOf('.');
+  if (dotIndex < 0 || dotIndex === trimmed.length - 1) {
+    return undefined;
+  }
+  const extension = trimmed.slice(dotIndex + 1);
+  return FILE_EXTENSION_MIME_TYPE_MAP[extension];
+}
+
+function resolveMediaMimeType(fileName: string, mimeType?: string): string | undefined {
+  const normalized = typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
+  if (normalized && normalized !== 'application/octet-stream') {
+    return normalized;
+  }
+  return inferMimeTypeFromFileName(fileName);
+}
+
+function applyMimeTypeToBlob(blob: Blob, mimeType?: string): Blob {
+  if (!mimeType || blob.type === mimeType) {
+    return blob;
+  }
+  return new Blob([blob], { type: mimeType });
+}
+
 function detectMediaKind(filename: string, mimeType?: string): ReceiveMediaKind {
   const lower = filename.toLowerCase();
   if (mimeType?.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) {
@@ -243,9 +294,10 @@ async function migrateItemsMetadataDigitalItemTypes(
         try {
           const blobEntry = await entry.async('blob');
           const filename = entry.name.split('/').pop() ?? entry.name;
-          const mimeType = blobEntry.type || undefined;
+          const mimeType = resolveMediaMimeType(filename, blobEntry.type || undefined);
+          const blobWithMimeType = applyMimeTypeToBlob(blobEntry, mimeType);
           inferred = await inferDigitalItemTypeFromBlob({
-            blob: blobEntry,
+            blob: blobWithMimeType,
             mimeType,
             fileName: filename,
             kindHint: resolveKindHint(detectMediaKind(filename, mimeType))
@@ -371,14 +423,15 @@ async function extractReceiveMediaItemsFromZip(
       try {
         const blobEntry = await entry.async('blob');
         const filename = entry.name.split('/').pop() ?? entry.name;
-        const mimeType = blobEntry.type || undefined;
+        const mimeType = resolveMediaMimeType(filename, blobEntry.type || undefined);
+        const blobWithMimeType = applyMimeTypeToBlob(blobEntry, mimeType);
         const kind = detectMediaKind(filename, mimeType);
         mediaItems.push({
           id: metadata.id,
           path: entry.name,
           filename,
-          size: blobEntry.size,
-          blob: blobEntry,
+          size: blobWithMimeType.size,
+          blob: blobWithMimeType,
           mimeType,
           kind,
           metadata
@@ -420,13 +473,14 @@ async function extractReceiveMediaItemsFromZip(
         continue;
       }
 
-      const mimeType = blobEntry.type || undefined;
+      const mimeType = resolveMediaMimeType(filename, blobEntry.type || undefined);
+      const blobWithMimeType = applyMimeTypeToBlob(blobEntry, mimeType);
       mediaItems.push({
         id: path,
         path,
         filename,
-        size: blobEntry.size,
-        blob: blobEntry,
+        size: blobWithMimeType.size,
+        blob: blobWithMimeType,
         mimeType,
         kind: detectMediaKind(filename, mimeType)
       });

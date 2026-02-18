@@ -26,6 +26,7 @@ import {
   saveHistoryFile
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
+import { useObjectUrl } from './hooks/useObjectUrl';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
 import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
@@ -474,6 +475,16 @@ function isLikelyImageSource(sourceItem: ReceiveMediaItem): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(sourceItem.filename);
 }
 
+function isLikelyAudioSource(sourceItem: ReceiveMediaItem): boolean {
+  if (sourceItem.kind === 'audio') {
+    return true;
+  }
+  if (sourceItem.mimeType?.startsWith('audio/')) {
+    return true;
+  }
+  return /\.(mp3|wav|m4a|aac|ogg)$/i.test(sourceItem.filename);
+}
+
 function resolveItemKey(gachaKey: string, itemId: string | null, itemName: string, assetId?: string | null): string {
   if (itemId && itemId.trim()) {
     return assetId && assetId.trim() ? `${gachaKey}:${itemId.trim()}:${assetId.trim()}` : `${gachaKey}:${itemId.trim()}`;
@@ -524,6 +535,8 @@ function ReceiveInventoryItemCard({
   previewCacheMaxEntries: number;
 }): JSX.Element {
   const { push } = useModal();
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.rarityColor ?? undefined),
     [item.rarityColor]
@@ -545,6 +558,11 @@ function ReceiveInventoryItemCard({
     () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
+  const audioSourceItem = useMemo(
+    () => item.sourceItems.find((sourceItem) => isLikelyAudioSource(sourceItem)) ?? null,
+    [item.sourceItems]
+  );
+  const audioSourceUrl = useObjectUrl(audioSourceItem?.blob ?? null);
   const previewBlob = useMemo(
     () => item.previewThumbnailBlob ?? imageSourceItem?.blob ?? null,
     [imageSourceItem, item.previewThumbnailBlob]
@@ -571,6 +589,52 @@ function ReceiveInventoryItemCard({
   );
   const canOpenPreview = item.isOwned && hasSource && Boolean(previewSourceItem);
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
+  const canPlayDigitalAudio = item.isOwned && item.digitalItemType === 'audio' && Boolean(audioSourceUrl);
+  const hasSecondaryAction = canWearIconRing || canPlayDigitalAudio;
+
+  useEffect(() => {
+    return () => {
+      const audioPlayer = audioPlayerRef.current;
+      if (!audioPlayer) {
+        return;
+      }
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+    };
+  }, [item.key, audioSourceUrl]);
+
+  useEffect(() => {
+    if (canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    setIsAudioPlaying(false);
+  }, [canPlayDigitalAudio]);
+
+  const handleToggleAudioPlayback = (): void => {
+    if (!canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    if (isAudioPlaying) {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      return;
+    }
+    audioPlayer.currentTime = 0;
+    void audioPlayer.play().catch((error) => {
+      console.warn('Failed to play receive list item audio', { itemKey: item.key, error });
+      setIsAudioPlaying(false);
+    });
+  };
 
   return (
     <div
@@ -661,6 +725,17 @@ function ReceiveInventoryItemCard({
           </div>
           {item.isOwned ? (
             <div className="receive-list-item-card__action-row mt-1 flex items-center gap-2">
+              {canPlayDigitalAudio ? (
+                <audio
+                  ref={audioPlayerRef}
+                  src={audioSourceUrl ?? undefined}
+                  className="receive-list-item-card__audio-player hidden"
+                  preload="metadata"
+                  onPlay={() => setIsAudioPlaying(true)}
+                  onPause={() => setIsAudioPlaying(false)}
+                  onEnded={() => setIsAudioPlaying(false)}
+                />
+              ) : null}
               {canWearIconRing ? (
                 <button
                   type="button"
@@ -681,12 +756,22 @@ function ReceiveInventoryItemCard({
                   装着
                 </button>
               ) : null}
+              {canPlayDigitalAudio ? (
+                <button
+                  type="button"
+                  className="receive-list-item-card__audio-toggle-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
+                  onClick={handleToggleAudioPlayback}
+                  title={isAudioPlaying ? '音声を停止' : '音声を再生'}
+                >
+                  {isAudioPlaying ? '再生中' : '再生'}
+                </button>
+              ) : null}
               <ReceiveSaveButton
                 onClick={onSave}
                 disabled={isSaving || !hasSource}
                 className={clsx(
                   'receive-list-item-card__save-button !min-h-0 h-7 justify-center px-3 text-xs',
-                  canWearIconRing ? 'flex-1' : 'w-full'
+                  hasSecondaryAction ? 'flex-1' : 'w-full'
                 )}
               />
             </div>
