@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
@@ -95,9 +95,21 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
   return undefined;
 }
 
+function isLikelyAudioItem(item: Pick<ReceiveMediaItem, 'kind' | 'filename' | 'mimeType'>): boolean {
+  if (item.kind === 'audio') {
+    return true;
+  }
+  if (item.mimeType?.startsWith('audio/')) {
+    return true;
+  }
+  return /\.(mp3|wav|m4a|aac|ogg)$/i.test(item.filename);
+}
+
 export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Element {
   const objectUrl = useObjectUrl(item.blob);
   const { push } = useModal();
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.metadata?.rarityColor),
     [item.metadata?.rarityColor]
@@ -157,7 +169,16 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       case 'audio':
         return (
           <div className="receive-item-card-audio-wrapper flex h-full w-full items-center justify-center rounded-xl bg-surface-deep/80 p-4 md:rounded-2xl">
-            <audio controls src={objectUrl} className="receive-item-card-audio-player w-full" preload="metadata" />
+            <audio
+              ref={audioPlayerRef}
+              controls
+              src={objectUrl}
+              className="receive-item-card-audio-player w-full"
+              preload="metadata"
+              onPlay={() => setIsAudioPlaying(true)}
+              onPause={() => setIsAudioPlaying(false)}
+              onEnded={() => setIsAudioPlaying(false)}
+            />
           </div>
         );
       case 'text':
@@ -186,6 +207,57 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
   );
 
   const canWearIconRing = item.kind === 'image' && item.metadata?.digitalItemType === 'icon-ring';
+  const canPlayDigitalAudio = useMemo(
+    () =>
+      item.metadata?.digitalItemType === 'audio' &&
+      isLikelyAudioItem(item) &&
+      Boolean(objectUrl),
+    [item, objectUrl]
+  );
+
+  useEffect(() => {
+    return () => {
+      const audioPlayer = audioPlayerRef.current;
+      if (!audioPlayer) {
+        return;
+      }
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+    };
+  }, [item.id, objectUrl]);
+
+  useEffect(() => {
+    if (canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    setIsAudioPlaying(false);
+  }, [canPlayDigitalAudio]);
+
+  const handleToggleAudioPlayback = (): void => {
+    if (!canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    if (isAudioPlaying) {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      return;
+    }
+    audioPlayer.currentTime = 0;
+    void audioPlayer.play().catch((error) => {
+      console.warn('Failed to play receive item audio', { itemId: item.id, error });
+      setIsAudioPlaying(false);
+    });
+  };
 
   return (
     <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
@@ -269,6 +341,16 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
                   }
                 >
                   装着
+                </button>
+              ) : null}
+              {canPlayDigitalAudio ? (
+                <button
+                  type="button"
+                  className="receive-item-card__audio-toggle-button btn btn-muted"
+                  onClick={handleToggleAudioPlayback}
+                  title={isAudioPlaying ? '音声を停止' : '音声を再生'}
+                >
+                  {isAudioPlaying ? '再生中' : '再生'}
                 </button>
               ) : null}
               <ReceiveSaveButton
