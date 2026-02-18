@@ -8,7 +8,14 @@ import {
   type PropsWithChildren
 } from 'react';
 
-import { DEFAULT_SITE_ACCENT, type CustomBaseTone, type SiteTheme } from '@domain/stores/uiPreferencesStore';
+import {
+  DEFAULT_SITE_ACCENT,
+  DEFAULT_SITE_ZOOM_PERCENT,
+  SITE_ZOOM_PERCENT_MAX,
+  SITE_ZOOM_PERCENT_MIN,
+  type CustomBaseTone,
+  type SiteTheme
+} from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
 
@@ -237,6 +244,40 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
   }
 }
 
+function normalizeSiteZoomPercent(raw: unknown): number {
+  const numeric = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+    return DEFAULT_SITE_ZOOM_PERCENT;
+  }
+
+  const rounded = Math.round(numeric);
+  return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
+
+function applyDocumentZoom(percent: number): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const root = document.documentElement;
+  const normalized = normalizeSiteZoomPercent(percent);
+  const scale = normalized / 100;
+  const supportsCssZoom =
+    typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1');
+
+  root.style.setProperty('--site-zoom-percent', String(normalized));
+  root.style.setProperty('--site-zoom-scale', String(scale));
+
+  if (supportsCssZoom) {
+    root.dataset.siteZoomMode = 'native';
+    root.style.setProperty('zoom', String(scale));
+    return;
+  }
+
+  root.dataset.siteZoomMode = 'transform';
+  root.style.removeProperty('zoom');
+}
+
 export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element {
   const { uiPreferences } = useDomainStores();
   const [theme, setThemeState] = useState<SiteTheme>(() => uiPreferences.getSiteTheme());
@@ -246,20 +287,31 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
   const [customBaseTone, setCustomBaseToneState] = useState<CustomBaseTone>(() =>
     uiPreferences.getCustomBaseTone()
   );
+  const [siteZoomPercent, setSiteZoomPercentState] = useState<number>(() =>
+    uiPreferences.getSiteZoomPercent()
+  );
 
   useEffect(() => {
     applyDocumentTheme(theme, resolveAccentHex(theme, customAccentColor), customBaseTone);
   }, [theme, customAccentColor, customBaseTone]);
 
   useEffect(() => {
+    applyDocumentZoom(siteZoomPercent);
+  }, [siteZoomPercent]);
+
+  useEffect(() => {
     const unsubscribe = uiPreferences.subscribe(() => {
       const nextTheme = uiPreferences.getSiteTheme();
       const nextAccent = uiPreferences.getCustomAccentColor();
       const nextBaseTone = uiPreferences.getCustomBaseTone();
+      const nextSiteZoomPercent = uiPreferences.getSiteZoomPercent();
 
       setThemeState((previous) => (previous === nextTheme ? previous : nextTheme));
       setCustomAccentColorState((previous) => (previous === nextAccent ? previous : nextAccent));
       setCustomBaseToneState((previous) => (previous === nextBaseTone ? previous : nextBaseTone));
+      setSiteZoomPercentState((previous) =>
+        previous === nextSiteZoomPercent ? previous : nextSiteZoomPercent
+      );
     });
     return unsubscribe;
   }, [uiPreferences]);

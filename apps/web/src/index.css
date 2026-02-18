@@ -27,6 +27,8 @@
   --color-accent-foreground: 255 255 255;
   --background-gradient-1: rgba(0, 0, 0, 0);
   --background-gradient-2: rgba(0, 0, 0, 0);
+  --site-zoom-scale: 1;
+  --site-zoom-percent: 100;
 }
 
 [data-site-theme='light'] {
@@ -117,6 +119,13 @@
   input[type='number']::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
+  }
+
+  :root[data-site-zoom-mode='transform'] body {
+    transform: scale(var(--site-zoom-scale));
+    transform-origin: top left;
+    width: calc(100% / var(--site-zoom-scale));
+    min-height: calc(100% / var(--site-zoom-scale));
   }
 }
 
@@ -271,6 +280,62 @@
   .page-settings__content-scroll::-webkit-scrollbar-thumb:hover,
   .page-settings__menu-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--color-accent) / 1);
+  }
+
+  body[data-page-settings-zoom-preview='1'] .modal-overlay {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .modal-header {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__menu-scroll {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__content-scroll {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__layout-intro,
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__desktop-layout-panel {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__site-zoom-panel--previewing {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 120;
+    margin: 0 auto;
+    width: min(42rem, calc(100vw - 2rem));
+    border-color: rgb(var(--color-accent) / 0.45);
+    background: rgb(var(--color-panel) / 0.96);
+    box-shadow: 0 14px 36px rgb(0 0 0 / 0.45);
   }
 
   @media (max-width: 1023px) {
