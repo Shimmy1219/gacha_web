@@ -17,6 +17,11 @@ import crypto from 'crypto';
 import { getCookies } from './cookies.js';
 import { isAllowedOrigin } from './origin.js';
 
+const CSRF_ERROR_CODE = 'csrf_token_mismatch';
+const CSRF_REASON_COOKIE_MISSING = 'cookie_missing';
+const CSRF_REASON_PROVIDED_MISSING = 'provided_missing';
+const CSRF_REASON_TOKEN_MISMATCH = 'token_mismatch';
+
 function normalizeHeaderValue(value) {
   if (Array.isArray(value)) {
     return value.join(', ');
@@ -163,10 +168,22 @@ function enforceCsrf(req, ctx, config) {
         ? ctx.body[field]
         : '';
 
-  if (!cookieValue || !provided || cookieValue !== provided) {
+  const csrfReason =
+    !cookieValue
+      ? CSRF_REASON_COOKIE_MISSING
+      : !provided
+        ? CSRF_REASON_PROVIDED_MISSING
+        : cookieValue !== provided
+          ? CSRF_REASON_TOKEN_MISMATCH
+          : '';
+
+  if (csrfReason) {
     const err = new Error('Forbidden: invalid CSRF token');
     err.statusCode = 403;
-    err.errorCode = 'csrf_token_mismatch';
+    err.errorCode = CSRF_ERROR_CODE;
+    err.csrfReason = csrfReason;
+    err.csrfSource = source;
+    err.csrfRetryable = csrfReason !== CSRF_REASON_PROVIDED_MISSING;
     return err;
   }
 
@@ -202,17 +219,22 @@ export function withApiGuards(config) {
 
       const csrfErr = enforceCsrf(req, ctx, config?.csrf);
       if (csrfErr) {
-        if (csrfErr.errorCode === 'csrf_token_mismatch') {
+        if (csrfErr.errorCode === CSRF_ERROR_CODE) {
           const routeLabel = route ? route.replace(/^\/+/u, '') : 'api';
           console.warn(`[${routeLabel}] 【既知のエラー】csrf mismatch`, {
             method: req?.method,
             url: req?.url,
+            csrfReason: csrfErr.csrfReason,
+            csrfSource: csrfErr.csrfSource,
           });
         }
         return json(res, csrfErr.statusCode || 403, {
           ok: false,
           error: csrfErr.message,
           errorCode: typeof csrfErr.errorCode === 'string' ? csrfErr.errorCode : undefined,
+          csrfReason: typeof csrfErr.csrfReason === 'string' ? csrfErr.csrfReason : undefined,
+          csrfSource: typeof csrfErr.csrfSource === 'string' ? csrfErr.csrfSource : undefined,
+          csrfRetryable: typeof csrfErr.csrfRetryable === 'boolean' ? csrfErr.csrfRetryable : undefined,
         });
       }
 

@@ -22,7 +22,11 @@ import {
   type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
 import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
-import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
+import {
+  extractBlobUploadCsrfFailureReason,
+  isBlobUploadCsrfTokenMismatchError,
+  useBlobUpload
+} from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
@@ -736,7 +740,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
       console.error('ZIPアップロード処理に失敗しました', error);
       if (isBlobUploadCsrfTokenMismatchError(error)) {
-        pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        pushCsrfTokenMismatchWarning(
+          push,
+          error instanceof Error ? error.message : undefined,
+          extractBlobUploadCsrfFailureReason(error)
+        );
         setErrorBanner(null);
         return;
       }
@@ -803,7 +811,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       } else {
         console.error('Discord共有用ZIPの生成またはアップロードに失敗しました', error);
         if (isBlobUploadCsrfTokenMismatchError(error)) {
-          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          pushCsrfTokenMismatchWarning(
+            push,
+            error instanceof Error ? error.message : undefined,
+            extractBlobUploadCsrfFailureReason(error)
+          );
           setErrorBanner(null);
           setIsDiscordSharing(false);
           return;

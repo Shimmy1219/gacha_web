@@ -26,6 +26,11 @@ import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZ
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import { ensureReceiveHistoryThumbnailsForEntry } from './receiveThumbnails';
+import {
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload
+} from '../../features/csrf/csrfGuards';
 
 interface ResolveSuccessPayload {
   url: string;
@@ -775,26 +780,42 @@ export function ReceivePage(): JSX.Element {
     setCleanupError(null);
 
     try {
-      const csrf = csrfRef.current ?? (await requestCsrfToken());
-      csrfRef.current = csrf;
-
-      const response = await fetch('/api/receive/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token: resolvedToken, csrf })
+      const response = await fetchWithCsrfRetry({
+        fetcher: fetch,
+        getToken: async () => {
+          const token = csrfRef.current ?? (await requestCsrfToken());
+          csrfRef.current = token;
+          return token;
+        },
+        refreshToken: async () => {
+          const token = await requestCsrfToken();
+          csrfRef.current = token;
+          return token;
+        },
+        performRequest: async (csrf, currentFetcher) =>
+          currentFetcher('/api/receive/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ token: resolvedToken, csrf })
+          }),
+        maxRetry: 1
       });
 
-      let payload: { ok?: boolean; error?: string } | null = null;
+      let payload: { ok?: boolean; error?: string; errorCode?: string; csrfReason?: string } | null = null;
       try {
-        payload = (await response.json()) as { ok?: boolean; error?: string };
+        payload = (await response.json()) as { ok?: boolean; error?: string; errorCode?: string; csrfReason?: string };
       } catch {
         // ignore json parse errors
       }
 
       if (!response.ok || !payload?.ok) {
-        const message = payload?.error ?? 'ファイルの削除に失敗しました。時間を置いて再度お試しください。';
-        throw new Error(message);
+        const reason = payload?.error ?? 'ファイルの削除に失敗しました。時間を置いて再度お試しください。';
+        const csrfFailure = inspectCsrfFailurePayload(payload);
+        if (csrfFailure.isMismatch) {
+          throw new Error(`${reason}\n\n${getCsrfMismatchGuideMessageJa(csrfFailure.reason)}`);
+        }
+        throw new Error(reason);
       }
 
       setCleanupStatus('success');

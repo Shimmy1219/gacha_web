@@ -231,6 +231,7 @@ async function handler(request: Request): Promise<Response> {
 }
 
 const guarded = withEdgeGuards({
+  route: '/api/discord/bot-guilds',
   methods: ['GET'],
   origin: true,
   csrf: { cookieName: 'discord_csrf', headerName: DEFAULT_CSRF_HEADER_NAME },

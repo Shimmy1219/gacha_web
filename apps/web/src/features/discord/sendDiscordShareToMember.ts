@@ -12,6 +12,7 @@ interface FindChannelsResponsePayload {
   created?: boolean;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface SendDiscordResponsePayload {
@@ -106,7 +107,7 @@ export async function sendDiscordShareToMember({
     if (!findResponse.ok || !findPayload) {
       const message =
         findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-      if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+      if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
         throw new Error('Discordギルドの設定を確認してください。');
       }
       throw new Error(message);
@@ -114,7 +115,7 @@ export async function sendDiscordShareToMember({
 
     if (!findPayload.ok) {
       const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-      if (pushDiscordApiWarningByErrorCode(push, findPayload.errorCode, message)) {
+      if (pushDiscordApiWarningByErrorCode(push, findPayload.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
         throw new Error('Discordギルドの設定を確認してください。');
       }
       throw new Error(message);

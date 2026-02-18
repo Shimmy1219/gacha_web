@@ -1,3 +1,5 @@
+import { fetchWithCsrfRetry } from '../csrf/csrfGuards';
+
 const DISCORD_CSRF_ENDPOINT = '/api/discord/csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
@@ -47,6 +49,11 @@ async function ensureDiscordCsrfToken(fetcher: typeof fetch): Promise<string> {
   return token;
 }
 
+async function refreshDiscordCsrfToken(fetcher: typeof fetch): Promise<string> {
+  cachedDiscordCsrfToken = null;
+  return ensureDiscordCsrfToken(fetcher);
+}
+
 function mergeHeaders(base?: HeadersInit, extra?: HeadersInit): Headers {
   const headers = new Headers(base ?? undefined);
   if (extra) {
@@ -57,47 +64,23 @@ function mergeHeaders(base?: HeadersInit, extra?: HeadersInit): Headers {
   return headers;
 }
 
-async function isLikelyCsrfFailure(response: Response): Promise<boolean> {
-  if (response.status !== 403) {
-    return false;
-  }
-  try {
-    const cloned = response.clone();
-    const payload = (await cloned.json().catch(() => null)) as { error?: unknown } | null;
-    const message = typeof payload?.error === 'string' ? payload.error : '';
-    return /csrf/i.test(message);
-  } catch {
-    return false;
-  }
-}
-
 export async function fetchDiscordApi(input: string, init: RequestInit = {}): Promise<Response> {
   if (typeof fetch === 'undefined') {
     throw new Error('fetch is not available in this environment');
   }
 
-  const token = await ensureDiscordCsrfToken(fetch);
-  const headers = mergeHeaders(init.headers, { [CSRF_HEADER_NAME]: token, Accept: 'application/json' });
-
-  const response = await fetch(input, {
-    ...init,
-    credentials: init.credentials ?? 'include',
-    headers,
-  });
-
-  if (!(await isLikelyCsrfFailure(response))) {
-    return response;
-  }
-
-  // Token mismatch can happen when another tab/page re-issued CSRF.
-  // Retry once with a fresh token.
-  cachedDiscordCsrfToken = null;
-  const refreshed = await ensureDiscordCsrfToken(fetch);
-  const retryHeaders = mergeHeaders(init.headers, { [CSRF_HEADER_NAME]: refreshed, Accept: 'application/json' });
-
-  return await fetch(input, {
-    ...init,
-    credentials: init.credentials ?? 'include',
-    headers: retryHeaders,
+  return fetchWithCsrfRetry({
+    fetcher: fetch,
+    getToken: ensureDiscordCsrfToken,
+    refreshToken: refreshDiscordCsrfToken,
+    performRequest: async (token, fetcher) => {
+      const headers = mergeHeaders(init.headers, { [CSRF_HEADER_NAME]: token, Accept: 'application/json' });
+      return fetcher(input, {
+        ...init,
+        credentials: init.credentials ?? 'include',
+        headers,
+      });
+    },
+    maxRetry: 1
   });
 }
