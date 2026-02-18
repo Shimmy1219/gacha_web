@@ -22,6 +22,14 @@ interface DashboardDesktopGridProps {
 
 type Breakpoint = 'base' | 'lg' | 'xl' | '2xl';
 
+const DESKTOP_GRID_ITEM_HEIGHT_CSS = [
+  'max(0px, calc(',
+  '(100vh * var(--site-zoom-inverse-scale, 1))',
+  ' - var(--app-header-height, 0px)',
+  ' - var(--app-main-vertical-padding, 0px)',
+  '))'
+].join('');
+
 interface ColumnConfig {
   minWidths: number[]; // rem values
   weights: number[];
@@ -61,6 +69,10 @@ export function getBreakpoint(width: number): Breakpoint {
     return 'lg';
   }
   return 'base';
+}
+
+export function shouldUseViewportHeightForGridItem(breakpoint: Breakpoint): boolean {
+  return breakpoint === 'xl' || breakpoint === '2xl';
 }
 
 export function distributeWidths(minWidths: number[], weights: number[], available: number): number[] {
@@ -339,6 +351,16 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     } as CSSProperties;
   }, [columnWidths, containerMetrics.gap, containerMetrics.width]);
 
+  const itemStyle = useMemo(() => {
+    if (!shouldUseViewportHeightForGridItem(breakpoint)) {
+      return undefined;
+    }
+
+    return {
+      height: DESKTOP_GRID_ITEM_HEIGHT_CSS
+    } as CSSProperties;
+  }, [breakpoint]);
+
   const handlePositions = useMemo(() => {
     if (!columnWidths) {
       return [] as number[];
@@ -355,7 +377,12 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
   return (
     <div ref={containerRef} className="dashboard-desktop-grid relative grid items-start gap-4" style={gridStyle}>
       {sections.map((section) => (
-        <div key={section.id} data-view={section.id} className="dashboard-desktop-grid__item h-full">
+        <div
+          key={section.id}
+          data-view={section.id}
+          className="dashboard-desktop-grid__item h-full"
+          style={itemStyle}
+        >
           {section.node}
         </div>
       ))}

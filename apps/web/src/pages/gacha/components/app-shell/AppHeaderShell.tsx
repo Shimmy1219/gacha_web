@@ -10,6 +10,10 @@ import { HeaderBrand } from './HeaderBrand';
 import { MobileMenuButton } from './MobileMenuButton';
 import { ResponsiveToolbarRail } from './ResponsiveToolbarRail';
 import { ToolbarActions } from './ToolbarActions';
+import {
+  readSiteZoomScaleFromComputedStyle,
+  resolveUnscaledPixelValue
+} from '../../../../features/theme/siteZoomMath';
 
 export interface AppHeaderShellProps {
   title: string;
@@ -70,10 +74,13 @@ export function AppHeaderShell({
     const root = document.documentElement;
 
     const updateHeaderHeight = () => {
+      const rootStyle = window.getComputedStyle(root);
+      const zoomScale = readSiteZoomScaleFromComputedStyle(rootStyle);
       const { height } = headerEl.getBoundingClientRect();
-      headerHeightRef.current = height;
-      root.style.setProperty('--app-header-height', `${height}px`);
-      const stickyOffset = hiddenStateRef.current ? 0 : height;
+      const unscaledHeight = resolveUnscaledPixelValue(height, zoomScale);
+      headerHeightRef.current = unscaledHeight;
+      root.style.setProperty('--app-header-height', `${unscaledHeight}px`);
+      const stickyOffset = hiddenStateRef.current ? 0 : unscaledHeight;
       root.style.setProperty('--app-sticky-top', `${stickyOffset}px`);
     };
 

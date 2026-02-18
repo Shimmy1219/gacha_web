@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveEffectiveViewportWidth } from '../../../../features/theme/siteZoomMath';
-import { clampWidthsToAvailable, distributeWidths, getBreakpoint } from './DashboardDesktopGrid';
+import {
+  clampWidthsToAvailable,
+  distributeWidths,
+  getBreakpoint,
+  shouldUseViewportHeightForGridItem
+} from './DashboardDesktopGrid';
 
 describe('DashboardDesktopGrid width helpers', () => {
   it('scales minimum widths proportionally when available width is smaller', () => {
@@ -42,5 +47,12 @@ describe('DashboardDesktopGrid width helpers', () => {
 
     expect(normalBreakpoint).toBe('lg');
     expect(zoomedOutBreakpoint).toBe('xl');
+  });
+
+  it('uses viewport-height lock only for 4-column breakpoints', () => {
+    expect(shouldUseViewportHeightForGridItem('base')).toBe(false);
+    expect(shouldUseViewportHeightForGridItem('lg')).toBe(false);
+    expect(shouldUseViewportHeightForGridItem('xl')).toBe(true);
+    expect(shouldUseViewportHeightForGridItem('2xl')).toBe(true);
   });
 });
