@@ -244,27 +244,32 @@
     background-color: rgb(var(--color-accent-bright) / 0.75);
   }
 
-  .page-settings__content-scroll {
+  .page-settings__content-scroll,
+  .page-settings__menu-scroll {
     min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 0.8) transparent;
     scrollbar-gutter: stable;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar {
+  .page-settings__content-scroll::-webkit-scrollbar,
+  .page-settings__menu-scroll::-webkit-scrollbar {
     width: 0.65rem;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-track {
+  .page-settings__content-scroll::-webkit-scrollbar-track,
+  .page-settings__menu-scroll::-webkit-scrollbar-track {
     background: rgb(var(--color-surface-deep) / 0.7);
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb {
     background: rgb(var(--color-accent) / 0.8);
     border-radius: 9999px;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--color-accent) / 1);
   }
 
