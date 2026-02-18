@@ -78,13 +78,13 @@ const DASHBOARD_DESKTOP_LAYOUT_OPTIONS: Array<{
 }> = [
   {
     value: 'grid',
-    label: 'カードグリッド',
+    label: '4カラム表示',
     description: '各セクションを複数列で同時に表示します。従来のデスクトップ表示です。'
   },
   {
     value: 'sidebar',
-    label: 'サイドタブ',
-    description: '左側のタブでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
+    label: 'サイドバー表示',
+    description: '左側のサイドバーでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
   }
 ];
 
@@ -922,12 +922,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               <div className="space-y-1">
                 <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
+                  横幅の広い画面での表示スタイルを切り替えられます。サイドバー表示はノートPCなどの狭い画面でもセクションを順番に確認できます。
                 </p>
               </div>
               {isSidebarLayoutForced ? (
                 <p className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
-                  画面幅が900〜1025pxのため、サイドタブレイアウトが自動的に適用されています。
+                  画面幅が900〜1025pxのため、サイドバーレイアウトが自動的に適用されています。
                 </p>
               ) : null}
               <RadioGroup
@@ -970,7 +970,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                           </RadioGroup.Description>
                           {optionDisabled ? (
                             <p className="text-[11px] text-muted-foreground">
-                              現在の画面幅ではサイドタブのみ利用できます。
+                              現在の画面幅ではサイドバーのみ利用できます。
                             </p>
                           ) : null}
                           {isSidebarLayoutForced && option.value === 'sidebar' ? (
