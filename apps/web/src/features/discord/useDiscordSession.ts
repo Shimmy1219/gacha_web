@@ -9,6 +9,12 @@ import {
   DISCORD_PWA_PENDING_STATE_STORAGE_KEY,
   getDiscordInfoStore
 } from './discordInfoStore';
+import {
+  createCsrfRetryRequestHeaders,
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload
+} from '../csrf/csrfGuards';
 
 export interface DiscordUserProfile {
   id: string;
@@ -517,8 +523,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
     logDiscordAuthEvent('DiscordログアウトAPIを呼び出します', {
       endpoint: '/api/auth/logout'
     });
-    let csrf: string | null = null;
-    try {
+    const issueCsrf = async (): Promise<string> => {
       const csrfResponse = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
         method: 'GET',
         credentials: 'include',
@@ -526,29 +531,64 @@ export function useDiscordSession(): UseDiscordSessionResult {
         headers: { Accept: 'application/json' }
       });
       const csrfPayload = (await csrfResponse.json().catch(() => null)) as { ok?: boolean; token?: string } | null;
-      if (csrfResponse.ok && csrfPayload?.ok && typeof csrfPayload.token === 'string') {
-        csrf = csrfPayload.token;
+      if (!csrfResponse.ok || !csrfPayload?.ok || typeof csrfPayload.token !== 'string' || csrfPayload.token.length === 0) {
+        const reason = csrfResponse.status;
+        throw new Error(`CSRF token issuance failed (status ${reason})`);
       }
-    } catch (error) {
-      logDiscordAuthError('CSRFトークンの発行に失敗しました', error);
-    }
+      return csrfPayload.token;
+    };
 
-    if (!csrf) {
-      logDiscordAuthError('CSRFトークンが取得できなかったためログアウトを中断します', {
-        endpoint: '/api/auth/logout'
+    let csrfToken: string | null = null;
+    let response: Response;
+    try {
+      response = await fetchWithCsrfRetry({
+        fetcher: fetch,
+        getToken: async () => {
+          if (csrfToken) {
+            return csrfToken;
+          }
+          csrfToken = await issueCsrf();
+          return csrfToken;
+        },
+        refreshToken: async () => {
+          csrfToken = await issueCsrf();
+          return csrfToken;
+        },
+        performRequest: async (csrf, currentFetcher, meta) =>
+          currentFetcher('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              ...createCsrfRetryRequestHeaders(meta)
+            },
+            body: JSON.stringify({ csrf })
+          }),
+        maxRetry: 1
       });
+    } catch (error) {
+      logDiscordAuthError('CSRFトークンの発行またはログアウト通信に失敗しました', error);
       return;
     }
 
-    const response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ csrf })
-    });
     if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        errorCode?: string;
+        csrfReason?: string;
+      } | null;
+      const csrfFailure = inspectCsrfFailurePayload(payload);
+      if (csrfFailure.isMismatch) {
+        logDiscordAuthError('DiscordログアウトAPIがCSRF検証で失敗しました', {
+          status: response.status,
+          csrfReason: csrfFailure.reason,
+          guide: getCsrfMismatchGuideMessageJa(csrfFailure.reason)
+        });
+      }
       logDiscordAuthError('DiscordログアウトAPIの呼び出しに失敗しました', {
-        status: response.status
+        status: response.status,
+        error: payload?.error
       });
     } else {
       logDiscordAuthEvent('DiscordログアウトAPIの呼び出しが完了しました', {

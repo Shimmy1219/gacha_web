@@ -28,6 +28,7 @@ interface DiscordCategoriesResponse {
   categories?: DiscordCategorySummary[];
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface DiscordCategoryCreateResponse {
@@ -35,6 +36,7 @@ interface DiscordCategoryCreateResponse {
   category?: DiscordCategorySummary;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface DiscordPrivateChannelCategoryDialogPayload {
@@ -64,7 +66,8 @@ function useDiscordGuildCategories(
         pushDiscordApiWarningByErrorCode(
           push,
           payload?.errorCode,
-          message && message.length > 0 ? message : `カテゴリ情報の取得に失敗しました (${response.status})`
+          message && message.length > 0 ? message : `カテゴリ情報の取得に失敗しました (${response.status})`,
+          { csrfReason: payload?.csrfReason }
         );
         throw new Error(
           message && message.length > 0
@@ -139,7 +142,7 @@ export function DiscordPrivateChannelCategoryDialog({
       const payload = (await response.json().catch(() => null)) as DiscordCategoryCreateResponse | null;
       if (!response.ok || !payload?.ok || !payload.category) {
         const message = payload?.error || 'カテゴリの作成に失敗しました。';
-        if (pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message)) {
+        if (pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message, { csrfReason: payload?.csrfReason })) {
           setCreateError(null);
           return;
         }
@@ -204,11 +207,12 @@ export function DiscordPrivateChannelCategoryDialog({
         created?: boolean;
         error?: string;
         errorCode?: string;
+        csrfReason?: string;
       } | null;
 
       if (!findResponse.ok || !findPayload) {
         const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
           setSubmitError(null);
           return;
         }
@@ -217,7 +221,7 @@ export function DiscordPrivateChannelCategoryDialog({
 
       if (!findPayload.ok) {
         const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
           setSubmitError(null);
           return;
         }

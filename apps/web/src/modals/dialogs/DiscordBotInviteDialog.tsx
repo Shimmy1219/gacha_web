@@ -36,6 +36,7 @@ interface DiscordMembersResponse {
   members?: DiscordGuildMemberSummary[];
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface DiscordGiftChannelsResponse {
@@ -43,6 +44,7 @@ interface DiscordGiftChannelsResponse {
   channels?: unknown;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 function getGuildIconUrl(guild: DiscordGuildSummary): string | undefined {
@@ -156,7 +158,7 @@ export function DiscordBotInviteDialog({
           }
         } else {
           const message = payload?.error || `Discordメンバー一覧の取得に失敗しました (${response.status})`;
-          pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message);
+          pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message, { csrfReason: payload?.csrfReason });
           console.warn('Failed to refresh Discord member cache after guild selection:', message);
         }
       } catch (error) {
@@ -178,7 +180,7 @@ export function DiscordBotInviteDialog({
           mergeDiscordMemberGiftChannels(userId, guild.id, normalizedChannels);
         } else {
           const message = payload?.error || `お渡しチャンネル一覧の取得に失敗しました (${response.status})`;
-          pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message);
+          pushDiscordApiWarningByErrorCode(push, payload?.errorCode, message, { csrfReason: payload?.csrfReason });
           console.warn('Failed to refresh Discord gift channel cache after guild selection:', message);
         }
       } catch (error) {

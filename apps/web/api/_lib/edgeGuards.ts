@@ -1,12 +1,22 @@
 import { getCookies } from './cookies.js';
 import { isAllowedOrigin } from './origin.js';
 
+const CSRF_ERROR_CODE = 'csrf_token_mismatch';
+const CSRF_REASON_COOKIE_MISSING = 'cookie_missing';
+const CSRF_REASON_PROVIDED_MISSING = 'provided_missing';
+const CSRF_REASON_TOKEN_MISMATCH = 'token_mismatch';
+
 type RateLimitConfig = {
   name: string;
   limit: number;
   windowSec?: number;
   identity?: (request: Request) => Promise<string> | string;
 };
+
+type CsrfFailureReason =
+  | typeof CSRF_REASON_COOKIE_MISSING
+  | typeof CSRF_REASON_PROVIDED_MISSING
+  | typeof CSRF_REASON_TOKEN_MISMATCH;
 
 type CsrfConfig = {
   cookieName?: string;
@@ -20,6 +30,39 @@ export type EdgeGuardConfig = {
   csrf?: CsrfConfig;
   rateLimit?: RateLimitConfig;
 };
+
+type CsrfValidationError = Error & {
+  statusCode?: number;
+  errorCode?: string;
+  csrfReason?: CsrfFailureReason;
+  csrfSource?: 'header';
+  csrfRetryable?: boolean;
+};
+
+function parseBooleanHeaderValue(value: string | null): boolean | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true') {
+    return true;
+  }
+  if (normalized === '0' || normalized === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
+function parseIntegerHeaderValue(value: string | null): number | undefined {
+  if (typeof value !== 'string' || value.length === 0) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
 
 function jsonResponse(status: number, body: Record<string, unknown>, init?: ResponseInit): Response {
   const headers = new Headers(init?.headers ?? undefined);
@@ -84,7 +127,7 @@ async function enforceRateLimit(request: Request, config: RateLimitConfig): Prom
   }
 }
 
-function enforceCsrf(request: Request, config: CsrfConfig): Error | null {
+function enforceCsrf(request: Request, config: CsrfConfig): CsrfValidationError | null {
   const cookieName = typeof config.cookieName === 'string' && config.cookieName ? config.cookieName : 'csrf';
   const headerName = typeof config.headerName === 'string' && config.headerName ? config.headerName : 'x-csrf-token';
 
@@ -92,12 +135,54 @@ function enforceCsrf(request: Request, config: CsrfConfig): Error | null {
   const cookieValue = typeof (cookies as any)?.[cookieName] === 'string' ? (cookies as any)[cookieName] : '';
   const headerValue = request.headers.get(headerName) || request.headers.get(headerName.toLowerCase()) || '';
 
-  if (!cookieValue || !headerValue || cookieValue !== headerValue) {
+  const csrfReason: CsrfFailureReason | '' =
+    !cookieValue
+      ? CSRF_REASON_COOKIE_MISSING
+      : !headerValue
+        ? CSRF_REASON_PROVIDED_MISSING
+        : cookieValue !== headerValue
+          ? CSRF_REASON_TOKEN_MISMATCH
+          : '';
+
+  if (csrfReason) {
     const err = new Error('Forbidden: invalid CSRF token');
-    (err as Error & { statusCode?: number }).statusCode = 403;
-    return err;
+    const out = err as CsrfValidationError;
+    out.statusCode = 403;
+    out.errorCode = CSRF_ERROR_CODE;
+    out.csrfReason = csrfReason;
+    out.csrfSource = 'header';
+    out.csrfRetryable = csrfReason !== CSRF_REASON_PROVIDED_MISSING;
+    return out;
   }
   return null;
+}
+
+function logCsrfMismatch(route: string | undefined, request: Request, error: CsrfValidationError): void {
+  const routeLabel = typeof route === 'string' && route.length > 0 ? route.replace(/^\/+/u, '') : 'api';
+  const csrfRetryEnabled = parseBooleanHeaderValue(request.headers.get('x-csrf-retry-enabled'));
+  const csrfRetryAttempt = parseIntegerHeaderValue(request.headers.get('x-csrf-retry-attempt'));
+  const csrfAutoRetryPrompted =
+    csrfRetryEnabled === true && csrfRetryAttempt === 0 && error.csrfRetryable === true;
+  console.warn(`[${routeLabel}] 【既知のエラー】csrf mismatch`, {
+    method: request.method,
+    url: request.url,
+    csrfReason: error.csrfReason,
+    csrfSource: error.csrfSource,
+    csrfRetryEnabled,
+    csrfRetryAttempt,
+    csrfAutoRetryPrompted,
+  });
+}
+
+function toCsrfResponse(error: CsrfValidationError): Record<string, unknown> {
+  return {
+    ok: false,
+    error: error.message,
+    errorCode: typeof error.errorCode === 'string' ? error.errorCode : undefined,
+    csrfReason: typeof error.csrfReason === 'string' ? error.csrfReason : undefined,
+    csrfSource: typeof error.csrfSource === 'string' ? error.csrfSource : undefined,
+    csrfRetryable: typeof error.csrfRetryable === 'boolean' ? error.csrfRetryable : undefined,
+  };
 }
 
 export function withEdgeGuards(config: EdgeGuardConfig) {
@@ -119,7 +204,10 @@ export function withEdgeGuards(config: EdgeGuardConfig) {
       if (config.csrf) {
         const err = enforceCsrf(request, config.csrf);
         if (err) {
-          return jsonResponse((err as any).statusCode || 403, { ok: false, error: err.message });
+          if (err.errorCode === CSRF_ERROR_CODE) {
+            logCsrfMismatch(config.route, request, err);
+          }
+          return jsonResponse(err.statusCode || 403, toCsrfResponse(err));
         }
       }
 
@@ -135,4 +223,3 @@ export function withEdgeGuards(config: EdgeGuardConfig) {
       return handler(request);
     };
 }
-

@@ -1,4 +1,11 @@
 import { useCallback, useRef } from 'react';
+import {
+  createCsrfRetryRequestHeaders,
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload,
+  type CsrfFailureInspection
+} from '../csrf/csrfGuards';
 
 export class TransferApiError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -25,34 +32,67 @@ interface CsrfResponsePayload {
   token?: string;
 }
 
-interface TransferCreateResponse {
+interface TransferApiResponseBase {
+  error?: string;
+  errorCode?: string;
+  csrfReason?: string;
+  csrfRetryable?: boolean;
+}
+
+interface TransferCreateResponse extends TransferApiResponseBase {
   ok?: boolean;
   code?: string;
   token?: string;
   pathname?: string;
   uploadTokenExpiresAt?: string;
   expiresAt?: string;
-  error?: string;
 }
 
-interface TransferCompleteResponse {
+interface TransferCompleteResponse extends TransferApiResponseBase {
   ok?: boolean;
   expiresAt?: string;
-  error?: string;
 }
 
-interface TransferResolveResponse {
+interface TransferResolveResponse extends TransferApiResponseBase {
   ok?: boolean;
   downloadUrl?: string;
   createdAt?: string;
   expiresAt?: string;
-  error?: string;
 }
 
-interface TransferConsumeResponse {
+interface TransferConsumeResponse extends TransferApiResponseBase {
   ok?: boolean;
   deleted?: boolean;
-  error?: string;
+}
+
+interface PostJsonWithCsrfOptions {
+  url: string;
+  buildBody: (csrf: string) => Record<string, unknown>;
+}
+
+function resolveCsrfMismatchFailure(payload?: unknown, message?: unknown): CsrfFailureInspection | null {
+  const inspection = inspectCsrfFailurePayload(payload);
+  if (inspection.isMismatch) {
+    return inspection;
+  }
+  if (typeof message !== 'string' || !/csrf/i.test(message)) {
+    return null;
+  }
+  return {
+    isMismatch: true,
+    reason: null,
+    source: null,
+    retryable: true,
+    message
+  };
+}
+
+function buildTransferFailureMessage(context: string, reason: string, payload?: unknown): string {
+  const csrfFailure = resolveCsrfMismatchFailure(payload, reason);
+  if (!csrfFailure) {
+    return `${context} (${reason})`;
+  }
+  return `${context} (${reason})\n\n${getCsrfMismatchGuideMessageJa(csrfFailure.reason)}`;
 }
 
 async function requestCsrf(fetcher: typeof fetch): Promise<string> {
@@ -80,33 +120,6 @@ async function requestCsrf(fetcher: typeof fetch): Promise<string> {
   return payload.token;
 }
 
-async function postJson<T>(
-  fetcher: typeof fetch,
-  url: string,
-  body: Record<string, unknown>
-): Promise<{ response: Response; payload: T }> {
-  let response: Response;
-  try {
-    response = await fetcher(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body)
-    });
-  } catch (error) {
-    throw new TransferApiError('通信に失敗しました (network error)', { cause: error });
-  }
-
-  let payload: T;
-  try {
-    payload = (await response.json()) as T;
-  } catch (error) {
-    throw new TransferApiError('通信に失敗しました (invalid json)', { cause: error });
-  }
-
-  return { response, payload };
-}
-
 export function useTransferApi(): {
   createTransfer: (args: { pin: string }) => Promise<{ code: string; token: string; pathname: string; expiresAt?: string }>;
   completeTransfer: (args: { code: string; pathname: string; url: string; downloadUrl?: string }) => Promise<void>;
@@ -127,55 +140,111 @@ export function useTransferApi(): {
     return token;
   }, []);
 
-  const createTransfer = useCallback(async (args: { pin: string }) => {
-    const csrf = await ensureCsrfToken();
-    const { response, payload } = await postJson<TransferCreateResponse>(fetch, TRANSFER_CREATE_ENDPOINT, {
-      csrf,
-      pin: args.pin
-    });
-    if (!response.ok || !payload?.ok || !payload.code || !payload.token || !payload.pathname) {
-      const reason = payload?.error ?? `status ${response.status}`;
-      throw new TransferApiError(`引継ぎコードの発行に失敗しました (${reason})`);
+  const refreshCsrfToken = useCallback(async () => {
+    csrfRef.current = null;
+    if (typeof fetch === 'undefined') {
+      throw new TransferApiError('ブラウザ環境でのみ引継ぎ機能を利用できます');
     }
-    return {
-      code: payload.code,
-      token: payload.token,
-      pathname: payload.pathname,
-      expiresAt: payload.expiresAt
-    };
-  }, [ensureCsrfToken]);
+    const token = await requestCsrf(fetch);
+    csrfRef.current = token;
+    return token;
+  }, []);
+
+  const postJsonWithCsrf = useCallback(
+    async <T>(options: PostJsonWithCsrfOptions): Promise<{ response: Response; payload: T }> => {
+      if (typeof fetch === 'undefined') {
+        throw new TransferApiError('ブラウザ環境でのみ引継ぎ機能を利用できます');
+      }
+
+      let response: Response;
+      try {
+        response = await fetchWithCsrfRetry({
+          fetcher: fetch,
+          getToken: async () => ensureCsrfToken(),
+          refreshToken: async () => refreshCsrfToken(),
+          performRequest: async (csrf, currentFetcher, meta) =>
+            currentFetcher(options.url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...createCsrfRetryRequestHeaders(meta)
+              },
+              credentials: 'include',
+              body: JSON.stringify(options.buildBody(csrf))
+            }),
+          maxRetry: 1
+        });
+      } catch (error) {
+        throw new TransferApiError('通信に失敗しました (network error)', { cause: error });
+      }
+
+      let payload: T;
+      try {
+        payload = (await response.json()) as T;
+      } catch (error) {
+        throw new TransferApiError('通信に失敗しました (invalid json)', { cause: error });
+      }
+
+      return { response, payload };
+    },
+    [ensureCsrfToken, refreshCsrfToken]
+  );
+
+  const createTransfer = useCallback(
+    async (args: { pin: string }) => {
+      const { response, payload } = await postJsonWithCsrf<TransferCreateResponse>({
+        url: TRANSFER_CREATE_ENDPOINT,
+        buildBody: (csrf) => ({ csrf, pin: args.pin })
+      });
+      if (!response.ok || !payload?.ok || !payload.code || !payload.token || !payload.pathname) {
+        const reason = payload?.error ?? `status ${response.status}`;
+        throw new TransferApiError(buildTransferFailureMessage('引継ぎコードの発行に失敗しました', reason, payload));
+      }
+      return {
+        code: payload.code,
+        token: payload.token,
+        pathname: payload.pathname,
+        expiresAt: payload.expiresAt
+      };
+    },
+    [postJsonWithCsrf]
+  );
 
   const completeTransfer = useCallback(
     async (args: { code: string; pathname: string; url: string; downloadUrl?: string }) => {
-      const csrf = await ensureCsrfToken();
-      const { response, payload } = await postJson<TransferCompleteResponse>(fetch, TRANSFER_COMPLETE_ENDPOINT, {
-        csrf,
-        code: args.code,
-        pathname: args.pathname,
-        url: args.url,
-        downloadUrl: args.downloadUrl
+      const { response, payload } = await postJsonWithCsrf<TransferCompleteResponse>({
+        url: TRANSFER_COMPLETE_ENDPOINT,
+        buildBody: (csrf) => ({
+          csrf,
+          code: args.code,
+          pathname: args.pathname,
+          url: args.url,
+          downloadUrl: args.downloadUrl
+        })
       });
 
       if (!response.ok || !payload?.ok) {
         const reason = payload?.error ?? `status ${response.status}`;
-        throw new TransferApiError(`引継ぎデータの登録に失敗しました (${reason})`);
+        throw new TransferApiError(buildTransferFailureMessage('引継ぎデータの登録に失敗しました', reason, payload));
       }
     },
-    [ensureCsrfToken]
+    [postJsonWithCsrf]
   );
 
   const resolveTransfer = useCallback(
     async (args: { code: string; pin: string }) => {
-      const csrf = await ensureCsrfToken();
-      const { response, payload } = await postJson<TransferResolveResponse>(fetch, TRANSFER_RESOLVE_ENDPOINT, {
-        csrf,
-        code: args.code,
-        pin: args.pin
+      const { response, payload } = await postJsonWithCsrf<TransferResolveResponse>({
+        url: TRANSFER_RESOLVE_ENDPOINT,
+        buildBody: (csrf) => ({
+          csrf,
+          code: args.code,
+          pin: args.pin
+        })
       });
 
       if (!response.ok || !payload?.ok || !payload.downloadUrl) {
         const reason = payload?.error ?? `status ${response.status}`;
-        throw new TransferApiError(`引継ぎデータの取得に失敗しました (${reason})`);
+        throw new TransferApiError(buildTransferFailureMessage('引継ぎデータの取得に失敗しました', reason, payload));
       }
 
       return {
@@ -184,25 +253,27 @@ export function useTransferApi(): {
         expiresAt: payload.expiresAt
       };
     },
-    [ensureCsrfToken]
+    [postJsonWithCsrf]
   );
 
   const consumeTransfer = useCallback(
     async (args: { code: string }) => {
-      const csrf = await ensureCsrfToken();
-      const { response, payload } = await postJson<TransferConsumeResponse>(fetch, TRANSFER_CONSUME_ENDPOINT, {
-        csrf,
-        code: args.code
+      const { response, payload } = await postJsonWithCsrf<TransferConsumeResponse>({
+        url: TRANSFER_CONSUME_ENDPOINT,
+        buildBody: (csrf) => ({
+          csrf,
+          code: args.code
+        })
       });
 
       if (!response.ok || !payload?.ok) {
         const reason = payload?.error ?? `status ${response.status}`;
-        throw new TransferApiError(`引継ぎデータの削除に失敗しました (${reason})`);
+        throw new TransferApiError(buildTransferFailureMessage('引継ぎデータの削除に失敗しました', reason, payload));
       }
 
       return { deleted: payload.deleted === true };
     },
-    [ensureCsrfToken]
+    [postJsonWithCsrf]
   );
 
   return { createTransfer, completeTransfer, resolveTransfer, consumeTransfer };

@@ -1,5 +1,13 @@
 import { useCallback, useRef } from 'react';
 import { put } from '@vercel/blob/client';
+import {
+  API_ERROR_CODE_CSRF_TOKEN_MISMATCH,
+  createCsrfRetryRequestHeaders,
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload,
+  type CsrfFailureInspection
+} from '../csrf/csrfGuards';
 
 export interface UploadZipArgs {
   file: Blob;
@@ -18,14 +26,15 @@ export interface UploadZipResult {
   pathname?: string;
 }
 
-export const BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch' as const;
+export const BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH = API_ERROR_CODE_CSRF_TOKEN_MISMATCH;
 
 export type BlobUploadErrorCode = typeof BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH;
 
 export class BlobUploadError extends Error {
   code?: BlobUploadErrorCode;
+  csrfReason?: string;
 
-  constructor(message: string, options?: { cause?: unknown; code?: BlobUploadErrorCode }) {
+  constructor(message: string, options?: { cause?: unknown; code?: BlobUploadErrorCode; csrfReason?: string }) {
     super(message);
     if (options?.cause) {
       try {
@@ -36,6 +45,9 @@ export class BlobUploadError extends Error {
     }
     if (typeof options?.code === 'string') {
       this.code = options.code;
+    }
+    if (typeof options?.csrfReason === 'string') {
+      this.csrfReason = options.csrfReason;
     }
     this.name = 'BlobUploadError';
   }
@@ -53,6 +65,8 @@ interface ReceiveTokenResponse {
   exp?: number | string;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
+  csrfRetryable?: boolean;
 }
 
 interface PrepareUploadResponsePayload {
@@ -63,10 +77,11 @@ interface PrepareUploadResponsePayload {
   expiresAt?: string;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
+  csrfRetryable?: boolean;
 }
 
 interface PrepareUploadArgs {
-  csrf: string;
   userId: string;
   fileName: string;
   purpose: string;
@@ -75,20 +90,44 @@ interface PrepareUploadArgs {
   receiverName?: string;
 }
 
+interface CsrfTokenProvider {
+  getCsrfToken: () => Promise<string>;
+  refreshCsrfToken: () => Promise<string>;
+}
+
 const CSRF_ENDPOINT = '/api/blob/csrf';
 const UPLOAD_ENDPOINT = '/api/blob/upload';
 const RECEIVE_TOKEN_ENDPOINT = '/api/receive/token';
 const DEFAULT_PURPOSE = 'zips';
 
-function isCsrfTokenMismatchResponse(errorCode?: unknown, message?: unknown): boolean {
-  if (errorCode === BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH) {
-    return true;
+function resolveCsrfMismatchFailure(payload?: unknown, message?: unknown): CsrfFailureInspection | null {
+  const inspection = inspectCsrfFailurePayload(payload);
+  if (inspection.isMismatch) {
+    return inspection;
   }
   if (typeof message !== 'string') {
-    return false;
+    return null;
   }
   const normalized = message.toLowerCase();
-  return normalized.includes('csrf token mismatch') || normalized.includes('invalid csrf token');
+  if (normalized.includes('csrf token mismatch') || normalized.includes('invalid csrf token')) {
+    return {
+      isMismatch: true,
+      reason: null,
+      source: null,
+      retryable: true,
+      message,
+    };
+  }
+  return null;
+}
+
+function buildCsrfMismatchErrorMessage(context: string, reason: string, payload?: unknown): string {
+  const inspection = resolveCsrfMismatchFailure(payload, reason);
+  if (!inspection) {
+    return `${context} (${reason})`;
+  }
+  const guide = getCsrfMismatchGuideMessageJa(inspection.reason);
+  return `${context} (${reason})\n\n${guide}`;
 }
 
 export function isBlobUploadCsrfTokenMismatchError(error: unknown): boolean {
@@ -96,9 +135,16 @@ export function isBlobUploadCsrfTokenMismatchError(error: unknown): boolean {
     return true;
   }
   if (error instanceof Error) {
-    return isCsrfTokenMismatchResponse(undefined, error.message);
+    return Boolean(resolveCsrfMismatchFailure(undefined, error.message));
   }
   return false;
+}
+
+export function extractBlobUploadCsrfFailureReason(error: unknown): string | undefined {
+  if (error instanceof BlobUploadError && typeof error.csrfReason === 'string' && error.csrfReason.length > 0) {
+    return error.csrfReason;
+  }
+  return undefined;
 }
 
 function ensureZipFileName(fileName: string): void {
@@ -159,20 +205,30 @@ async function requestCsrf(fetcher: typeof fetch): Promise<string> {
 
 async function issueReceiveShareUrl(
   fetcher: typeof fetch,
-  args: { csrf: string; downloadUrl: string; fileName: string }
+  args: { downloadUrl: string; fileName: string } & CsrfTokenProvider
 ): Promise<{ shareUrl: string; token: string; expiresAt?: string }> {
   let response: Response;
   try {
-    response = await fetcher(RECEIVE_TOKEN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        url: args.downloadUrl,
-        name: args.fileName,
-        purpose: DEFAULT_PURPOSE,
-        csrf: args.csrf
-      })
+    response = await fetchWithCsrfRetry({
+      fetcher,
+      getToken: async () => args.getCsrfToken(),
+      refreshToken: async () => args.refreshCsrfToken(),
+      performRequest: async (csrf, currentFetcher, meta) =>
+        currentFetcher(RECEIVE_TOKEN_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...createCsrfRetryRequestHeaders(meta)
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            url: args.downloadUrl,
+            name: args.fileName,
+            purpose: DEFAULT_PURPOSE,
+            csrf
+          })
+        }),
+      maxRetry: 1
     });
   } catch (error) {
     throw new BlobUploadError('共有リンクの発行に失敗しました (network error)', { cause: error });
@@ -187,9 +243,11 @@ async function issueReceiveShareUrl(
 
   if (!response.ok || !payload?.ok || !payload.shareUrl || !payload.token) {
     const reason = payload?.error ?? `status ${response.status}`;
-    if (isCsrfTokenMismatchResponse(payload?.errorCode, reason)) {
-      throw new BlobUploadError(`共有リンクの発行に失敗しました (${reason})`, {
-        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH
+    const csrfFailure = resolveCsrfMismatchFailure(payload, reason);
+    if (csrfFailure) {
+      throw new BlobUploadError(buildCsrfMismatchErrorMessage('共有リンクの発行に失敗しました', reason, payload), {
+        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH,
+        csrfReason: csrfFailure.reason ?? undefined
       });
     }
     throw new BlobUploadError(`共有リンクの発行に失敗しました (${reason})`);
@@ -204,24 +262,34 @@ async function issueReceiveShareUrl(
 
 async function requestUploadAuthorization(
   fetcher: typeof fetch,
-  args: PrepareUploadArgs
+  args: PrepareUploadArgs & CsrfTokenProvider
 ): Promise<{ token: string; pathname: string; fileName?: string }> {
   let response: Response;
   try {
-    response = await fetcher(UPLOAD_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        action: 'prepare-upload',
-        csrf: args.csrf,
-        userId: args.userId,
-        fileName: args.fileName,
-        purpose: args.purpose,
-        ownerDiscordId: args.ownerDiscordId,
-        ownerDiscordName: args.ownerDiscordName,
-        receiverName: args.receiverName
-      })
+    response = await fetchWithCsrfRetry({
+      fetcher,
+      getToken: async () => args.getCsrfToken(),
+      refreshToken: async () => args.refreshCsrfToken(),
+      performRequest: async (csrf, currentFetcher, meta) =>
+        currentFetcher(UPLOAD_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...createCsrfRetryRequestHeaders(meta)
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            action: 'prepare-upload',
+            csrf,
+            userId: args.userId,
+            fileName: args.fileName,
+            purpose: args.purpose,
+            ownerDiscordId: args.ownerDiscordId,
+            ownerDiscordName: args.ownerDiscordName,
+            receiverName: args.receiverName
+          })
+        }),
+      maxRetry: 1
     });
   } catch (error) {
     throw new BlobUploadError('アップロードポリシーの取得に失敗しました (network error)', { cause: error });
@@ -236,9 +304,11 @@ async function requestUploadAuthorization(
 
   if (!response.ok || !payload?.ok || !payload.token || !payload.pathname) {
     const reason = payload?.error ?? `status ${response.status}`;
-    if (isCsrfTokenMismatchResponse(payload?.errorCode, reason)) {
-      throw new BlobUploadError(`アップロードポリシーの取得に失敗しました (${reason})`, {
-        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH
+    const csrfFailure = resolveCsrfMismatchFailure(payload, reason);
+    if (csrfFailure) {
+      throw new BlobUploadError(buildCsrfMismatchErrorMessage('アップロードポリシーの取得に失敗しました', reason, payload), {
+        code: BLOB_UPLOAD_ERROR_CODE_CSRF_TOKEN_MISMATCH,
+        csrfReason: csrfFailure.reason ?? undefined
       });
     }
     throw new BlobUploadError(`アップロードポリシーの取得に失敗しました (${reason})`);
@@ -266,6 +336,16 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
     return token;
   }, []);
 
+  const refreshCsrfToken = useCallback(async () => {
+    csrfRef.current = null;
+    if (typeof fetch === 'undefined') {
+      throw new BlobUploadError('ブラウザ環境でのみアップロードを実行できます');
+    }
+    const token = await requestCsrf(fetch);
+    csrfRef.current = token;
+    return token;
+  }, []);
+
   const uploadZip = useCallback(async (args: UploadZipArgs): Promise<UploadZipResult> => {
     if (typeof window === 'undefined') {
       throw new BlobUploadError('ブラウザ環境でのみアップロードを実行できます');
@@ -277,20 +357,19 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
 
     ensureZipFileName(args.fileName);
 
-    const csrf = await ensureCsrfToken();
-
     const ownerDiscordId = normalizeOptionalString(args.ownerDiscordId ?? undefined);
     const ownerDiscordName = normalizeOptionalString(args.ownerDiscordName ?? undefined);
     const receiverName = normalizeOptionalString(args.receiverName);
 
     const uploadIntent = await requestUploadAuthorization(fetch, {
-      csrf,
       userId: args.userId,
       fileName: args.fileName,
       purpose: DEFAULT_PURPOSE,
       ownerDiscordId,
       ownerDiscordName,
-      receiverName
+      receiverName,
+      getCsrfToken: ensureCsrfToken,
+      refreshCsrfToken
     });
 
     let uploadResult;
@@ -314,9 +393,10 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
     }
 
     const { shareUrl, token, expiresAt } = await issueReceiveShareUrl(fetch, {
-      csrf,
       downloadUrl,
-      fileName: args.fileName
+      fileName: args.fileName,
+      getCsrfToken: ensureCsrfToken,
+      refreshCsrfToken
     });
 
     return {
@@ -326,7 +406,7 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
       expiresAt,
       pathname: uploadResult.pathname
     };
-  }, [ensureCsrfToken]);
+  }, [ensureCsrfToken, refreshCsrfToken]);
 
   return { uploadZip };
 }

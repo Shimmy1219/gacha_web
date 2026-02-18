@@ -1,9 +1,12 @@
 import type { ModalComponentProps } from '../../ModalTypes';
 import { WarningDialog } from '../WarningDialog';
+import {
+  API_ERROR_CODE_CSRF_TOKEN_MISMATCH,
+  getCsrfMismatchGuideMessageJa
+} from '../../../features/csrf/csrfGuards';
 
 export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild' as const;
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions' as const;
-export const API_ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch' as const;
 
 export function isDiscordUnknownGuildErrorCode(value: unknown): boolean {
   return value === DISCORD_API_ERROR_CODE_UNKNOWN_GUILD;
@@ -20,8 +23,6 @@ export function isCsrfTokenMismatchErrorCode(value: unknown): boolean {
 export const DISCORD_UNKNOWN_GUILD_FALLBACK_MESSAGE =
   '選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。';
 export const DISCORD_MISSING_PERMISSIONS_FALLBACK_MESSAGE = 'Discord botの権限が不足しています。';
-export const CSRF_TOKEN_MISMATCH_GUIDE_MESSAGE_JA =
-  'エラー名: CSRFトークン不一致 (csrf_token_mismatch)\n\n対処法:\n1. ブラウザがプライベートモードになっていないか確認してください。\n2. 複数タブで同時に操作している場合は、不要なタブを閉じて1タブで操作してください。\n3. ページを再読み込みして、もう一度お試しください。\n4. それでも解決しない場合は、@shiyuragacha のDMまでご相談ください。';
 
 export function pushDiscordUnknownGuildWarning(
   push: ModalComponentProps['push'],
@@ -65,7 +66,8 @@ export function pushDiscordMissingPermissionsWarning(
 
 export function pushCsrfTokenMismatchWarning(
   push: ModalComponentProps['push'],
-  message?: unknown
+  message?: unknown,
+  reason?: unknown
 ): void {
   const detail =
     typeof message === 'string' && message.trim().length > 0
@@ -77,7 +79,7 @@ export function pushCsrfTokenMismatchWarning(
     title: 'セキュリティ検証に失敗しました',
     intent: 'warning',
     payload: {
-      message: `${CSRF_TOKEN_MISMATCH_GUIDE_MESSAGE_JA}${detail}`,
+      message: `${getCsrfMismatchGuideMessageJa(reason)}${detail}`,
       confirmLabel: '閉じる'
     }
   });
@@ -86,7 +88,8 @@ export function pushCsrfTokenMismatchWarning(
 export function pushDiscordApiWarningByErrorCode(
   push: ModalComponentProps['push'],
   errorCode: unknown,
-  message: unknown
+  message: unknown,
+  options?: { csrfReason?: unknown }
 ): boolean {
   if (isDiscordUnknownGuildErrorCode(errorCode)) {
     pushDiscordUnknownGuildWarning(push, message);
@@ -97,7 +100,7 @@ export function pushDiscordApiWarningByErrorCode(
     return true;
   }
   if (isCsrfTokenMismatchErrorCode(errorCode)) {
-    pushCsrfTokenMismatchWarning(push, message);
+    pushCsrfTokenMismatchWarning(push, message, options?.csrfReason);
     return true;
   }
   return false;

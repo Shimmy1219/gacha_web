@@ -19,7 +19,11 @@ import { useShareHandler } from '../../hooks/useShare';
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
-import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
+import {
+  extractBlobUploadCsrfFailureReason,
+  isBlobUploadCsrfTokenMismatchError,
+  useBlobUpload
+} from '../../features/save/useBlobUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -1436,7 +1440,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         setDiscordDeliveryCompleted(true);
       } catch (error) {
         if (isBlobUploadCsrfTokenMismatchError(error)) {
-          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          pushCsrfTokenMismatchWarning(
+            push,
+            error instanceof Error ? error.message : undefined,
+            extractBlobUploadCsrfFailureReason(error)
+          );
         }
         const message =
           error instanceof DiscordGuildSelectionMissingError
