@@ -92,7 +92,7 @@ export function GachaSplashScreen({
       <div className="pointer-events-none absolute -bottom-40 left-1/2 -z-20 h-72 w-72 -translate-x-1/2 rounded-full bg-surface-deep/30 blur-3xl" aria-hidden="true" />
       <div className="gacha-splash__intro max-w-2xl space-y-4">
         <h1 className="text-3xl font-bold tracking-tight text-surface-foreground sm:text-4xl">
-          最初のガチャを作成しよう！
+          最初のガチャを作成
         </h1>
         <p className="text-base leading-relaxed text-muted-foreground">
           ようこそ四遊楽ガチャへ
