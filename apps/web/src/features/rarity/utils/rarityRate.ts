@@ -1,6 +1,6 @@
 import { clampRate } from '../../../logic/rarityTable';
 
-export const MAX_RATE_FRACTION_DIGITS = 12;
+export const MAX_RATE_FRACTION_DIGITS = 13;
 export const MAX_PERCENT_FRACTION_DIGITS = 10;
 
 const ELLIPSIS = '...';
