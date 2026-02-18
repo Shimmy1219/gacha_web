@@ -1308,7 +1308,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
       }}
     >
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
+      <div className="flex flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
           className={clsx(
             'm-2 w-[calc(100%-1rem)] shrink-0 p-2 lg:m-0 lg:w-full lg:p-0',
@@ -1354,10 +1354,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         </nav>
         <div
           className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
+            'page-settings__content-scroll flex-1 max-h-full min-h-0 rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
             isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
           )}
-          style={{ maxHeight: viewportLimit ?? undefined }}
         >
           {!isLargeLayout ? (
             <div className="mb-4 flex items-center lg:hidden">
