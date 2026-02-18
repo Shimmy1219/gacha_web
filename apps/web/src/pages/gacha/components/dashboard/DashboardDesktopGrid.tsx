@@ -10,6 +10,11 @@ import {
 } from 'react';
 
 import type { DashboardSectionConfig } from './DashboardShell';
+import {
+  readSiteZoomScaleFromComputedStyle,
+  resolveEffectiveViewportWidth,
+  SITE_ZOOM_CHANGE_EVENT
+} from '../../../../features/theme/siteZoomMath';
 
 interface DashboardDesktopGridProps {
   sections: DashboardSectionConfig[];
@@ -45,7 +50,7 @@ interface DragState {
   minWidths: number[];
 }
 
-function getBreakpoint(width: number): Breakpoint {
+export function getBreakpoint(width: number): Breakpoint {
   if (width >= 1536) {
     return '2xl';
   }
@@ -175,14 +180,20 @@ export function DashboardDesktopGrid({ sections }: DashboardDesktopGridProps): J
     if (typeof window === 'undefined') {
       return;
     }
-    const handleResize = () => {
-      setBreakpoint(getBreakpoint(window.innerWidth));
+
+    const updateBreakpoint = () => {
+      const rootStyle = window.getComputedStyle(window.document.documentElement);
+      const zoomScale = readSiteZoomScaleFromComputedStyle(rootStyle);
+      const effectiveViewportWidth = resolveEffectiveViewportWidth(window.innerWidth, zoomScale);
+      setBreakpoint(getBreakpoint(effectiveViewportWidth));
     };
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
+    updateBreakpoint();
+    window.addEventListener('resize', updateBreakpoint);
+    window.addEventListener(SITE_ZOOM_CHANGE_EVENT, updateBreakpoint as EventListener);
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', updateBreakpoint);
+      window.removeEventListener(SITE_ZOOM_CHANGE_EVENT, updateBreakpoint as EventListener);
     };
   }, []);
 

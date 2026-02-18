@@ -28,6 +28,7 @@
   --background-gradient-1: rgba(0, 0, 0, 0);
   --background-gradient-2: rgba(0, 0, 0, 0);
   --site-zoom-scale: 1;
+  --site-zoom-inverse-scale: 1;
   --site-zoom-percent: 100;
 }
 
@@ -131,7 +132,13 @@
 
 @layer components {
   .section-container {
-    max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
+    max-height: max(
+      0px,
+      calc(
+        (100vh * var(--site-zoom-inverse-scale, 1)) - var(--app-header-height, 0px) -
+          var(--app-main-vertical-padding, 0px)
+      )
+    );
   }
 
   .section-container--mobile {

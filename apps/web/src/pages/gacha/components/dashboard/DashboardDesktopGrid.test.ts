@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { clampWidthsToAvailable, distributeWidths } from './DashboardDesktopGrid';
+import { resolveEffectiveViewportWidth } from '../../../../features/theme/siteZoomMath';
+import { clampWidthsToAvailable, distributeWidths, getBreakpoint } from './DashboardDesktopGrid';
 
 describe('DashboardDesktopGrid width helpers', () => {
   it('scales minimum widths proportionally when available width is smaller', () => {
@@ -32,5 +33,14 @@ describe('DashboardDesktopGrid width helpers', () => {
     clamped.forEach((value, index) => {
       expect(value).toBeCloseTo(widths[index] * expectedScale, 5);
     });
+  });
+
+  it('switches from lg to xl breakpoint when zoom-out increases effective viewport width', () => {
+    const layoutViewportWidth = 1180;
+    const normalBreakpoint = getBreakpoint(resolveEffectiveViewportWidth(layoutViewportWidth, 1));
+    const zoomedOutBreakpoint = getBreakpoint(resolveEffectiveViewportWidth(layoutViewportWidth, 0.8));
+
+    expect(normalBreakpoint).toBe('lg');
+    expect(zoomedOutBreakpoint).toBe('xl');
   });
 });

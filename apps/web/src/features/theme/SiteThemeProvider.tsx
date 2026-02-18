@@ -18,6 +18,7 @@ import {
 } from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
+import { normalizeSiteZoomScale, SITE_ZOOM_CHANGE_EVENT } from './siteZoomMath';
 
 type ThemeRole = 'main' | 'accent' | 'text';
 
@@ -245,12 +246,10 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
 }
 
 function normalizeSiteZoomPercent(raw: unknown): number {
-  const numeric = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+  const rounded = Math.round(normalizeSiteZoomScale(raw) * 100);
+  if (!Number.isFinite(rounded) || Number.isNaN(rounded)) {
     return DEFAULT_SITE_ZOOM_PERCENT;
   }
-
-  const rounded = Math.round(numeric);
   return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
 }
 
@@ -267,15 +266,23 @@ function applyDocumentZoom(percent: number): void {
 
   root.style.setProperty('--site-zoom-percent', String(normalized));
   root.style.setProperty('--site-zoom-scale', String(scale));
+  root.style.setProperty('--site-zoom-inverse-scale', String(1 / scale));
 
   if (supportsCssZoom) {
     root.dataset.siteZoomMode = 'native';
     root.style.setProperty('zoom', String(scale));
-    return;
+  } else {
+    root.dataset.siteZoomMode = 'transform';
+    root.style.removeProperty('zoom');
   }
 
-  root.dataset.siteZoomMode = 'transform';
-  root.style.removeProperty('zoom');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(SITE_ZOOM_CHANGE_EVENT, {
+        detail: { percent: normalized, scale }
+      })
+    );
+  }
 }
 
 export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element {
