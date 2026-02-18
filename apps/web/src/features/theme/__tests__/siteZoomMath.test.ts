@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  isSiteZoomDisabledByMediaQuery,
   normalizeSiteZoomPercent,
   normalizeSiteZoomScale,
   readSiteZoomScaleFromComputedStyle,
+  resolveAppliedSiteZoomPercent,
   resolveEffectiveViewportWidth,
   resolveUnscaledPixelValue
 } from '../siteZoomMath';
@@ -20,6 +22,20 @@ describe('siteZoomMath', () => {
     expect(normalizeSiteZoomPercent('75')).toBe(75);
     expect(normalizeSiteZoomPercent(49)).toBe(50);
     expect(normalizeSiteZoomPercent(101)).toBe(100);
+  });
+
+  it('resolves applied site zoom percent to 100 when zoom is disabled', () => {
+    expect(resolveAppliedSiteZoomPercent(75, false)).toBe(75);
+    expect(resolveAppliedSiteZoomPercent(75, true)).toBe(100);
+  });
+
+  it('detects whether site zoom should be disabled by media query', () => {
+    const matchMediaEnabled = () => ({ matches: false });
+    const matchMediaDisabled = () => ({ matches: true });
+
+    expect(isSiteZoomDisabledByMediaQuery(undefined)).toBe(false);
+    expect(isSiteZoomDisabledByMediaQuery(matchMediaEnabled)).toBe(false);
+    expect(isSiteZoomDisabledByMediaQuery(matchMediaDisabled)).toBe(true);
   });
 
   it('reads zoom scale from computed style text', () => {

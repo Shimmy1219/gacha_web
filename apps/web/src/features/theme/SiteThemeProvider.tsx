@@ -15,7 +15,12 @@ import {
 } from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
-import { normalizeSiteZoomPercent, SITE_ZOOM_CHANGE_EVENT } from './siteZoomMath';
+import {
+  isSiteZoomDisabledByMediaQuery,
+  resolveAppliedSiteZoomPercent,
+  SITE_ZOOM_CHANGE_EVENT,
+  SITE_ZOOM_DISABLED_MEDIA_QUERY
+} from './siteZoomMath';
 
 type ThemeRole = 'main' | 'accent' | 'text';
 
@@ -248,7 +253,10 @@ function applyDocumentZoom(percent: number): void {
   }
 
   const root = document.documentElement;
-  const normalized = normalizeSiteZoomPercent(percent);
+  const zoomDisabled = typeof window !== 'undefined'
+    ? isSiteZoomDisabledByMediaQuery(window.matchMedia.bind(window))
+    : false;
+  const normalized = resolveAppliedSiteZoomPercent(percent, zoomDisabled);
   const scale = normalized / 100;
   const supportsCssZoom =
     typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1');
@@ -268,7 +276,7 @@ function applyDocumentZoom(percent: number): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent(SITE_ZOOM_CHANGE_EVENT, {
-        detail: { percent: normalized, scale }
+        detail: { percent: normalized, scale, disabled: zoomDisabled }
       })
     );
   }
@@ -293,6 +301,29 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
 
   useEffect(() => {
     applyDocumentZoom(siteZoomPercent);
+  }, [siteZoomPercent]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(SITE_ZOOM_DISABLED_MEDIA_QUERY);
+    const handleViewportChange = () => {
+      applyDocumentZoom(siteZoomPercent);
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleViewportChange);
+      return () => {
+        mediaQuery.removeEventListener('change', handleViewportChange);
+      };
+    }
+
+    mediaQuery.addListener(handleViewportChange);
+    return () => {
+      mediaQuery.removeListener(handleViewportChange);
+    };
   }, [siteZoomPercent]);
 
   useEffect(() => {

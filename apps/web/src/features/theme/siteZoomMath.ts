@@ -5,6 +5,7 @@ import {
 } from '@domain/stores/uiPreferencesStore';
 
 export const SITE_ZOOM_CHANGE_EVENT = 'site-zoom:change';
+export const SITE_ZOOM_DISABLED_MEDIA_QUERY = '(max-width: 1024px), (pointer: coarse)';
 
 const FALLBACK_ZOOM_SCALE = 1;
 const MIN_ZOOM_SCALE = 0.01;
@@ -22,6 +23,21 @@ export function normalizeSiteZoomPercent(raw: unknown): number {
   }
 
   return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
+
+export function resolveAppliedSiteZoomPercent(rawPercent: unknown, zoomDisabled: boolean): number {
+  const normalized = normalizeSiteZoomPercent(rawPercent);
+  return zoomDisabled ? DEFAULT_SITE_ZOOM_PERCENT : normalized;
+}
+
+export function isSiteZoomDisabledByMediaQuery(
+  matchMedia: ((query: string) => Pick<MediaQueryList, 'matches'>) | undefined
+): boolean {
+  if (typeof matchMedia !== 'function') {
+    return false;
+  }
+
+  return matchMedia(SITE_ZOOM_DISABLED_MEDIA_QUERY).matches;
 }
 
 export function normalizeSiteZoomScale(raw: unknown): number {
