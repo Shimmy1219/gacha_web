@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  normalizeSiteZoomPercent,
   normalizeSiteZoomScale,
   readSiteZoomScaleFromComputedStyle,
   resolveEffectiveViewportWidth,
@@ -13,6 +14,12 @@ describe('siteZoomMath', () => {
     expect(normalizeSiteZoomScale('abc')).toBe(1);
     expect(normalizeSiteZoomScale(0)).toBe(1);
     expect(normalizeSiteZoomScale(-1)).toBe(1);
+  });
+
+  it('normalizes site zoom percent as percent (not scale)', () => {
+    expect(normalizeSiteZoomPercent('75')).toBe(75);
+    expect(normalizeSiteZoomPercent(49)).toBe(50);
+    expect(normalizeSiteZoomPercent(101)).toBe(100);
   });
 
   it('reads zoom scale from computed style text', () => {

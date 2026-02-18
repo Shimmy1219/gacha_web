@@ -10,15 +10,12 @@ import {
 
 import {
   DEFAULT_SITE_ACCENT,
-  DEFAULT_SITE_ZOOM_PERCENT,
-  SITE_ZOOM_PERCENT_MAX,
-  SITE_ZOOM_PERCENT_MIN,
   type CustomBaseTone,
   type SiteTheme
 } from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
-import { normalizeSiteZoomScale, SITE_ZOOM_CHANGE_EVENT } from './siteZoomMath';
+import { normalizeSiteZoomPercent, SITE_ZOOM_CHANGE_EVENT } from './siteZoomMath';
 
 type ThemeRole = 'main' | 'accent' | 'text';
 
@@ -243,14 +240,6 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
     }
     root.dataset.siteThemeScheme = scheme;
   }
-}
-
-function normalizeSiteZoomPercent(raw: unknown): number {
-  const rounded = Math.round(normalizeSiteZoomScale(raw) * 100);
-  if (!Number.isFinite(rounded) || Number.isNaN(rounded)) {
-    return DEFAULT_SITE_ZOOM_PERCENT;
-  }
-  return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
 }
 
 function applyDocumentZoom(percent: number): void {
