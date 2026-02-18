@@ -1,5 +1,4 @@
 import { clsx } from 'clsx';
-import { SparklesIcon } from '@heroicons/react/24/outline';
 import { type DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
 
 import { OfficialXAccountPanel } from '../../../../components/OfficialXAccountPanel';
@@ -67,16 +66,15 @@ const DESKTOP_LAYOUT_OPTIONS: readonly DesktopLayoutOption[] = [
   {
     value: 'sidebar',
     title: 'サイドバー表示',
-    description:
-      '左サイドのメニューから表示するカラムを切り替えます。ノートパソコンの人やモニターが小さい人に推奨です。',
-    guidance: 'ノートパソコンの方はこちら',
+    description: '左サイドのメニューから表示するカラムを切り替えます。',
+    guidance: 'ノートPCの方はこちら',
     Icon: SidebarLayoutIcon
   },
   {
     value: 'grid',
     title: '４カラム表示',
-    description: 'セクションを横並びに表示します。モニター画面が広い人・デスクトップ画面の方はこちらを推奨',
-    guidance: 'デスクトップ画面の方はこちら',
+    description: 'セクションを横並びにします。',
+    guidance: 'モニター画面が広い方・デスクトップPCの方はこちら',
     Icon: FourColumnLayoutIcon
   }
 ] as const;
@@ -92,12 +90,9 @@ export function GachaSplashScreen({
     <section className="gacha-splash relative isolate mx-auto flex w-full max-w-5xl flex-col items-center overflow-hidden rounded-3xl border border-border/70 bg-surface/80 px-6 py-16 text-center shadow-xl">
       <div className="pointer-events-none absolute -inset-x-20 -top-32 -z-20 h-64 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
       <div className="pointer-events-none absolute -bottom-40 left-1/2 -z-20 h-72 w-72 -translate-x-1/2 rounded-full bg-surface-deep/30 blur-3xl" aria-hidden="true" />
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/20 text-accent">
-        <SparklesIcon className="h-8 w-8" />
-      </div>
-      <div className="mt-8 max-w-2xl space-y-4">
+      <div className="gacha-splash__intro max-w-2xl space-y-4">
         <h1 className="text-3xl font-bold tracking-tight text-surface-foreground sm:text-4xl">
-          最初のガチャを登録
+          最初のガチャを作成しよう！
         </h1>
         <p className="text-base leading-relaxed text-muted-foreground">
           ようこそ四遊楽ガチャへ
@@ -149,7 +144,7 @@ export function GachaSplashScreen({
                   <span className="gacha-splash__layout-option-description text-xs leading-relaxed text-muted-foreground">
                     {option.description}
                   </span>
-                  <span className="gacha-splash__layout-option-guidance mt-auto border-t border-border/60 pt-2 text-[11px] font-semibold text-muted-foreground">
+                  <span className="gacha-splash__layout-option-guidance mt-auto border-t border-accent/35 pt-2 text-[11px] font-semibold text-accent">
                     {option.guidance}
                   </span>
                 </button>
