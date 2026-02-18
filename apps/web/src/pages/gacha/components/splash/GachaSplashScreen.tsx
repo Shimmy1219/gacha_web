@@ -24,33 +24,41 @@ interface DesktopLayoutOption {
 function SidebarLayoutIcon(): JSX.Element {
   return (
     <svg
-      viewBox="0 0 64 48"
+      viewBox="0 0 80 52"
       className="gacha-splash__layout-option-icon h-20 w-full text-current"
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="3" y="4" width="58" height="40" rx="8" fill="none" stroke="currentColor" strokeWidth="2" />
-      <rect x="8" y="9" width="14" height="30" rx="3" fill="currentColor" opacity="0.35" />
-      <rect x="26" y="10" width="29" height="6" rx="3" fill="currentColor" opacity="0.3" />
-      <rect x="26" y="20" width="24" height="5" rx="2.5" fill="currentColor" opacity="0.22" />
-      <rect x="26" y="29" width="29" height="5" rx="2.5" fill="currentColor" opacity="0.22" />
+      <rect x="2.5" y="3.5" width="75" height="45" rx="9" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      <rect x="8" y="9" width="19" height="34" rx="4" fill="currentColor" opacity="0.28" />
+      <rect x="11" y="13" width="13" height="4" rx="2" fill="currentColor" opacity="0.65" />
+      <rect x="11" y="21" width="13" height="4" rx="2" fill="currentColor" opacity="0.65" />
+      <rect x="11" y="29" width="13" height="4" rx="2" fill="currentColor" opacity="0.65" />
+      <rect x="31" y="9" width="41" height="34" rx="5" fill="currentColor" opacity="0.12" />
+      <rect x="35" y="13" width="16" height="26" rx="3" fill="currentColor" opacity="0.46" />
+      <rect x="55" y="13" width="13" height="11" rx="3" fill="currentColor" opacity="0.3" />
+      <rect x="55" y="28" width="13" height="11" rx="3" fill="currentColor" opacity="0.3" />
     </svg>
   );
 }
 
-function GridLayoutIcon(): JSX.Element {
+function FourColumnLayoutIcon(): JSX.Element {
   return (
     <svg
-      viewBox="0 0 64 48"
+      viewBox="0 0 80 52"
       className="gacha-splash__layout-option-icon h-20 w-full text-current"
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="3" y="4" width="58" height="40" rx="8" fill="none" stroke="currentColor" strokeWidth="2" />
-      <rect x="8" y="10" width="22" height="12" rx="3" fill="currentColor" opacity="0.35" />
-      <rect x="34" y="10" width="22" height="12" rx="3" fill="currentColor" opacity="0.28" />
-      <rect x="8" y="26" width="22" height="12" rx="3" fill="currentColor" opacity="0.28" />
-      <rect x="34" y="26" width="22" height="12" rx="3" fill="currentColor" opacity="0.35" />
+      <rect x="2.5" y="3.5" width="75" height="45" rx="9" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      <rect x="8" y="9" width="13" height="34" rx="3" fill="currentColor" opacity="0.2" />
+      <rect x="8" y="12" width="13" height="4" rx="2" fill="currentColor" opacity="0.52" />
+      <rect x="25" y="9" width="13" height="34" rx="3" fill="currentColor" opacity="0.22" />
+      <rect x="25" y="12" width="13" height="4" rx="2" fill="currentColor" opacity="0.56" />
+      <rect x="42" y="9" width="13" height="34" rx="3" fill="currentColor" opacity="0.24" />
+      <rect x="42" y="12" width="13" height="4" rx="2" fill="currentColor" opacity="0.6" />
+      <rect x="59" y="9" width="13" height="34" rx="3" fill="currentColor" opacity="0.26" />
+      <rect x="59" y="12" width="13" height="4" rx="2" fill="currentColor" opacity="0.64" />
     </svg>
   );
 }
@@ -59,16 +67,17 @@ const DESKTOP_LAYOUT_OPTIONS: readonly DesktopLayoutOption[] = [
   {
     value: 'sidebar',
     title: 'サイドバー表示',
-    description: '左側のメニューを使ってセクションを切り替える表示です。',
+    description:
+      '左サイドのメニューから表示するカラムを切り替えます。ノートパソコンの人やモニターが小さい人に推奨です。',
     guidance: 'ノートパソコンの方はこちら',
     Icon: SidebarLayoutIcon
   },
   {
     value: 'grid',
-    title: 'カードグリッド表示',
-    description: '主要セクションを横並びに表示して一覧性を高めます。',
+    title: '４カラム表示',
+    description: 'セクションを横並びに表示します。モニター画面が広い人・デスクトップ画面の方はこちらを推奨',
     guidance: 'デスクトップ画面の方はこちら',
-    Icon: GridLayoutIcon
+    Icon: FourColumnLayoutIcon
   }
 ] as const;
 
@@ -120,11 +129,18 @@ export function GachaSplashScreen({
                   className={clsx(
                     'gacha-splash__layout-option group flex h-full flex-col gap-2 rounded-2xl border p-4 text-left transition',
                     isSelected
-                      ? 'border-accent bg-accent/10 text-accent'
+                      ? 'border-accent bg-accent/10'
                       : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90'
                   )}
                 >
-                  <div className="gacha-splash__layout-option-preview rounded-xl border border-current/20 bg-black/5 p-3">
+                  <div
+                    className={clsx(
+                      'gacha-splash__layout-option-preview rounded-xl border p-3',
+                      isSelected
+                        ? 'border-accent/35 bg-accent/5 text-accent'
+                        : 'border-border/70 bg-panel-contrast/50 text-muted-foreground'
+                    )}
+                  >
                     <OptionIcon />
                   </div>
                   <span className="gacha-splash__layout-option-title text-sm font-semibold text-surface-foreground">
@@ -133,7 +149,7 @@ export function GachaSplashScreen({
                   <span className="gacha-splash__layout-option-description text-xs leading-relaxed text-muted-foreground">
                     {option.description}
                   </span>
-                  <span className="gacha-splash__layout-option-guidance mt-auto border-t border-current/20 pt-2 text-[11px] font-semibold text-accent">
+                  <span className="gacha-splash__layout-option-guidance mt-auto border-t border-border/60 pt-2 text-[11px] font-semibold text-muted-foreground">
                     {option.guidance}
                   </span>
                 </button>
