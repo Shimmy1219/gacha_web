@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clsx } from 'clsx';
 
 import {
   type GachaAppStateV3,
@@ -35,7 +36,9 @@ import {
   type SingleSelectOption
 } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { RarityFileUploadControls } from '../../components/RarityFileUploadControls';
 import { RarityRateErrorDialog } from './RarityRateErrorDialog';
+import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -162,6 +165,18 @@ function formatFilenameAsItemName(filename: string | null | undefined): string {
   return trimmed.slice(0, lastDotIndex);
 }
 
+function removeCompleteFromPtSettings(settings: PtSettingV3 | undefined): PtSettingV3 | undefined {
+  if (!settings?.complete) {
+    return settings;
+  }
+  const nextSettings: PtSettingV3 = { ...settings };
+  delete nextSettings.complete;
+  if (!nextSettings.perPull && !nextSettings.bundles && !nextSettings.guarantees && !nextSettings.updatedAt) {
+    return undefined;
+  }
+  return nextSettings;
+}
+
 export interface CreateGachaWizardDialogPayload {}
 
 export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
@@ -179,6 +194,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [rarities, setRarities] = useState<DraftRarity[]>(() => createInitialRarities());
   const [items, setItems] = useState<DraftItem[]>([]);
   const [ptSettings, setPtSettings] = useState<PtSettingV3 | undefined>(undefined);
+  const [isCompleteGachaEnabled, setIsCompleteGachaEnabled] = useState(true);
   const [isProcessingAssets, setIsProcessingAssets] = useState(false);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -208,6 +224,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, [items]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingAssetRarityIdRef = useRef<string | null>(null);
   const subAssetInputRef = useRef<HTMLInputElement | null>(null);
   const pendingSubAssetItemIdRef = useRef<string | null>(null);
   const createdAssetIdsRef = useRef<Set<string>>(new Set());
@@ -304,21 +321,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       }
     };
   }, []);
-
-  useEffect(() => {
-    if (step !== 'assets') {
-      return;
-    }
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      fileInputRef.current?.click();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [step]);
 
   const applyEmitRateUpdates = useCallback(
     (updates: ReadonlyArray<{ rarityId: string; emitRate: number | undefined }>) => {
@@ -495,7 +497,25 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     );
   }, []);
 
-  const handleSelectFiles = useCallback(async (fileList: FileList | null) => {
+  const handleToggleCompleteGacha = useCallback((checked: boolean) => {
+    setIsCompleteGachaEnabled(checked);
+    if (checked) {
+      return;
+    }
+    setItems((previous) =>
+      previous.map((item) =>
+        item.isCompleteTarget ? { ...item, isCompleteTarget: false } : item
+      )
+    );
+    setPtSettings((previous) => removeCompleteFromPtSettings(previous));
+  }, []);
+
+  const handleRequestAssetSelection = useCallback((rarityId: string | null) => {
+    pendingAssetRarityIdRef.current = rarityId;
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleSelectFiles = useCallback(async (fileList: FileList | null, rarityId: string | null) => {
     if (!fileList || fileList.length === 0) {
       return;
     }
@@ -515,9 +535,11 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           file
         }))
       );
-
-      const defaultRarityId =
+      const availableRarityIds = new Set(sortedRarities.map((rarity) => rarity.id));
+      const lowestRarityId =
         sortedRarities[sortedRarities.length - 1]?.id ?? sortedRarities[0]?.id ?? null;
+      const assignedRarityId =
+        rarityId && availableRarityIds.has(rarityId) ? rarityId : lowestRarityId;
 
       const draftAssets = await Promise.all(
         assetEntries.map(async ({ record, file }) => {
@@ -537,8 +559,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             name: '',
             originalFilename: file?.name ?? null,
             isRiagu: false,
-            isCompleteTarget: true,
-            rarityId: defaultRarityId
+            isCompleteTarget: isCompleteGachaEnabled,
+            rarityId: assignedRarityId
           });
         });
 
@@ -550,7 +572,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     } finally {
       setIsProcessingAssets(false);
     }
-  }, [applyItemNamingStrategy, createDraftAssetEntry, createdAssetIdsRef, sortedRarities]);
+  }, [applyItemNamingStrategy, createDraftAssetEntry, createdAssetIdsRef, isCompleteGachaEnabled, sortedRarities]);
 
   const handleRemoveItem = useCallback(
     (draftItemId: string) => {
@@ -690,13 +712,13 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           name: '',
           originalFilename: null,
           isRiagu: false,
-          isCompleteTarget: true,
+          isCompleteTarget: isCompleteGachaEnabled,
           rarityId: defaultRarityId
         }
       ];
       return applyItemNamingStrategy(nextItems);
     });
-  }, [applyItemNamingStrategy, sortedRarities]);
+  }, [applyItemNamingStrategy, isCompleteGachaEnabled, sortedRarities]);
 
   useEffect(() => {
     const availableRarityIds = new Set(sortedRarities.map((rarity) => rarity.id));
@@ -709,7 +731,10 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
     setItems((previous) =>
       previous.map((item) => {
-        if (item.rarityId && availableRarityIds.has(item.rarityId)) {
+        if (item.rarityId == null || item.rarityId === '') {
+          return item;
+        }
+        if (availableRarityIds.has(item.rarityId)) {
           return item;
         }
         return { ...item, rarityId: fallbackRarityId };
@@ -867,7 +892,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           order: index,
           ...(assets.length > 0 ? { assets } : {}),
           ...(item.isRiagu ? { riagu: true } : {}),
-          ...(item.isCompleteTarget ? { completeTarget: true } : {}),
+          ...(isCompleteGachaEnabled && item.isCompleteTarget ? { completeTarget: true } : {}),
           updatedAt: timestamp
         } satisfies GachaCatalogItemV4;
 
@@ -895,7 +920,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         riaguStore.upsertCard({ itemId, gachaId }, { persist: 'immediate' });
       });
 
-      const resolvedPtSettings = ptSettings
+      const basePtSettings = ptSettings
         ? {
             ...ptSettings,
             guarantees: ptSettings.guarantees
@@ -921,6 +946,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               : undefined
           }
         : undefined;
+      const resolvedPtSettings = isCompleteGachaEnabled
+        ? basePtSettings
+        : removeCompleteFromPtSettings(basePtSettings);
 
       ptControlsStore.setGachaSettings(gachaId, resolvedPtSettings, { persist: 'immediate' });
 
@@ -940,6 +968,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     catalogStore,
     close,
     gachaName,
+    isCompleteGachaEnabled,
     isSubmitting,
     items,
     ptControlsStore,
@@ -979,7 +1008,6 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
-          <p className="text-xs text-muted-foreground">ダッシュボードでの表示名として利用されます。</p>
         </div>
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
@@ -1002,12 +1030,49 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
   const renderAssetStep = () => {
     return (
-      <div className="space-y-5">
+      <div className="create-gacha-wizard__asset-step space-y-5">
+        <div className="create-gacha-wizard__complete-toggle-row grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 rounded-2xl border border-border/60 bg-surface/50 px-4 py-3 sm:gap-2">
+          <span className="create-gacha-wizard__complete-toggle-title text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+            コンプガチャを有効にする
+          </span>
+          <div className="create-gacha-wizard__complete-toggle-controls flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => handleToggleCompleteGacha(!isCompleteGachaEnabled)}
+              className={clsx(
+                'create-gacha-wizard__complete-toggle-button relative inline-flex h-6 w-11 items-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-deep',
+                isCompleteGachaEnabled
+                  ? 'border-accent bg-[rgb(var(--color-accent)/1)]'
+                  : 'border-border/60 bg-panel-muted'
+              )}
+              aria-pressed={isCompleteGachaEnabled}
+            >
+              <span
+                className={clsx(
+                  'create-gacha-wizard__complete-toggle-indicator inline-block h-4 w-4 rounded-full transition-all',
+                  isCompleteGachaEnabled
+                    ? 'translate-x-[22px] bg-[rgb(var(--color-accent-foreground)/1)]'
+                    : 'translate-x-[6px] bg-[rgb(var(--color-surface-foreground)/1)]'
+                )}
+              />
+            </button>
+          </div>
+        </div>
         {assetError ? (
-          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <div className="create-gacha-wizard__asset-error rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {assetError}
           </div>
         ) : null}
+        <RarityFileUploadControls
+          options={sortedRarities.map((rarity) => ({
+            id: rarity.id,
+            label: rarity.label.trim() || rarity.id,
+            color: rarity.color
+          }))}
+          isProcessing={isProcessingAssets}
+          onSelectAll={() => handleRequestAssetSelection(null)}
+          onSelectRarity={handleRequestAssetSelection}
+        />
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground">選択済みの画像</h3>
@@ -1023,19 +1088,11 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               </label>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground disabled:opacity-60"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessingAssets}
-              >
-                {isProcessingAssets ? '処理中…' : '追加'}
-              </button>
-              <button
-                type="button"
                 className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
                 onClick={handleAddEmptyItem}
                 disabled={isProcessingAssets}
               >
-                画像なしで追加
+                ファイル無しで追加
               </button>
             </div>
           </div>
@@ -1128,17 +1185,19 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                             />
                             <span>リアグとして登録</span>
                           </label>
-                          <label className="inline-flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
-                              checked={item.isCompleteTarget}
-                              onChange={(event) =>
-                                handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
-                              }
-                            />
-                            <span>コンプ対象</span>
-                          </label>
+                          {isCompleteGachaEnabled ? (
+                            <label className="inline-flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-border/60 bg-transparent text-accent focus:ring-accent"
+                                checked={item.isCompleteTarget}
+                                onChange={(event) =>
+                                  handleToggleItemFlag(item.id, 'isCompleteTarget', event.target.checked)
+                                }
+                              />
+                              <span>コンプ対象</span>
+                            </label>
+                          ) : null}
                         </div>
                         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                           <button
@@ -1203,6 +1262,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             )}
           </div>
         </div>
+        <p className="create-gacha-wizard__asset-step-description text-sm text-muted-foreground">
+          ここで景品の画像を登録してください。後から追加も出来ます。リアルグッズはサムネ画像があれば、それも登録するのをオススメします。（任意）
+        </p>
       </div>
     );
   };
@@ -1211,13 +1273,29 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          ピックアップ保証や天井などのポイント設定を入力できます。必要に応じて後から変更することも可能です。
+          １回の消費ptやお得バンドル・天井保証を任意で設定出来ます。後から変更も出来ます。
         </p>
+        <button
+          type="button"
+          id="create-gacha-wizard-pt-guide-button"
+          className="create-gacha-wizard__pt-guide-button inline-flex items-center gap-2 rounded-xl border border-border/70 bg-surface/40 px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:border-accent/60 hover:text-surface-foreground"
+          onClick={() =>
+            push(PtBundleGuaranteeGuideDialog, {
+              id: 'pt-bundle-guarantee-guide',
+              title: '天井保証・お得バンドルについて',
+              size: 'md'
+            })
+          }
+        >
+          天井保証・お得バンドルについて
+        </button>
         <div className="rounded-2xl border border-border/60 bg-surface/50 p-4 sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions}
             itemOptionsByRarity={guaranteeItemOptions}
+            isCompleteEnabled={isCompleteGachaEnabled}
+            showOptionalHints
             onSettingsChange={setPtSettings}
           />
         </div>
@@ -1283,7 +1361,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         multiple
         className="sr-only"
         onChange={(event) => {
-          void handleSelectFiles(event.currentTarget.files);
+          const selectedRarityId = pendingAssetRarityIdRef.current;
+          pendingAssetRarityIdRef.current = null;
+          void handleSelectFiles(event.currentTarget.files, selectedRarityId);
           event.currentTarget.value = '';
         }}
       />
