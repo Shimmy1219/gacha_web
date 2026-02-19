@@ -1,6 +1,33 @@
 import { ArrowDownTrayIcon, BoltIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline';
 
+import { useNotification, type NotificationVariant } from '../../../../features/notification';
+
 export function ControlsPanel(): JSX.Element {
+  const { notify } = useNotification();
+
+  const handlePushRandomNotification = () => {
+    const notificationCandidates: Array<{ variant: NotificationVariant; title: string; message: string }> = [
+      {
+        variant: 'success',
+        title: '通知テスト: 成功',
+        message: 'サンプルの成功通知です。共有処理が完了した想定です。'
+      },
+      {
+        variant: 'warning',
+        title: '通知テスト: 警告',
+        message: 'サンプルの警告通知です。一部データに未設定項目があります。'
+      },
+      {
+        variant: 'error',
+        title: '通知テスト: 失敗',
+        message: 'サンプルの失敗通知です。通信エラーを想定しています。'
+      }
+    ];
+    const randomIndex = Math.floor(Math.random() * notificationCandidates.length);
+    const selected = notificationCandidates[randomIndex] ?? notificationCandidates[0];
+    notify(selected);
+  };
+
   return (
     <div className="controls-panel flex flex-col gap-6 text-sm text-muted-foreground">
       <div className="controls-panel__header flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -27,6 +54,13 @@ export function ControlsPanel(): JSX.Element {
           >
             <CloudArrowUpIcon className="h-4 w-4" />
             保存オプション
+          </button>
+          <button
+            type="button"
+            className="controls-panel__random-notification-button btn btn-muted rounded-xl px-5 py-2"
+            onClick={handlePushRandomNotification}
+          >
+            ランダム通知テスト
           </button>
         </div>
       </div>
