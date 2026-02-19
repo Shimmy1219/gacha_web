@@ -6,8 +6,7 @@ import {
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
@@ -35,6 +34,7 @@ import {
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useNotification } from '../../features/notification';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
@@ -112,9 +112,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const [isDiscordSharing, setIsDiscordSharing] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
-  const [uploadNotice, setUploadNotice] = useState<{ id: number; message: string } | null>(null);
-  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noticePortalRef = useRef<HTMLDivElement | null>(null);
+  const { notify } = useNotification();
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
@@ -409,52 +407,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     [uploadResult?.url]
   );
 
-  useEffect(() => {
-    return () => {
-      if (noticeTimerRef.current) {
-        clearTimeout(noticeTimerRef.current);
-        noticeTimerRef.current = null;
-      }
-      if (noticePortalRef.current?.parentNode) {
-        noticePortalRef.current.parentNode.removeChild(noticePortalRef.current);
-        noticePortalRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!uploadNotice) {
-      return;
-    }
-    if (noticeTimerRef.current) {
-      clearTimeout(noticeTimerRef.current);
-    }
-    noticeTimerRef.current = setTimeout(() => {
-      setUploadNotice(null);
-    }, 4000);
-  }, [uploadNotice?.id]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const root = document.getElementById('modal-root');
-    if (!root) {
-      return;
-    }
-    const container = document.createElement('div');
-    root.appendChild(container);
-    noticePortalRef.current = container;
-    return () => {
-      if (container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-      if (noticePortalRef.current === container) {
-        noticePortalRef.current = null;
-      }
-    };
-  }, []);
-
   const gachaNameMap = useMemo(() => {
     const map = new Map<string, string>();
     Object.entries(snapshot.appState?.meta ?? {}).forEach(([gachaId, meta]) => {
@@ -627,10 +579,27 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         warnings: result.warnings,
         savedAt: new Date().toISOString()
       });
+      if (result.warnings.length > 0) {
+        notify({
+          variant: 'warning',
+          title: '保存は完了しました',
+          message: `端末への保存は完了しましたが、警告が${result.warnings.length}件あります。`
+        });
+      } else {
+        notify({
+          variant: 'success',
+          message: '端末への保存が完了しました'
+        });
+      }
     } catch (error) {
       console.error('ZIPの作成に失敗しました', error);
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`ZIPの作成に失敗しました: ${message}`);
+      notify({
+        variant: 'error',
+        title: '保存に失敗しました',
+        message
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -705,11 +674,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
     setIsUploading(true);
     setErrorBanner(null);
-    if (noticeTimerRef.current) {
-      clearTimeout(noticeTimerRef.current);
-      noticeTimerRef.current = null;
-    }
-    setUploadNotice(null);
     setUploadResult(null);
     persistence.savePartial({
       saveOptions: {
@@ -732,7 +696,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           zip.originalPrizeMissingPullIds
         );
       }
-      setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
+      notify({
+        variant: 'success',
+        message: 'アップロードが完了しました'
+      });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('ZIPアップロードがユーザーによってキャンセルされました');
@@ -750,6 +717,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`アップロードに失敗しました: ${message}`);
+      notify({
+        variant: 'error',
+        title: 'アップロードに失敗しました',
+        message
+      });
     } finally {
       setIsUploading(false);
     }
@@ -938,8 +910,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         }
 
         setErrorBanner(null);
-        setUploadNotice({
-          id: Date.now(),
+        notify({
+          variant: 'success',
           message: `${memberDisplayName}さんにDiscordで共有しました`
         });
       } catch (error) {
@@ -954,6 +926,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
         setErrorBanner(displayMessage);
+        notify({
+          variant: 'error',
+          title: 'Discord共有に失敗しました',
+          message: displayMessage
+        });
       }
       setIsDiscordSharing(false);
       return;
@@ -1019,13 +996,18 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
               originalPrizeMissingPullIds
             );
           }
-          setUploadNotice({
-            id: Date.now(),
+          notify({
+            variant: 'success',
             message: `${memberName}さんにDiscordで共有しました`
           });
         },
         onShareFailed: (message) => {
           setErrorBanner(message);
+          notify({
+            variant: 'error',
+            title: 'Discord共有に失敗しました',
+            message
+          });
         }
       });
     } catch (error) {
@@ -1034,6 +1016,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           ? error.message
           : 'Discordギルドの選択情報を取得できませんでした。Discord共有設定を確認してください。';
       setErrorBanner(message);
+      notify({
+        variant: 'error',
+        title: 'Discord共有に失敗しました',
+        message
+      });
     } finally {
       setIsDiscordSharing(false);
     }
@@ -1061,22 +1048,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
   };
 
-  const uploadNoticePortal =
-    uploadNotice && noticePortalRef.current
-      ? createPortal(
-          <div className="pointer-events-none fixed inset-x-0 top-10 z-[120] flex justify-center">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-emerald-500/50 bg-white/95 px-5 py-2 text-sm font-medium text-black shadow-lg shadow-emerald-900/10">
-              <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
-              <span className="text-black">{uploadNotice.message}</span>
-            </div>
-          </div>,
-          noticePortalRef.current
-        )
-      : null;
-
   return (
     <>
-      {uploadNoticePortal}
       <ModalBody className="space-y-6">
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象一覧</div>

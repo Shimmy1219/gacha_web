@@ -10,6 +10,7 @@ import { CatalogDigitalItemTypeMigrationGate } from '../features/storage/Catalog
 import { SiteThemeProvider } from '../features/theme/SiteThemeProvider';
 import { HapticsProvider } from '../features/haptics/HapticsProvider';
 import { DiscordInfoStoreGate } from '../features/discord/DiscordInfoStoreGate';
+import { NotificationProvider } from '../features/notification';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   const [queryClient] = useState(
@@ -34,11 +35,13 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
           <CatalogDigitalItemTypeMigrationGate />
           <SiteThemeProvider>
             <HapticsProvider>
-              <ModalProvider>
-                <DiscordInfoStoreGate>
-                  <ToolbarStateProvider>{children}</ToolbarStateProvider>
-                </DiscordInfoStoreGate>
-              </ModalProvider>
+              <NotificationProvider>
+                <ModalProvider>
+                  <DiscordInfoStoreGate>
+                    <ToolbarStateProvider>{children}</ToolbarStateProvider>
+                  </DiscordInfoStoreGate>
+                </ModalProvider>
+              </NotificationProvider>
             </HapticsProvider>
           </SiteThemeProvider>
         </AppPersistenceProvider>
