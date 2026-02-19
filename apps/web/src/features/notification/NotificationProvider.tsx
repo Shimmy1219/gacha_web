@@ -321,7 +321,7 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
                   <Icon className={`h-4 w-4 ${iconClassName}`} />
                 </div>
                 <div className="global-notification-toast__content min-w-0 flex-1">
-                  <p className="global-notification-toast__message truncate text-xs leading-5 text-surface-foreground/95">
+                  <p className="global-notification-toast__message whitespace-normal break-words text-xs leading-5 text-surface-foreground/95">
                     <span className="global-notification-toast__title font-semibold text-surface-foreground">
                       {titleLabel}：
                     </span>{' '}
@@ -351,13 +351,13 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
 function resolveVariantContainerClassName(variant: NotificationVariant): string {
   switch (variant) {
     case 'success':
-      return 'global-notification-toast--success border-emerald-400/52 bg-white/84 dark:border-emerald-300/45 dark:bg-white/16';
+      return 'global-notification-toast--success border-emerald-400/52 bg-white/88 dark:border-emerald-300/45 dark:bg-white/16';
     case 'warning':
-      return 'global-notification-toast--warning border-amber-400/54 bg-white/84 dark:border-amber-300/48 dark:bg-white/16';
+      return 'global-notification-toast--warning border-amber-400/54 bg-white/88 dark:border-amber-300/48 dark:bg-white/16';
     case 'error':
-      return 'global-notification-toast--error border-rose-400/58 bg-white/84 dark:border-rose-300/50 dark:bg-white/16';
+      return 'global-notification-toast--error border-rose-400/58 bg-white/88 dark:border-rose-300/50 dark:bg-white/16';
     default:
-      return 'border-border/70 bg-white/86 dark:bg-white/18';
+      return 'border-border/70 bg-white/88 dark:bg-white/18';
   }
 }
 
@@ -392,11 +392,11 @@ function resolveWrapperPhaseClassName(phase: NotificationRenderPhase): string {
     case 'entering':
       return 'global-notification-toast-wrap--entering mb-0 max-h-0 opacity-0';
     case 'visible':
-      return 'global-notification-toast-wrap--visible mb-1.5 max-h-24 opacity-100';
+      return 'global-notification-toast-wrap--visible mb-1.5 max-h-40 opacity-100';
     case 'leaving':
       return 'global-notification-toast-wrap--leaving mb-0 max-h-0 opacity-0';
     default:
-      return 'mb-1.5 max-h-24 opacity-100';
+      return 'mb-1.5 max-h-40 opacity-100';
   }
 }
 
