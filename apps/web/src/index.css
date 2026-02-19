@@ -260,6 +260,87 @@
     background-color: rgb(var(--color-accent-bright) / 0.75);
   }
 
+  .dashboard-desktop-grid {
+    grid-template-columns: minmax(0, 1fr);
+    --dashboard-grid-lg-col-1-fr: 1fr;
+    --dashboard-grid-lg-col-2-fr: 1fr;
+    --dashboard-grid-xl-col-1-fr: 1fr;
+    --dashboard-grid-xl-col-2-fr: 1.25fr;
+    --dashboard-grid-xl-col-3-fr: 1fr;
+    --dashboard-grid-xl-col-4-fr: 0.9fr;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-lg-col-1-fr))
+        minmax(0, var(--dashboard-grid-lg-col-2-fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-xl-col-1-fr))
+        minmax(0, var(--dashboard-grid-xl-col-2-fr))
+        minmax(0, var(--dashboard-grid-xl-col-3-fr))
+        minmax(0, var(--dashboard-grid-xl-col-4-fr));
+    }
+  }
+
+  .dashboard-desktop-grid__resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 30;
+    width: 1rem;
+    margin-left: -0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1px solid rgb(var(--color-border) / 0.7);
+    background: rgb(var(--color-panel) / 0.8);
+    color: rgb(var(--color-accent) / 0.9);
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  .dashboard-desktop-grid__resize-handle:hover {
+    border-color: rgb(var(--color-accent) / 0.6);
+    background: rgb(var(--color-panel-contrast) / 0.92);
+    color: rgb(var(--color-accent) / 1);
+    opacity: 1;
+  }
+
+  .dashboard-desktop-grid__resize-handle--active {
+    border-color: rgb(var(--color-accent) / 0.9);
+    background: rgb(var(--color-panel-contrast) / 1);
+    color: rgb(var(--color-accent) / 1);
+    box-shadow: 0 0 0 2px rgb(var(--color-accent) / 0.2), 0 8px 20px rgb(0 0 0 / 0.25);
+    opacity: 1;
+  }
+
+  .dashboard-desktop-grid__resize-handle-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: -0.08em;
+    line-height: 1;
+    pointer-events: none;
+  }
+
   .page-settings__content-scroll,
   .page-settings__menu-scroll {
     min-height: 0;
