@@ -162,21 +162,9 @@ function clampSiteZoomPercent(value: number): number {
   return Math.min(Math.max(Math.round(value), SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
 }
 
-interface ZoomPreviewPanelRect {
-  top: number;
-  left: number;
-  width: number;
-}
-
-interface ZoomPreviewModalRect {
-  top: number;
-  left: number;
-}
-
 export const PageSettingsDialog: ModalComponent = (props) => {
   const { close, push, isTop } = props;
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
-  const zoomPanelRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
   const [showBetaTips, setShowBetaTips] = useState(true);
@@ -229,8 +217,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     uiPreferencesStore.getSiteZoomPercent()
   );
   const [isZoomPreviewing, setIsZoomPreviewing] = useState(false);
-  const [zoomPreviewPanelRect, setZoomPreviewPanelRect] = useState<ZoomPreviewPanelRect | null>(null);
-  const [zoomPreviewModalRect, setZoomPreviewModalRect] = useState<ZoomPreviewModalRect | null>(null);
   const appState = useStoreValue(appStateStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const quickSendNewOnlyPreference = useMemo(
@@ -436,31 +422,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       if (isMobileDashboard) {
         return;
       }
-
-      const panel = zoomPanelRef.current;
-      if (panel) {
-        const rect = panel.getBoundingClientRect();
-        const modalPanel = panel.closest('.page-settings-modal');
-        const modalRect =
-          modalPanel instanceof HTMLElement ? modalPanel.getBoundingClientRect() : null;
-        setZoomPreviewPanelRect({
-          top: rect.top,
-          left: rect.left,
-          width: rect.width
-        });
-        if (modalRect) {
-          setZoomPreviewModalRect({
-            top: modalRect.top,
-            left: modalRect.left
-          });
-        } else {
-          setZoomPreviewModalRect(null);
-        }
-      } else {
-        setZoomPreviewPanelRect(null);
-        setZoomPreviewModalRect(null);
-      }
-
       setIsZoomPreviewing(true);
     },
     [isMobileDashboard]
@@ -468,8 +429,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const handleStopZoomPreview = useCallback(() => {
     setIsZoomPreviewing(false);
-    setZoomPreviewPanelRect(null);
-    setZoomPreviewModalRect(null);
     handleCommitSiteZoom();
   }, [handleCommitSiteZoom]);
 
@@ -489,25 +448,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const handleResetSiteZoom = useCallback(() => {
     setIsZoomPreviewing(false);
-    setZoomPreviewPanelRect(null);
-    setZoomPreviewModalRect(null);
     setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT);
     uiPreferencesStore.setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT, { persist: 'immediate' });
   }, [uiPreferencesStore]);
-
-  const zoomPreviewPanelStyle = useMemo(() => {
-    if (!isZoomPreviewing || !zoomPreviewPanelRect || !zoomPreviewModalRect) {
-      return undefined;
-    }
-
-    const zoomScale = Math.max(siteZoomPercent / 100, SITE_ZOOM_PERCENT_MIN / 100);
-    return {
-      top: `${(zoomPreviewPanelRect.top - zoomPreviewModalRect.top) / zoomScale}px`,
-      left: `${(zoomPreviewPanelRect.left - zoomPreviewModalRect.left) / zoomScale}px`,
-      width: `${zoomPreviewPanelRect.width / zoomScale}px`,
-      maxWidth: 'none'
-    };
-  }, [isZoomPreviewing, zoomPreviewModalRect, zoomPreviewPanelRect, siteZoomPercent]);
 
   const handleDeleteAllData = useCallback(async () => {
     if (isDeletingAllData) {
@@ -757,38 +700,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       delete body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY];
     };
   }, [isZoomPreviewing]);
-
-  useLayoutEffect(() => {
-    if (!isZoomPreviewing) {
-      return;
-    }
-
-    const panel = zoomPanelRef.current;
-    if (!panel || typeof window === 'undefined') {
-      return;
-    }
-
-    const modalPanel = panel.closest('.page-settings-modal');
-    if (!(modalPanel instanceof HTMLElement)) {
-      return;
-    }
-
-    const updateModalRect = () => {
-      const rect = modalPanel.getBoundingClientRect();
-      setZoomPreviewModalRect({
-        top: rect.top,
-        left: rect.left
-      });
-    };
-
-    updateModalRect();
-    window.requestAnimationFrame(updateModalRect);
-    window.addEventListener('resize', updateModalRect);
-
-    return () => {
-      window.removeEventListener('resize', updateModalRect);
-    };
-  }, [isZoomPreviewing, siteZoomPercent]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -1205,8 +1116,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
             </div>
             {!isMobileDashboard ? (
               <div
-                ref={zoomPanelRef}
-                style={zoomPreviewPanelStyle}
                 className={clsx(
                   'page-settings__site-zoom-panel space-y-3 rounded-2xl border border-border/60 bg-panel/70 p-4 transition',
                   isZoomPreviewing && 'page-settings__site-zoom-panel--previewing'
