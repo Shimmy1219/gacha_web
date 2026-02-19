@@ -368,6 +368,7 @@
     z-index: 120;
     margin: 0 auto;
     width: min(42rem, calc(100vw - 2rem));
+    padding: 0.875rem 1rem;
     border-color: rgb(var(--color-accent) / 0.45);
     background: rgb(var(--color-panel) / 0.96);
     box-shadow: 0 14px 36px rgb(0 0 0 / 0.45);
