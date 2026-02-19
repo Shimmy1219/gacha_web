@@ -21,9 +21,9 @@ function item(partial: Partial<GlobalNotificationItem> & Pick<GlobalNotification
 
 describe('resolveNotificationDuration', () => {
   it('returns defaults for each variant when custom duration is missing', () => {
-    expect(resolveNotificationDuration('success')).toBe(4000);
-    expect(resolveNotificationDuration('warning')).toBe(5000);
-    expect(resolveNotificationDuration('error')).toBe(7000);
+    expect(resolveNotificationDuration('success')).toBe(2500);
+    expect(resolveNotificationDuration('warning')).toBe(2500);
+    expect(resolveNotificationDuration('error')).toBe(2500);
   });
 
   it('returns custom duration when valid', () => {
@@ -32,8 +32,8 @@ describe('resolveNotificationDuration', () => {
   });
 
   it('falls back to variant default when custom duration is invalid', () => {
-    expect(resolveNotificationDuration('error', Number.NaN)).toBe(7000);
-    expect(resolveNotificationDuration('warning', -1)).toBe(5000);
+    expect(resolveNotificationDuration('error', Number.NaN)).toBe(2500);
+    expect(resolveNotificationDuration('warning', -1)).toBe(2500);
   });
 });
 

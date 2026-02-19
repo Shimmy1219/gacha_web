@@ -9,7 +9,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -171,8 +170,6 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
   const [renderEntries, setRenderEntries] = useState<NotificationRenderEntry[]>([]);
   const enterRafMapRef = useRef<Map<string, number>>(new Map());
   const leaveTimerMapRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const wrapperRefMap = useRef<Map<string, HTMLDivElement>>(new Map());
-  const positionRefMap = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -252,7 +249,6 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
             previous.filter((current) => current.notification.id !== notificationId)
           );
           leaveTimerMapRef.current.delete(notificationId);
-          positionRefMap.current.delete(notificationId);
         }, NOTIFICATION_TRANSITION_MS);
         leaveTimerMapRef.current.set(notificationId, timerId);
       }
@@ -281,46 +277,6 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
     });
   }, [renderEntries]);
 
-  useLayoutEffect(() => {
-    const rafIds: number[] = [];
-    const nextPositionMap = new Map<string, number>();
-
-    renderEntries.forEach((entry) => {
-      const notificationId = entry.notification.id;
-      const wrapperElement = wrapperRefMap.current.get(notificationId);
-      if (!wrapperElement) {
-        return;
-      }
-      const nextTop = wrapperElement.getBoundingClientRect().top;
-      nextPositionMap.set(notificationId, nextTop);
-
-      const previousTop = positionRefMap.current.get(notificationId);
-      if (typeof previousTop !== 'number') {
-        return;
-      }
-      const deltaY = previousTop - nextTop;
-      if (Math.abs(deltaY) < 0.5) {
-        return;
-      }
-
-      wrapperElement.style.transition = 'none';
-      wrapperElement.style.transform = `translateY(${deltaY}px)`;
-
-      const rafId = window.requestAnimationFrame(() => {
-        wrapperElement.style.transition = `transform ${NOTIFICATION_TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-        wrapperElement.style.transform = '';
-      });
-      rafIds.push(rafId);
-    });
-
-    positionRefMap.current = nextPositionMap;
-    return () => {
-      rafIds.forEach((rafId) => {
-        window.cancelAnimationFrame(rafId);
-      });
-    };
-  }, [renderEntries]);
-
   useEffect(() => {
     return () => {
       enterRafMapRef.current.forEach((rafId) => {
@@ -331,18 +287,7 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
         window.clearTimeout(timerId);
       });
       leaveTimerMapRef.current.clear();
-      wrapperRefMap.current.clear();
-      positionRefMap.current.clear();
     };
-  }, []);
-
-  const setWrapperRef = useCallback((notificationId: string, node: HTMLDivElement | null) => {
-    if (node) {
-      wrapperRefMap.current.set(notificationId, node);
-      return;
-    }
-    wrapperRefMap.current.delete(notificationId);
-    positionRefMap.current.delete(notificationId);
   }, []);
 
   if (!portalElement || renderEntries.length === 0) {
@@ -351,7 +296,7 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
 
   return createPortal(
     <div className="global-notification-root pointer-events-none fixed inset-x-0 top-0 z-[140] flex justify-center px-2 pt-[calc(env(safe-area-inset-top,0px)+0.45rem)]">
-      <div className="global-notification__viewport flex w-full max-w-[min(34rem,calc(100vw-0.85rem))] flex-col gap-1.5">
+      <div className="global-notification__viewport flex w-full max-w-[min(34rem,calc(100vw-0.85rem))] flex-col">
         {renderEntries.map((entry) => {
           const notification = entry.notification;
           const titleLabel = notification.title?.trim() || resolveVariantLabel(notification.variant);
@@ -359,11 +304,11 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
           const iconClassName = resolveVariantIconClassName(notification.variant);
           const Icon = resolveVariantIcon(notification.variant);
           const phaseClassName = resolvePhaseClassName(entry.phase);
+          const wrapperPhaseClassName = resolveWrapperPhaseClassName(entry.phase);
           return (
             <div
               key={notification.id}
-              ref={(node) => setWrapperRef(notification.id, node)}
-              className="global-notification-toast-wrap pointer-events-auto will-change-transform"
+              className={`global-notification-toast-wrap pointer-events-auto overflow-hidden transition-[max-height,margin,opacity] duration-200 ease-out ${wrapperPhaseClassName}`}
             >
               <div
                 className={`global-notification-toast flex items-center gap-2 rounded-xl border px-3 py-2 text-xs shadow-md backdrop-blur-sm transition-[opacity,transform] duration-200 ease-out ${phaseClassName} ${colorClassName}`}
@@ -406,13 +351,13 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
 function resolveVariantContainerClassName(variant: NotificationVariant): string {
   switch (variant) {
     case 'success':
-      return 'global-notification-toast--success border-emerald-500/45 bg-emerald-500/12';
+      return 'global-notification-toast--success border-emerald-500/55 bg-emerald-500/22';
     case 'warning':
-      return 'global-notification-toast--warning border-amber-500/50 bg-amber-500/14';
+      return 'global-notification-toast--warning border-amber-500/58 bg-amber-500/24';
     case 'error':
-      return 'global-notification-toast--error border-rose-500/55 bg-rose-500/14';
+      return 'global-notification-toast--error border-rose-500/62 bg-rose-500/24';
     default:
-      return 'border-border/60 bg-surface/95';
+      return 'border-border/70 bg-surface/96';
   }
 }
 
@@ -439,6 +384,19 @@ function resolvePhaseClassName(phase: NotificationRenderPhase): string {
       return 'global-notification-toast--leaving -translate-y-2.5 opacity-0';
     default:
       return 'translate-y-0 opacity-100';
+  }
+}
+
+function resolveWrapperPhaseClassName(phase: NotificationRenderPhase): string {
+  switch (phase) {
+    case 'entering':
+      return 'global-notification-toast-wrap--entering mb-0 max-h-0 opacity-0';
+    case 'visible':
+      return 'global-notification-toast-wrap--visible mb-1.5 max-h-24 opacity-100';
+    case 'leaving':
+      return 'global-notification-toast-wrap--leaving mb-0 max-h-0 opacity-0';
+    default:
+      return 'mb-1.5 max-h-24 opacity-100';
   }
 }
 

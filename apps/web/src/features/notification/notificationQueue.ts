@@ -27,9 +27,9 @@ export interface UpsertNotificationQueueResult {
 export const MAX_GLOBAL_NOTIFICATIONS = 3;
 
 export const DEFAULT_NOTIFICATION_DURATION_MS: Record<NotificationVariant, number> = {
-  success: 4000,
-  warning: 5000,
-  error: 7000
+  success: 2500,
+  warning: 2500,
+  error: 2500
 };
 
 export function resolveNotificationDuration(variant: NotificationVariant, durationMs?: number): number {

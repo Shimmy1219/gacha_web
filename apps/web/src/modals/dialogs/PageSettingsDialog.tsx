@@ -28,6 +28,7 @@ import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarSt
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
+import { useNotification } from '../../features/notification';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
 import {
   DEFAULT_SITE_ZOOM_PERCENT,
@@ -164,6 +165,7 @@ function clampSiteZoomPercent(value: number): number {
 
 export const PageSettingsDialog: ModalComponent = (props) => {
   const { close, push, isTop } = props;
+  const { notify } = useNotification();
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
@@ -480,9 +482,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       succeeded = true;
     } catch (error) {
       console.error('Failed to delete all data', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('全てのデータを削除できませんでした。ブラウザのストレージ設定をご確認の上、再度お試しください。');
-      }
+      notify({
+        variant: 'error',
+        title: 'データ削除に失敗しました',
+        message: '全てのデータを削除できませんでした。ブラウザのストレージ設定をご確認の上、再度お試しください。'
+      });
     } finally {
       setIsDeletingAllData(false);
       if (succeeded) {
@@ -498,6 +502,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     clearToolbarPreferencesStorage,
     deleteAllAssets,
     isDeletingAllData,
+    notify,
     persistence,
     ptControlsStore,
     pullHistoryStore,
@@ -520,15 +525,15 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       userProfilesStore.resetDiscordInfo({ persist: 'immediate' });
     } catch (error) {
       console.error('Failed to reset Discord server info', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert(
-          'Discordサーバー情報のリセットに失敗しました。ブラウザのストレージ設定をご確認の上、再度お試しください。'
-        );
-      }
+      notify({
+        variant: 'error',
+        title: 'Discord情報のリセットに失敗しました',
+        message: 'ブラウザのストレージ設定をご確認の上、再度お試しください。'
+      });
     } finally {
       setIsResettingDiscordServerInfo(false);
     }
-  }, [isResettingDiscordServerInfo, userProfilesStore]);
+  }, [isResettingDiscordServerInfo, notify, userProfilesStore]);
 
   const handleRequestDeleteAllData = useCallback(() => {
     if (isDeletingAllData) {
