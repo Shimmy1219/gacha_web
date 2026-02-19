@@ -9,6 +9,7 @@ import { SectionContainer } from '../layout/SectionContainer';
 import { useModal } from '../../../../modals';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
+import { useNotification, type NotificationVariant } from '../../../../features/notification';
 import { RarityTable, type RarityTableRow } from './RarityTable';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
@@ -44,6 +45,7 @@ export function RaritySection(): JSX.Element {
   const ptSettingsState = useStoreValue(ptControlsStore);
   const catalogState = useStoreValue(catalogStore);
   const { push } = useModal();
+  const { notify } = useNotification();
   const confirmDeleteGacha = useGachaDeletion();
 
   const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
@@ -347,6 +349,29 @@ export function RaritySection(): JSX.Element {
 
   const shouldRenderTable = Boolean(activeGachaId);
 
+  const handlePushRandomNotification = useCallback(() => {
+    const notificationCandidates: Array<{ variant: NotificationVariant; title: string; message: string }> = [
+      {
+        variant: 'success',
+        title: '通知テスト: 成功',
+        message: 'サンプルの成功通知です。レアリティ設定の保存が完了した想定です。'
+      },
+      {
+        variant: 'warning',
+        title: '通知テスト: 警告',
+        message: 'サンプルの警告通知です。排出率の合計値をご確認ください。'
+      },
+      {
+        variant: 'error',
+        title: '通知テスト: 失敗',
+        message: 'サンプルの失敗通知です。設定の保存に失敗した想定です。'
+      }
+    ];
+    const randomIndex = Math.floor(Math.random() * notificationCandidates.length);
+    const selected = notificationCandidates[randomIndex] ?? notificationCandidates[0];
+    notify(selected);
+  }, [notify]);
+
   return (
     <SectionContainer
       id="rarity"
@@ -392,6 +417,15 @@ export function RaritySection(): JSX.Element {
               onSimulation={handleOpenSimulation}
             />
           ) : null}
+          <div className="rarity-section__notification-test-area flex justify-end">
+            <button
+              type="button"
+              className="rarity-section__notification-test-button btn btn-muted rounded-xl px-4 py-2 text-xs"
+              onClick={handlePushRandomNotification}
+            >
+              ランダム通知テスト
+            </button>
+          </div>
         </div>
       </div>
     </SectionContainer>
