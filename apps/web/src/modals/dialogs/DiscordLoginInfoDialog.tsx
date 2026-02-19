@@ -1,18 +1,9 @@
-import { InformationCircleIcon } from '@heroicons/react/24/outline';
-
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 
 export function DiscordLoginInfoDialog({ close }: ModalComponentProps): JSX.Element {
   return (
     <>
       <ModalBody className="login-info-dialog__body space-y-4">
-        <div className="login-info-dialog__lead flex items-start gap-3 rounded-2xl border border-white/5 bg-surface/40 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
-          <InformationCircleIcon className="login-info-dialog__lead-icon mt-0.5 h-5 w-5 text-accent" aria-hidden="true" />
-          <p className="login-info-dialog__lead-text">
-            Discordログインの必要性と、ログインで使える機能をまとめています。
-          </p>
-        </div>
-
         <section className="login-info-dialog__section space-y-2 rounded-2xl border border-border/60 bg-panel/40 p-4 text-left">
           <h3 className="login-info-dialog__section-title text-base font-semibold text-surface-foreground">
             ログインは必要？
@@ -24,9 +15,11 @@ export function DiscordLoginInfoDialog({ close }: ModalComponentProps): JSX.Elem
             またログインしなくても以下のことが可能です。
           </p>
           <ul className="login-info-dialog__feature-list space-y-1 text-sm leading-relaxed text-muted-foreground">
+            <li className="login-info-dialog__feature-item">・ガチャ機能の全て</li>
             <li className="login-info-dialog__feature-item">
-              ・基本的なガチャ機能zipファイルを作成したり、URLを発行したりすることが出来ます。
+              ・ユーザーごとに景品をまとめ、zipファイルを作成し、端末に保存
             </li>
+            <li className="login-info-dialog__feature-item">・作成したzipファイルをアップロードし、URLを発行</li>
           </ul>
         </section>
 
