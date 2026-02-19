@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent
 } from 'react';
 import { RadioGroup } from '@headlessui/react';
 import { ArrowPathIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -29,7 +30,10 @@ import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/u
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
 import {
+  DEFAULT_SITE_ZOOM_PERCENT,
   DEFAULT_GACHA_OWNER_SHARE_RATE,
+  SITE_ZOOM_PERCENT_MAX,
+  SITE_ZOOM_PERCENT_MIN,
   type DashboardDesktopLayout
 } from '@domain/stores/uiPreferencesStore';
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
@@ -46,7 +50,7 @@ type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'receive' | 'misc';
 const MENU_ITEMS: MenuItem[] = [
   {
     id: 'gacha',
-    label: 'ガチャ一覧',
+    label: 'ガチャ設定',
     description: '一覧ページの並べ替えや表示項目を調整します。'
   },
   {
@@ -56,7 +60,7 @@ const MENU_ITEMS: MenuItem[] = [
   },
   {
     id: 'layout',
-    label: 'レイアウト',
+    label: 'レイアウトとズーム',
     description: 'ページ全体のレイアウトや表示方法を切り替えます。'
   },
   {
@@ -78,13 +82,13 @@ const DASHBOARD_DESKTOP_LAYOUT_OPTIONS: Array<{
 }> = [
   {
     value: 'grid',
-    label: 'カードグリッド',
+    label: '4カラム表示',
     description: '各セクションを複数列で同時に表示します。従来のデスクトップ表示です。'
   },
   {
     value: 'sidebar',
-    label: 'サイドタブ',
-    description: '左側のタブでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
+    label: 'サイドバー表示',
+    description: '左側のサイドバーでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
   }
 ];
 
@@ -152,9 +156,14 @@ const BASE_MODAL_MIN_HEIGHT_REM = 28;
 const VIEWPORT_PADDING_REM = 12;
 const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
 const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
+const PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY = 'pageSettingsZoomPreview';
+
+function clampSiteZoomPercent(value: number): number {
+  return Math.min(Math.max(Math.round(value), SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
 
 export const PageSettingsDialog: ModalComponent = (props) => {
-  const { close, push } = props;
+  const { close, push, isTop } = props;
   const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
   const [showArchived, setShowArchived] = useState(true);
@@ -170,7 +179,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     }
     return window.matchMedia('(min-width: 1024px)').matches;
   });
-  const { forceSidebarLayout } = useResponsiveDashboard();
+  const { forceSidebarLayout, isMobile: isMobileDashboard } = useResponsiveDashboard();
   const isSidebarLayoutForced = forceSidebarLayout;
   const [activeView, setActiveView] = useState<'menu' | 'content'>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
@@ -204,6 +213,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const [desktopLayout, setDesktopLayout] = useState<DashboardDesktopLayout>(() =>
     uiPreferencesStore.getDashboardDesktopLayout()
   );
+  const [siteZoomPercent, setSiteZoomPercent] = useState<number>(() =>
+    uiPreferencesStore.getSiteZoomPercent()
+  );
+  const [isZoomPreviewing, setIsZoomPreviewing] = useState(false);
   const appState = useStoreValue(appStateStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const quickSendNewOnlyPreference = useMemo(
@@ -386,6 +399,59 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [isSidebarLayoutForced, uiPreferencesStore]
   );
 
+  const handleSiteZoomChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const numeric = Number(event.target.value);
+      if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+        return;
+      }
+      const nextZoomPercent = clampSiteZoomPercent(numeric);
+      setSiteZoomPercent(nextZoomPercent);
+      uiPreferencesStore.setSiteZoomPercent(nextZoomPercent, { persist: 'debounced' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleCommitSiteZoom = useCallback(() => {
+    const normalized = clampSiteZoomPercent(siteZoomPercent);
+    uiPreferencesStore.setSiteZoomPercent(normalized, { persist: 'immediate', emit: false });
+  }, [siteZoomPercent, uiPreferencesStore]);
+
+  const handleStartZoomPreview = useCallback(
+    (_event: ReactPointerEvent<HTMLInputElement>) => {
+      if (isMobileDashboard) {
+        return;
+      }
+      setIsZoomPreviewing(true);
+    },
+    [isMobileDashboard]
+  );
+
+  const handleStopZoomPreview = useCallback(() => {
+    setIsZoomPreviewing(false);
+    handleCommitSiteZoom();
+  }, [handleCommitSiteZoom]);
+
+  const handleSiteZoomSliderBlur = useCallback(() => {
+    handleStopZoomPreview();
+  }, [handleStopZoomPreview]);
+
+  const handleSiteZoomSliderKeyUp = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      const commitKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+      if (commitKeys.has(event.key)) {
+        handleCommitSiteZoom();
+      }
+    },
+    [handleCommitSiteZoom]
+  );
+
+  const handleResetSiteZoom = useCallback(() => {
+    setIsZoomPreviewing(false);
+    setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT);
+    uiPreferencesStore.setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT, { persist: 'immediate' });
+  }, [uiPreferencesStore]);
+
   const handleDeleteAllData = useCallback(async () => {
     if (isDeletingAllData) {
       return;
@@ -567,6 +633,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [uiPreferencesState, uiPreferencesStore]);
 
   useEffect(() => {
+    setSiteZoomPercent(uiPreferencesStore.getSiteZoomPercent());
+  }, [uiPreferencesState, uiPreferencesStore]);
+
+  useEffect(() => {
     const nextValue = formatOwnerShareRateInput(gachaOwnerShareRate);
     setOwnerShareRateInput((previous) => (previous === nextValue ? previous : nextValue));
   }, [gachaOwnerShareRate]);
@@ -576,6 +646,60 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   useEffect(() => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
+
+  useEffect(() => {
+    if (!isZoomPreviewing || typeof window === 'undefined') {
+      return;
+    }
+
+    const stopPreview = () => {
+      handleStopZoomPreview();
+    };
+
+    window.addEventListener('pointerup', stopPreview);
+    window.addEventListener('pointercancel', stopPreview);
+
+    return () => {
+      window.removeEventListener('pointerup', stopPreview);
+      window.removeEventListener('pointercancel', stopPreview);
+    };
+  }, [handleStopZoomPreview, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (activeMenu !== 'layout' && isZoomPreviewing) {
+      handleStopZoomPreview();
+    }
+  }, [activeMenu, handleStopZoomPreview, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (isMobileDashboard && isZoomPreviewing) {
+      handleStopZoomPreview();
+    }
+  }, [handleStopZoomPreview, isMobileDashboard, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (isTop || !isZoomPreviewing) {
+      return;
+    }
+    handleStopZoomPreview();
+  }, [handleStopZoomPreview, isTop, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const { body } = document;
+    if (isZoomPreviewing) {
+      body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY] = '1';
+    } else {
+      delete body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY];
+    }
+
+    return () => {
+      delete body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY];
+    };
+  }, [isZoomPreviewing]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -726,7 +850,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-semibold text-surface-foreground">ガチャ一覧の表示</h2>
+              <h2 className="text-base font-semibold text-surface-foreground">ガチャ設定</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 並べ替えや表示ルールを変更すると、ガチャ管理ページに即時反映されます。
               </p>
@@ -911,23 +1035,28 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         return <ReceiveSettingsContent />;
       case 'layout':
         return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-base font-semibold text-surface-foreground">レイアウト</h2>
+          <div
+            className={clsx(
+              'page-settings__layout-tab space-y-6',
+              isZoomPreviewing && 'page-settings__layout-tab--previewing'
+            )}
+          >
+            <div className="page-settings__layout-intro">
+              <h2 className="text-base font-semibold text-surface-foreground">レイアウトとズーム</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 デスクトップ時の表示方式を切り替えて、画面サイズに合わせた操作性を選択できます。
               </p>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
+            <div className="page-settings__desktop-layout-panel space-y-4">
+              <div className="page-settings__desktop-layout-header space-y-1">
                 <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
+                  横幅の広い画面での表示スタイルを切り替えられます。サイドバー表示はノートPCなどの狭い画面でもセクションを順番に確認できます。
                 </p>
               </div>
               {isSidebarLayoutForced ? (
                 <p className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
-                  画面幅が900〜1025pxのため、サイドタブレイアウトが自動的に適用されています。
+                  画面幅が900〜1025pxのため、サイドバーレイアウトが自動的に適用されています。
                 </p>
               ) : null}
               <RadioGroup
@@ -970,7 +1099,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                           </RadioGroup.Description>
                           {optionDisabled ? (
                             <p className="text-[11px] text-muted-foreground">
-                              現在の画面幅ではサイドタブのみ利用できます。
+                              現在の画面幅ではサイドバーのみ利用できます。
                             </p>
                           ) : null}
                           {isSidebarLayoutForced && option.value === 'sidebar' ? (
@@ -985,6 +1114,60 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 })}
               </RadioGroup>
             </div>
+            {!isMobileDashboard ? (
+              <div
+                className={clsx(
+                  'page-settings__site-zoom-panel space-y-4 transition',
+                  isZoomPreviewing &&
+                    'page-settings__site-zoom-panel--previewing rounded-2xl border border-border/60'
+                )}
+              >
+                <div className="page-settings__site-zoom-header space-y-1">
+                  <h3 className="page-settings__site-zoom-title text-sm font-semibold text-surface-foreground">
+                    サイト表示倍率
+                  </h3>
+                  <p className="page-settings__site-zoom-description text-xs leading-relaxed text-muted-foreground">
+                    表示サイズを50%〜100%で調整できます。
+                  </p>
+                </div>
+                <div className="page-settings__site-zoom-controls flex items-center gap-3">
+                  <label className="sr-only" htmlFor="page-settings-site-zoom-range">
+                    サイト表示倍率
+                  </label>
+                  <input
+                    id="page-settings-site-zoom-range"
+                    type="range"
+                    min={SITE_ZOOM_PERCENT_MIN}
+                    max={SITE_ZOOM_PERCENT_MAX}
+                    step={1}
+                    value={siteZoomPercent}
+                    onChange={handleSiteZoomChange}
+                    onPointerDown={handleStartZoomPreview}
+                    onPointerUp={handleStopZoomPreview}
+                    onPointerCancel={handleStopZoomPreview}
+                    onBlur={handleSiteZoomSliderBlur}
+                    onKeyUp={handleSiteZoomSliderKeyUp}
+                    className="page-settings__site-zoom-slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-panel-contrast accent-accent"
+                    aria-valuemin={SITE_ZOOM_PERCENT_MIN}
+                    aria-valuemax={SITE_ZOOM_PERCENT_MAX}
+                    aria-valuenow={siteZoomPercent}
+                    aria-label="サイト表示倍率"
+                  />
+                  <span className="page-settings__site-zoom-value min-w-[3.5rem] text-right text-sm font-semibold text-accent">
+                    {siteZoomPercent}%
+                  </span>
+                </div>
+                <div className="page-settings__site-zoom-actions flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResetSiteZoom}
+                    className="page-settings__site-zoom-reset-button rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    リセット
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         );
       case 'site-theme':
@@ -1300,7 +1483,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     <ModalBody
       ref={modalBodyRef}
       className={clsx(
-        'flex flex-col space-y-0 overflow-hidden p-0',
+        'page-settings-dialog flex flex-col space-y-0 overflow-hidden p-0',
+        isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
         isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
       )}
       style={{
@@ -1308,10 +1492,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
       }}
     >
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
+      <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
           className={clsx(
-            'm-2 w-[calc(100%-1rem)] shrink-0 p-2 lg:m-0 lg:w-full lg:p-0',
+            'page-settings__menu-scroll m-2 w-[calc(100%-1rem)] min-h-0 flex-1 overflow-y-auto p-2 lg:m-0 lg:w-full lg:flex-none lg:self-stretch lg:p-0',
             isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
             activeView === 'menu' ? 'block' : 'hidden',
             'lg:block'
@@ -1354,10 +1538,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         </nav>
         <div
           className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
+            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:self-stretch lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
             isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
           )}
-          style={{ maxHeight: viewportLimit ?? undefined }}
         >
           {!isLargeLayout ? (
             <div className="mb-4 flex items-center lg:hidden">

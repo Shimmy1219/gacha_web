@@ -34,6 +34,9 @@ export const DASHBOARD_DESKTOP_LAYOUT_VALUES = ['grid', 'sidebar'] as const;
 export type DashboardDesktopLayout = (typeof DASHBOARD_DESKTOP_LAYOUT_VALUES)[number];
 const DASHBOARD_DESKTOP_LAYOUT_SET = new Set<string>(DASHBOARD_DESKTOP_LAYOUT_VALUES);
 export const DEFAULT_DASHBOARD_DESKTOP_LAYOUT: DashboardDesktopLayout = 'grid';
+export const SITE_ZOOM_PERCENT_MIN = 50;
+export const SITE_ZOOM_PERCENT_MAX = 100;
+export const DEFAULT_SITE_ZOOM_PERCENT = 100;
 export const DEFAULT_GACHA_OWNER_SHARE_RATE = 0.15;
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -173,6 +176,20 @@ function normalizeDashboardDesktopLayout(value: unknown): DashboardDesktopLayout
   return null;
 }
 
+function normalizeSiteZoomPercent(value: unknown): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+    return null;
+  }
+
+  const rounded = Math.round(numeric);
+  return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
+
 function readDiscordAuthLogsEnabledFromState(state: UiPreferencesStateV3 | undefined): boolean | null {
   if (!state) {
     return null;
@@ -265,6 +282,19 @@ function readDashboardDesktopLayoutFromState(
     return null;
   }
   return normalizeDashboardDesktopLayout(dashboard.desktop);
+}
+
+function readSiteZoomPercentFromState(state: UiPreferencesStateV3 | undefined): number | null {
+  if (!state) {
+    return null;
+  }
+
+  const appearance = state.appearance;
+  if (!isRecord(appearance)) {
+    return null;
+  }
+
+  return normalizeSiteZoomPercent(appearance.siteZoomPercent);
 }
 
 function readUserCardOpenState(state: UiPreferencesStateV3 | undefined, userId: string): boolean | null {
@@ -680,6 +710,37 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
           appearance: {
             ...previousAppearance,
             customBaseTone: tone
+          }
+        };
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  getSiteZoomPercent(): number {
+    return readSiteZoomPercentFromState(this.state) ?? DEFAULT_SITE_ZOOM_PERCENT;
+  }
+
+  setSiteZoomPercent(percent: number, options: UpdateOptions = { persist: 'debounced' }): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = normalizeSiteZoomPercent(percent) ?? DEFAULT_SITE_ZOOM_PERCENT;
+
+    this.update(
+      (previous) => {
+        const current = readSiteZoomPercentFromState(previous) ?? DEFAULT_SITE_ZOOM_PERCENT;
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousAppearance = base.appearance && isRecord(base.appearance) ? base.appearance : {};
+
+        return {
+          ...base,
+          appearance: {
+            ...previousAppearance,
+            siteZoomPercent: normalized
           }
         };
       },

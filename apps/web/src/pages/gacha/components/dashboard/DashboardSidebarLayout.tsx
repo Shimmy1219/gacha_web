@@ -2,6 +2,14 @@ import { clsx } from 'clsx';
 
 import type { DashboardSectionConfig } from './DashboardShell';
 
+const SIDEBAR_MAIN_HEIGHT_CSS = [
+  'max(0px, calc(',
+  '(100vh * var(--site-zoom-inverse-scale, 1))',
+  ' - var(--app-header-height, 0px)',
+  ' - var(--app-main-vertical-padding, 0px)',
+  '))'
+].join('');
+
 interface DashboardSidebarLayoutProps {
   sections: DashboardSectionConfig[];
   selectedViewIds: readonly string[];
@@ -58,7 +66,10 @@ export function DashboardSidebarLayout({
           );
         })}
       </nav>
-      <div className="dashboard-sidebar-layout__content rounded-2xl border border-border/60 bg-panel p-4">
+      <div
+        className="dashboard-sidebar-layout__content rounded-2xl border border-border/60 bg-panel p-4"
+        style={{ height: SIDEBAR_MAIN_HEIGHT_CSS }}
+      >
         {selectedSections.length === 0 ? (
           <div className="flex h-full min-h-[200px] items-center justify-center rounded-xl border border-dashed border-border/60 bg-panel-contrast/40 text-sm text-muted-foreground">
             表示するセクションを{maxSelections}つまで選択してください。

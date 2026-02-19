@@ -27,6 +27,9 @@
   --color-accent-foreground: 255 255 255;
   --background-gradient-1: rgba(0, 0, 0, 0);
   --background-gradient-2: rgba(0, 0, 0, 0);
+  --site-zoom-scale: 1;
+  --site-zoom-inverse-scale: 1;
+  --site-zoom-percent: 100;
 }
 
 [data-site-theme='light'] {
@@ -118,11 +121,24 @@
     -webkit-appearance: none;
     margin: 0;
   }
+
+  :root[data-site-zoom-mode='transform'] body {
+    transform: scale(var(--site-zoom-scale));
+    transform-origin: top left;
+    width: calc(100% / var(--site-zoom-scale));
+    min-height: calc(100% / var(--site-zoom-scale));
+  }
 }
 
 @layer components {
   .section-container {
-    max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
+    max-height: max(
+      0px,
+      calc(
+        (100vh * var(--site-zoom-inverse-scale, 1)) - var(--app-header-height, 0px) -
+          var(--app-main-vertical-padding, 0px)
+      )
+    );
   }
 
   .section-container--mobile {
@@ -244,28 +260,118 @@
     background-color: rgb(var(--color-accent-bright) / 0.75);
   }
 
-  .page-settings__content-scroll {
+  .dashboard-desktop-grid {
+    grid-template-columns: minmax(0, 1fr);
+    --dashboard-grid-lg-col-1-fr: 1fr;
+    --dashboard-grid-lg-col-2-fr: 1fr;
+    --dashboard-grid-xl-col-1-fr: 0.92fr;
+    --dashboard-grid-xl-col-2-fr: 1.32fr;
+    --dashboard-grid-xl-col-3-fr: 1.11fr;
+    --dashboard-grid-xl-col-4-fr: 0.8fr;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-lg-col-1-fr))
+        minmax(0, var(--dashboard-grid-lg-col-2-fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-xl-col-1-fr))
+        minmax(0, var(--dashboard-grid-xl-col-2-fr))
+        minmax(0, var(--dashboard-grid-xl-col-3-fr))
+        minmax(0, var(--dashboard-grid-xl-col-4-fr));
+    }
+  }
+
+  .page-settings__content-scroll,
+  .page-settings__menu-scroll {
     min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 0.8) transparent;
     scrollbar-gutter: stable;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar {
+  .page-settings__content-scroll::-webkit-scrollbar,
+  .page-settings__menu-scroll::-webkit-scrollbar {
     width: 0.65rem;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-track {
+  .page-settings__content-scroll::-webkit-scrollbar-track,
+  .page-settings__menu-scroll::-webkit-scrollbar-track {
     background: rgb(var(--color-surface-deep) / 0.7);
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb {
     background: rgb(var(--color-accent) / 0.8);
     border-radius: 9999px;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--color-accent) / 1);
+  }
+
+  body[data-page-settings-zoom-preview='1'] .modal-overlay {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .modal-header {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__menu-scroll {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__content-scroll {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__layout-intro,
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__desktop-layout-panel {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__site-zoom-panel--previewing {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 120;
+    margin: 0 auto;
+    width: min(42rem, calc(100vw - 2rem));
+    padding: 0.875rem 1rem;
+    border-color: rgb(var(--color-accent) / 0.45);
+    background: rgb(var(--color-panel) / 0.96);
+    box-shadow: 0 14px 36px rgb(0 0 0 / 0.45);
   }
 
   @media (max-width: 1023px) {

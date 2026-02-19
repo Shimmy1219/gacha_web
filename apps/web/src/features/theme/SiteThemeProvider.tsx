@@ -8,9 +8,19 @@ import {
   type PropsWithChildren
 } from 'react';
 
-import { DEFAULT_SITE_ACCENT, type CustomBaseTone, type SiteTheme } from '@domain/stores/uiPreferencesStore';
+import {
+  DEFAULT_SITE_ACCENT,
+  type CustomBaseTone,
+  type SiteTheme
+} from '@domain/stores/uiPreferencesStore';
 
 import { useDomainStores } from '../storage/AppPersistenceProvider';
+import {
+  isSiteZoomDisabledByMediaQuery,
+  resolveAppliedSiteZoomPercent,
+  SITE_ZOOM_CHANGE_EVENT,
+  SITE_ZOOM_DISABLED_MEDIA_QUERY
+} from './siteZoomMath';
 
 type ThemeRole = 'main' | 'accent' | 'text';
 
@@ -237,6 +247,41 @@ function applyDocumentTheme(theme: SiteTheme, accentHex: string, customBaseTone:
   }
 }
 
+function applyDocumentZoom(percent: number): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const root = document.documentElement;
+  const zoomDisabled = typeof window !== 'undefined'
+    ? isSiteZoomDisabledByMediaQuery(window.matchMedia.bind(window))
+    : false;
+  const normalized = resolveAppliedSiteZoomPercent(percent, zoomDisabled);
+  const scale = normalized / 100;
+  const supportsCssZoom =
+    typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1');
+
+  root.style.setProperty('--site-zoom-percent', String(normalized));
+  root.style.setProperty('--site-zoom-scale', String(scale));
+  root.style.setProperty('--site-zoom-inverse-scale', String(1 / scale));
+
+  if (supportsCssZoom) {
+    root.dataset.siteZoomMode = 'native';
+    root.style.setProperty('zoom', String(scale));
+  } else {
+    root.dataset.siteZoomMode = 'transform';
+    root.style.removeProperty('zoom');
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent(SITE_ZOOM_CHANGE_EVENT, {
+        detail: { percent: normalized, scale, disabled: zoomDisabled }
+      })
+    );
+  }
+}
+
 export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element {
   const { uiPreferences } = useDomainStores();
   const [theme, setThemeState] = useState<SiteTheme>(() => uiPreferences.getSiteTheme());
@@ -246,20 +291,54 @@ export function SiteThemeProvider({ children }: PropsWithChildren): JSX.Element 
   const [customBaseTone, setCustomBaseToneState] = useState<CustomBaseTone>(() =>
     uiPreferences.getCustomBaseTone()
   );
+  const [siteZoomPercent, setSiteZoomPercentState] = useState<number>(() =>
+    uiPreferences.getSiteZoomPercent()
+  );
 
   useEffect(() => {
     applyDocumentTheme(theme, resolveAccentHex(theme, customAccentColor), customBaseTone);
   }, [theme, customAccentColor, customBaseTone]);
 
   useEffect(() => {
+    applyDocumentZoom(siteZoomPercent);
+  }, [siteZoomPercent]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(SITE_ZOOM_DISABLED_MEDIA_QUERY);
+    const handleViewportChange = () => {
+      applyDocumentZoom(siteZoomPercent);
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleViewportChange);
+      return () => {
+        mediaQuery.removeEventListener('change', handleViewportChange);
+      };
+    }
+
+    mediaQuery.addListener(handleViewportChange);
+    return () => {
+      mediaQuery.removeListener(handleViewportChange);
+    };
+  }, [siteZoomPercent]);
+
+  useEffect(() => {
     const unsubscribe = uiPreferences.subscribe(() => {
       const nextTheme = uiPreferences.getSiteTheme();
       const nextAccent = uiPreferences.getCustomAccentColor();
       const nextBaseTone = uiPreferences.getCustomBaseTone();
+      const nextSiteZoomPercent = uiPreferences.getSiteZoomPercent();
 
       setThemeState((previous) => (previous === nextTheme ? previous : nextTheme));
       setCustomAccentColorState((previous) => (previous === nextAccent ? previous : nextAccent));
       setCustomBaseToneState((previous) => (previous === nextBaseTone ? previous : nextBaseTone));
+      setSiteZoomPercentState((previous) =>
+        previous === nextSiteZoomPercent ? previous : nextSiteZoomPercent
+      );
     });
     return unsubscribe;
   }, [uiPreferences]);
