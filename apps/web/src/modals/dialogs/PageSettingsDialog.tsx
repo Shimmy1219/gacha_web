@@ -50,7 +50,7 @@ type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'receive' | 'misc';
 const MENU_ITEMS: MenuItem[] = [
   {
     id: 'gacha',
-    label: 'ガチャ一覧',
+    label: 'ガチャ設定',
     description: '一覧ページの並べ替えや表示項目を調整します。'
   },
   {
@@ -850,7 +850,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-semibold text-surface-foreground">ガチャ一覧の表示</h2>
+              <h2 className="text-base font-semibold text-surface-foreground">ガチャ設定</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 並べ替えや表示ルールを変更すると、ガチャ管理ページに即時反映されます。
               </p>
@@ -1118,7 +1118,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               <div
                 className={clsx(
                   'page-settings__site-zoom-panel space-y-4 transition',
-                  isZoomPreviewing && 'page-settings__site-zoom-panel--previewing'
+                  isZoomPreviewing &&
+                    'page-settings__site-zoom-panel--previewing rounded-2xl border border-border/60'
                 )}
               >
                 <div className="page-settings__site-zoom-header space-y-1">
@@ -1494,7 +1495,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
           className={clsx(
-            'page-settings__menu-scroll m-2 w-[calc(100%-1rem)] min-h-0 shrink-0 overflow-y-auto p-2 lg:m-0 lg:w-full lg:self-stretch lg:p-0',
+            'page-settings__menu-scroll m-2 w-[calc(100%-1rem)] min-h-0 flex-1 overflow-y-auto p-2 lg:m-0 lg:w-full lg:flex-none lg:self-stretch lg:p-0',
             isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
             activeView === 'menu' ? 'block' : 'hidden',
             'lg:block'
