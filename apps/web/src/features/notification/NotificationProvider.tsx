@@ -351,13 +351,13 @@ function GlobalNotificationHost({ notifications, onDismiss }: GlobalNotification
 function resolveVariantContainerClassName(variant: NotificationVariant): string {
   switch (variant) {
     case 'success':
-      return 'global-notification-toast--success border-emerald-400/52 bg-white/88 dark:border-emerald-300/45 dark:bg-white/16';
+      return 'global-notification-toast--success border-emerald-400/52 bg-white/90 dark:border-emerald-300/45 dark:bg-white/16';
     case 'warning':
-      return 'global-notification-toast--warning border-amber-400/54 bg-white/88 dark:border-amber-300/48 dark:bg-white/16';
+      return 'global-notification-toast--warning border-amber-400/54 bg-white/90 dark:border-amber-300/48 dark:bg-white/16';
     case 'error':
-      return 'global-notification-toast--error border-rose-400/58 bg-white/88 dark:border-rose-300/50 dark:bg-white/16';
+      return 'global-notification-toast--error border-rose-400/58 bg-white/90 dark:border-rose-300/50 dark:bg-white/16';
     default:
-      return 'border-border/70 bg-white/88 dark:bg-white/18';
+      return 'border-border/70 bg-white/89 dark:bg-white/18';
   }
 }
 
