@@ -264,10 +264,10 @@
     grid-template-columns: minmax(0, 1fr);
     --dashboard-grid-lg-col-1-fr: 1fr;
     --dashboard-grid-lg-col-2-fr: 1fr;
-    --dashboard-grid-xl-col-1-fr: 1fr;
-    --dashboard-grid-xl-col-2-fr: 1.25fr;
-    --dashboard-grid-xl-col-3-fr: 1fr;
-    --dashboard-grid-xl-col-4-fr: 0.9fr;
+    --dashboard-grid-xl-col-1-fr: 0.92fr;
+    --dashboard-grid-xl-col-2-fr: 1.32fr;
+    --dashboard-grid-xl-col-3-fr: 1.11fr;
+    --dashboard-grid-xl-col-4-fr: 0.8fr;
   }
 
   @media (min-width: 1024px) {
