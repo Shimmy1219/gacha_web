@@ -60,7 +60,7 @@ const MENU_ITEMS: MenuItem[] = [
   },
   {
     id: 'layout',
-    label: 'レイアウト',
+    label: 'レイアウトとズーム',
     description: 'ページ全体のレイアウトや表示方法を切り替えます。'
   },
   {
@@ -1042,7 +1042,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
             )}
           >
             <div className="page-settings__layout-intro">
-              <h2 className="text-base font-semibold text-surface-foreground">レイアウト</h2>
+              <h2 className="text-base font-semibold text-surface-foreground">レイアウトとズーム</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 デスクトップ時の表示方式を切り替えて、画面サイズに合わせた操作性を選択できます。
               </p>
@@ -1117,7 +1117,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
             {!isMobileDashboard ? (
               <div
                 className={clsx(
-                  'page-settings__site-zoom-panel space-y-3 rounded-2xl border border-border/60 bg-panel/70 p-4 transition',
+                  'page-settings__site-zoom-panel space-y-4 transition',
                   isZoomPreviewing && 'page-settings__site-zoom-panel--previewing'
                 )}
               >
@@ -1126,7 +1126,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                     サイト表示倍率
                   </h3>
                   <p className="page-settings__site-zoom-description text-xs leading-relaxed text-muted-foreground">
-                    ブラウザのズームと同様に、表示サイズを50%〜100%で調整できます。
+                    表示サイズを50%〜100%で調整できます。
                   </p>
                 </div>
                 <div className="page-settings__site-zoom-controls flex items-center gap-3">
@@ -1155,17 +1155,16 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   <span className="page-settings__site-zoom-value min-w-[3.5rem] text-right text-sm font-semibold text-accent">
                     {siteZoomPercent}%
                   </span>
+                </div>
+                <div className="page-settings__site-zoom-actions flex justify-end">
                   <button
                     type="button"
                     onClick={handleResetSiteZoom}
                     className="page-settings__site-zoom-reset-button rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                   >
-                    100%に戻す
+                    リセット
                   </button>
                 </div>
-                <p className="page-settings__site-zoom-help text-[11px] text-muted-foreground">
-                  50%で縮小表示、100%で通常表示になります。
-                </p>
               </div>
             ) : null}
           </div>
