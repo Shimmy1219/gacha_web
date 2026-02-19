@@ -1,7 +1,9 @@
+import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import { type DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
 
 import { OfficialXAccountPanel } from '../../../../components/OfficialXAccountPanel';
+import { DiscordLoginInfoDialog, useModal } from '../../../../modals';
 import { DiscordLoginButton } from '../auth/DiscordLoginButton';
 
 interface GachaSplashScreenProps {
@@ -86,6 +88,16 @@ export function GachaSplashScreen({
   selectedDesktopLayout = 'grid',
   onSelectDesktopLayout
 }: GachaSplashScreenProps): JSX.Element {
+  const { push } = useModal();
+
+  const handleOpenLoginInfo = () => {
+    push(DiscordLoginInfoDialog, {
+      id: 'splash-login-info',
+      title: 'ログインについて',
+      size: 'md'
+    });
+  };
+
   return (
     <section className="gacha-splash relative isolate mx-auto flex w-full max-w-5xl flex-col items-center overflow-hidden rounded-3xl border border-border/70 bg-surface/80 px-6 py-16 text-center shadow-xl">
       <div className="pointer-events-none absolute -inset-x-20 -top-32 -z-20 h-64 rounded-full bg-accent/10 blur-3xl" aria-hidden="true" />
@@ -161,12 +173,21 @@ export function GachaSplashScreen({
         >
           ガチャを登録
         </button>
-        <div className="w-full max-w-md">
+        <div className="gacha-splash__login-actions w-full max-w-md space-y-2">
           <DiscordLoginButton
             placement="splash"
             onOpenPageSettings={onOpenPageSettings}
-            className="w-full justify-center"
+            className="gacha-splash__discord-login-button w-full justify-center"
           />
+          <button
+            id="splash-login-about-button"
+            type="button"
+            onClick={handleOpenLoginInfo}
+            className="gacha-splash__login-info-button btn btn-muted inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+          >
+            <InformationCircleIcon className="gacha-splash__login-info-button-icon h-5 w-5" aria-hidden="true" />
+            <span className="gacha-splash__login-info-button-label">ログインについて</span>
+          </button>
         </div>
         <div className="gacha-splash__official-x-contact w-full max-w-2xl">
           <OfficialXAccountPanel />
