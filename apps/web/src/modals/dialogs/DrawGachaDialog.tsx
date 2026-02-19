@@ -1146,7 +1146,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [shareContent?.tweetUrl]
   );
 
-  const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
@@ -2111,31 +2110,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果をコピー</span>
                   </button>
-                  {shareStatus === 'shared' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有を開始しました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'copied' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有テキストをコピーしました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'error' ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      共有に失敗しました
-                    </span>
-                  ) : null}
-                  {discordDeliveryNotice ? (
-                    <span className="basis-full text-right text-[11px] text-emerald-600">
-                      {discordDeliveryNotice}
-                    </span>
-                  ) : null}
-                  {discordDeliveryError ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      {discordDeliveryError}
-                    </span>
-                  ) : null}
                 </div>
               ) : null}
             </div>
