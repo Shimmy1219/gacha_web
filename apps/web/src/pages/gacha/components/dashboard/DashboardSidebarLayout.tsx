@@ -112,29 +112,29 @@ export function DashboardSidebarLayout({
             </nav>
           </div>
         </div>
-      <div
-        className="dashboard-sidebar-layout__content rounded-2xl border border-border/60 bg-panel p-4"
-        style={{ height: SIDEBAR_MAIN_HEIGHT_CSS }}
-      >
-        {selectedSections.length === 0 ? (
-          <div className="flex h-full min-h-[200px] items-center justify-center rounded-xl border border-dashed border-border/60 bg-panel-contrast/40 text-sm text-muted-foreground">
-            表示するセクションを{maxSelections}つまで選択してください。
-          </div>
-        ) : (
-          <div
-            className={clsx(
-              'dashboard-sidebar-layout__section-grid grid h-full w-full gap-4 [&_.section-container]:border-none [&_.section-container]:p-0',
-              selectedSections.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1'
-            )}
-          >
-            {selectedSections.map((section) => (
-              <div key={section.id} data-view={section.id} className="dashboard-sidebar-layout__section h-full w-full">
-                {section.node}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        <div
+          className="dashboard-sidebar-layout__content rounded-2xl border border-border/60 bg-panel p-4"
+          style={{ height: SIDEBAR_MAIN_HEIGHT_CSS }}
+        >
+          {selectedSections.length === 0 ? (
+            <div className="flex h-full min-h-[200px] items-center justify-center rounded-xl border border-dashed border-border/60 bg-panel-contrast/40 text-sm text-muted-foreground">
+              表示するセクションを{maxSelections}つまで選択してください。
+            </div>
+          ) : (
+            <div
+              className={clsx(
+                'dashboard-sidebar-layout__section-grid grid h-full w-full gap-4 [&_.section-container]:border-none [&_.section-container]:p-0',
+                selectedSections.length > 1 ? 'lg:grid-cols-2' : 'grid-cols-1'
+              )}
+            >
+              {selectedSections.map((section) => (
+                <div key={section.id} data-view={section.id} className="dashboard-sidebar-layout__section h-full w-full">
+                  {section.node}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
