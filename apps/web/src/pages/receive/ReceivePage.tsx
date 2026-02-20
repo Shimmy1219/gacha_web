@@ -35,6 +35,7 @@ import {
   getCsrfMismatchGuideMessageJa,
   inspectCsrfFailurePayload
 } from '../../features/csrf/csrfGuards';
+import { resolveGachaThumbnailFromBlob } from '../../features/gacha/thumbnailBlobApi';
 
 interface ResolveSuccessPayload {
   url: string;
@@ -107,7 +108,9 @@ interface ReceiveGachaSummaryCard {
   gachaId: string | null;
   gachaName: string;
   itemCount: number;
+  ownerId: string | null;
   thumbnailAssetId: string | null;
+  thumbnailBlobUrl: string | null;
 }
 
 async function requestCsrfToken(signal?: AbortSignal): Promise<string> {
@@ -291,6 +294,8 @@ export function ReceivePage(): JSX.Element {
   const [duplicateHistoryEntry, setDuplicateHistoryEntry] = useState<ReceiveHistoryEntryMetadata | null>(null);
   const [duplicateReason, setDuplicateReason] = useState<'token' | 'pull' | null>(null);
   const [omittedItemNames, setOmittedItemNames] = useState<string[]>([]);
+  const [activeSelectionOwnerId, setActiveSelectionOwnerId] = useState<string | null>(null);
+  const [resolvedThumbnailUrlByCardKey, setResolvedThumbnailUrlByCardKey] = useState<Record<string, string | null>>({});
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const csrfRef = useRef<string | null>(null);
@@ -311,7 +316,7 @@ export function ReceivePage(): JSX.Element {
     const tokenParam = searchParams.get('t');
     return Boolean(tokenParam && tokenParam.trim());
   }, [searchParams]);
-  const gachaSummaryCards = useMemo<ReceiveGachaSummaryCard[]>(() => {
+  const baseGachaSummaryCards = useMemo<ReceiveGachaSummaryCard[]>(() => {
     if (mediaItems.length === 0) {
       return [];
     }
@@ -329,21 +334,96 @@ export function ReceivePage(): JSX.Element {
         return;
       }
 
-      const thumbnailAssetIdFromMeta = gachaId ? meta[gachaId]?.thumbnailAssetId : null;
+      const metaEntry = gachaId ? meta[gachaId] : null;
+      const metaOwnerId =
+        typeof metaEntry?.thumbnailOwnerId === 'string' && metaEntry.thumbnailOwnerId.length > 0
+          ? metaEntry.thumbnailOwnerId
+          : null;
+      const isOwnerMatched =
+        Boolean(activeSelectionOwnerId) &&
+        Boolean(metaOwnerId) &&
+        activeSelectionOwnerId === metaOwnerId;
+      const thumbnailAssetIdFromMeta = isOwnerMatched ? metaEntry?.thumbnailAssetId : null;
+      const thumbnailBlobUrlFromMeta = isOwnerMatched ? metaEntry?.thumbnailBlobUrl : null;
       map.set(key, {
         key,
         gachaId,
         gachaName,
         itemCount: 1,
+        ownerId: activeSelectionOwnerId,
         thumbnailAssetId:
           typeof thumbnailAssetIdFromMeta === 'string' && thumbnailAssetIdFromMeta.length > 0
             ? thumbnailAssetIdFromMeta
+            : null,
+        thumbnailBlobUrl:
+          typeof thumbnailBlobUrlFromMeta === 'string' && thumbnailBlobUrlFromMeta.length > 0
+            ? thumbnailBlobUrlFromMeta
             : null
       });
     });
 
     return Array.from(map.values()).sort((left, right) => left.gachaName.localeCompare(right.gachaName, 'ja'));
-  }, [appState, mediaItems]);
+  }, [activeSelectionOwnerId, appState, mediaItems]);
+
+  useEffect(() => {
+    const requests = baseGachaSummaryCards
+      .filter((card) => Boolean(card.gachaId))
+      .map((card) => ({
+        key: card.key,
+        gachaId: card.gachaId as string,
+        ownerId: card.ownerId
+      }));
+    if (requests.length === 0) {
+      setResolvedThumbnailUrlByCardKey({});
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const resolved = await resolveGachaThumbnailFromBlob(
+          requests.map((entry) => ({
+            gachaId: entry.gachaId,
+            ownerId: entry.ownerId
+          }))
+        );
+        if (!active) {
+          return;
+        }
+        const nextMap: Record<string, string | null> = {};
+        requests.forEach((entry, index) => {
+          const resolvedEntry = resolved[index];
+          if (!resolvedEntry || (resolvedEntry.match !== 'owner' && resolvedEntry.match !== 'fallback')) {
+            nextMap[entry.key] = null;
+            return;
+          }
+          nextMap[entry.key] =
+            typeof resolvedEntry.url === 'string' && resolvedEntry.url.length > 0
+              ? resolvedEntry.url
+              : null;
+        });
+        setResolvedThumbnailUrlByCardKey(nextMap);
+      } catch (error) {
+        console.warn('Failed to resolve gacha thumbnails for receive page', error);
+        if (active) {
+          setResolvedThumbnailUrlByCardKey({});
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [baseGachaSummaryCards]);
+
+  const gachaSummaryCards = useMemo(
+    () =>
+      baseGachaSummaryCards.map((card) => ({
+        ...card,
+        thumbnailBlobUrl: resolvedThumbnailUrlByCardKey[card.key] ?? card.thumbnailBlobUrl
+      })),
+    [baseGachaSummaryCards, resolvedThumbnailUrlByCardKey]
+  );
 
   useEffect(() => {
     if (hasHistoryParam) {
@@ -363,6 +443,8 @@ export function ReceivePage(): JSX.Element {
       setDuplicateReason(null);
       setHasAttemptedLoad(false);
       setOmittedItemNames([]);
+      setActiveSelectionOwnerId(null);
+      setResolvedThumbnailUrlByCardKey({});
     }
   }, [activeToken, hasHistoryParam, isShareLinkMode]);
 
@@ -379,6 +461,8 @@ export function ReceivePage(): JSX.Element {
       setMediaItems([]);
       setOmittedItemNames([]);
       setActiveHistoryId(null);
+      setActiveSelectionOwnerId(null);
+      setResolvedThumbnailUrlByCardKey({});
       return;
     }
 
@@ -528,6 +612,7 @@ export function ReceivePage(): JSX.Element {
         } finally {
           queueThumbnailGeneration(existingEntry.id);
           setActiveHistoryId(existingEntry.id);
+          setActiveSelectionOwnerId(existingEntry.ownerId ?? null);
           setDuplicateHistoryEntry(existingEntry);
           setDuplicateReason('token');
           setIsSavingHistory(false);
@@ -538,12 +623,21 @@ export function ReceivePage(): JSX.Element {
       const selectionInfo = await loadReceiveZipSelectionInfo(zipBlob);
       const pullIds = selectionInfo.pullIds;
       const ownerName = selectionInfo.ownerName;
+      const ownerId = selectionInfo.ownerId;
+      setActiveSelectionOwnerId(ownerId ?? null);
       let nextHistoryEntries = historyEntries;
       let metadataChanged = false;
       if (historyEntries.length > 0) {
         const updatedEntries = [...historyEntries];
         for (const entry of historyEntries) {
-          if (entry.pullIds && entry.pullIds.length > 0) {
+          if (
+            entry.pullIds &&
+            entry.pullIds.length > 0 &&
+            entry.ownerName &&
+            entry.ownerName.trim() &&
+            entry.ownerId &&
+            entry.ownerId.trim()
+          ) {
             continue;
           }
           const entryBlob = await loadHistoryFile(entry.id);
@@ -552,15 +646,21 @@ export function ReceivePage(): JSX.Element {
           }
           const entrySelectionInfo = await loadReceiveZipSelectionInfo(entryBlob);
           const entryPullIds = entrySelectionInfo.pullIds;
-          if (entryPullIds.length === 0) {
+          if (
+            entryPullIds.length === 0 &&
+            !entrySelectionInfo.ownerName &&
+            !entrySelectionInfo.ownerId
+          ) {
             continue;
           }
           const index = updatedEntries.findIndex((candidate) => candidate.id === entry.id);
           if (index >= 0) {
+            const currentEntry = updatedEntries[index];
             updatedEntries[index] = {
-              ...updatedEntries[index],
-              pullIds: entryPullIds,
-              ownerName: entrySelectionInfo.ownerName ?? updatedEntries[index].ownerName
+              ...currentEntry,
+              pullIds: entryPullIds.length > 0 ? entryPullIds : currentEntry.pullIds,
+              ownerName: entrySelectionInfo.ownerName ?? currentEntry.ownerName,
+              ownerId: entrySelectionInfo.ownerId ?? currentEntry.ownerId
             };
             metadataChanged = true;
           }
@@ -578,6 +678,7 @@ export function ReceivePage(): JSX.Element {
         : null;
       if (duplicatedByPull) {
         setActiveHistoryId(duplicatedByPull.id);
+        setActiveSelectionOwnerId(duplicatedByPull.ownerId ?? null);
         setDuplicateHistoryEntry(duplicatedByPull);
         setDuplicateReason('pull');
         setIsSavingHistory(false);
@@ -608,6 +709,7 @@ export function ReceivePage(): JSX.Element {
         itemNames: itemNames.length > 0 ? itemNames.slice(0, 24) : undefined,
         pullCount: pullCount ?? undefined,
         ownerName: ownerName ?? null,
+        ownerId: ownerId ?? null,
         pullIds: pullIds.length > 0 ? pullIds : undefined,
         downloadedAt: timestamp,
         itemCount: items.length,
@@ -658,6 +760,7 @@ export function ReceivePage(): JSX.Element {
     setCleanupStatus('idle');
     setCleanupError(null);
     setActiveHistoryId(null);
+    setActiveSelectionOwnerId(null);
     setHistorySaveError(null);
 
     try {
@@ -756,6 +859,25 @@ export function ReceivePage(): JSX.Element {
         if (!blob) {
           throw new Error('保存済みのファイルが見つかりませんでした。履歴を削除して再度お試しください。');
         }
+        const selectionInfo = await loadReceiveZipSelectionInfo(blob);
+        const resolvedOwnerId = selectionInfo.ownerId ?? entry.ownerId ?? null;
+        setActiveSelectionOwnerId(resolvedOwnerId);
+        if (
+          (!entry.ownerId && selectionInfo.ownerId) ||
+          (!entry.ownerName && selectionInfo.ownerName)
+        ) {
+          const updatedEntries = historyEntries.map((historyEntry) =>
+            historyEntry.id === entry.id
+              ? {
+                  ...historyEntry,
+                  ownerId: selectionInfo.ownerId ?? historyEntry.ownerId,
+                  ownerName: selectionInfo.ownerName ?? historyEntry.ownerName
+                }
+              : historyEntry
+          );
+          setHistoryEntries(updatedEntries);
+          persistHistoryMetadata(updatedEntries);
+        }
         const { metadataEntries, mediaItems: items, migratedBlob } = await loadReceiveZipInventory(blob, {
           migrateDigitalItemTypes: true,
           onProgress: (processed, total) => {
@@ -790,7 +912,7 @@ export function ReceivePage(): JSX.Element {
         setIsRestoringHistory(false);
       }
     },
-    []
+    [historyEntries]
   );
 
   useEffect(() => {
@@ -1110,6 +1232,7 @@ export function ReceivePage(): JSX.Element {
                 >
                   <ItemPreview
                     assetId={card.thumbnailAssetId}
+                    fallbackUrl={card.thumbnailBlobUrl}
                     alt={`${card.gachaName}の配信サムネイル`}
                     kindHint="image"
                     imageFit="cover"

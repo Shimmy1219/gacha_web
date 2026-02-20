@@ -565,6 +565,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         isSelected: boolean;
         isArchived: boolean;
         thumbnailAssetId: string | null;
+        thumbnailBlobUrl: string | null;
       }>;
     }
 
@@ -577,6 +578,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       isSelected: boolean;
       isArchived: boolean;
       thumbnailAssetId: string | null;
+      thumbnailBlobUrl: string | null;
     }> = [];
 
     const append = (gachaId: string | undefined | null) => {
@@ -590,7 +592,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         name: displayName && displayName.length > 0 ? displayName : gachaId,
         isSelected: appState.selectedGachaId === gachaId,
         isArchived: meta[gachaId]?.isArchived === true,
-        thumbnailAssetId: meta[gachaId]?.thumbnailAssetId ?? null
+        thumbnailAssetId: meta[gachaId]?.thumbnailAssetId ?? null,
+        thumbnailBlobUrl: meta[gachaId]?.thumbnailBlobUrl ?? null
       });
     };
 
@@ -954,6 +957,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                             <div className="page-settings-dialog__gacha-entry-main flex min-w-[200px] flex-1 items-start gap-3">
                               <ItemPreview
                                 assetId={entry.thumbnailAssetId}
+                                fallbackUrl={entry.thumbnailBlobUrl}
                                 alt={`${entry.name}の配信サムネイル`}
                                 kindHint="image"
                                 imageFit="cover"

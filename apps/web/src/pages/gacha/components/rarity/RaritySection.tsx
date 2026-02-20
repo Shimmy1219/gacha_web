@@ -28,6 +28,11 @@ import {
 import { useRarityTableController } from '../../../../features/rarity/hooks/useRarityTableController';
 import { ItemPreview } from '../../../../components/ItemPreviewThumbnail';
 import { validateGachaThumbnailFile } from '../../../../features/gacha/gachaThumbnail';
+import { useDiscordSession } from '../../../../features/discord/useDiscordSession';
+import {
+  deleteGachaThumbnailFromBlob,
+  uploadGachaThumbnailToBlob
+} from '../../../../features/gacha/thumbnailBlobApi';
 
 interface RarityRow extends RarityRateRow {
   id: string;
@@ -48,6 +53,7 @@ export function RaritySection(): JSX.Element {
   const catalogState = useStoreValue(catalogStore);
   const { push } = useModal();
   const confirmDeleteGacha = useGachaDeletion();
+  const { data: discordSession } = useDiscordSession();
 
   const status = appStateStore.isHydrated() && rarityStore.isHydrated() ? 'ready' : 'loading';
 
@@ -93,6 +99,8 @@ export function RaritySection(): JSX.Element {
   const activeGachaMeta = activeGachaId ? appState?.meta?.[activeGachaId] : undefined;
   const activeGachaName = activeGachaMeta?.displayName ?? activeGachaId ?? 'ガチャ未選択';
   const activeGachaThumbnailAssetId = activeGachaMeta?.thumbnailAssetId ?? null;
+  const activeGachaThumbnailBlobUrl = activeGachaMeta?.thumbnailBlobUrl ?? null;
+  const hasActiveGachaThumbnail = Boolean(activeGachaThumbnailAssetId || activeGachaThumbnailBlobUrl);
 
   const gachaTabIds = useMemo(() => gachaTabs.map((gacha) => gacha.id), [gachaTabs]);
   const panelMotion = useTabMotion(activeGachaId, gachaTabIds);
@@ -382,6 +390,11 @@ export function RaritySection(): JSX.Element {
       setIsUpdatingThumbnail(true);
       setThumbnailError(null);
       let createdAssetId: string | null = null;
+      let uploadedThumbnail: {
+        ownerId: string;
+        url: string;
+        updatedAt: string | null;
+      } | null = null;
 
       try {
         // 受け取り画面・設定画面との見た目統一のため、形式を先に厳密チェックする。
@@ -391,9 +404,20 @@ export function RaritySection(): JSX.Element {
           return;
         }
 
-        const previousAssetId = appStateStore.getState()?.meta?.[targetGachaId]?.thumbnailAssetId ?? null;
+        const previousMeta = appStateStore.getState()?.meta?.[targetGachaId];
+        const previousAssetId = previousMeta?.thumbnailAssetId ?? null;
+        const previousOwnerId =
+          typeof previousMeta?.thumbnailOwnerId === 'string' && previousMeta.thumbnailOwnerId.length > 0
+            ? previousMeta.thumbnailOwnerId
+            : null;
         const saved = await saveAsset(file);
         createdAssetId = saved.id;
+        uploadedThumbnail = await uploadGachaThumbnailToBlob({
+          gachaId: targetGachaId,
+          file,
+          ownerName: activeGachaName,
+          discordUserId: discordSession?.user?.id ?? null
+        });
         const timestamp = new Date().toISOString();
         let updated = false;
 
@@ -411,6 +435,9 @@ export function RaritySection(): JSX.Element {
                 id: previous.meta[targetGachaId]?.id ?? targetGachaId,
                 displayName: previous.meta[targetGachaId]?.displayName ?? targetGachaId,
                 thumbnailAssetId: saved.id,
+                thumbnailBlobUrl: uploadedThumbnail.url,
+                thumbnailOwnerId: uploadedThumbnail.ownerId,
+                thumbnailUpdatedAt: uploadedThumbnail.updatedAt ?? timestamp,
                 updatedAt: timestamp
               }
             };
@@ -436,6 +463,22 @@ export function RaritySection(): JSX.Element {
           // 置き換え完了後に旧アセットを削除し、不要データの蓄積を防ぐ。
           void deleteAsset(previousAssetId);
         }
+        if (previousOwnerId && previousOwnerId !== uploadedThumbnail.ownerId) {
+          try {
+            await deleteGachaThumbnailFromBlob({
+              gachaId: targetGachaId,
+              ownerId: previousOwnerId,
+              discordUserId: discordSession?.user?.id ?? null
+            });
+          } catch (cleanupError) {
+            // メイン更新は完了しているため、旧owner側の掃除失敗は警告ログに留める。
+            console.warn('Failed to cleanup old gacha thumbnail owner record', {
+              gachaId: targetGachaId,
+              previousOwnerId,
+              cleanupError
+            });
+          }
+        }
 
         createdAssetId = null;
       } catch (error) {
@@ -444,11 +487,25 @@ export function RaritySection(): JSX.Element {
         if (createdAssetId) {
           void deleteAsset(createdAssetId);
         }
+        if (uploadedThumbnail?.ownerId) {
+          try {
+            await deleteGachaThumbnailFromBlob({
+              gachaId: targetGachaId,
+              ownerId: uploadedThumbnail.ownerId,
+              discordUserId: discordSession?.user?.id ?? null
+            });
+          } catch (cleanupError) {
+            console.warn('Failed to rollback uploaded gacha thumbnail after update error', {
+              gachaId: targetGachaId,
+              cleanupError
+            });
+          }
+        }
       } finally {
         setIsUpdatingThumbnail(false);
       }
     },
-    [activeGachaId, appStateStore]
+    [activeGachaId, activeGachaName, appStateStore, discordSession?.user?.id]
   );
 
   const handleRemoveGachaThumbnail = useCallback(async () => {
@@ -457,8 +514,13 @@ export function RaritySection(): JSX.Element {
       return;
     }
 
-    const previousAssetId = appStateStore.getState()?.meta?.[targetGachaId]?.thumbnailAssetId ?? null;
-    if (!previousAssetId) {
+    const previousMeta = appStateStore.getState()?.meta?.[targetGachaId];
+    const previousAssetId = previousMeta?.thumbnailAssetId ?? null;
+    const previousOwnerId =
+      typeof previousMeta?.thumbnailOwnerId === 'string' && previousMeta.thumbnailOwnerId.length > 0
+        ? previousMeta.thumbnailOwnerId
+        : null;
+    if (!previousAssetId && !previousOwnerId) {
       return;
     }
 
@@ -466,13 +528,22 @@ export function RaritySection(): JSX.Element {
     setThumbnailError(null);
 
     try {
+      if (previousOwnerId) {
+        await deleteGachaThumbnailFromBlob({
+          gachaId: targetGachaId,
+          ownerId: previousOwnerId,
+          discordUserId: discordSession?.user?.id ?? null
+        });
+      }
       const timestamp = new Date().toISOString();
+      let updated = false;
       appStateStore.update(
         (previous) => {
           if (!previous?.meta?.[targetGachaId]) {
             return previous;
           }
 
+          updated = true;
           const nextMeta = {
             ...(previous.meta ?? {}),
             [targetGachaId]: {
@@ -480,6 +551,9 @@ export function RaritySection(): JSX.Element {
               id: previous.meta[targetGachaId]?.id ?? targetGachaId,
               displayName: previous.meta[targetGachaId]?.displayName ?? targetGachaId,
               thumbnailAssetId: null,
+              thumbnailBlobUrl: null,
+              thumbnailOwnerId: null,
+              thumbnailUpdatedAt: null,
               updatedAt: timestamp
             }
           };
@@ -492,15 +566,20 @@ export function RaritySection(): JSX.Element {
         },
         { persist: 'immediate' }
       );
+      if (!updated) {
+        throw new Error(`ガチャ ${targetGachaId} が見つからないためサムネイルを削除できませんでした。`);
+      }
 
-      await deleteAsset(previousAssetId);
+      if (previousAssetId) {
+        await deleteAsset(previousAssetId);
+      }
     } catch (error) {
       console.error('ガチャサムネイルの削除に失敗しました', { gachaId: targetGachaId, error });
       setThumbnailError('ガチャサムネイルの削除に失敗しました。もう一度お試しください。');
     } finally {
       setIsUpdatingThumbnail(false);
     }
-  }, [activeGachaId, appStateStore, isUpdatingThumbnail]);
+  }, [activeGachaId, appStateStore, discordSession?.user?.id, isUpdatingThumbnail]);
 
   const shouldRenderTable = Boolean(activeGachaId);
 
@@ -530,13 +609,14 @@ export function RaritySection(): JSX.Element {
                 <p className="rarity-section__thumbnail-title text-sm font-semibold text-surface-foreground">配信サムネイル</p>
                 <p className="rarity-section__thumbnail-subtitle text-xs text-muted-foreground">{activeGachaName}</p>
               </div>
-              {activeGachaThumbnailAssetId ? (
+              {hasActiveGachaThumbnail ? (
                 <span className="rarity-section__thumbnail-status chip border-emerald-500/40 bg-emerald-500/10 text-emerald-600">設定済み</span>
               ) : null}
             </div>
             <div className="rarity-section__thumbnail-content flex flex-col gap-4 sm:flex-row sm:items-center">
               <ItemPreview
                 assetId={activeGachaThumbnailAssetId}
+                fallbackUrl={activeGachaThumbnailBlobUrl}
                 alt={`${activeGachaName}の配信サムネイル`}
                 kindHint="image"
                 imageFit="cover"
@@ -554,9 +634,9 @@ export function RaritySection(): JSX.Element {
                     onClick={handleRequestGachaThumbnailSelection}
                     disabled={!activeGachaId || isUpdatingThumbnail}
                   >
-                    {isUpdatingThumbnail ? '更新中…' : activeGachaThumbnailAssetId ? '画像を変更' : '画像を設定'}
+                    {isUpdatingThumbnail ? '更新中…' : hasActiveGachaThumbnail ? '画像を変更' : '画像を設定'}
                   </button>
-                  {activeGachaThumbnailAssetId ? (
+                  {hasActiveGachaThumbnail ? (
                     <button
                       type="button"
                       className="rarity-section__thumbnail-remove-button inline-flex items-center justify-center rounded-xl border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"

@@ -107,6 +107,7 @@ export function ReceiveHistoryPage(): JSX.Element {
           ...entry,
           userName: hasUserName ? entry.userName : summary.userName ?? entry.userName,
           ownerName: hasOwnerName ? entry.ownerName : summary.ownerName ?? entry.ownerName,
+          ownerId: entry.ownerId && entry.ownerId.trim() ? entry.ownerId : summary.ownerId ?? entry.ownerId,
           gachaNames: hasGachaNames ? entry.gachaNames : summary.gachaNames.length > 0 ? summary.gachaNames : entry.gachaNames,
           itemNames: hasItemNames ? entry.itemNames : summary.itemNames.length > 0 ? summary.itemNames : entry.itemNames,
           pullCount:

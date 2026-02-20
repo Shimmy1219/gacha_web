@@ -12,6 +12,9 @@ export interface GachaAppStateV3 {
       updatedAt?: string;
       isArchived?: boolean;
       thumbnailAssetId?: string | null;
+      thumbnailBlobUrl?: string | null;
+      thumbnailOwnerId?: string | null;
+      thumbnailUpdatedAt?: string | null;
     }
   >;
   order: string[];

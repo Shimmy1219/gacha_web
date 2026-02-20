@@ -18,6 +18,7 @@ export interface ReceiveHistoryEntryMetadata {
   pullCount?: number;
   userName?: string | null;
   ownerName?: string | null;
+  ownerId?: string | null;
   pullIds?: string[];
   downloadedAt: string;
   itemCount: number;
@@ -151,6 +152,9 @@ function sanitizeMetadata(raw: unknown): ReceiveHistoryEntryMetadata[] {
         userName: typeof (entry as { userName?: unknown }).userName === 'string' ? (entry as { userName: string }).userName : null,
         ownerName: typeof (entry as { ownerName?: unknown }).ownerName === 'string'
           ? (entry as { ownerName: string }).ownerName
+          : null,
+        ownerId: typeof (entry as { ownerId?: unknown }).ownerId === 'string'
+          ? (entry as { ownerId: string }).ownerId
           : null,
         pullIds: pullIds.length > 0 ? Array.from(new Set(pullIds)) : undefined,
         downloadedAt,

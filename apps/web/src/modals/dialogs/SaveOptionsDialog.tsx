@@ -28,6 +28,7 @@ import {
 } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import { resolveThumbnailOwnerId } from '../../features/gacha/thumbnailOwnerId';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection
@@ -615,12 +616,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   };
 
   const runZipUpload = useCallback(async (ownerName: string) => {
+    const resolvedOwnerId = resolveThumbnailOwnerId(discordSession?.user?.id ?? null);
+    if (!resolvedOwnerId) {
+      throw new Error('配信サムネイルownerIdを解決できませんでした。');
+    }
     const { zip, uploadResponse } = await buildAndUploadSelectionZip({
       snapshot: resolveZipSnapshot(),
       selection,
       userId,
       userName: receiverDisplayName,
       ownerName,
+      ownerId: resolvedOwnerId,
       uploadZip,
       ownerDiscordId: discordSession?.user?.id,
       ownerDiscordName: discordSession?.user?.name,

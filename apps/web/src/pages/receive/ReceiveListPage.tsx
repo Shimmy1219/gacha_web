@@ -32,6 +32,7 @@ import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, u
 import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
 import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
+import { resolveGachaThumbnailFromBlob } from '../../features/gacha/thumbnailBlobApi';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -57,6 +58,7 @@ interface ReceiveGachaGroup {
   gachaName: string;
   gachaId: string | null;
   ownerNames: string[];
+  ownerIds: string[];
   items: ReceiveInventoryItem[];
   ownedKinds: number;
   totalKinds: number;
@@ -798,6 +800,7 @@ export function ReceiveListPage(): JSX.Element {
   const [updatingDigitalTypeItemKey, setUpdatingDigitalTypeItemKey] = useState<string | null>(null);
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [resolvedGroupThumbnailUrlByKey, setResolvedGroupThumbnailUrlByKey] = useState<Record<string, string | null>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
   const [showUnownedItems, setShowUnownedItems] = useState<boolean>(true);
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
@@ -823,15 +826,26 @@ export function ReceiveListPage(): JSX.Element {
     []
   );
 
-  const gachaThumbnailAssetIdById = useMemo(() => {
-    const map = new Map<string, string>();
+  const gachaThumbnailMetaById = useMemo(() => {
+    const map = new Map<string, { assetId: string | null; blobUrl: string | null; ownerId: string | null }>();
     const meta = appState?.meta ?? {};
     Object.entries(meta).forEach(([gachaId, entry]) => {
-      const thumbnailAssetId = entry?.thumbnailAssetId;
-      if (!gachaId || typeof thumbnailAssetId !== 'string' || thumbnailAssetId.length === 0) {
+      if (!gachaId) {
         return;
       }
-      map.set(gachaId, thumbnailAssetId);
+      const assetId =
+        typeof entry?.thumbnailAssetId === 'string' && entry.thumbnailAssetId.length > 0
+          ? entry.thumbnailAssetId
+          : null;
+      const blobUrl =
+        typeof entry?.thumbnailBlobUrl === 'string' && entry.thumbnailBlobUrl.length > 0
+          ? entry.thumbnailBlobUrl
+          : null;
+      const ownerId =
+        typeof entry?.thumbnailOwnerId === 'string' && entry.thumbnailOwnerId.length > 0
+          ? entry.thumbnailOwnerId
+          : null;
+      map.set(gachaId, { assetId, blobUrl, ownerId });
     });
     return map;
   }, [appState]);
@@ -881,6 +895,7 @@ export function ReceiveListPage(): JSX.Element {
             gachaId: string | null;
             gachaName: string;
             ownerNames: Set<string>;
+            ownerIds: Set<string>;
             itemMap: Map<string, ReceiveInventoryItem>;
             sourceItems: ReceiveMediaItem[];
             baseKeySet: Set<string>;
@@ -897,6 +912,7 @@ export function ReceiveListPage(): JSX.Element {
           const selectionInfo = await loadReceiveZipSelectionInfo(blob);
           const pullIds = selectionInfo.pullIds;
           const ownerName = selectionInfo.ownerName;
+          const ownerId = selectionInfo.ownerId ?? entry.ownerId ?? null;
           if (pullIds.length > 0 && (!entry.pullIds || entry.pullIds.length === 0)) {
             const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
             if (index >= 0) {
@@ -908,6 +924,13 @@ export function ReceiveListPage(): JSX.Element {
             const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
             if (index >= 0) {
               updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], ownerName };
+              metadataChanged = true;
+            }
+          }
+          if (ownerId && (!entry.ownerId || !entry.ownerId.trim())) {
+            const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
+            if (index >= 0) {
+              updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], ownerId };
               metadataChanged = true;
             }
           }
@@ -980,12 +1003,16 @@ export function ReceiveListPage(): JSX.Element {
                   gachaId,
                   gachaName,
                   ownerNames: new Set<string>(),
+                  ownerIds: new Set<string>(),
                   itemMap: new Map<string, ReceiveInventoryItem>(),
                   sourceItems: [],
                   baseKeySet: new Set<string>(),
                   entryIds: new Set<string>()
                 };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
               existingGroup.baseKeySet.add(baseKey);
               existingGroup.entryIds.add(entry.id);
 
@@ -1052,12 +1079,16 @@ export function ReceiveListPage(): JSX.Element {
                   gachaId,
                   gachaName,
                   ownerNames: new Set<string>(),
+                  ownerIds: new Set<string>(),
                   itemMap: new Map<string, ReceiveInventoryItem>(),
                   sourceItems: [],
                   baseKeySet: new Set<string>(),
                   entryIds: new Set<string>()
                 };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
               existingGroup.baseKeySet.add(baseKey);
               existingGroup.entryIds.add(entry.id);
 
@@ -1128,12 +1159,16 @@ export function ReceiveListPage(): JSX.Element {
                 gachaId,
                 gachaName,
                 ownerNames: new Set<string>(),
+                ownerIds: new Set<string>(),
                 itemMap: new Map<string, ReceiveInventoryItem>(),
                 sourceItems: [],
                 baseKeySet: new Set<string>(),
                 entryIds: new Set<string>()
               };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
 
               const itemMap = existingGroup.itemMap;
               for (const item of gacha.items) {
@@ -1191,11 +1226,12 @@ export function ReceiveListPage(): JSX.Element {
           }
         }
 
-        const nextGroups = Array.from(gachaMap.values()).map(({ ownerNames, gachaId, gachaName, itemMap, sourceItems, entryIds }) => {
+        const nextGroups = Array.from(gachaMap.values()).map(({ ownerNames, ownerIds, gachaId, gachaName, itemMap, sourceItems, entryIds }) => {
           const items = sortInventoryItems(Array.from(itemMap.values()));
           const { ownedKinds, totalKinds, ownedCount } = summarizeGroupItems(items);
           return {
             ownerNames: Array.from(ownerNames).sort((a, b) => a.localeCompare(b)),
+            ownerIds: Array.from(ownerIds).sort((a, b) => a.localeCompare(b)),
             gachaId,
             gachaName,
             items,
@@ -1244,6 +1280,87 @@ export function ReceiveListPage(): JSX.Element {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const requestEntries = groups
+      .map((group) => {
+        const gachaId = group.gachaId?.trim();
+        if (!gachaId) {
+          return null;
+        }
+        const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+        if (group.ownerIds.length > 1) {
+          return {
+            groupKey,
+            gachaId,
+            ownerId: null,
+            isAmbiguousGroup: true
+          };
+        }
+        return {
+          groupKey,
+          gachaId,
+          ownerId: group.ownerIds[0] ?? null,
+          isAmbiguousGroup: false
+        };
+      })
+      .filter((entry): entry is { groupKey: string; gachaId: string; ownerId: string | null; isAmbiguousGroup: boolean } => Boolean(entry));
+
+    if (requestEntries.length === 0) {
+      setResolvedGroupThumbnailUrlByKey({});
+      return;
+    }
+
+    const fixedMap: Record<string, string | null> = {};
+    const apiTargets = requestEntries.filter((entry) => {
+      if (entry.isAmbiguousGroup) {
+        fixedMap[entry.groupKey] = null;
+        return false;
+      }
+      return true;
+    });
+    if (apiTargets.length === 0) {
+      setResolvedGroupThumbnailUrlByKey(fixedMap);
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const resolved = await resolveGachaThumbnailFromBlob(
+          apiTargets.map((entry) => ({
+            gachaId: entry.gachaId,
+            ownerId: entry.ownerId
+          }))
+        );
+        if (!active) {
+          return;
+        }
+        const nextMap: Record<string, string | null> = { ...fixedMap };
+        apiTargets.forEach((entry, index) => {
+          const resolvedEntry = resolved[index];
+          if (!resolvedEntry || (resolvedEntry.match !== 'owner' && resolvedEntry.match !== 'fallback')) {
+            nextMap[entry.groupKey] = null;
+            return;
+          }
+          nextMap[entry.groupKey] =
+            typeof resolvedEntry.url === 'string' && resolvedEntry.url.length > 0
+              ? resolvedEntry.url
+              : null;
+        });
+        setResolvedGroupThumbnailUrlByKey(nextMap);
+      } catch (error) {
+        console.warn('Failed to resolve gacha thumbnails for receive list', error);
+        if (active) {
+          setResolvedGroupThumbnailUrlByKey(fixedMap);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [groups]);
 
   const displayGroups = useMemo<ReceiveGachaGroup[]>(() => {
     const selectedDigitalTypeSet =
@@ -1849,7 +1966,15 @@ export function ReceiveListPage(): JSX.Element {
               const isCollapsed = Boolean(collapsedGroups[groupKey]);
               const isGroupLoading = Boolean(loadingGroupKeys[groupKey]);
               const contentId = createGroupDomId(groupKey);
-              const gachaThumbnailAssetId = group.gachaId ? gachaThumbnailAssetIdById.get(group.gachaId) ?? null : null;
+              const localMeta = group.gachaId ? gachaThumbnailMetaById.get(group.gachaId) ?? null : null;
+              const isLocalOwnerMatched =
+                Boolean(localMeta?.ownerId) &&
+                group.ownerIds.length === 1 &&
+                group.ownerIds[0] === localMeta?.ownerId;
+              const gachaThumbnailAssetId = isLocalOwnerMatched ? localMeta?.assetId ?? null : null;
+              const gachaThumbnailBlobUrl =
+                resolvedGroupThumbnailUrlByKey[groupKey] ??
+                (isLocalOwnerMatched ? localMeta?.blobUrl ?? null : null);
 
               return (
                 <div
@@ -1867,6 +1992,7 @@ export function ReceiveListPage(): JSX.Element {
                       <div className="receive-list-page__group-header-row flex items-center gap-3">
                         <ItemPreview
                           assetId={gachaThumbnailAssetId}
+                          fallbackUrl={gachaThumbnailBlobUrl}
                           alt={`${group.gachaName}の配信サムネイル`}
                           kindHint="image"
                           imageFit="cover"

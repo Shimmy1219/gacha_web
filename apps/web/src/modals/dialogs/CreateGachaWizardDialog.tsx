@@ -9,7 +9,7 @@ import {
   type GachaRarityStateV3,
   type PtSettingV3
 } from '@domain/app-persistence';
-import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
+import { deleteAsset, loadAsset, saveAsset } from '@domain/assets/assetStorage';
 import { generateGachaId, generateItemId, generateRarityId } from '@domain/idGenerators';
 
 import { ModalBody, ModalFooter, type ModalComponentProps, useModal } from '..';
@@ -41,6 +41,11 @@ import { RarityRateErrorDialog } from './RarityRateErrorDialog';
 import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
 import { useNotification } from '../../features/notification';
 import { validateGachaThumbnailFile } from '../../features/gacha/gachaThumbnail';
+import { useDiscordSession } from '../../features/discord/useDiscordSession';
+import {
+  deleteGachaThumbnailFromBlob,
+  uploadGachaThumbnailToBlob
+} from '../../features/gacha/thumbnailBlobApi';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -191,6 +196,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   } = useDomainStores();
   const { push } = useModal();
   const { notify } = useNotification();
+  const { data: discordSession } = useDiscordSession();
 
   const [step, setStep] = useState<WizardStep>('basic');
   const [gachaName, setGachaName] = useState('');
@@ -834,10 +840,38 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     }
 
     setIsSubmitting(true);
+    let createdGachaId: string | null = null;
+    let uploadedThumbnail: {
+      ownerId: string;
+      url: string;
+      updatedAt: string | null;
+    } | null = null;
 
     try {
       const gachaId = generateGachaId();
+      createdGachaId = gachaId;
       const timestamp = new Date().toISOString();
+
+      if (gachaThumbnailAsset?.assetId) {
+        const storedAsset = await loadAsset(gachaThumbnailAsset.assetId);
+        if (!storedAsset?.blob) {
+          throw new Error('配信サムネイルのローカルデータを読み込めませんでした。');
+        }
+        const sourceBlob = storedAsset.blob;
+        const file = new File(
+          [sourceBlob],
+          storedAsset.name || gachaThumbnailAsset.originalFilename || `${gachaId}.png`,
+          {
+            type: storedAsset.type || sourceBlob.type || 'image/png'
+          }
+        );
+        uploadedThumbnail = await uploadGachaThumbnailToBlob({
+          gachaId,
+          file,
+          ownerName: discordSession?.user?.name ?? trimmedName,
+          discordUserId: discordSession?.user?.id ?? null
+        });
+      }
 
       appStateStore.update(
         (previous) => {
@@ -849,6 +883,9 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
               id: gachaId,
               displayName: trimmedName,
               thumbnailAssetId: gachaThumbnailAsset?.assetId ?? null,
+              thumbnailBlobUrl: uploadedThumbnail?.url ?? null,
+              thumbnailOwnerId: uploadedThumbnail?.ownerId ?? null,
+              thumbnailUpdatedAt: uploadedThumbnail?.updatedAt ?? timestamp,
               createdAt: timestamp,
               updatedAt: timestamp
             }
@@ -1028,6 +1065,18 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         title: '新規ガチャの登録に失敗しました',
         message: 'もう一度お試しください。'
       });
+      // Blob登録が完了した後に失敗した場合は、孤立データを残さないように回収する。
+      if (createdGachaId && uploadedThumbnail?.ownerId) {
+        try {
+          await deleteGachaThumbnailFromBlob({
+            gachaId: createdGachaId,
+            ownerId: uploadedThumbnail.ownerId,
+            discordUserId: discordSession?.user?.id ?? null
+          });
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup uploaded gacha thumbnail after submit error', cleanupError);
+        }
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1042,10 +1091,12 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     items,
     ptControlsStore,
     ptSettings,
-    rarities,
+    sortedRarities,
     rarityStore,
     riaguStore,
-    notify
+    notify,
+    discordSession?.user?.id,
+    discordSession?.user?.name
   ]);
 
   const renderBasicStep = () => {
