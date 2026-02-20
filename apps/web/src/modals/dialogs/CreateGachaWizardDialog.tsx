@@ -1099,7 +1099,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             />
             <div className="create-gacha-wizard__thumbnail-body flex min-w-0 flex-1 flex-col gap-2">
               <p className="create-gacha-wizard__thumbnail-description text-xs text-muted-foreground">
-                正方形のPNG/JPGを設定できます。設定した画像はガチャの各画面で共通表示されます。
+                ガチャ当日のサムネイルを登録出来ます。景品を受け取る時や景品リストで見た目が良くなります
               </p>
               {gachaThumbnailAsset?.originalFilename ? (
                 <p className="create-gacha-wizard__thumbnail-filename truncate text-xs text-muted-foreground">

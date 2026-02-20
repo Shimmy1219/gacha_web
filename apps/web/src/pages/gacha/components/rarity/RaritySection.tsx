@@ -511,59 +511,6 @@ export function RaritySection(): JSX.Element {
       description="排出率は10^-10%まで対応しています。"
       contentClassName="rarity-section__content"
     >
-      <div className="rarity-section__thumbnail-panel space-y-3 rounded-2xl border border-border/60 bg-surface/50 p-4">
-        <div className="rarity-section__thumbnail-header flex flex-wrap items-start justify-between gap-3">
-          <div className="rarity-section__thumbnail-title-group">
-            <p className="rarity-section__thumbnail-title text-sm font-semibold text-surface-foreground">配信サムネイル</p>
-            <p className="rarity-section__thumbnail-subtitle text-xs text-muted-foreground">{activeGachaName}</p>
-          </div>
-          {activeGachaThumbnailAssetId ? (
-            <span className="rarity-section__thumbnail-status chip border-emerald-500/40 bg-emerald-500/10 text-emerald-600">設定済み</span>
-          ) : null}
-        </div>
-        <div className="rarity-section__thumbnail-content flex flex-col gap-4 sm:flex-row sm:items-center">
-          <ItemPreview
-            assetId={activeGachaThumbnailAssetId}
-            alt={`${activeGachaName}の配信サムネイル`}
-            kindHint="image"
-            imageFit="cover"
-            emptyLabel="noImage"
-            className="rarity-section__thumbnail-preview h-20 w-20 bg-surface-deep"
-          />
-          <div className="rarity-section__thumbnail-actions-wrapper flex min-w-0 flex-1 flex-col gap-2">
-            <p className="rarity-section__thumbnail-help text-xs text-muted-foreground">
-              正方形のPNG/JPGを設定できます。ここで変更した画像は受け取り画面や設定一覧にも反映されます。
-            </p>
-            <div className="rarity-section__thumbnail-actions flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rarity-section__thumbnail-change-button btn btn-muted !min-h-0 h-8 px-3 text-xs"
-                onClick={handleRequestGachaThumbnailSelection}
-                disabled={!activeGachaId || isUpdatingThumbnail}
-              >
-                {isUpdatingThumbnail ? '更新中…' : activeGachaThumbnailAssetId ? '画像を変更' : '画像を設定'}
-              </button>
-              {activeGachaThumbnailAssetId ? (
-                <button
-                  type="button"
-                  className="rarity-section__thumbnail-remove-button inline-flex items-center justify-center rounded-xl border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => {
-                    void handleRemoveGachaThumbnail();
-                  }}
-                  disabled={isUpdatingThumbnail}
-                >
-                  削除
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        {thumbnailError ? (
-          <div className="rarity-section__thumbnail-error rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            {thumbnailError}
-          </div>
-        ) : null}
-      </div>
       <GachaTabs
         tabs={gachaTabs}
         activeId={activeGachaId}
@@ -577,6 +524,59 @@ export function RaritySection(): JSX.Element {
           key={activeGachaId ?? 'rarity-empty'}
           className={clsx('rarity-section__scroll-content space-y-4', panelAnimationClass)}
         >
+          <div className="rarity-section__thumbnail-panel space-y-3 rounded-2xl border border-border/60 bg-surface/50 p-4">
+            <div className="rarity-section__thumbnail-header flex flex-wrap items-start justify-between gap-3">
+              <div className="rarity-section__thumbnail-title-group">
+                <p className="rarity-section__thumbnail-title text-sm font-semibold text-surface-foreground">配信サムネイル</p>
+                <p className="rarity-section__thumbnail-subtitle text-xs text-muted-foreground">{activeGachaName}</p>
+              </div>
+              {activeGachaThumbnailAssetId ? (
+                <span className="rarity-section__thumbnail-status chip border-emerald-500/40 bg-emerald-500/10 text-emerald-600">設定済み</span>
+              ) : null}
+            </div>
+            <div className="rarity-section__thumbnail-content flex flex-col gap-4 sm:flex-row sm:items-center">
+              <ItemPreview
+                assetId={activeGachaThumbnailAssetId}
+                alt={`${activeGachaName}の配信サムネイル`}
+                kindHint="image"
+                imageFit="cover"
+                emptyLabel="noImage"
+                className="rarity-section__thumbnail-preview h-20 w-20 bg-surface-deep"
+              />
+              <div className="rarity-section__thumbnail-actions-wrapper flex min-w-0 flex-1 flex-col gap-2">
+                <p className="rarity-section__thumbnail-help text-xs text-muted-foreground">
+                  正方形のPNG/JPGを設定できます。ここで変更した画像は受け取り画面や設定一覧にも反映されます。
+                </p>
+                <div className="rarity-section__thumbnail-actions flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rarity-section__thumbnail-change-button btn btn-muted !min-h-0 h-8 px-3 text-xs"
+                    onClick={handleRequestGachaThumbnailSelection}
+                    disabled={!activeGachaId || isUpdatingThumbnail}
+                  >
+                    {isUpdatingThumbnail ? '更新中…' : activeGachaThumbnailAssetId ? '画像を変更' : '画像を設定'}
+                  </button>
+                  {activeGachaThumbnailAssetId ? (
+                    <button
+                      type="button"
+                      className="rarity-section__thumbnail-remove-button inline-flex items-center justify-center rounded-xl border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => {
+                        void handleRemoveGachaThumbnail();
+                      }}
+                      disabled={isUpdatingThumbnail}
+                    >
+                      削除
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            {thumbnailError ? (
+              <div className="rarity-section__thumbnail-error rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {thumbnailError}
+              </div>
+            ) : null}
+          </div>
           <PtControlsPanel
             settings={ptSettings}
             rarityOptions={rarityOptions.length > 0 ? rarityOptions : [{ value: '', label: 'レアリティ未設定' }]}
