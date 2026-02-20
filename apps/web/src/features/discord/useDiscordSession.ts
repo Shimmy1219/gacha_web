@@ -202,7 +202,9 @@ async function fetchSession(): Promise<DiscordSessionData> {
     headers: {
       Accept: 'application/json'
     },
-    credentials: 'include'
+    credentials: 'include',
+    // 304が返るとヒントcookie削除が反映できないため、HTTPキャッシュを使わず毎回取得する。
+    cache: 'no-store'
   });
 
   if (!response.ok) {

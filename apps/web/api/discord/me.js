@@ -25,6 +25,11 @@ export default withApiGuards({
   const log = createRequestLogger('api/discord/me', req);
   const soft = req.query?.soft === '1';
   log.info('リクエストを受信しました', { soft });
+  // このエンドポイントはヒントクッキー更新など副作用を伴うため、
+  // HTTPキャッシュ(ETag/304)で短絡されないよう毎回実処理を強制する。
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   const { sid } = getCookies(req);
   if (!sid) {
