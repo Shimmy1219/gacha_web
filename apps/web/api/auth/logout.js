@@ -2,6 +2,7 @@
 // 現在の端末のセッションだけ無効化
 import { withApiGuards } from '../_lib/apiGuards.js';
 import { getCookies, setCookie } from '../_lib/cookies.js';
+import { clearDiscordSessionHintCookie } from '../_lib/discordSessionHintCookie.js';
 import { deleteSession } from '../_lib/sessionStore.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
@@ -26,6 +27,8 @@ export default withApiGuards({
   } else {
     log.info('no session cookie present');
   }
+  // 未ログイン状態に戻るため、/api/discord/me 自動取得ヒントも必ず削除する
+  clearDiscordSessionHintCookie(res);
   log.info('logout completed');
   return res.status(200).json({ ok: true });
 });

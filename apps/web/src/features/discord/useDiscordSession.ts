@@ -10,6 +10,10 @@ import {
   getDiscordInfoStore
 } from './discordInfoStore';
 import {
+  clearDiscordSessionHintCookieClientSide,
+  hasDiscordSessionHintCookie
+} from './discordSessionHint';
+import {
   createCsrfRetryRequestHeaders,
   fetchWithCsrfRetry,
   getCsrfMismatchGuideMessageJa,
@@ -198,7 +202,9 @@ async function fetchSession(): Promise<DiscordSessionData> {
     headers: {
       Accept: 'application/json'
     },
-    credentials: 'include'
+    credentials: 'include',
+    // 304が返るとヒントcookie削除が反映できないため、HTTPキャッシュを使わず毎回取得する。
+    cache: 'no-store'
   });
 
   if (!response.ok) {
@@ -218,6 +224,14 @@ async function fetchSession(): Promise<DiscordSessionData> {
   return payload;
 }
 
+/**
+ * Discordログイン状態を取得・維持するためのカスタムフック。
+ *
+ * `sid` は HttpOnly クッキーでクライアントから直接参照できないため、
+ * `discord_session_hint` を使って `/api/discord/me` の自動取得可否を制御する。
+ *
+ * @returns Discordセッション情報とログイン/ログアウト操作
+ */
 export function useDiscordSession(): UseDiscordSessionResult {
   const queryClient = useQueryClient();
   const [shouldDelaySessionFetch, setShouldDelaySessionFetch] = useState<boolean>(() => {
@@ -226,6 +240,13 @@ export function useDiscordSession(): UseDiscordSessionResult {
     }
     return resolveLoginContext() === 'pwa' && readPendingPwaState() !== null;
   });
+  const [hasSessionHint, setHasSessionHint] = useState<boolean>(() => hasDiscordSessionHintCookie());
+
+  const syncSessionHintFromCookie = useCallback((): boolean => {
+    const next = hasDiscordSessionHintCookie();
+    setHasSessionHint(next);
+    return next;
+  }, []);
 
   const claimPendingPwaSession = useCallback(
     async (options?: { signal?: AbortSignal }): Promise<PwaClaimResult> => {
@@ -346,6 +367,8 @@ export function useDiscordSession(): UseDiscordSessionResult {
 
             clearPendingPwaState();
             console.info('Discord PWA セッション復旧に成功しました', { statePreview });
+            // claim-session 成功時はレスポンスの Set-Cookie で hint が更新されるため同期する
+            syncSessionHintFromCookie();
             await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
             return 'claimed';
           } catch (error) {
@@ -380,7 +403,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
         // pending state still exists (e.g. recoverable failure). Retry on next loop iteration.
       }
     },
-    [queryClient, setShouldDelaySessionFetch]
+    [queryClient, setShouldDelaySessionFetch, syncSessionHintFromCookie]
   );
 
   const query = useQuery({
@@ -388,10 +411,21 @@ export function useDiscordSession(): UseDiscordSessionResult {
     queryFn: fetchSession,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: !shouldDelaySessionFetch
+    // 未ログイン利用者は hint が無い限り /api/discord/me を自動実行しない
+    enabled: !shouldDelaySessionFetch && hasSessionHint,
+    onSuccess: (payload) => {
+      if (payload.loggedIn) {
+        return;
+      }
+      // サーバーが hint を削除した直後に、同一タブでも即時反映して再取得ループを防ぐ
+      clearDiscordSessionHintCookieClientSide();
+      setHasSessionHint(false);
+    }
   });
   const { refetch: refetchQuery } = query;
 
+  // アプリ復帰時にPWA復旧と必要な場合のみセッション再取得を行う。
+  // claimPendingPwaSession/refetchQuery/syncSessionHintFromCookie は effect 内で参照するため依存に含める。
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -416,6 +450,11 @@ export function useDiscordSession(): UseDiscordSessionResult {
           logDiscordAuthEvent('Discord PWA セッション復旧がキャンセルされたためセッション再取得をスキップします');
           return;
         }
+        const canFetchSession = syncSessionHintFromCookie();
+        if (!canFetchSession) {
+          logDiscordAuthEvent('Discordセッションヒントが存在しないため再取得をスキップします');
+          return;
+        }
         logDiscordAuthEvent('アプリが前面に復帰したためDiscordセッション情報の再取得を開始します');
         await refetchQuery();
       })();
@@ -426,7 +465,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [claimPendingPwaSession, refetchQuery]);
+  }, [claimPendingPwaSession, refetchQuery, syncSessionHintFromCookie]);
 
   const login = useCallback(async () => {
     const baseLoginUrl = '/api/auth/discord/start';
@@ -594,15 +633,24 @@ export function useDiscordSession(): UseDiscordSessionResult {
       logDiscordAuthEvent('DiscordログアウトAPIの呼び出しが完了しました', {
         status: response.status
       });
+      // ログアウト成功時のみクッキー削除を反映し、不要な /api/discord/me 再取得を止める
+      clearDiscordSessionHintCookieClientSide();
+      setHasSessionHint(false);
     }
     await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
   }, [queryClient]);
 
   const refetch = useCallback(async () => {
+    const canFetchSession = syncSessionHintFromCookie();
+    if (!canFetchSession) {
+      return undefined;
+    }
     const result = await refetchQuery();
     return result.data;
-  }, [refetchQuery]);
+  }, [refetchQuery, syncSessionHintFromCookie]);
 
+  // 初回マウント時にPWA保留stateの回収を開始する。
+  // claimPendingPwaSession が差し替わった場合は最新ロジックで再実行するため依存に含める。
   useEffect(() => {
     const controller = new AbortController();
 
