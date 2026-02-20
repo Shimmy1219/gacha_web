@@ -8,6 +8,7 @@ import {
   saveDiscordPwaSession,
   digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
+import { setDiscordSessionHintCookie } from '../../_lib/discordSessionHintCookie.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 import { resolveDiscordRedirectUri } from '../../_lib/discordAuthConfig.js';
@@ -371,6 +372,8 @@ export default async function handler(req, res) {
 
     // sid をクッキーへ（30日）
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    // クライアント側の /api/discord/me 自動取得可否を判断するヒントも同時に付与する
+    setDiscordSessionHintCookie(res);
 
     const formatParam = Array.isArray(req.query?.format)
       ? req.query?.format[0]

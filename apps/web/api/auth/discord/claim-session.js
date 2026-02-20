@@ -8,6 +8,7 @@ import {
   deleteDiscordPwaSession,
   digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
+import { setDiscordSessionHintCookie } from '../../_lib/discordSessionHintCookie.js';
 import { getSession, touchSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 
@@ -151,6 +152,8 @@ export default async function handler(req, res) {
     });
 
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    // PWA復旧成功時にもヒントクッキーを更新し、以後の /api/discord/me 自動取得を有効化する
+    setDiscordSessionHintCookie(res);
     setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });
     log.info('PWAセッションブリッジのクレームに成功しSIDクッキーを再発行しました', {
       statePreview,
