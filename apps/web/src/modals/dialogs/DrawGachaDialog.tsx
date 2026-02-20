@@ -27,6 +27,7 @@ import {
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
+import { useNotification } from '../../features/notification';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection,
@@ -300,6 +301,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
   const includeOutOfStockItems = includeOutOfStockInComplete || allowOutOfStockGuaranteeItem;
   const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
+  const { notify } = useNotification();
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () =>
@@ -1144,7 +1146,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [shareContent?.tweetUrl]
   );
 
-  const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
@@ -1197,6 +1198,54 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       noticeTimerRef.current = null;
     }, 4000);
   }, [discordDeliveryNotice]);
+
+  useEffect(() => {
+    if (!shareFeedback || shareFeedback.entryKey !== 'draw-result') {
+      return;
+    }
+
+    if (shareFeedback.status === 'copied') {
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: 'コピーしました'
+      });
+      return;
+    }
+
+    if (shareFeedback.status === 'shared') {
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: '共有を開始しました'
+      });
+      return;
+    }
+
+    notify({
+      variant: 'error',
+      title: 'エラー',
+      message: '共有に失敗しました'
+    });
+  }, [notify, shareFeedback]);
+
+  const notifyDiscordDeliverySuccess = useCallback((message: string) => {
+    setDiscordDeliveryNotice(message);
+    notify({
+      variant: 'success',
+      title: '成功',
+      message
+    });
+  }, [notify]);
+
+  const notifyDiscordDeliveryError = useCallback((message: string) => {
+    setDiscordDeliveryError(message);
+    notify({
+      variant: 'error',
+      title: 'エラー',
+      message
+    });
+  }, [notify]);
 
   const requestQuickSendPreference = useCallback(() => {
     return new Promise<{ sendNewOnly: boolean; rememberChoice: boolean } | null>((resolve) => {
@@ -1260,27 +1309,27 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setDiscordDeliveryCompleted(false);
       if (!resultItems || resultItems.length === 0) {
         const message = '共有できるガチャ結果がありません。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!lastPullId) {
         const message = '共有する履歴が見つかりませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!targetUserId) {
         const message = '共有対象のユーザー情報が見つかりませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!isDiscordLoggedIn) {
         const message = 'Discordにログインしてから共有してください。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!staffDiscordId) {
         const message = 'Discordアカウントの情報を取得できませんでした。再度ログインしてください。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
 
@@ -1295,7 +1344,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       const sharedMemberId = trimOrNull(profile.discordUserId);
       if (!sharedMemberId) {
         const message = 'Discord連携ユーザーのIDを確認できませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
 
@@ -1436,7 +1485,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         });
 
         setDiscordDeliveryError(null);
-        setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
+        notifyDiscordDeliverySuccess(`${memberDisplayName}さんに景品を送信しました`);
         setDiscordDeliveryCompleted(true);
       } catch (error) {
         if (isBlobUploadCsrfTokenMismatchError(error)) {
@@ -1456,7 +1505,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           error instanceof DiscordGuildSelectionMissingError
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
-        setDiscordDeliveryError(displayMessage);
+        notifyDiscordDeliveryError(displayMessage);
         setDiscordDeliveryCompleted(false);
         throw new Error(displayMessage);
       } finally {
@@ -1475,7 +1524,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       staffDiscordName,
       pullHistory,
       userProfiles,
-      excludeRiaguImages
+      excludeRiaguImages,
+      notifyDiscordDeliveryError,
+      notifyDiscordDeliverySuccess
     ]
   );
 
@@ -1521,23 +1572,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   const handleDeliverToDiscord = useCallback(async () => {
     if (!resultItems || resultItems.length === 0) {
-      setDiscordDeliveryError('共有できるガチャ結果がありません。');
+      notifyDiscordDeliveryError('共有できるガチャ結果がありません。');
       return;
     }
     if (!lastPullId) {
-      setDiscordDeliveryError('共有する履歴が見つかりませんでした。');
+      notifyDiscordDeliveryError('共有する履歴が見つかりませんでした。');
       return;
     }
     if (!lastUserId) {
-      setDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
+      notifyDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
       return;
     }
     if (!isDiscordLoggedIn) {
-      setDiscordDeliveryError('Discordにログインしてから共有してください。');
+      notifyDiscordDeliveryError('Discordにログインしてから共有してください。');
       return;
     }
     if (!staffDiscordId) {
-      setDiscordDeliveryError('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      notifyDiscordDeliveryError('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
       return;
     }
 
@@ -1550,7 +1601,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       return;
     }
     if (quickSendNewOnly && newResultItemIds.length === 0) {
-      setDiscordDeliveryError('新規取得した景品がありません。');
+      notifyDiscordDeliveryError('新規取得した景品がありません。');
       return;
     }
     const itemIdFilter = quickSendNewOnly ? newResultItemIds : undefined;
@@ -1563,7 +1614,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         error instanceof DiscordGuildSelectionMissingError
           ? error.message
           : 'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。';
-      setDiscordDeliveryError(message);
+      notifyDiscordDeliveryError(message);
       return;
     }
 
@@ -1632,7 +1683,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           const displayMessage = message.includes('Discord情報')
             ? message
             : `Discord情報の連携に失敗しました: ${message}`;
-          setDiscordDeliveryError(displayMessage);
+          notifyDiscordDeliveryError(displayMessage);
         }
       }
     });
@@ -1647,7 +1698,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     resolveQuickSendNewOnly,
     newResultItemIds,
     push,
-    userProfiles
+    userProfiles,
+    notifyDiscordDeliveryError
   ]);
 
   const handleCopyShareResult = useCallback(() => {
@@ -2058,31 +2110,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                     <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     <span className="sr-only">結果をコピー</span>
                   </button>
-                  {shareStatus === 'shared' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有を開始しました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'copied' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有テキストをコピーしました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'error' ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      共有に失敗しました
-                    </span>
-                  ) : null}
-                  {discordDeliveryNotice ? (
-                    <span className="basis-full text-right text-[11px] text-emerald-600">
-                      {discordDeliveryNotice}
-                    </span>
-                  ) : null}
-                  {discordDeliveryError ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      {discordDeliveryError}
-                    </span>
-                  ) : null}
                 </div>
               ) : null}
             </div>

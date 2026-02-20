@@ -39,6 +39,7 @@ import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { RarityFileUploadControls } from '../../components/RarityFileUploadControls';
 import { RarityRateErrorDialog } from './RarityRateErrorDialog';
 import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
+import { useNotification } from '../../features/notification';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -188,6 +189,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     riagu: riaguStore
   } = useDomainStores();
   const { push } = useModal();
+  const { notify } = useNotification();
 
   const [step, setStep] = useState<WizardStep>('basic');
   const [gachaName, setGachaName] = useState('');
@@ -957,9 +959,11 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
       close();
     } catch (error) {
       console.error('新規ガチャの登録に失敗しました', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('新規ガチャの登録に失敗しました。もう一度お試しください。');
-      }
+      notify({
+        variant: 'error',
+        title: '新規ガチャの登録に失敗しました',
+        message: 'もう一度お試しください。'
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -975,7 +979,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     ptSettings,
     rarities,
     rarityStore,
-    riaguStore
+    riaguStore,
+    notify
   ]);
 
   const renderBasicStep = () => {
