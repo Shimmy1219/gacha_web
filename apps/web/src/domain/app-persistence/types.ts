@@ -11,6 +11,7 @@ export interface GachaAppStateV3 {
       createdAt?: string;
       updatedAt?: string;
       isArchived?: boolean;
+      thumbnailAssetId?: string | null;
     }
   >;
   order: string[];

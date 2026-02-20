@@ -8,6 +8,9 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { OFFICIAL_X_ACCOUNT_ID, OFFICIAL_X_ACCOUNT_URL } from '../../components/OfficialXAccountPanel';
+import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { useStoreValue } from '@domain/stores';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
@@ -97,6 +100,14 @@ interface CsrfResponsePayload {
   ok?: boolean;
   token?: string;
   error?: string;
+}
+
+interface ReceiveGachaSummaryCard {
+  key: string;
+  gachaId: string | null;
+  gachaName: string;
+  itemCount: number;
+  thumbnailAssetId: string | null;
 }
 
 async function requestCsrfToken(signal?: AbortSignal): Promise<string> {
@@ -255,6 +266,8 @@ function formatOmittedMessage(itemNames: string[]): string | null {
 }
 
 export function ReceivePage(): JSX.Element {
+  const { appState: appStateStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
   const [searchParams, setSearchParams] = useSearchParams();
   const [tokenInput, setTokenInput] = useState<string>('');
   const [resolveStatus, setResolveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -298,6 +311,39 @@ export function ReceivePage(): JSX.Element {
     const tokenParam = searchParams.get('t');
     return Boolean(tokenParam && tokenParam.trim());
   }, [searchParams]);
+  const gachaSummaryCards = useMemo<ReceiveGachaSummaryCard[]>(() => {
+    if (mediaItems.length === 0) {
+      return [];
+    }
+
+    const meta = appState?.meta ?? {};
+    const map = new Map<string, ReceiveGachaSummaryCard>();
+
+    mediaItems.forEach((item) => {
+      const gachaName = item.metadata?.gachaName?.trim() || '不明なガチャ';
+      const gachaId = item.metadata?.gachaId?.trim() || null;
+      const key = gachaId ?? `name:${gachaName}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.itemCount += 1;
+        return;
+      }
+
+      const thumbnailAssetIdFromMeta = gachaId ? meta[gachaId]?.thumbnailAssetId : null;
+      map.set(key, {
+        key,
+        gachaId,
+        gachaName,
+        itemCount: 1,
+        thumbnailAssetId:
+          typeof thumbnailAssetIdFromMeta === 'string' && thumbnailAssetIdFromMeta.length > 0
+            ? thumbnailAssetIdFromMeta
+            : null
+      });
+    });
+
+    return Array.from(map.values()).sort((left, right) => left.gachaName.localeCompare(right.gachaName, 'ja'));
+  }, [appState, mediaItems]);
 
   useEffect(() => {
     if (hasHistoryParam) {
@@ -1051,6 +1097,33 @@ export function ReceivePage(): JSX.Element {
               </div>
             ) : null}
           </div>
+        ) : null}
+
+        {gachaSummaryCards.length > 0 ? (
+          <section className="receive-page-gacha-summary-section rounded-3xl border border-border/60 bg-panel/85 p-5 shadow-lg shadow-black/10 backdrop-blur">
+            <h2 className="receive-page-gacha-summary-title text-base font-semibold text-surface-foreground">ガチャ別サマリー</h2>
+            <div className="receive-page-gacha-summary-grid mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {gachaSummaryCards.map((card) => (
+                <div
+                  key={card.key}
+                  className="receive-page-gacha-summary-card flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/50 p-3"
+                >
+                  <ItemPreview
+                    assetId={card.thumbnailAssetId}
+                    alt={`${card.gachaName}の配信サムネイル`}
+                    kindHint="image"
+                    imageFit="cover"
+                    emptyLabel="noImage"
+                    className="receive-page-gacha-summary-thumbnail h-12 w-12 bg-surface-deep"
+                  />
+                  <div className="receive-page-gacha-summary-card-content min-w-0">
+                    <p className="receive-page-gacha-summary-card-name truncate text-sm font-semibold text-surface-foreground">{card.gachaName}</p>
+                    <p className="receive-page-gacha-summary-card-count text-xs text-muted-foreground">景品 {card.itemCount} 件</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {mediaItems.length > 0 ? (

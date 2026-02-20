@@ -30,6 +30,7 @@ import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/u
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import { useNotification } from '../../features/notification';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
+import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import {
   DEFAULT_SITE_ZOOM_PERCENT,
   DEFAULT_GACHA_OWNER_SHARE_RATE,
@@ -558,13 +559,25 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const gachaEntries = useMemo(() => {
     if (!appState) {
-      return [] as Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }>;
+      return [] as Array<{
+        id: string;
+        name: string;
+        isSelected: boolean;
+        isArchived: boolean;
+        thumbnailAssetId: string | null;
+      }>;
     }
 
     const order = appState.order ?? [];
     const meta = appState.meta ?? {};
     const seen = new Set<string>();
-    const entries: Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }> = [];
+    const entries: Array<{
+      id: string;
+      name: string;
+      isSelected: boolean;
+      isArchived: boolean;
+      thumbnailAssetId: string | null;
+    }> = [];
 
     const append = (gachaId: string | undefined | null) => {
       if (!gachaId || seen.has(gachaId)) {
@@ -576,7 +589,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         id: gachaId,
         name: displayName && displayName.length > 0 ? displayName : gachaId,
         isSelected: appState.selectedGachaId === gachaId,
-        isArchived: meta[gachaId]?.isArchived === true
+        isArchived: meta[gachaId]?.isArchived === true,
+        thumbnailAssetId: meta[gachaId]?.thumbnailAssetId ?? null
       });
     };
 
@@ -937,62 +951,72 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                       <li key={entry.id}>
                         <div className="rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
                           <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-                              {editingGachaId === entry.id ? (
-                                <>
-                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                    <input
-                                      type="text"
-                                      value={editingGachaName}
-                                      onChange={handleEditingGachaNameChange}
-                                      onKeyDown={(event) => {
-                                        if (event.key === 'Enter') {
-                                          event.preventDefault();
-                                          handleCommitEditingGacha();
-                                        }
-                                        if (event.key === 'Escape') {
-                                          event.preventDefault();
-                                          handleCancelEditingGacha();
-                                        }
-                                      }}
-                                      autoFocus
-                                      className="w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                                    />
-                                    <div className="flex flex-wrap items-center gap-2">
+                            <div className="page-settings-dialog__gacha-entry-main flex min-w-[200px] flex-1 items-start gap-3">
+                              <ItemPreview
+                                assetId={entry.thumbnailAssetId}
+                                alt={`${entry.name}の配信サムネイル`}
+                                kindHint="image"
+                                imageFit="cover"
+                                emptyLabel="noImage"
+                                className="page-settings-dialog__gacha-entry-thumbnail h-12 w-12 bg-surface-deep"
+                              />
+                              <div className="page-settings-dialog__gacha-entry-info flex min-w-0 flex-1 flex-col gap-2">
+                                {editingGachaId === entry.id ? (
+                                  <>
+                                    <div className="page-settings-dialog__gacha-entry-edit-row flex flex-col gap-2 sm:flex-row sm:items-center">
+                                      <input
+                                        type="text"
+                                        value={editingGachaName}
+                                        onChange={handleEditingGachaNameChange}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            handleCommitEditingGacha();
+                                          }
+                                          if (event.key === 'Escape') {
+                                            event.preventDefault();
+                                            handleCancelEditingGacha();
+                                          }
+                                        }}
+                                        autoFocus
+                                        className="page-settings-dialog__gacha-entry-edit-input w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                                      />
+                                      <div className="page-settings-dialog__gacha-entry-edit-actions flex flex-wrap items-center gap-2">
+                                        <button
+                                          type="button"
+                                          className="page-settings-dialog__gacha-entry-save-button inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                          onClick={handleCommitEditingGacha}
+                                        >
+                                          保存
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="page-settings-dialog__gacha-entry-cancel-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                          onClick={handleCancelEditingGacha}
+                                        >
+                                          キャンセル
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="page-settings-dialog__gacha-entry-id text-xs text-muted-foreground">ID: {entry.id}</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="page-settings-dialog__gacha-entry-name-row flex items-center gap-2">
+                                      <p className="page-settings-dialog__gacha-entry-name font-semibold leading-tight">{entry.name}</p>
                                       <button
                                         type="button"
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                        onClick={handleCommitEditingGacha}
+                                        className="page-settings-dialog__gacha-entry-edit-button inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                        onClick={() => handleStartEditingGacha(entry.id, entry.name)}
+                                        aria-label={`${entry.name}を編集`}
                                       >
-                                        保存
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
-                                        onClick={handleCancelEditingGacha}
-                                      >
-                                        キャンセル
+                                        <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
                                       </button>
                                     </div>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold leading-tight">{entry.name}</p>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                      onClick={() => handleStartEditingGacha(entry.id, entry.name)}
-                                      aria-label={`${entry.name}を編集`}
-                                    >
-                                      <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-                                    </button>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                                </>
-                              )}
+                                    <p className="page-settings-dialog__gacha-entry-id text-xs text-muted-foreground">ID: {entry.id}</p>
+                                  </>
+                                )}
+                              </div>
                             </div>
                             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
                               {entry.isSelected ? (

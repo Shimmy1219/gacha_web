@@ -40,6 +40,7 @@ import { RarityFileUploadControls } from '../../components/RarityFileUploadContr
 import { RarityRateErrorDialog } from './RarityRateErrorDialog';
 import { PtBundleGuaranteeGuideDialog } from './PtBundleGuaranteeGuideDialog';
 import { useNotification } from '../../features/notification';
+import { validateGachaThumbnailFile } from '../../features/gacha/gachaThumbnail';
 
 type WizardStep = 'basic' | 'assets' | 'pt';
 
@@ -202,6 +203,8 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNameError, setShowNameError] = useState(false);
   const [useFilenameAsItemName, setUseFilenameAsItemName] = useState(false);
+  const [gachaThumbnailAsset, setGachaThumbnailAsset] = useState<DraftItemAsset | null>(null);
+  const [gachaThumbnailError, setGachaThumbnailError] = useState<string | null>(null);
   const itemsRef = useRef<DraftItem[]>([]);
 
   const sortedRarities = useMemo(() => sortRarityRows(rarities), [rarities]);
@@ -226,6 +229,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, [items]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const gachaThumbnailInputRef = useRef<HTMLInputElement | null>(null);
   const pendingAssetRarityIdRef = useRef<string | null>(null);
   const subAssetInputRef = useRef<HTMLInputElement | null>(null);
   const pendingSubAssetItemIdRef = useRef<string | null>(null);
@@ -517,6 +521,65 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     fileInputRef.current?.click();
   }, []);
 
+  const handleRequestGachaThumbnailSelection = useCallback(() => {
+    gachaThumbnailInputRef.current?.click();
+  }, []);
+
+  const handleSelectGachaThumbnail = useCallback(
+    async (fileList: FileList | null) => {
+      const file = fileList?.[0];
+      if (!file) {
+        return;
+      }
+
+      if (typeof window === 'undefined' || typeof window.indexedDB === 'undefined') {
+        setGachaThumbnailError('この環境では画像を保存できません。');
+        return;
+      }
+
+      setIsProcessingAssets(true);
+      setGachaThumbnailError(null);
+
+      try {
+        // 配信サムネイルは仕様上「正方形のPNG/JPGのみ」を許可する。
+        const validation = await validateGachaThumbnailFile(file);
+        if (!validation.ok) {
+          setGachaThumbnailError(validation.message ?? '配信サムネイルに使える画像ではありません。');
+          return;
+        }
+
+        const record = await saveAsset(file);
+        createdAssetIdsRef.current.add(record.id);
+        const draftAsset = await createDraftAssetEntry(record, file);
+
+        setGachaThumbnailAsset((previous) => {
+          // 差し替え時は古いドラフトアセットを必ず破棄してリークを防ぐ。
+          if (previous) {
+            disposeDraftAsset(previous);
+          }
+          return draftAsset;
+        });
+      } catch (error) {
+        console.error('配信サムネイルの保存に失敗しました', error);
+        setGachaThumbnailError('配信サムネイルの保存に失敗しました。もう一度お試しください。');
+      } finally {
+        setIsProcessingAssets(false);
+      }
+    },
+    [createDraftAssetEntry, disposeDraftAsset]
+  );
+
+  const handleRemoveGachaThumbnail = useCallback(() => {
+    setGachaThumbnailAsset((previous) => {
+      if (!previous) {
+        return null;
+      }
+      disposeDraftAsset(previous);
+      return null;
+    });
+    setGachaThumbnailError(null);
+  }, [disposeDraftAsset]);
+
   const handleSelectFiles = useCallback(async (fileList: FileList | null, rarityId: string | null) => {
     if (!fileList || fileList.length === 0) {
       return;
@@ -785,6 +848,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
             [gachaId]: {
               id: gachaId,
               displayName: trimmedName,
+              thumbnailAssetId: gachaThumbnailAsset?.assetId ?? null,
               createdAt: timestamp,
               updatedAt: timestamp
             }
@@ -972,6 +1036,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     catalogStore,
     close,
     gachaName,
+    gachaThumbnailAsset,
     isCompleteGachaEnabled,
     isSubmitting,
     items,
@@ -986,17 +1051,17 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   const renderBasicStep = () => {
     const gachaNameInputId = 'create-gacha-wizard-name';
     return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
+      <div className="create-gacha-wizard__basic-step space-y-6">
+        <div className="create-gacha-wizard__name-field space-y-2">
+          <div className="create-gacha-wizard__name-field-header flex items-center gap-3">
             <label
               htmlFor={gachaNameInputId}
-              className="block text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground"
+              className="create-gacha-wizard__name-label block text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground"
             >
               ガチャ名（必須）
             </label>
             {showNameError ? (
-              <span className="text-xs font-semibold text-red-400">この項目は必須です。</span>
+              <span className="create-gacha-wizard__name-error text-xs font-semibold text-red-400">この項目は必須です。</span>
             ) : null}
           </div>
           <input
@@ -1010,13 +1075,68 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
                 setShowNameError(false);
               }
             }}
-            className="w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
+            className="create-gacha-wizard__name-input w-full rounded-2xl border border-border/60 bg-surface-alt px-4 py-3 text-sm text-surface-foreground transition focus:border-accent focus:outline-none"
             placeholder="例：リアルグッズガチャ"
           />
         </div>
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
-          <div className="sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
+        <div className="create-gacha-wizard__thumbnail-section space-y-2">
+          <div className="create-gacha-wizard__thumbnail-header flex items-center justify-between gap-3">
+            <h3 className="create-gacha-wizard__thumbnail-title text-sm font-semibold text-muted-foreground">配信サムネイルを設定</h3>
+            {gachaThumbnailAsset ? (
+              <span className="create-gacha-wizard__thumbnail-status chip border-emerald-500/40 bg-emerald-500/10 text-emerald-600">設定済み</span>
+            ) : null}
+          </div>
+          <div className="create-gacha-wizard__thumbnail-panel flex flex-col gap-4 rounded-2xl border border-border/60 bg-surface/50 p-4 sm:flex-row sm:items-center">
+            <ItemPreview
+              assetId={gachaThumbnailAsset?.assetId}
+              previewAssetId={gachaThumbnailAsset?.thumbnailAssetId ?? null}
+              previewUrl={gachaThumbnailAsset?.previewUrl || undefined}
+              alt="配信サムネイルのプレビュー"
+              kindHint="image"
+              className="create-gacha-wizard__thumbnail-preview h-24 w-24 bg-surface-deep"
+              imageFit="cover"
+              emptyLabel="noImage"
+            />
+            <div className="create-gacha-wizard__thumbnail-body flex min-w-0 flex-1 flex-col gap-2">
+              <p className="create-gacha-wizard__thumbnail-description text-xs text-muted-foreground">
+                正方形のPNG/JPGを設定できます。設定した画像はガチャの各画面で共通表示されます。
+              </p>
+              {gachaThumbnailAsset?.originalFilename ? (
+                <p className="create-gacha-wizard__thumbnail-filename truncate text-xs text-muted-foreground">
+                  選択中: {gachaThumbnailAsset.originalFilename}
+                </p>
+              ) : null}
+              <div className="create-gacha-wizard__thumbnail-actions flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="create-gacha-wizard__thumbnail-select-button btn btn-muted !min-h-0 h-8 px-3 text-xs"
+                  onClick={handleRequestGachaThumbnailSelection}
+                  disabled={isProcessingAssets}
+                >
+                  {gachaThumbnailAsset ? '画像を変更' : '画像を選択'}
+                </button>
+                {gachaThumbnailAsset ? (
+                  <button
+                    type="button"
+                    className="create-gacha-wizard__thumbnail-remove-button inline-flex items-center justify-center rounded-xl border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={handleRemoveGachaThumbnail}
+                    disabled={isProcessingAssets}
+                  >
+                    削除
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {gachaThumbnailError ? (
+            <div className="create-gacha-wizard__thumbnail-error rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {gachaThumbnailError}
+            </div>
+          ) : null}
+        </div>
+        <div className="create-gacha-wizard__rarity-settings space-y-3">
+          <h3 className="create-gacha-wizard__rarity-settings-title text-sm font-semibold text-muted-foreground">レアリティ設定</h3>
+          <div className="create-gacha-wizard__rarity-table-wrapper sm:max-h-[45vh] sm:overflow-y-auto sm:pr-1">
             <RarityTable
               rows={rarityTableRows}
               onLabelChange={handleLabelChange}
@@ -1359,6 +1479,17 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
           </button>
         )}
       </ModalFooter>
+      <input
+        ref={gachaThumbnailInputRef}
+        id="create-gacha-wizard-thumbnail-input"
+        type="file"
+        accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+        className="sr-only"
+        onChange={(event) => {
+          void handleSelectGachaThumbnail(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
       <input
         ref={fileInputRef}
         type="file"

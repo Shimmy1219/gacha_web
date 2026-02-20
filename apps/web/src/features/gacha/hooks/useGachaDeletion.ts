@@ -34,10 +34,11 @@ export function useGachaDeletion(options: UseGachaDeletionOptions = {}): (target
 
       const catalogState = catalog.getState();
       const snapshot = catalogState?.byGacha?.[gachaId];
-      const assetIds = snapshot
-        ? Array.from(
-            new Set(
-              Object.values(snapshot.items ?? {}).flatMap((item) => {
+      const thumbnailAssetId = appState.getState()?.meta?.[gachaId]?.thumbnailAssetId ?? null;
+      const assetIds = Array.from(
+        new Set([
+          ...(snapshot
+            ? Object.values(snapshot.items ?? {}).flatMap((item) => {
                 const assets = Array.isArray(item?.assets) ? item.assets : [];
                 if (assets.length > 0) {
                   return assets
@@ -52,9 +53,10 @@ export function useGachaDeletion(options: UseGachaDeletionOptions = {}): (target
 
                 return [];
               })
-            )
-          )
-        : [];
+            : []),
+          ...(typeof thumbnailAssetId === 'string' && thumbnailAssetId.length > 0 ? [thumbnailAssetId] : [])
+        ])
+      );
 
       appState.purgeGacha(gachaId);
       catalog.removeGacha(gachaId);

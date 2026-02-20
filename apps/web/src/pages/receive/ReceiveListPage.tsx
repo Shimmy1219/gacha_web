@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
-import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
+import { ItemPreview, ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
 import {
   getRarityTextPresentation,
   getWhiteRarityTextOutlineStyle,
@@ -30,6 +30,8 @@ import { useObjectUrl } from './hooks/useObjectUrl';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
 import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -785,6 +787,8 @@ function ReceiveInventoryItemCard({
 }
 
 export function ReceiveListPage(): JSX.Element {
+  const { appState: appStateStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
   const [groups, setGroups] = useState<ReceiveGachaGroup[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -818,6 +822,19 @@ export function ReceiveListPage(): JSX.Element {
       })),
     []
   );
+
+  const gachaThumbnailAssetIdById = useMemo(() => {
+    const map = new Map<string, string>();
+    const meta = appState?.meta ?? {};
+    Object.entries(meta).forEach(([gachaId, entry]) => {
+      const thumbnailAssetId = entry?.thumbnailAssetId;
+      if (!gachaId || typeof thumbnailAssetId !== 'string' || thumbnailAssetId.length === 0) {
+        return;
+      }
+      map.set(gachaId, thumbnailAssetId);
+    });
+    return map;
+  }, [appState]);
 
   useEffect(() => {
     groupsRef.current = groups;
@@ -1832,6 +1849,7 @@ export function ReceiveListPage(): JSX.Element {
               const isCollapsed = Boolean(collapsedGroups[groupKey]);
               const isGroupLoading = Boolean(loadingGroupKeys[groupKey]);
               const contentId = createGroupDomId(groupKey);
+              const gachaThumbnailAssetId = group.gachaId ? gachaThumbnailAssetIdById.get(group.gachaId) ?? null : null;
 
               return (
                 <div
@@ -1844,24 +1862,36 @@ export function ReceiveListPage(): JSX.Element {
                       onClick={() => toggleGroup(groupKey)}
                       aria-expanded={!isCollapsed}
                       aria-controls={contentId}
-                      className="group flex-1 text-left"
+                      className="receive-list-page__group-header-button group flex-1 text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
-                        <ChevronDownIcon
-                          className={clsx(
-                            'h-4 w-4 text-muted-foreground transition-transform',
-                            isCollapsed ? '' : 'rotate-180'
-                          )}
-                          aria-hidden="true"
+                      <div className="receive-list-page__group-header-row flex items-center gap-3">
+                        <ItemPreview
+                          assetId={gachaThumbnailAssetId}
+                          alt={`${group.gachaName}の配信サムネイル`}
+                          kindHint="image"
+                          imageFit="cover"
+                          emptyLabel="noImage"
+                          className="receive-list-page__group-thumbnail h-12 w-12 bg-surface-deep"
                         />
+                        <div className="receive-list-page__group-title-wrapper min-w-0">
+                          <div className="receive-list-page__group-title-row flex items-center gap-2">
+                            <h2 className="receive-list-page__group-title text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
+                            <ChevronDownIcon
+                              className={clsx(
+                                'receive-list-page__group-chevron h-4 w-4 text-muted-foreground transition-transform',
+                                isCollapsed ? '' : 'rotate-180'
+                              )}
+                              aria-hidden="true"
+                            />
+                          </div>
+                          <p className="receive-list-page__group-stats text-xs text-muted-foreground">
+                            所持 {group.ownedKinds} 種類 / 全 {group.totalKinds} 種類 ・ 合計 {group.ownedCount} 個
+                          </p>
+                          <p className="receive-list-page__group-owner text-xs text-muted-foreground">
+                            オーナー: {formatOwnerNames(group.ownerNames)}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        所持 {group.ownedKinds} 種類 / 全 {group.totalKinds} 種類 ・ 合計 {group.ownedCount} 個
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        オーナー: {formatOwnerNames(group.ownerNames)}
-                      </p>
                     </button>
                     <ReceiveBulkSaveButton
                       onClick={() => handleSaveGroup(group)}
