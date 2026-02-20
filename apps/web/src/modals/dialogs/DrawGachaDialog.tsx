@@ -2054,20 +2054,22 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
               </div>
               {shareContent ? (
                 <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
-                  <button
-                    type="button"
-                    className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
-                    style={{ minWidth: discordDeliveryButtonMinWidth }}
-                    onClick={handleDeliverToDiscord}
-                    disabled={discordDeliveryButtonDisabled}
-                  >
-                    {isDiscordDeliveryInProgress ? (
-                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    {discordDeliveryButtonLabel}
-                  </button>
+                  {isDiscordLoggedIn ? (
+                    <button
+                      type="button"
+                      className="draw-gacha-dialog__quick-send-button btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+                      style={{ minWidth: discordDeliveryButtonMinWidth }}
+                      onClick={handleDeliverToDiscord}
+                      disabled={discordDeliveryButtonDisabled}
+                    >
+                      {isDiscordDeliveryInProgress ? (
+                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      {discordDeliveryButtonLabel}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
