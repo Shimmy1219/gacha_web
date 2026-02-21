@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 import { DrawResultRevealCard } from './DrawResultRevealCard'
@@ -26,6 +26,7 @@ export function DrawResultRevealOverlay({
   onClose
 }: DrawResultRevealOverlayProps): JSX.Element {
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => {
     if (typeof window === 'undefined') {
       return { width: 1366, height: 768 }
@@ -64,6 +65,29 @@ export function DrawResultRevealOverlay({
     return cards.slice(0, safeCount)
   }, [cards, revealedCount])
 
+  useEffect(() => {
+    const gridElement = gridRef.current
+    if (!gridElement) {
+      return
+    }
+    if (gridElement.scrollHeight <= gridElement.clientHeight) {
+      return
+    }
+
+    // 追加表示でスクロール領域が伸びるたびに末尾へ追従し、最新の演出カードを見切れさせない。
+    // visibleCards.length と isAnimating に反応して、段階表示中は滑らかに追従する。
+    const frameId = window.requestAnimationFrame(() => {
+      gridElement.scrollTo({
+        top: gridElement.scrollHeight,
+        behavior: isAnimating ? 'smooth' : 'auto'
+      })
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [isAnimating, visibleCards.length])
+
   const totalQuantity = useMemo(() => {
     return cards.reduce((total, card) => total + card.quantity, 0)
   }, [cards])
@@ -71,32 +95,49 @@ export function DrawResultRevealOverlay({
   const overlayStyle = useMemo<CSSProperties>(() => {
     const totalCards = Math.max(1, cards.length)
     const defaultCardSize = 118
-    const minMobileCardSize = 64
     const mobileBreakpoint = 768
+    const tabletBreakpoint = 1100
     const availableWidth = Math.max(240, viewport.width - 40)
     const availableHeight = Math.max(220, viewport.height - 40 - 136)
     const horizontalGap = 12
     const verticalGap = 14
     const cardMetaHeight = 30
 
-    if (viewport.width >= mobileBreakpoint) {
-      return {
-        '--draw-result-card-size': `${defaultCardSize}px`
-      } as CSSProperties
+    const resolveMinimumCardSize = (): number => {
+      if (viewport.width < mobileBreakpoint) {
+        return Math.max(52, Math.floor(viewport.width / 5))
+      }
+      if (viewport.width < tabletBreakpoint) {
+        return Math.max(52, Math.floor(viewport.width / 7))
+      }
+      return defaultCardSize
     }
 
-    const estimateContentHeight = (cardSize: number): number => {
-      const columns = Math.max(1, Math.floor((availableWidth + horizontalGap) / (cardSize + horizontalGap)))
+    const minimumCardSize = Math.min(defaultCardSize, resolveMinimumCardSize())
+
+    const resolveLayoutForMinSize = (
+      minimumSize: number
+    ): { columns: number; cardSize: number; contentHeight: number } => {
+      const estimatedColumns = Math.max(1, Math.floor((availableWidth + horizontalGap) / (minimumSize + horizontalGap)))
+      const columns = Math.max(1, Math.min(totalCards, estimatedColumns))
+      const cardSize = Math.max(
+        1,
+        Math.floor((availableWidth - horizontalGap * Math.max(0, columns - 1)) / columns)
+      )
       const rows = Math.ceil(totalCards / columns)
       const cardBlockHeight = cardSize + cardMetaHeight
-      return rows * cardBlockHeight + Math.max(0, rows - 1) * verticalGap
+      const contentHeight = rows * cardBlockHeight + Math.max(0, rows - 1) * verticalGap
+      return { columns, cardSize, contentHeight }
     }
 
-    const willOverflowAtDefaultSize = estimateContentHeight(defaultCardSize) > availableHeight
-    const mobileCardSize = willOverflowAtDefaultSize ? minMobileCardSize : defaultCardSize
+    const defaultLayout = resolveLayoutForMinSize(defaultCardSize)
+    const minimumLayout = resolveLayoutForMinSize(minimumCardSize)
+    const shouldUseMinimumLayout =
+      minimumCardSize < defaultCardSize && defaultLayout.contentHeight > availableHeight
+    const selectedLayout = shouldUseMinimumLayout ? minimumLayout : defaultLayout
 
     return {
-      '--draw-result-card-size': `${mobileCardSize}px`
+      '--draw-result-columns': `${selectedLayout.columns}`
     } as CSSProperties
   }, [cards.length, viewport.height, viewport.width])
 
@@ -149,7 +190,10 @@ export function DrawResultRevealOverlay({
           </div>
         </div>
 
-        <div className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-y-auto overflow-x-hidden pb-2 pr-1">
+        <div
+          ref={gridRef}
+          className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-y-auto overflow-x-hidden pb-2 pr-1"
+        >
           {visibleCards.map((card) => (
             <div key={`${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
               <DrawResultRevealCard card={card} />

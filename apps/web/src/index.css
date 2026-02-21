@@ -689,12 +689,16 @@
   }
 
   .draw-gacha-result-overlay__grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(var(--draw-result-columns, 1), minmax(0, 1fr));
     align-content: flex-start;
     gap: 0.85rem 0.7rem;
     scrollbar-width: thin;
     scrollbar-color: rgb(255 255 255 / 0.45) transparent;
+  }
+
+  .draw-gacha-result-overlay__grid-item {
+    min-width: 0;
   }
 
   .draw-gacha-result-overlay__grid::-webkit-scrollbar {
@@ -717,8 +721,8 @@
   }
 
   .draw-gacha-result-card {
-    width: var(--draw-result-card-size, 118px);
-    min-width: var(--draw-result-card-size, 118px);
+    width: 100%;
+    min-width: 0;
   }
 
   .draw-gacha-result-card__thumb {

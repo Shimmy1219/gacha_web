@@ -405,6 +405,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawGachaDialogBodyRef = useRef<HTMLDivElement | null>(null);
   const lastRevealedPullIdRef = useRef<string | null>(null);
   const [isRevealOverlayVisible, setIsRevealOverlayVisible] = useState(false);
   const [revealCards, setRevealCards] = useState<DrawResultRevealCardModel[]>([]);
@@ -417,6 +418,22 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
     }
+  }, []);
+  const scrollDrawGachaDialogBodyToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const bodyElement = drawGachaDialogBodyRef.current;
+    if (!bodyElement) {
+      return;
+    }
+    if (bodyElement.scrollHeight <= bodyElement.clientHeight) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      bodyElement.scrollTo({
+        top: bodyElement.scrollHeight,
+        behavior
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -984,6 +1001,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const handleExecute = () => {
     void executeGachaDraw();
   };
+
+  useEffect(() => {
+    if (!lastPullId) {
+      return;
+    }
+
+    // ガチャ実行成功時に結果一覧まで自動で移動し、操作直後に結果確認しやすくする。
+    // lastPullId は成功時のみ更新されるため、依存は lastPullId と helper callback のみに限定する。
+    scrollDrawGachaDialogBodyToBottom('smooth');
+  }, [lastPullId, scrollDrawGachaDialogBodyToBottom]);
 
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
   const integerFormatter = useMemo(() => new Intl.NumberFormat('ja-JP'), []);
@@ -1877,7 +1904,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   return (
     <div className="draw-gacha-dialog__frame relative flex min-h-0 flex-1 flex-col" id="draw-gacha-dialog-frame">
-      <ModalBody className="draw-gacha-dialog__body space-y-6">
+      <ModalBody ref={drawGachaDialogBodyRef} className="draw-gacha-dialog__body space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
