@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import html2canvas from 'html2canvas'
 
 import { DrawResultRevealCard } from './DrawResultRevealCard'
 import type { DrawResultRevealCardModel } from './revealCards'
@@ -51,54 +52,6 @@ async function waitForImageCompletion(rootElement: HTMLElement): Promise<void> {
 }
 
 /**
- * DOM ノードの見た目を維持するため、計算済みスタイルをクローン側へインライン転写する。
- *
- * @param sourceElement 元の DOM 要素
- * @param clonedElement クローン済み DOM 要素
- */
-function inlineComputedStyles(sourceElement: HTMLElement, clonedElement: HTMLElement): void {
-  const sourceElements = [sourceElement, ...Array.from(sourceElement.querySelectorAll<HTMLElement>('*'))]
-  const clonedElements = [clonedElement, ...Array.from(clonedElement.querySelectorAll<HTMLElement>('*'))]
-
-  sourceElements.forEach((sourceNode, index) => {
-    const clonedNode = clonedElements[index]
-    if (!clonedNode) {
-      return
-    }
-
-    const computedStyle = window.getComputedStyle(sourceNode)
-    const inlineStyleText = Array.from(computedStyle)
-      .map((propertyName) => `${propertyName}:${computedStyle.getPropertyValue(propertyName)};`)
-      .join('')
-    clonedNode.setAttribute('style', inlineStyleText)
-
-    if (sourceNode instanceof HTMLImageElement && clonedNode instanceof HTMLImageElement) {
-      clonedNode.src = sourceNode.currentSrc || sourceNode.src
-    }
-  })
-}
-
-/**
- * SVG データ URL を読み込み、Canvas へ描画可能な Image 要素へ変換する。
- *
- * @param sourceUrl SVG データ URL
- * @returns 読み込み済み Image 要素
- */
-function loadImageFromUrl(sourceUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.decoding = 'async'
-    image.onload = () => {
-      resolve(image)
-    }
-    image.onerror = () => {
-      reject(new Error('画像の読み込みに失敗しました。'))
-    }
-    image.src = sourceUrl
-  })
-}
-
-/**
  * 指定した要素を PNG Blob に変換する。
  *
  * @param rootElement 変換対象のルート要素
@@ -110,38 +63,22 @@ async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
   }
   await waitForImageCompletion(rootElement)
 
-  const { width: rawWidth, height: rawHeight } = rootElement.getBoundingClientRect()
-  const width = Math.max(1, Math.ceil(rawWidth))
-  const height = Math.max(1, Math.ceil(rawHeight))
-
-  const clonedRootElement = rootElement.cloneNode(true) as HTMLElement
-  inlineComputedStyles(rootElement, clonedRootElement)
-  clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
-  clonedRootElement.style.margin = '0'
-
-  const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
-  const svgText = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-    '<foreignObject x="0" y="0" width="100%" height="100%">',
-    serializedHtml,
-    '</foreignObject>',
-    '</svg>'
-  ].join('')
-  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
-  const renderedImage = await loadImageFromUrl(svgDataUrl)
-
-  const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.ceil(width * devicePixelRatio))
-  canvas.height = Math.max(1, Math.ceil(height * devicePixelRatio))
-
-  const context = canvas.getContext('2d')
-  if (!context) {
-    throw new Error('画像描画コンテキストを作成できませんでした。')
-  }
-
-  context.scale(devicePixelRatio, devicePixelRatio)
-  context.drawImage(renderedImage, 0, 0, width, height)
+  const targetWidth = Math.max(1, Math.ceil(rootElement.scrollWidth))
+  const targetHeight = Math.max(1, Math.ceil(rootElement.scrollHeight))
+  const canvas = await html2canvas(rootElement, {
+    backgroundColor: null,
+    useCORS: true,
+    allowTaint: false,
+    logging: false,
+    imageTimeout: 0,
+    scale: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2),
+    width: targetWidth,
+    height: targetHeight,
+    windowWidth: Math.max(document.documentElement.clientWidth, targetWidth),
+    windowHeight: Math.max(document.documentElement.clientHeight, targetHeight),
+    scrollX: 0,
+    scrollY: 0
+  })
 
   const pngBlob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((blob) => resolve(blob), DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
@@ -183,7 +120,7 @@ export function DrawResultRevealOverlay({
   onClose
 }: DrawResultRevealOverlayProps): JSX.Element {
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
-  const overlayRootRef = useRef<HTMLElement | null>(null)
+  const copySurfaceRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isCopyingImage, setIsCopyingImage] = useState(false)
@@ -269,15 +206,15 @@ export function DrawResultRevealOverlay({
   }, [])
 
   const handleCopyImage = useCallback(async (): Promise<void> => {
-    const overlayElement = overlayRootRef.current
-    if (!overlayElement || isCopyingImage) {
+    const copySurfaceElement = copySurfaceRef.current
+    if (!copySurfaceElement || isCopyingImage) {
       return
     }
 
     setIsCopyingImage(true)
     setCopyButtonLabel('コピー中...')
     try {
-      await copyElementAsImage(overlayElement)
+      await copyElementAsImage(copySurfaceElement)
       setCopyButtonLabel('コピーしました')
     } catch (error) {
       console.error('抽選結果表示画面の画像コピーに失敗しました', error)
@@ -355,7 +292,6 @@ export function DrawResultRevealOverlay({
   return createPortal(
     <section
       id="draw-gacha-result-overlay"
-      ref={overlayRootRef}
       className="draw-gacha-result-overlay fixed inset-0 z-[80]"
       aria-label="ガチャ結果の演出表示"
       style={overlayStyle}
@@ -415,6 +351,32 @@ export function DrawResultRevealOverlay({
         >
           {visibleCards.map((card) => (
             <div key={`${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
+              <DrawResultRevealCard card={card} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        ref={copySurfaceRef}
+        className="draw-gacha-result-overlay__copy-surface fixed left-[-100000px] top-0 z-[-1] bg-black/95 p-4 text-white"
+        style={{ width: `${Math.max(280, viewport.width - 40)}px` }}
+      >
+        <div className="draw-gacha-result-overlay__copy-header mb-3 border-b border-white/30 pb-2">
+          <h3 className="draw-gacha-result-overlay__copy-title text-sm font-semibold text-white">{overlayTitle}</h3>
+          <div className="draw-gacha-result-overlay__copy-summary mt-1 flex flex-wrap items-center gap-2 text-xs text-white/90">
+            <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
+              表示カード {visibleCards.length}/{cards.length}
+            </span>
+            <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
+              計 {totalQuantity}連
+            </span>
+          </div>
+        </div>
+
+        <div className="draw-gacha-result-overlay__copy-grid draw-gacha-result-overlay__grid content-start overflow-visible pb-0 pr-0">
+          {visibleCards.map((card) => (
+            <div key={`copy-${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
               <DrawResultRevealCard card={card} />
             </div>
           ))}
