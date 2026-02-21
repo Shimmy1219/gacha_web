@@ -7,18 +7,18 @@
 
 ## 2. 対象範囲
 - 対象 UI: `apps/web/src/modals/dialogs/DrawGachaDialog.tsx`
-- 対象ロジック: `apps/web/src/logic/gacha/engine.ts`, `apps/web/src/logic/gacha/types.ts`
 - 対象スタイル: `apps/web/src/index.css`
 - 非対象:
   - 抽選確率ロジックそのものの仕様変更
+  - `apps/web/src/logic/gacha/engine.ts` の戻り値変更
   - 共有（X/Discord）フォーマット変更
   - ガチャ外画面（ItemsSection 等）の UI 変更
 
 ## 3. 要件を満たす画面フロー
 1. ユーザーが「ガチャを実行」ボタンを押下。
-2. 抽選処理が完了し、`executeGacha` の結果を確定。
+2. 抽選処理が完了し、既存の集計結果（`resultItems`）を確定。
 3. モーダル上に、既存 UI の上から半透明オーバーレイを表示。
-4. 結果サムネイルを 1 件ずつ順番に出現させる。
+4. `resultItems` を UI 側で件数分に展開したカード列を 1 件ずつ順番に出現させる。
 5. サムネイルカードは左上起点で横並び、はみ出し時に折返し。
 6. 下方向にはみ出す場合はオーバーレイ内で縦スクロール。
 7. 各カード下に「レアリティ」「アイテム名」を表示。
@@ -28,7 +28,7 @@
 ### 4.1 追加 state
 ```ts
 interface DrawRevealCardModel {
-  drawIndex: number;
+  revealIndex: number;
   itemId: string;
   name: string;
   rarityId: string;
@@ -50,7 +50,7 @@ const revealTimerRef = useRef<number | null>(null);
 ### 4.2 状態遷移
 - `idle`（演出なし）
 - `executing`（抽選処理中）
-- `reveal-ready`（抽選結果確定、カード配列生成済み）
+- `reveal-ready`（集計結果からカード配列生成済み）
 - `revealing`（順次表示中）
 - `revealed`（全件表示完了）
 - `dismissed`（オーバーレイを閉じて通常結果表示へ）
@@ -62,34 +62,31 @@ const revealTimerRef = useRef<number | null>(null);
 - 「閉じる」押下: `revealed -> dismissed`
 - モーダルクローズ/ガチャ変更時: タイマー停止して `idle` へリセット
 
-## 5. 抽選結果データの拡張
-現状の `ExecuteGachaResult.items` はアイテム別集計のみで「順番」が失われるため、抽選順を UI に渡すフィールドを追加する。
+## 5. 集計結果の擬似展開（engine.ts 変更なし）
+`ExecuteGachaResult.items`（アイテム別集計）を UI で展開して演出用カード列を作る。
 
-### 5.1 追加型（`apps/web/src/logic/gacha/types.ts`）
+### 5.1 展開ユーティリティ（`DrawGachaDialog.tsx` 内または分離関数）
 ```ts
-export interface ExecuteGachaDrawResult {
-  drawIndex: number;
-  itemId: string;
-  rarityId: string;
-  name: string;
-  rarityLabel: string;
-  rarityColor?: string;
-  wasGuaranteed: boolean;
-}
-
-export interface ExecuteGachaResult {
-  // 既存
-  items: ExecutedPullItem[];
-  // 追加
-  draws: ExecuteGachaDrawResult[];
-}
+function expandResultItemsToRevealCards(args: {
+  aggregatedItems: DrawGachaDialogResultItem[];
+  itemAssetById: Map<string, { assetId: string | null; thumbnailAssetId: string | null; digitalItemType: DigitalItemTypeKey | null }>;
+  rarityOrderIndex: Map<string, number>;
+  itemOrderIndex: Map<string, number>;
+}): DrawRevealCardModel[]
 ```
 
-### 5.2 `engine.ts` 変更方針
-- 既存の内部 `draws: ExecuteGachaDrawInstance[]` を `ExecuteGachaResult.draws` として返却。
-- `drawIndex` は 0 始まりで付与。
-- `items`（集計）は既存互換で維持。
-- 並び順はエンジンが実行した順序（コンプリート排出 → 保証排出 → ランダム排出）をそのまま採用。
+### 5.2 擬似順序ルール
+1. まず `aggregatedItems` を既存結果リストと同じ並び順でソート。
+   - レアリティ順 (`rarityOrderIndex`)
+   - 同レアリティ内はアイテム順 (`itemOrderIndex`)
+   - 最後に名前昇順
+2. 各アイテムを `count` 回だけ複製して 1 次元配列へ展開。
+3. `guaranteedCount` がある場合、各アイテムの先頭 `guaranteedCount` 件を `guaranteed: true` に設定。
+4. 最後に `revealIndex` を 0..N-1 で採番。
+
+### 5.3 注意点（仕様）
+- この並びは「演出用の疑似順序」であり、実際の抽選順ではない。
+- 要件として許容されるため、`engine.ts` の API は変更しない。
 
 ## 6. アイテム資産（サムネイル）解決
 ### 6.1 解決元
@@ -207,15 +204,15 @@ export interface ExecuteGachaResult {
 - プレビュー取得失敗時:
   - 画像: no-image 表示
   - 音声: `♫` 表示は維持（`digitalItemType` ベースで成立）
-- タイマーは必ず `finally` / cleanup で解放し、メモリリークを防止。
+- タイマーは必ず cleanup で解放し、メモリリークを防止。
 - モーダルクローズ時に演出中でも安全に終了できるよう `isMounted` ガードを入れる。
 
 ## 13. テスト設計
-### 13.1 ロジック（Vitest）
-- `engine.test.ts`
-  - `ExecuteGachaResult.draws` が `totalPulls` 件返る。
-  - `drawIndex` が連番。
-  - `wasGuaranteed` が保証排出分のみ `true`。
+### 13.1 ユーティリティ（Vitest）
+- `expandResultItemsToRevealCards` のテストを追加。
+  - `count` 件数ぶん展開される。
+  - `guaranteedCount` が先頭から `guaranteed: true` になる。
+  - `revealIndex` が連番になる。
 
 ### 13.2 UI（React Testing Library）
 - `DrawGachaDialog` 抽選成功後に `draw-gacha-result-overlay` が表示される。
@@ -229,13 +226,13 @@ export interface ExecuteGachaResult {
 - 抽選失敗時にオーバーレイが表示されない。
 
 ## 14. 実装ステップ
-1. `logic/gacha/types.ts` と `engine.ts` に `draws` 返却を追加し、既存テスト更新。
-2. `DrawGachaDialog.tsx` に演出 state と asset 解決処理を追加。
-3. `DrawResultRevealOverlay` / `DrawResultRevealCard` を新規作成。
-4. `index.css` に `draw-gacha-result-overlay__*` とアニメーション keyframes を追加。
-5. UI テストを追加し、`npm run test` と編集ファイル対象の `eslint` を実行。
+1. `DrawGachaDialog.tsx` に集計結果展開ユーティリティと演出 state を追加。
+2. `DrawResultRevealOverlay` / `DrawResultRevealCard` を新規作成。
+3. `index.css` に `draw-gacha-result-overlay__*` とアニメーション keyframes を追加。
+4. ユーティリティテストと UI テストを追加。
+5. `npm run test` と編集ファイル対象の `eslint` を実行。
 
 ## 15. 今回の設計上の判断
-- 順次表示要件に対しては、UI 側で疑似順序を作るより、エンジンから抽選順そのものを返す方が再現性と保守性が高い。
+- 実抽選順ではなく「擬似順序」で十分という要件のため、`engine.ts` は変更しない。
 - レイアウトは JS 座標計算より CSS `flex-wrap + overflow-y:auto` が堅牢で、レスポンシブ時の破綻が少ない。
 - 音声は視覚情報が少ないため、演出では `♫` に限定して密度を抑える。
