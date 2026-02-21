@@ -1,15 +1,171 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 import { DrawResultRevealCard } from './DrawResultRevealCard'
 import type { DrawResultRevealCardModel } from './revealCards'
 
 export interface DrawResultRevealOverlayProps {
+  title: string
   cards: DrawResultRevealCardModel[]
   revealedCount: number
   isAnimating: boolean
   onSkip: () => void
   onClose: () => void
+}
+
+const DRAW_RESULT_COPY_IMAGE_MIME_TYPE = 'image/png'
+const DRAW_RESULT_COPY_FEEDBACK_RESET_MS = 2000
+
+/**
+ * 画像の読み込み完了まで待機する。
+ *
+ * @param rootElement 画像要素を含むルート要素
+ * @returns 全画像が load/error で完了した時点で resolve される Promise
+ */
+async function waitForImageCompletion(rootElement: HTMLElement): Promise<void> {
+  const imageElements = Array.from(rootElement.querySelectorAll('img'))
+  if (imageElements.length === 0) {
+    return
+  }
+
+  await Promise.all(
+    imageElements.map(
+      (imageElement) =>
+        new Promise<void>((resolve) => {
+          if (imageElement.complete) {
+            resolve()
+            return
+          }
+
+          const handleDone = (): void => {
+            imageElement.removeEventListener('load', handleDone)
+            imageElement.removeEventListener('error', handleDone)
+            resolve()
+          }
+
+          imageElement.addEventListener('load', handleDone, { once: true })
+          imageElement.addEventListener('error', handleDone, { once: true })
+        })
+    )
+  )
+}
+
+/**
+ * DOM ノードの見た目を維持するため、計算済みスタイルをクローン側へインライン転写する。
+ *
+ * @param sourceElement 元の DOM 要素
+ * @param clonedElement クローン済み DOM 要素
+ */
+function inlineComputedStyles(sourceElement: HTMLElement, clonedElement: HTMLElement): void {
+  const sourceElements = [sourceElement, ...Array.from(sourceElement.querySelectorAll<HTMLElement>('*'))]
+  const clonedElements = [clonedElement, ...Array.from(clonedElement.querySelectorAll<HTMLElement>('*'))]
+
+  sourceElements.forEach((sourceNode, index) => {
+    const clonedNode = clonedElements[index]
+    if (!clonedNode) {
+      return
+    }
+
+    const computedStyle = window.getComputedStyle(sourceNode)
+    const inlineStyleText = Array.from(computedStyle)
+      .map((propertyName) => `${propertyName}:${computedStyle.getPropertyValue(propertyName)};`)
+      .join('')
+    clonedNode.setAttribute('style', inlineStyleText)
+
+    if (sourceNode instanceof HTMLImageElement && clonedNode instanceof HTMLImageElement) {
+      clonedNode.src = sourceNode.currentSrc || sourceNode.src
+    }
+  })
+}
+
+/**
+ * SVG データ URL を読み込み、Canvas へ描画可能な Image 要素へ変換する。
+ *
+ * @param sourceUrl SVG データ URL
+ * @returns 読み込み済み Image 要素
+ */
+function loadImageFromUrl(sourceUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => {
+      resolve(image)
+    }
+    image.onerror = () => {
+      reject(new Error('画像の読み込みに失敗しました。'))
+    }
+    image.src = sourceUrl
+  })
+}
+
+/**
+ * 指定した要素を PNG Blob に変換する。
+ *
+ * @param rootElement 変換対象のルート要素
+ * @returns PNG Blob
+ */
+async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
+  if (document.fonts?.ready) {
+    await document.fonts.ready
+  }
+  await waitForImageCompletion(rootElement)
+
+  const { width: rawWidth, height: rawHeight } = rootElement.getBoundingClientRect()
+  const width = Math.max(1, Math.ceil(rawWidth))
+  const height = Math.max(1, Math.ceil(rawHeight))
+
+  const clonedRootElement = rootElement.cloneNode(true) as HTMLElement
+  inlineComputedStyles(rootElement, clonedRootElement)
+  clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  clonedRootElement.style.margin = '0'
+
+  const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
+  const svgText = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    '<foreignObject x="0" y="0" width="100%" height="100%">',
+    serializedHtml,
+    '</foreignObject>',
+    '</svg>'
+  ].join('')
+  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
+  const renderedImage = await loadImageFromUrl(svgDataUrl)
+
+  const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(width * devicePixelRatio))
+  canvas.height = Math.max(1, Math.ceil(height * devicePixelRatio))
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('画像描画コンテキストを作成できませんでした。')
+  }
+
+  context.scale(devicePixelRatio, devicePixelRatio)
+  context.drawImage(renderedImage, 0, 0, width, height)
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
+  })
+
+  if (!pngBlob) {
+    throw new Error('画像の生成に失敗しました。')
+  }
+
+  return pngBlob
+}
+
+/**
+ * ルート要素を PNG 化してクリップボードへ書き込む。
+ *
+ * @param rootElement コピー対象のルート要素
+ */
+async function copyElementAsImage(rootElement: HTMLElement): Promise<void> {
+  if (!navigator.clipboard || typeof navigator.clipboard.write !== 'function' || typeof ClipboardItem === 'undefined') {
+    throw new Error('このブラウザでは画像コピーに対応していません。')
+  }
+
+  const pngBlob = await renderElementToPngBlob(rootElement)
+  await navigator.clipboard.write([new ClipboardItem({ [DRAW_RESULT_COPY_IMAGE_MIME_TYPE]: pngBlob })])
 }
 
 /**
@@ -19,6 +175,7 @@ export interface DrawResultRevealOverlayProps {
  * @returns 画面全体に重ねて表示する演出 UI
  */
 export function DrawResultRevealOverlay({
+  title,
   cards,
   revealedCount,
   isAnimating,
@@ -26,7 +183,11 @@ export function DrawResultRevealOverlay({
   onClose
 }: DrawResultRevealOverlayProps): JSX.Element {
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
+  const overlayRootRef = useRef<HTMLElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
+  const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isCopyingImage, setIsCopyingImage] = useState(false)
+  const [copyButtonLabel, setCopyButtonLabel] = useState('画像としてコピー')
   const [viewport, setViewport] = useState(() => {
     if (typeof window === 'undefined') {
       return { width: 1366, height: 768 }
@@ -91,6 +252,52 @@ export function DrawResultRevealOverlay({
   const totalQuantity = useMemo(() => {
     return cards.reduce((total, card) => total + card.quantity, 0)
   }, [cards])
+  const overlayTitle = useMemo(() => {
+    const normalizedTitle = title.trim()
+    return normalizedTitle.length > 0 ? normalizedTitle : '抽選結果表示'
+  }, [title])
+
+  const resetCopyFeedbackLabel = useCallback((): void => {
+    if (copyFeedbackTimerRef.current) {
+      clearTimeout(copyFeedbackTimerRef.current)
+    }
+
+    copyFeedbackTimerRef.current = setTimeout(() => {
+      setCopyButtonLabel('画像としてコピー')
+      copyFeedbackTimerRef.current = null
+    }, DRAW_RESULT_COPY_FEEDBACK_RESET_MS)
+  }, [])
+
+  const handleCopyImage = useCallback(async (): Promise<void> => {
+    const overlayElement = overlayRootRef.current
+    if (!overlayElement || isCopyingImage) {
+      return
+    }
+
+    setIsCopyingImage(true)
+    setCopyButtonLabel('コピー中...')
+    try {
+      await copyElementAsImage(overlayElement)
+      setCopyButtonLabel('コピーしました')
+    } catch (error) {
+      console.error('抽選結果表示画面の画像コピーに失敗しました', error)
+      setCopyButtonLabel('コピー失敗')
+    } finally {
+      setIsCopyingImage(false)
+      resetCopyFeedbackLabel()
+    }
+  }, [isCopyingImage, resetCopyFeedbackLabel])
+
+  useEffect(() => {
+    // 画面破棄時にラベル復帰タイマーを解放し、アンマウント後の state 更新を防ぐ。
+    // copyFeedbackTimerRef はこの effect 内でのみ clear するため依存配列は空にする。
+    return () => {
+      if (copyFeedbackTimerRef.current) {
+        clearTimeout(copyFeedbackTimerRef.current)
+        copyFeedbackTimerRef.current = null
+      }
+    }
+  }, [])
 
   const overlayStyle = useMemo<CSSProperties>(() => {
     const totalCards = Math.max(1, cards.length)
@@ -148,6 +355,7 @@ export function DrawResultRevealOverlay({
   return createPortal(
     <section
       id="draw-gacha-result-overlay"
+      ref={overlayRootRef}
       className="draw-gacha-result-overlay fixed inset-0 z-[80]"
       aria-label="ガチャ結果の演出表示"
       style={overlayStyle}
@@ -157,13 +365,13 @@ export function DrawResultRevealOverlay({
       <div className="draw-gacha-result-overlay__content relative z-[1] flex h-full min-h-0 flex-col p-3 sm:p-4">
         <div className="draw-gacha-result-overlay__header mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-white/30 pb-2 text-white">
           <div className="draw-gacha-result-overlay__title-group space-y-1">
-            <h3 className="draw-gacha-result-overlay__title text-sm font-semibold text-white">抽選結果表示</h3>
+            <h3 className="draw-gacha-result-overlay__title text-sm font-semibold text-white">{overlayTitle}</h3>
             <div className="draw-gacha-result-overlay__summary flex flex-wrap items-center gap-2 text-xs text-white/90">
               <span className="draw-gacha-result-overlay__progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
                 表示カード {visibleCards.length}/{cards.length}
               </span>
               <span className="draw-gacha-result-overlay__total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-                総排出 ×{totalQuantity}
+                計 {totalQuantity}連
               </span>
             </div>
           </div>
@@ -179,6 +387,17 @@ export function DrawResultRevealOverlay({
                 スキップ
               </button>
             ) : null}
+            <button
+              id="draw-gacha-result-copy-image-button"
+              type="button"
+              onClick={() => {
+                void handleCopyImage()
+              }}
+              disabled={isCopyingImage}
+              className="draw-gacha-result-overlay__copy-image-button inline-flex h-8 items-center rounded-md border border-white/45 bg-black/25 px-3 text-xs font-medium text-white transition hover:bg-black/45 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {copyButtonLabel}
+            </button>
             <button
               id="draw-gacha-result-close-button"
               type="button"

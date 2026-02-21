@@ -2354,6 +2354,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       </ModalFooter>
       {isRevealOverlayVisible ? (
         <DrawResultRevealOverlay
+          title={lastUserName}
           cards={revealCards}
           revealedCount={revealedCount}
           isAnimating={isRevealAnimating}
