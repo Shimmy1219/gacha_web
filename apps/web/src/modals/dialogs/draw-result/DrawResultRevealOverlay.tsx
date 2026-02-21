@@ -54,7 +54,7 @@ export function DrawResultRevealOverlay({
       className="draw-gacha-result-overlay fixed inset-0 z-[80]"
       aria-label="ガチャ結果の演出表示"
     >
-      <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/72" aria-hidden="true" />
+      <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/82" aria-hidden="true" />
 
       <div className="draw-gacha-result-overlay__content relative z-[1] flex h-full min-h-0 flex-col p-3 sm:p-4">
         <div className="draw-gacha-result-overlay__header mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-white/30 pb-2 text-white">
@@ -85,7 +85,7 @@ export function DrawResultRevealOverlay({
               id="draw-gacha-result-close-button"
               type="button"
               onClick={onClose}
-              className="draw-gacha-result-overlay__close-button inline-flex h-8 items-center rounded-md border border-white/45 bg-black/25 px-3 text-xs font-medium text-white transition hover:bg-black/45"
+              className="draw-gacha-result-overlay__close-button btn btn-primary !min-h-0 h-8 px-3 text-xs"
             >
               閉じる
             </button>

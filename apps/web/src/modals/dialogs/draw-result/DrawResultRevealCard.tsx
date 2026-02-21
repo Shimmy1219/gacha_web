@@ -1,5 +1,6 @@
 import { PhotoIcon, VideoCameraIcon } from '@heroicons/react/24/outline'
 
+import { RarityLabel } from '../../../components/RarityLabel'
 import { useAssetPreview } from '../../../features/assets/useAssetPreview'
 
 import type { DrawResultRevealCardModel } from './revealCards'
@@ -28,7 +29,7 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
   return (
     <article className="draw-gacha-result-card draw-gacha-result-card--reveal">
       <div className="draw-gacha-result-card__thumb-wrapper relative">
-        <div className="draw-gacha-result-card__thumb flex items-center justify-center overflow-hidden rounded-md border border-white/35 bg-transparent">
+        <div className="draw-gacha-result-card__thumb flex items-center justify-center overflow-hidden bg-transparent">
           {isAudio ? (
             <div className="draw-gacha-result-card__audio-placeholder flex h-full w-full items-center justify-center" aria-label="音声アイテム">
               <span className="draw-gacha-result-card__audio-symbol text-3xl font-bold text-white">♫</span>
@@ -59,7 +60,7 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
 
       <div className="draw-gacha-result-card__meta mt-2 space-y-1 text-white">
         <span className="draw-gacha-result-card__rarity inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white">
-          {card.rarityLabel}
+          <RarityLabel label={card.rarityLabel} color={card.rarityColor} className="text-[10px] font-semibold" />
         </span>
         <span className="draw-gacha-result-card__name block truncate text-xs font-medium text-white" title={card.name}>
           {card.name}
