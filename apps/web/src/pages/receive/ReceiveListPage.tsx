@@ -1427,20 +1427,52 @@ export function ReceiveListPage(): JSX.Element {
   const totalOwnedCount = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedCount, 0), [displayGroups]);
   const hasSaving = Boolean(savingGroupKey || savingItemKey || updatingDigitalTypeItemKey);
 
+  const resolveGroupSourceItemsForSave = useCallback(
+    (targetGroup: ReceiveGachaGroup): ReceiveMediaItem[] => {
+      const selectedDigitalTypeSet =
+        digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+      const seenSourceIds = new Set<string>();
+      const sourceItems: ReceiveMediaItem[] = [];
+
+      targetGroup.items.forEach((item) => {
+        if (!showUnownedItems && !item.isOwned) {
+          return;
+        }
+        if (selectedDigitalTypeSet) {
+          if (!item.digitalItemType || !selectedDigitalTypeSet.has(item.digitalItemType)) {
+            return;
+          }
+        }
+        item.sourceItems.forEach((source) => {
+          if (seenSourceIds.has(source.id)) {
+            return;
+          }
+          seenSourceIds.add(source.id);
+          sourceItems.push(source);
+        });
+      });
+
+      return sourceItems;
+    },
+    [digitalItemTypeFilter, showUnownedItems]
+  );
+
   const loadGroupMedia = useCallback(async (groupKey: string) => {
     const targetGroup = groupsRef.current.find((group) => resolveGroupKey(group.gachaId, group.gachaName) === groupKey);
     if (!targetGroup || targetGroup.mediaLoaded) {
       return;
     }
     if (targetGroup.entryIds.length === 0) {
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
           return { ...group, mediaLoaded: true };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
       return;
     }
 
@@ -1589,8 +1621,8 @@ export function ReceiveListPage(): JSX.Element {
         });
       }
 
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
@@ -1642,13 +1674,15 @@ export function ReceiveListPage(): JSX.Element {
             sourceItems: Array.from(mergedSourceMap.values()),
             mediaLoaded: true
           };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
     } catch (loadError) {
       console.error('Failed to lazy-load receive list group media', { groupKey, loadError });
       // Prevent infinite retry loop when a group media load fails.
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
@@ -1656,8 +1690,10 @@ export function ReceiveListPage(): JSX.Element {
             return group;
           }
           return { ...group, mediaLoaded: true };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
     } finally {
       const next = { ...loadingGroupKeysRef.current };
       delete next[groupKey];
@@ -1718,9 +1754,6 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const handleSaveGroup = useCallback(async (group: ReceiveGachaGroup) => {
-    if (group.sourceItems.length === 0) {
-      return;
-    }
     if (typeof document === 'undefined') {
       setSaveError('まとめて保存機能はブラウザ環境でのみ利用できます。');
       return;
@@ -1729,14 +1762,36 @@ export function ReceiveListPage(): JSX.Element {
     const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
     setSavingGroupKey(groupKey);
     try {
-      await saveReceiveItems(group.sourceItems);
+      let sourceItemsToSave = group.sourceItems;
+
+      if (sourceItemsToSave.length === 0) {
+        const currentGroup = groupsRef.current.find(
+          (candidate) => resolveGroupKey(candidate.gachaId, candidate.gachaName) === groupKey
+        );
+        if (currentGroup && !currentGroup.mediaLoaded) {
+          await loadGroupMedia(groupKey);
+        }
+        const latestGroup = groupsRef.current.find(
+          (candidate) => resolveGroupKey(candidate.gachaId, candidate.gachaName) === groupKey
+        );
+        if (latestGroup) {
+          sourceItemsToSave = resolveGroupSourceItemsForSave(latestGroup);
+        }
+      }
+
+      if (sourceItemsToSave.length === 0) {
+        setSaveError('保存対象の景品が見つかりませんでした。フィルタ条件をご確認ください。');
+        return;
+      }
+
+      await saveReceiveItems(sourceItemsToSave);
     } catch (saveError) {
       console.error('Failed to save receive inventory group', saveError);
       setSaveError('まとめて保存中にエラーが発生しました。個別保存をお試しください。');
     } finally {
       setSavingGroupKey(null);
     }
-  }, []);
+  }, [loadGroupMedia, resolveGroupSourceItemsForSave]);
 
   const handleUpdateDigitalItemType = useCallback(
     async (group: ReceiveGachaGroup, item: ReceiveInventoryItem, digitalItemType: DigitalItemTypeKey) => {
@@ -2028,7 +2083,7 @@ export function ReceiveListPage(): JSX.Element {
                       <ReceiveBulkSaveButton
                         onClick={() => handleSaveGroup(group)}
                         isLoading={savingGroupKey === groupKey || isGroupLoading}
-                        disabled={hasSaving || isGroupLoading || group.sourceItems.length === 0}
+                        disabled={hasSaving || isGroupLoading || group.ownedCount === 0}
                         tone="accent"
                         showIcon={false}
                         className="receive-list-page__group-save-button w-full justify-center px-4 py-2 text-sm sm:w-auto"
