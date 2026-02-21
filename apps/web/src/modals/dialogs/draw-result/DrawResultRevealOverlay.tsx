@@ -16,7 +16,7 @@ export interface DrawResultRevealOverlayProps {
  * ガチャ結果サムネイル演出のオーバーレイ本体。
  *
  * @param props 演出カード配列と操作ハンドラ
- * @returns モーダル内に重ねて表示する演出 UI
+ * @returns 画面全体に重ねて表示する演出 UI
  */
 export function DrawResultRevealOverlay({
   cards,
