@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import html2canvas from 'html2canvas'
 
 import { DrawResultRevealCard } from './DrawResultRevealCard'
 import type { DrawResultRevealCardModel } from './revealCards'
@@ -16,6 +15,7 @@ export interface DrawResultRevealOverlayProps {
 
 const DRAW_RESULT_COPY_IMAGE_MIME_TYPE = 'image/png'
 const DRAW_RESULT_COPY_FEEDBACK_RESET_MS = 2000
+const DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS = 8000
 
 /**
  * 画像の読み込み完了まで待機する。
@@ -52,6 +52,135 @@ async function waitForImageCompletion(rootElement: HTMLElement): Promise<void> {
 }
 
 /**
+ * Blob を data URL へ変換する。
+ *
+ * @param blob 変換対象 Blob
+ * @returns data URL 文字列
+ */
+function convertBlobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+      reject(new Error('画像データの変換に失敗しました。'))
+    }
+    reader.onerror = () => {
+      reject(new Error('画像データの読み込みに失敗しました。'))
+    }
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * 画像 URL を fetch して data URL 化する。
+ *
+ * @param sourceUrl 画像 URL
+ * @returns data URL。変換不可の場合は null
+ */
+async function resolveImageDataUrl(sourceUrl: string): Promise<string | null> {
+  if (!sourceUrl) {
+    return null
+  }
+  if (sourceUrl.startsWith('data:')) {
+    return sourceUrl
+  }
+
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => {
+    abortController.abort()
+  }, DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(sourceUrl, {
+      mode: 'cors',
+      credentials: 'omit',
+      signal: abortController.signal,
+      cache: 'force-cache'
+    })
+    if (!response.ok) {
+      return null
+    }
+    const blob = await response.blob()
+    return await convertBlobToDataUrl(blob)
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+/**
+ * DOM ノードの見た目を維持するため、計算済みスタイルをクローン側へインライン転写する。
+ *
+ * @param sourceElement 元の DOM 要素
+ * @param clonedElement クローン済み DOM 要素
+ */
+function inlineComputedStyles(sourceElement: HTMLElement, clonedElement: HTMLElement): void {
+  const sourceElements = [sourceElement, ...Array.from(sourceElement.querySelectorAll<HTMLElement>('*'))]
+  const clonedElements = [clonedElement, ...Array.from(clonedElement.querySelectorAll<HTMLElement>('*'))]
+
+  sourceElements.forEach((sourceNode, index) => {
+    const clonedNode = clonedElements[index]
+    if (!clonedNode) {
+      return
+    }
+
+    const computedStyle = window.getComputedStyle(sourceNode)
+    const inlineStyleText = Array.from(computedStyle)
+      .map((propertyName) => `${propertyName}:${computedStyle.getPropertyValue(propertyName)};`)
+      .join('')
+    clonedNode.setAttribute('style', inlineStyleText)
+  })
+}
+
+/**
+ * クローン内の画像ソースを data URL 化して埋め込み、foreignObject 描画時の欠落を回避する。
+ *
+ * @param sourceElement 元の DOM 要素
+ * @param clonedElement クローン済み DOM 要素
+ */
+async function inlineCloneImageSources(sourceElement: HTMLElement, clonedElement: HTMLElement): Promise<void> {
+  const sourceImageElements = Array.from(sourceElement.querySelectorAll('img'))
+  const clonedImageElements = Array.from(clonedElement.querySelectorAll('img'))
+
+  await Promise.all(
+    sourceImageElements.map(async (sourceImageElement, index) => {
+      const clonedImageElement = clonedImageElements[index]
+      if (!clonedImageElement) {
+        return
+      }
+
+      const sourceUrl = sourceImageElement.currentSrc || sourceImageElement.src
+      const dataUrl = await resolveImageDataUrl(sourceUrl)
+      clonedImageElement.src = dataUrl ?? sourceUrl
+    })
+  )
+}
+
+/**
+ * SVG データ URL を読み込み、Canvas へ描画可能な Image 要素へ変換する。
+ *
+ * @param sourceUrl SVG データ URL
+ * @returns 読み込み済み Image 要素
+ */
+function loadImageFromUrl(sourceUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => {
+      resolve(image)
+    }
+    image.onerror = () => {
+      reject(new Error('画像の読み込みに失敗しました。'))
+    }
+    image.src = sourceUrl
+  })
+}
+
+/**
  * 指定した要素を PNG Blob に変換する。
  *
  * @param rootElement 変換対象のルート要素
@@ -65,20 +194,35 @@ async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
 
   const targetWidth = Math.max(1, Math.ceil(rootElement.scrollWidth))
   const targetHeight = Math.max(1, Math.ceil(rootElement.scrollHeight))
-  const canvas = await html2canvas(rootElement, {
-    backgroundColor: null,
-    useCORS: true,
-    allowTaint: false,
-    logging: false,
-    imageTimeout: 0,
-    scale: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2),
-    width: targetWidth,
-    height: targetHeight,
-    windowWidth: Math.max(document.documentElement.clientWidth, targetWidth),
-    windowHeight: Math.max(document.documentElement.clientHeight, targetHeight),
-    scrollX: 0,
-    scrollY: 0
-  })
+  const clonedRootElement = rootElement.cloneNode(true) as HTMLElement
+  inlineComputedStyles(rootElement, clonedRootElement)
+  await inlineCloneImageSources(rootElement, clonedRootElement)
+  clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  clonedRootElement.style.margin = '0'
+
+  const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
+  const svgText = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}">`,
+    '<foreignObject x="0" y="0" width="100%" height="100%">',
+    serializedHtml,
+    '</foreignObject>',
+    '</svg>'
+  ].join('')
+  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
+  const renderedImage = await loadImageFromUrl(svgDataUrl)
+
+  const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(targetWidth * devicePixelRatio))
+  canvas.height = Math.max(1, Math.ceil(targetHeight * devicePixelRatio))
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('画像描画コンテキストを作成できませんでした。')
+  }
+
+  context.scale(devicePixelRatio, devicePixelRatio)
+  context.drawImage(renderedImage, 0, 0, targetWidth, targetHeight)
 
   const pngBlob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((blob) => resolve(blob), DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
