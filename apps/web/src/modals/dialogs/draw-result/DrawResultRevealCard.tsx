@@ -7,6 +7,7 @@ import type { DrawResultRevealCardModel } from './revealCards'
 
 export interface DrawResultRevealCardProps {
   card: DrawResultRevealCardModel
+  imageLoading?: 'lazy' | 'eager'
 }
 
 /**
@@ -16,7 +17,7 @@ export interface DrawResultRevealCardProps {
  * @param props 演出カードデータ
  * @returns 結果演出カード要素
  */
-export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.Element {
+export function DrawResultRevealCard({ card, imageLoading = 'lazy' }: DrawResultRevealCardProps): JSX.Element {
   const preview = useAssetPreview(card.assetId, {
     previewAssetId: card.thumbnailAssetId
   })
@@ -41,7 +42,7 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
             <img
               src={preview.url}
               alt={card.name}
-              loading="lazy"
+              loading={imageLoading}
               decoding="async"
               className="draw-gacha-result-card__image h-full w-full object-contain"
             />

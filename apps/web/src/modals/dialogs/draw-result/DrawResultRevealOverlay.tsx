@@ -16,6 +16,7 @@ export interface DrawResultRevealOverlayProps {
 const DRAW_RESULT_COPY_IMAGE_MIME_TYPE = 'image/png'
 const DRAW_RESULT_COPY_FEEDBACK_RESET_MS = 2000
 const DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS = 8000
+const DRAW_RESULT_IMAGE_WAIT_TIMEOUT_MS = 12000
 
 /**
  * 画像の読み込み完了まで待機する。
@@ -33,16 +34,37 @@ async function waitForImageCompletion(rootElement: HTMLElement): Promise<void> {
     imageElements.map(
       (imageElement) =>
         new Promise<void>((resolve) => {
+          // src が未設定の画像は load が発火しないため、待機対象から除外する。
+          if (!imageElement.currentSrc && !imageElement.src) {
+            resolve()
+            return
+          }
+
           if (imageElement.complete) {
             resolve()
             return
           }
 
+          // オフスクリーン描画面でも確実に読み込みを開始させるため、コピー用途では eager を強制する。
+          imageElement.loading = 'eager'
+          imageElement.setAttribute('loading', 'eager')
+
+          let timeoutId: ReturnType<typeof setTimeout> | null = null
           const handleDone = (): void => {
+            if (timeoutId) {
+              clearTimeout(timeoutId)
+              timeoutId = null
+            }
             imageElement.removeEventListener('load', handleDone)
             imageElement.removeEventListener('error', handleDone)
             resolve()
           }
+
+          timeoutId = setTimeout(() => {
+            imageElement.removeEventListener('load', handleDone)
+            imageElement.removeEventListener('error', handleDone)
+            resolve()
+          }, DRAW_RESULT_IMAGE_WAIT_TIMEOUT_MS)
 
           imageElement.addEventListener('load', handleDone, { once: true })
           imageElement.addEventListener('error', handleDone, { once: true })
@@ -521,7 +543,7 @@ export function DrawResultRevealOverlay({
         <div className="draw-gacha-result-overlay__copy-grid draw-gacha-result-overlay__grid content-start overflow-visible pb-0 pr-0">
           {visibleCards.map((card) => (
             <div key={`copy-${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
-              <DrawResultRevealCard card={card} />
+              <DrawResultRevealCard card={card} imageLoading="eager" />
             </div>
           ))}
         </div>
