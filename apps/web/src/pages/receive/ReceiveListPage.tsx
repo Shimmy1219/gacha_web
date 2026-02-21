@@ -1989,7 +1989,7 @@ export function ReceiveListPage(): JSX.Element {
                       aria-controls={contentId}
                       className="receive-list-page__group-header-button group w-full text-left"
                     >
-                      <div className="receive-list-page__group-header-row flex items-start gap-3">
+                      <div className="receive-list-page__group-header-row flex items-stretch gap-3">
                         <ItemPreview
                           assetId={gachaThumbnailAssetId}
                           fallbackUrl={gachaThumbnailBlobUrl}
@@ -1997,7 +1997,7 @@ export function ReceiveListPage(): JSX.Element {
                           kindHint="image"
                           imageFit="cover"
                           emptyLabel="noImage"
-                          className="receive-list-page__group-thumbnail h-12 w-12 shrink-0 bg-surface-deep"
+                          className="receive-list-page__group-thumbnail aspect-square self-stretch flex-none bg-surface-deep"
                         />
                         <div className="receive-list-page__group-title-wrapper min-w-0 flex-1">
                           <div className="receive-list-page__group-title-row flex items-start gap-2">
