@@ -4,7 +4,7 @@
 - `DrawGachaDialog` で抽選確定後に、結果サムネイルを順番に表示する演出を追加する。
 - 既存の「結果テキスト一覧（集計）」は維持しつつ、演出レイヤーを追加して視認性と体験を向上する。
 - 要件: 左上から右方向に並べ、端を超えたら改行、下端を超えたらスクロール表示、画像下にレアリティ/アイテム名、音声は `♫` 表示。
-- 100連/1000連など大量件数時は、1件1カードで描画せず `×40` / `×100` のような倍率表示で圧縮する。
+- 件数に関係なく常に倍率表示（`×N`）を使い、1件1カード描画は行わない。
 
 ## 2. 対象範囲
 - 対象 UI: `apps/web/src/modals/dialogs/DrawGachaDialog.tsx`
@@ -19,7 +19,7 @@
 1. ユーザーが「ガチャを実行」ボタンを押下。
 2. 抽選処理が完了し、既存の集計結果（`resultItems`）を確定。
 3. モーダル上に、既存 UI の上から半透明オーバーレイを表示。
-4. `resultItems` を UI 側で「必要に応じて圧縮」したカード列に変換し、1 件ずつ順番に出現させる。
+4. `resultItems` を UI 側で「常時倍率表示」のカード列に変換し、1 件ずつ順番に出現させる。
 5. サムネイルカードは左上起点で横並び、はみ出し時に折返し。
 6. 下方向にはみ出す場合はオーバーレイ内で縦スクロール。
 7. 各カード下に「レアリティ」「アイテム名」を表示。
@@ -65,9 +65,9 @@ const revealTimerRef = useRef<number | null>(null);
 - 「閉じる」押下: `revealed -> dismissed`
 - モーダルクローズ/ガチャ変更時: タイマー停止して `idle` へリセット
 
-## 5. 集計結果の擬似展開と圧縮（engine.ts 変更なし）
+## 5. 集計結果の擬似展開（常時倍率表示、engine.ts 変更なし）
 `ExecuteGachaResult.items`（アイテム別集計）を UI で演出用カード列に変換する。
-大量件数時はカード数を圧縮し、カード上に `×N` を表示する。
+件数に関係なくカード上に `×N` を表示する。
 
 ### 5.1 変換ユーティリティ（`DrawGachaDialog.tsx` 内または分離関数）
 ```ts
@@ -76,29 +76,23 @@ function buildRevealCardsFromAggregatedItems(args: {
   itemAssetById: Map<string, { assetId: string | null; thumbnailAssetId: string | null; digitalItemType: DigitalItemTypeKey | null }>;
   rarityOrderIndex: Map<string, number>;
   itemOrderIndex: Map<string, number>;
-  totalPulls: number;
 }): DrawRevealCardModel[]
 ```
 
-### 5.2 擬似順序 + 圧縮ルール
+### 5.2 擬似順序 + 常時倍率表示ルール
 1. まず `aggregatedItems` を既存結果リストと同じ並び順でソート。
    - レアリティ順 (`rarityOrderIndex`)
    - 同レアリティ内はアイテム順 (`itemOrderIndex`)
    - 最後に名前昇順
-2. `totalPulls` に応じて `compressionUnit` を決定する。
-   - `totalPulls <= 80`: `compressionUnit = 1`（従来通り）
-   - `81 <= totalPulls <= 400`: `compressionUnit = 40`
-   - `totalPulls >= 401`: `compressionUnit = 100`
-3. 各アイテムについて `count` を `compressionUnit` 単位で分割してカード化する。
-   - 例: `count=95`, `compressionUnit=40` -> `40`, `40`, `15`
-4. 各カードに `quantity` を保持し、`quantity > 1` の場合はサムネイル右下バッジで `×{quantity}` を表示する。
-5. `guaranteedCount` は先頭カードから順に割り当て、`guaranteedQuantity > 0` のカードを `guaranteed: true` とする。
-6. 最後に `revealIndex` を 0..N-1 で採番。
+2. 各アイテムを「1アイテム1カード」でカード化し、`quantity = count` を設定する。
+3. `guaranteedQuantity = guaranteedCount ?? 0` を設定し、`guaranteedQuantity > 0` のカードを `guaranteed: true` とする。
+4. カード右下バッジで常に `×{quantity}` を表示する（`×1` も表示）。
+5. 最後に `revealIndex` を 0..N-1 で採番。
 
 ### 5.3 注意点（仕様）
 - この並びは「演出用の疑似順序」であり、実際の抽選順ではない。
 - 要件として許容されるため、`engine.ts` の API は変更しない。
-- 大量件数時は全件描画しないため、描画負荷を抑えつつ視認性を維持できる。
+- 常時倍率表示により、描画負荷を一定に保ちつつ視認性を維持できる。
 
 ## 6. アイテム資産（サムネイル）解決
 ### 6.1 解決元
@@ -198,7 +192,6 @@ function buildRevealCardsFromAggregatedItems(args: {
 - 表示間隔: `90ms`（既定）
 - カード自体: `opacity 0 -> 1`, `transform translateY(8px) scale(0.96) -> translateY(0) scale(1)`
 - 1カードのアニメーション長: `220ms`
-- 圧縮後カード数が 160 を超える場合は表示間隔を `40ms` に短縮する。
 
 ### 9.3 低モーション環境
 - `prefers-reduced-motion: reduce` 時は全件即時表示（`revealedCount = cards.length`）。
@@ -229,9 +222,8 @@ function buildRevealCardsFromAggregatedItems(args: {
 ## 13. テスト設計
 ### 13.1 ユーティリティ（Vitest）
 - `buildRevealCardsFromAggregatedItems` のテストを追加。
-  - `totalPulls <= 80` は `count` 件数ぶん展開される。
-  - `totalPulls = 100` では `compressionUnit = 40` が適用され、`40/40/残り` に分割される。
-  - `totalPulls = 1000` では `compressionUnit = 100` が適用される。
+  - 各アイテムが 1 カードに変換され、`quantity = count` になる。
+  - `count = 1` の場合も `×1` 表示前提で `quantity = 1` になる。
   - `guaranteedCount` が先頭カードから `guaranteedQuantity` として割り当てられる。
   - `revealIndex` が連番になる。
 
@@ -255,6 +247,6 @@ function buildRevealCardsFromAggregatedItems(args: {
 
 ## 15. 今回の設計上の判断
 - 実抽選順ではなく「擬似順序」で十分という要件のため、`engine.ts` は変更しない。
-- 100連/1000連で全件描画すると重くなるため、倍率表示（`×40`, `×100`）でカード数を圧縮する。
+- 連数に関係なく倍率表示（`×N`）を常時適用し、描画負荷のばらつきをなくす。
 - レイアウトは JS 座標計算より CSS `flex-wrap + overflow-y:auto` が堅牢で、レスポンシブ時の破綻が少ない。
 - 音声は視覚情報が少ないため、演出では `♫` に限定して密度を抑える。
