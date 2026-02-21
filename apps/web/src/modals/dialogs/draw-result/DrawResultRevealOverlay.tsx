@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { clsx } from 'clsx'
 
+import { useAssetPreview } from '../../../features/assets/useAssetPreview'
+import {
+  DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
+  type DrawResultRevealBackgroundColor
+} from '@domain/stores/uiPreferencesStore'
 import { DrawResultRevealCard } from './DrawResultRevealCard'
 import type { DrawResultRevealCardModel } from './revealCards'
 
@@ -9,6 +15,9 @@ export interface DrawResultRevealOverlayProps {
   cards: DrawResultRevealCardModel[]
   revealedCount: number
   isAnimating: boolean
+  backgroundColor: DrawResultRevealBackgroundColor
+  gachaThumbnailAssetId?: string | null
+  gachaThumbnailBlobUrl?: string | null
   onSkip: () => void
   onClose: () => void
 }
@@ -55,6 +64,67 @@ interface ForeignObjectLayerOptions {
   transparentRootBackground: boolean
   hideThumbnailImages: boolean
   hideAudioSymbols: boolean
+}
+
+interface DrawResultRevealOverlayPalette {
+  backdropColor: string
+  copySurfaceColor: string
+  textColor: string
+  mutedTextColor: string
+  borderColor: string
+  chipBackgroundColor: string
+  chipBorderColor: string
+}
+
+const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
+  DrawResultRevealBackgroundColor,
+  DrawResultRevealOverlayPalette
+> = {
+  black: {
+    backdropColor: 'rgba(0, 0, 0, 0.68)',
+    copySurfaceColor: '#000000',
+    textColor: '#ffffff',
+    mutedTextColor: 'rgba(255, 255, 255, 0.9)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    chipBackgroundColor: 'rgba(0, 0, 0, 0.25)',
+    chipBorderColor: 'rgba(255, 255, 255, 0.45)'
+  },
+  white: {
+    backdropColor: 'rgba(255, 255, 255, 0.84)',
+    copySurfaceColor: '#ffffff',
+    textColor: '#111827',
+    mutedTextColor: 'rgba(17, 24, 39, 0.88)',
+    borderColor: 'rgba(17, 24, 39, 0.24)',
+    chipBackgroundColor: 'rgba(255, 255, 255, 0.74)',
+    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+  },
+  pink: {
+    backdropColor: 'rgba(251, 207, 232, 0.86)',
+    copySurfaceColor: '#fbcfe8',
+    textColor: '#111827',
+    mutedTextColor: 'rgba(17, 24, 39, 0.88)',
+    borderColor: 'rgba(17, 24, 39, 0.24)',
+    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
+    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+  },
+  purple: {
+    backdropColor: 'rgba(233, 213, 255, 0.86)',
+    copySurfaceColor: '#e9d5ff',
+    textColor: '#111827',
+    mutedTextColor: 'rgba(17, 24, 39, 0.88)',
+    borderColor: 'rgba(17, 24, 39, 0.24)',
+    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
+    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+  },
+  'light-blue': {
+    backdropColor: 'rgba(186, 230, 253, 0.86)',
+    copySurfaceColor: '#bae6fd',
+    textColor: '#111827',
+    mutedTextColor: 'rgba(17, 24, 39, 0.88)',
+    borderColor: 'rgba(17, 24, 39, 0.24)',
+    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
+    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+  }
 }
 
 /**
@@ -789,7 +859,7 @@ async function renderElementToPngBlobByHybridLayerComposition(rootElement: HTMLE
   composedContext.drawImage(thumbnailLayerCanvas, 0, 0, targetWidth, targetHeight)
 
   const foregroundLayerImage = await createForeignObjectLayerImage(rootElement, targetWidth, targetHeight, {
-    inlineImageSources: false,
+    inlineImageSources: true,
     transparentRootBackground: true,
     hideThumbnailImages: true,
     hideAudioSymbols: true
@@ -987,6 +1057,9 @@ export function DrawResultRevealOverlay({
   cards,
   revealedCount,
   isAnimating,
+  backgroundColor,
+  gachaThumbnailAssetId = null,
+  gachaThumbnailBlobUrl = null,
   onSkip,
   onClose
 }: DrawResultRevealOverlayProps): JSX.Element {
@@ -1064,6 +1137,39 @@ export function DrawResultRevealOverlay({
     const normalizedTitle = title.trim()
     return normalizedTitle.length > 0 ? normalizedTitle : '抽選結果表示'
   }, [title])
+  const gachaThumbnailPreview = useAssetPreview(gachaThumbnailAssetId ?? null)
+  const gachaThumbnailUrl = useMemo(() => {
+    const previewUrl = gachaThumbnailPreview.url?.trim()
+    if (previewUrl) {
+      return previewUrl
+    }
+
+    const fallbackUrl = gachaThumbnailBlobUrl?.trim()
+    return fallbackUrl && fallbackUrl.length > 0 ? fallbackUrl : null
+  }, [gachaThumbnailBlobUrl, gachaThumbnailPreview.url])
+  const hasGachaThumbnail = Boolean(gachaThumbnailUrl)
+  const revealOverlayPalette = useMemo(() => {
+    return (
+      DRAW_RESULT_REVEAL_OVERLAY_PALETTE[backgroundColor] ??
+      DRAW_RESULT_REVEAL_OVERLAY_PALETTE[DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR]
+    )
+  }, [backgroundColor])
+  const isDarkRevealOverlay = backgroundColor === 'black'
+  const summaryBadgeStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: revealOverlayPalette.chipBorderColor,
+      backgroundColor: revealOverlayPalette.chipBackgroundColor,
+      color: revealOverlayPalette.textColor
+    }
+  }, [revealOverlayPalette.chipBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
+  const actionButtonClassName = useMemo(() => {
+    return clsx(
+      'inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+      isDarkRevealOverlay
+        ? 'border-white/45 bg-black/25 text-white hover:bg-black/45'
+        : 'border-black/35 bg-white/70 text-slate-900 hover:bg-white/90'
+    )
+  }, [isDarkRevealOverlay])
 
   const resetCopyFeedbackLabel = useCallback((): void => {
     if (copyFeedbackTimerRef.current) {
@@ -1167,19 +1273,50 @@ export function DrawResultRevealOverlay({
       aria-label="ガチャ結果の演出表示"
       style={overlayStyle}
     >
-      <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/65 backdrop-blur-sm" aria-hidden="true" />
+      <div
+        className="draw-gacha-result-overlay__backdrop absolute inset-0 backdrop-blur-sm"
+        aria-hidden="true"
+        style={{ backgroundColor: revealOverlayPalette.backdropColor }}
+      />
 
-      <div className="draw-gacha-result-overlay__content relative z-[1] flex h-full min-h-0 flex-col p-3 sm:p-4">
-        <div className="draw-gacha-result-overlay__header mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-white/30 pb-2 text-white">
-          <div className="draw-gacha-result-overlay__title-group space-y-1">
-            <h3 className="draw-gacha-result-overlay__title text-sm font-semibold text-white">{overlayTitle}</h3>
-            <div className="draw-gacha-result-overlay__summary flex flex-wrap items-center gap-2 text-xs text-white/90">
-              <span className="draw-gacha-result-overlay__progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-                表示 {visibleCards.length}
-              </span>
-              <span className="draw-gacha-result-overlay__total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-                計 {totalQuantity}連
-              </span>
+      <div
+        className="draw-gacha-result-overlay__content relative z-[1] flex h-full min-h-0 flex-col p-3 sm:p-4"
+        style={{ color: revealOverlayPalette.textColor }}
+      >
+        <div
+          className="draw-gacha-result-overlay__header mb-3 flex flex-wrap items-start justify-between gap-3 border-b pb-2"
+          style={{ borderColor: revealOverlayPalette.borderColor }}
+        >
+          <div className="draw-gacha-result-overlay__title-group min-w-0">
+            <div className="draw-gacha-result-overlay__title-row flex items-start gap-2">
+              {hasGachaThumbnail && gachaThumbnailUrl ? (
+                <div
+                  className="draw-gacha-result-overlay__gacha-thumbnail-wrapper h-10 w-10 shrink-0 overflow-hidden rounded-lg border"
+                  style={{ borderColor: revealOverlayPalette.chipBorderColor }}
+                >
+                  <img
+                    src={gachaThumbnailUrl}
+                    alt={`${overlayTitle}のガチャサムネイル`}
+                    loading="eager"
+                    decoding="async"
+                    className="draw-gacha-result-overlay__gacha-thumbnail h-full w-full object-cover"
+                  />
+                </div>
+              ) : null}
+              <div className="draw-gacha-result-overlay__title-meta min-w-0 space-y-1">
+                <h3 className="draw-gacha-result-overlay__title truncate text-sm font-semibold">{overlayTitle}</h3>
+                <div
+                  className="draw-gacha-result-overlay__summary flex flex-wrap items-center gap-2 text-xs"
+                  style={{ color: revealOverlayPalette.mutedTextColor }}
+                >
+                  <span className="draw-gacha-result-overlay__progress inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
+                    表示 {visibleCards.length}
+                  </span>
+                  <span className="draw-gacha-result-overlay__total inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
+                    計 {totalQuantity}連
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1189,7 +1326,7 @@ export function DrawResultRevealOverlay({
                 id="draw-gacha-result-skip-button"
                 type="button"
                 onClick={onSkip}
-                className="draw-gacha-result-overlay__skip-button inline-flex h-8 items-center rounded-md border border-white/45 bg-black/25 px-3 text-xs font-medium text-white transition hover:bg-black/45"
+                className={clsx('draw-gacha-result-overlay__skip-button', actionButtonClassName)}
               >
                 スキップ
               </button>
@@ -1201,7 +1338,7 @@ export function DrawResultRevealOverlay({
                 void handleCopyImage()
               }}
               disabled={isCopyingImage}
-              className="draw-gacha-result-overlay__copy-image-button inline-flex h-8 items-center rounded-md border border-white/45 bg-black/25 px-3 text-xs font-medium text-white transition hover:bg-black/45 disabled:cursor-not-allowed disabled:opacity-60"
+              className={clsx('draw-gacha-result-overlay__copy-image-button', actionButtonClassName)}
             >
               {copyButtonLabel}
             </button>
@@ -1230,18 +1367,46 @@ export function DrawResultRevealOverlay({
 
       <div
         ref={copySurfaceRef}
-        className="draw-gacha-result-overlay__copy-surface fixed left-[-100000px] top-0 z-[-1] bg-black/95 p-4 text-white"
-        style={{ width: `${Math.max(280, viewport.width - 40)}px` }}
+        className="draw-gacha-result-overlay__copy-surface fixed left-[-100000px] top-0 z-[-1] p-4"
+        style={{
+          width: `${Math.max(280, viewport.width - 40)}px`,
+          backgroundColor: revealOverlayPalette.copySurfaceColor,
+          color: revealOverlayPalette.textColor
+        }}
       >
-        <div className="draw-gacha-result-overlay__copy-header mb-3 border-b border-white/30 pb-2">
-          <h3 className="draw-gacha-result-overlay__copy-title text-sm font-semibold text-white">{overlayTitle}</h3>
-          <div className="draw-gacha-result-overlay__copy-summary mt-1 flex flex-wrap items-center gap-2 text-xs text-white/90">
-            <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-              表示 {visibleCards.length}
-            </span>
-            <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-              計 {totalQuantity}連
-            </span>
+        <div
+          className="draw-gacha-result-overlay__copy-header mb-3 border-b pb-2"
+          style={{ borderColor: revealOverlayPalette.borderColor }}
+        >
+          <div className="draw-gacha-result-overlay__copy-title-row flex items-start gap-2">
+            {hasGachaThumbnail && gachaThumbnailUrl ? (
+              <div
+                className="draw-gacha-result-overlay__copy-gacha-thumbnail-wrapper h-10 w-10 shrink-0 overflow-hidden rounded-lg border"
+                style={{ borderColor: revealOverlayPalette.chipBorderColor }}
+              >
+                <img
+                  src={gachaThumbnailUrl}
+                  alt={`${overlayTitle}のガチャサムネイル`}
+                  loading="eager"
+                  decoding="async"
+                  className="draw-gacha-result-overlay__copy-gacha-thumbnail h-full w-full object-cover"
+                />
+              </div>
+            ) : null}
+            <div className="draw-gacha-result-overlay__copy-title-meta min-w-0">
+              <h3 className="draw-gacha-result-overlay__copy-title truncate text-sm font-semibold">{overlayTitle}</h3>
+              <div
+                className="draw-gacha-result-overlay__copy-summary mt-1 flex flex-wrap items-center gap-2 text-xs"
+                style={{ color: revealOverlayPalette.mutedTextColor }}
+              >
+                <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
+                  表示 {visibleCards.length}
+                </span>
+                <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
+                  計 {totalQuantity}連
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
