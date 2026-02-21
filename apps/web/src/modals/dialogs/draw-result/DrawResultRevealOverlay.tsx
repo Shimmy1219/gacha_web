@@ -205,6 +205,23 @@ function inlineComputedStyles(sourceElement: HTMLElement, clonedElement: HTMLEle
 }
 
 /**
+ * コピー対象ルートの座標をキャプチャ用に正規化する。
+ *
+ * @param clonedRootElement クローン済みルート要素
+ */
+function normalizeCaptureRootElementPosition(clonedRootElement: HTMLElement): void {
+  // コピー面は普段「left:-100000px」で画面外に逃がしている。
+  // 計算済みスタイルをそのまま転写すると foreignObject 描画時も画面外に飛び、空画像になるため原点へ戻す。
+  clonedRootElement.style.position = 'static'
+  clonedRootElement.style.left = '0px'
+  clonedRootElement.style.top = '0px'
+  clonedRootElement.style.right = 'auto'
+  clonedRootElement.style.bottom = 'auto'
+  clonedRootElement.style.transform = 'none'
+  clonedRootElement.style.zIndex = '0'
+}
+
+/**
  * クローン内の画像ソースを data URL 化して埋め込み、foreignObject 描画時の欠落を回避する。
  *
  * @param sourceElement 元の DOM 要素
@@ -266,6 +283,7 @@ async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
   inlineComputedStyles(rootElement, clonedRootElement)
   await inlineCloneImageSources(rootElement, clonedRootElement)
   clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  normalizeCaptureRootElementPosition(clonedRootElement)
   clonedRootElement.style.margin = '0'
 
   const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
