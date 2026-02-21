@@ -1203,6 +1203,8 @@ export function ReceivePage(): JSX.Element {
                   <ReceiveBulkSaveButton
                     onClick={handleDownloadAll}
                     isLoading={isBulkDownloading}
+                    tone="accent"
+                    showIcon={false}
                     className="receive-page-bulk-download-button"
                   />
                   <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-muted-foreground">受け取り完了</span>
