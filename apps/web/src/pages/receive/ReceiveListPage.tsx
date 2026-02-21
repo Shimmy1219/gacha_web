@@ -1457,6 +1457,52 @@ export function ReceiveListPage(): JSX.Element {
     [digitalItemTypeFilter, showUnownedItems]
   );
 
+  const filterLoadedSourceItemsForSave = useCallback(
+    (sourceItems: ReceiveMediaItem[]): ReceiveMediaItem[] => {
+      // UIと同じデジタルタイプ条件を、直接読み込んだ保存候補にも適用する。
+      const selectedDigitalTypeSet =
+        digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+      if (!selectedDigitalTypeSet) {
+        return sourceItems;
+      }
+      return sourceItems.filter((sourceItem) => {
+        const digitalItemType = sourceItem.metadata?.isRiagu ? null : sourceItem.metadata?.digitalItemType ?? null;
+        return Boolean(digitalItemType) && selectedDigitalTypeSet.has(digitalItemType);
+      });
+    },
+    [digitalItemTypeFilter]
+  );
+
+  const loadGroupSourceItemsFromHistory = useCallback(async (groupKey: string, entryIds: string[]): Promise<ReceiveMediaItem[]> => {
+    if (entryIds.length === 0) {
+      return [];
+    }
+
+    const sourceItemMap = new Map<string, ReceiveMediaItem>();
+    for (const entryId of entryIds) {
+      const historyBlob = await loadHistoryFile(entryId);
+      if (!historyBlob) {
+        continue;
+      }
+
+      const { mediaItems } = await loadReceiveZipInventory(historyBlob, {
+        migrateDigitalItemTypes: false,
+        includeMedia: true,
+        metadataFilter: (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
+      });
+
+      mediaItems.forEach((sourceItem) => {
+        const sourceGroupKey = resolveGroupKey(sourceItem.metadata?.gachaId, sourceItem.metadata?.gachaName);
+        if (sourceGroupKey !== groupKey) {
+          return;
+        }
+        sourceItemMap.set(sourceItem.id, sourceItem);
+      });
+    }
+
+    return Array.from(sourceItemMap.values());
+  }, []);
+
   const loadGroupMedia = useCallback(async (groupKey: string) => {
     const targetGroup = groupsRef.current.find((group) => resolveGroupKey(group.gachaId, group.gachaName) === groupKey);
     if (!targetGroup || targetGroup.mediaLoaded) {
@@ -1762,7 +1808,7 @@ export function ReceiveListPage(): JSX.Element {
     const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
     setSavingGroupKey(groupKey);
     try {
-      let sourceItemsToSave = group.sourceItems;
+      let sourceItemsToSave = resolveGroupSourceItemsForSave(group);
 
       if (sourceItemsToSave.length === 0) {
         const currentGroup = groupsRef.current.find(
@@ -1776,6 +1822,14 @@ export function ReceiveListPage(): JSX.Element {
         );
         if (latestGroup) {
           sourceItemsToSave = resolveGroupSourceItemsForSave(latestGroup);
+        }
+
+        if (sourceItemsToSave.length === 0) {
+          // state反映タイミングで空配列になるケースを避けるため、
+          // 履歴ZIPから直接メディアを解決して保存対象を確定する。
+          const entryIdsForDirectLoad = latestGroup?.entryIds ?? currentGroup?.entryIds ?? group.entryIds;
+          const directlyLoadedSourceItems = await loadGroupSourceItemsFromHistory(groupKey, entryIdsForDirectLoad);
+          sourceItemsToSave = filterLoadedSourceItemsForSave(directlyLoadedSourceItems);
         }
       }
 
@@ -1791,7 +1845,7 @@ export function ReceiveListPage(): JSX.Element {
     } finally {
       setSavingGroupKey(null);
     }
-  }, [loadGroupMedia, resolveGroupSourceItemsForSave]);
+  }, [filterLoadedSourceItemsForSave, loadGroupMedia, loadGroupSourceItemsFromHistory, resolveGroupSourceItemsForSave]);
 
   const handleUpdateDigitalItemType = useCallback(
     async (group: ReceiveGachaGroup, item: ReceiveInventoryItem, digitalItemType: DigitalItemTypeKey) => {
