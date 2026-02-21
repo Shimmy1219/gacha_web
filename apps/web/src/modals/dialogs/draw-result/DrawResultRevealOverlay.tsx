@@ -17,6 +17,37 @@ const DRAW_RESULT_COPY_IMAGE_MIME_TYPE = 'image/png'
 const DRAW_RESULT_COPY_FEEDBACK_RESET_MS = 2000
 const DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS = 8000
 const DRAW_RESULT_IMAGE_WAIT_TIMEOUT_MS = 12000
+const DRAW_RESULT_CANVAS_FONT_FAMILY = "'Hiragino Sans', 'Noto Sans JP', sans-serif"
+
+interface RectMetrics {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface CopyHeaderSnapshot {
+  dividerY: number | null
+  titleRect: RectMetrics | null
+  titleText: string
+  progressRect: RectMetrics | null
+  progressText: string
+  totalRect: RectMetrics | null
+  totalText: string
+}
+
+interface CopyCardSnapshot {
+  thumbRect: RectMetrics
+  rarityRect: RectMetrics | null
+  rarityText: string
+  rarityColor: string
+  quantityRect: RectMetrics | null
+  quantityText: string
+  nameRect: RectMetrics | null
+  nameText: string
+  imageUrl: string | null
+  isAudio: boolean
+}
 
 /**
  * 画像の読み込み完了まで待機する。
@@ -301,12 +332,368 @@ async function convertImageUrlToDataUrl(sourceUrl: string): Promise<string | nul
 }
 
 /**
+ * Safari 系ブラウザかどうかを判定する。
+ * iOS Safari では foreignObject を含む描画で画像が欠落しやすいため、Canvas 直接描画へフォールバックする。
+ *
+ * @returns Safari 系ブラウザなら true
+ */
+function isSafariLikeBrowser(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const userAgent = navigator.userAgent
+  const isWebkitSafari = /Safari/i.test(userAgent) && /AppleWebKit/i.test(userAgent)
+  const isOtherEngine = /Chrome|CriOS|Chromium|Edg|EdgiOS|OPR|OPiOS|FxiOS/i.test(userAgent)
+  return isWebkitSafari && !isOtherEngine
+}
+
+/**
+ * ルート要素を基準にした相対矩形を取得する。
+ *
+ * @param element 対象要素
+ * @param rootRect ルート要素の絶対矩形
+ * @returns 相対矩形。取得できない場合は null
+ */
+function createRelativeRect(element: Element | null, rootRect: DOMRect): RectMetrics | null {
+  if (!element) {
+    return null
+  }
+
+  const rect = element.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null
+  }
+
+  return {
+    x: rect.left - rootRect.left,
+    y: rect.top - rootRect.top,
+    width: rect.width,
+    height: rect.height
+  }
+}
+
+/**
+ * 矩形を内側へ縮めた結果を返す。
+ *
+ * @param rect 元の矩形
+ * @param inset 縮小量
+ * @returns 縮小後の矩形
+ */
+function insetRect(rect: RectMetrics, inset: number): RectMetrics {
+  const width = Math.max(1, rect.width - inset * 2)
+  const height = Math.max(1, rect.height - inset * 2)
+  return {
+    x: rect.x + inset,
+    y: rect.y + inset,
+    width,
+    height
+  }
+}
+
+/**
+ * 角丸矩形のパスを Canvas へ設定する。
+ *
+ * @param context Canvas 2D コンテキスト
+ * @param rect 対象矩形
+ * @param radius 角丸半径
+ */
+function buildRoundedRectPath(context: CanvasRenderingContext2D, rect: RectMetrics, radius: number): void {
+  const safeRadius = Math.max(0, Math.min(radius, rect.width / 2, rect.height / 2))
+  context.beginPath()
+  context.moveTo(rect.x + safeRadius, rect.y)
+  context.lineTo(rect.x + rect.width - safeRadius, rect.y)
+  context.quadraticCurveTo(rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + safeRadius)
+  context.lineTo(rect.x + rect.width, rect.y + rect.height - safeRadius)
+  context.quadraticCurveTo(rect.x + rect.width, rect.y + rect.height, rect.x + rect.width - safeRadius, rect.y + rect.height)
+  context.lineTo(rect.x + safeRadius, rect.y + rect.height)
+  context.quadraticCurveTo(rect.x, rect.y + rect.height, rect.x, rect.y + rect.height - safeRadius)
+  context.lineTo(rect.x, rect.y + safeRadius)
+  context.quadraticCurveTo(rect.x, rect.y, rect.x + safeRadius, rect.y)
+  context.closePath()
+}
+
+/**
+ * 最大幅に収まるようにテキストを省略する。
+ *
+ * @param context Canvas 2D コンテキスト
+ * @param text 元テキスト
+ * @param maxWidth 最大幅
+ * @returns 省略後テキスト
+ */
+function truncateTextToWidth(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (context.measureText(text).width <= maxWidth) {
+    return text
+  }
+
+  const ellipsis = '…'
+  let current = text
+  while (current.length > 0 && context.measureText(`${current}${ellipsis}`).width > maxWidth) {
+    current = current.slice(0, -1)
+  }
+  return current.length > 0 ? `${current}${ellipsis}` : ''
+}
+
+/**
+ * バッジ背景とテキストを描画する。
+ *
+ * @param context Canvas 2D コンテキスト
+ * @param rect 描画先矩形
+ * @param text テキスト
+ * @param textColor 文字色
+ * @param fontWeight フォントウェイト
+ */
+function drawBadge(
+  context: CanvasRenderingContext2D,
+  rect: RectMetrics,
+  text: string,
+  textColor: string,
+  fontWeight: number
+): void {
+  buildRoundedRectPath(context, rect, rect.height / 2)
+  context.fillStyle = 'rgba(0, 0, 0, 0.65)'
+  context.fill()
+  context.strokeStyle = 'rgba(255, 255, 255, 0.4)'
+  context.lineWidth = 1
+  context.stroke()
+
+  const fontSize = Math.max(9, Math.min(12, Math.floor(rect.height * 0.58)))
+  context.font = `${fontWeight} ${fontSize}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
+  context.textBaseline = 'middle'
+  context.textAlign = 'left'
+  context.fillStyle = textColor
+  const textPadding = 8
+  const visibleText = truncateTextToWidth(context, text, Math.max(0, rect.width - textPadding * 2))
+  context.fillText(visibleText, rect.x + textPadding, rect.y + rect.height / 2)
+}
+
+/**
+ * コピー面ヘッダーの描画情報を取得する。
+ *
+ * @param rootElement コピー面ルート
+ * @param rootRect ルート矩形
+ * @returns 描画情報
+ */
+function collectCopyHeaderSnapshot(rootElement: HTMLElement, rootRect: DOMRect): CopyHeaderSnapshot {
+  const headerElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-header')
+  const titleElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-title')
+  const progressElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-progress')
+  const totalElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-total')
+
+  const headerRect = createRelativeRect(headerElement, rootRect)
+  return {
+    dividerY: headerRect ? headerRect.y + headerRect.height : null,
+    titleRect: createRelativeRect(titleElement, rootRect),
+    titleText: titleElement?.textContent?.trim() ?? '',
+    progressRect: createRelativeRect(progressElement, rootRect),
+    progressText: progressElement?.textContent?.trim() ?? '',
+    totalRect: createRelativeRect(totalElement, rootRect),
+    totalText: totalElement?.textContent?.trim() ?? ''
+  }
+}
+
+/**
+ * コピー面カードの描画情報を収集する。
+ *
+ * @param rootElement コピー面ルート
+ * @param rootRect ルート矩形
+ * @returns カード描画情報配列
+ */
+function collectCopyCardSnapshots(rootElement: HTMLElement, rootRect: DOMRect): CopyCardSnapshot[] {
+  const gridItemElements = Array.from(rootElement.querySelectorAll('.draw-gacha-result-overlay__copy-grid .draw-gacha-result-overlay__grid-item'))
+  const snapshots: CopyCardSnapshot[] = []
+
+  gridItemElements.forEach((gridItemElement) => {
+    const thumbElement = gridItemElement.querySelector('.draw-gacha-result-card__thumb')
+    const thumbRect = createRelativeRect(thumbElement, rootRect)
+    if (!thumbRect) {
+      return
+    }
+
+    const rarityElement = gridItemElement.querySelector('.draw-gacha-result-card__rarity')
+    const quantityElement = gridItemElement.querySelector('.draw-gacha-result-card__quantity-badge')
+    const nameElement = gridItemElement.querySelector('.draw-gacha-result-card__name')
+    const imageElement = gridItemElement.querySelector('img')
+    const audioSymbolElement = gridItemElement.querySelector('.draw-gacha-result-card__audio-symbol')
+    const rarityTextColorSource = rarityElement?.querySelector('span') ?? rarityElement
+
+    snapshots.push({
+      thumbRect,
+      rarityRect: createRelativeRect(rarityElement, rootRect),
+      rarityText: rarityElement?.textContent?.trim() ?? '',
+      rarityColor: rarityTextColorSource ? window.getComputedStyle(rarityTextColorSource).color : '#ffffff',
+      quantityRect: createRelativeRect(quantityElement, rootRect),
+      quantityText: quantityElement?.textContent?.trim() ?? '',
+      nameRect: createRelativeRect(nameElement, rootRect),
+      nameText: nameElement?.textContent?.trim() ?? '',
+      imageUrl: imageElement ? imageElement.currentSrc || imageElement.src : null,
+      isAudio: Boolean(audioSymbolElement)
+    })
+  })
+
+  return snapshots
+}
+
+/**
+ * サムネイル画像を Canvas 描画用に読み込む。
+ *
+ * @param sourceUrl 画像 URL
+ * @returns 読み込み済み画像。失敗時は null
+ */
+async function resolveCanvasImage(sourceUrl: string): Promise<HTMLImageElement | null> {
+  if (!sourceUrl) {
+    return null
+  }
+
+  try {
+    const resolvedSourceUrl = sourceUrl.startsWith('blob:') ? (await convertImageUrlToDataUrl(sourceUrl)) ?? sourceUrl : sourceUrl
+    return await Promise.race([
+      loadImageFromUrl(resolvedSourceUrl).catch(() => null),
+      new Promise<HTMLImageElement | null>((resolve) => {
+        setTimeout(() => resolve(null), DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS)
+      })
+    ])
+  } catch {
+    return null
+  }
+}
+
+/**
+ * object-contain 相当で画像を描画する。
+ *
+ * @param context Canvas 2D コンテキスト
+ * @param image 描画画像
+ * @param targetRect 描画領域
+ */
+function drawContainImage(context: CanvasRenderingContext2D, image: HTMLImageElement, targetRect: RectMetrics): void {
+  const sourceWidth = Math.max(1, image.naturalWidth || image.width)
+  const sourceHeight = Math.max(1, image.naturalHeight || image.height)
+  const scale = Math.min(targetRect.width / sourceWidth, targetRect.height / sourceHeight)
+  const drawWidth = Math.max(1, sourceWidth * scale)
+  const drawHeight = Math.max(1, sourceHeight * scale)
+  const drawX = targetRect.x + (targetRect.width - drawWidth) / 2
+  const drawY = targetRect.y + (targetRect.height - drawHeight) / 2
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+}
+
+/**
+ * Safari 向けに、DOM 座標を使って Canvas へ直接描画して PNG を生成する。
+ *
+ * @param rootElement 変換対象のコピー面ルート要素
+ * @returns PNG Blob
+ */
+async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElement): Promise<Blob> {
+  if (document.fonts?.ready) {
+    await document.fonts.ready
+  }
+  await waitForImageCompletion(rootElement)
+
+  const targetWidth = Math.max(1, Math.ceil(rootElement.scrollWidth))
+  const targetHeight = Math.max(1, Math.ceil(rootElement.scrollHeight))
+  const rootRect = rootElement.getBoundingClientRect()
+  const headerSnapshot = collectCopyHeaderSnapshot(rootElement, rootRect)
+  const cardSnapshots = collectCopyCardSnapshots(rootElement, rootRect)
+
+  const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(targetWidth * devicePixelRatio))
+  canvas.height = Math.max(1, Math.ceil(targetHeight * devicePixelRatio))
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('画像描画コンテキストを作成できませんでした。')
+  }
+
+  context.scale(devicePixelRatio, devicePixelRatio)
+  context.fillStyle = '#000000'
+  context.fillRect(0, 0, targetWidth, targetHeight)
+
+  if (headerSnapshot.dividerY !== null) {
+    context.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+    context.lineWidth = 1
+    context.beginPath()
+    context.moveTo(0, headerSnapshot.dividerY)
+    context.lineTo(targetWidth, headerSnapshot.dividerY)
+    context.stroke()
+  }
+  if (headerSnapshot.titleRect && headerSnapshot.titleText) {
+    context.fillStyle = '#ffffff'
+    context.textBaseline = 'top'
+    context.textAlign = 'left'
+    context.font = `600 ${Math.max(13, Math.floor(headerSnapshot.titleRect.height * 0.85))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
+    context.fillText(headerSnapshot.titleText, headerSnapshot.titleRect.x, headerSnapshot.titleRect.y)
+  }
+  if (headerSnapshot.progressRect && headerSnapshot.progressText) {
+    drawBadge(context, headerSnapshot.progressRect, headerSnapshot.progressText, '#ffffff', 500)
+  }
+  if (headerSnapshot.totalRect && headerSnapshot.totalText) {
+    drawBadge(context, headerSnapshot.totalRect, headerSnapshot.totalText, '#ffffff', 500)
+  }
+
+  const imageCache = new Map<string, Promise<HTMLImageElement | null>>()
+  const resolveCachedImage = (imageUrl: string): Promise<HTMLImageElement | null> => {
+    const cached = imageCache.get(imageUrl)
+    if (cached) {
+      return cached
+    }
+    const imagePromise = resolveCanvasImage(imageUrl)
+    imageCache.set(imageUrl, imagePromise)
+    return imagePromise
+  }
+
+  for (const cardSnapshot of cardSnapshots) {
+    if (cardSnapshot.imageUrl) {
+      const resolvedImage = await resolveCachedImage(cardSnapshot.imageUrl)
+      if (resolvedImage) {
+        drawContainImage(context, resolvedImage, insetRect(cardSnapshot.thumbRect, 1))
+      }
+    } else if (cardSnapshot.isAudio) {
+      context.fillStyle = '#ffffff'
+      context.textAlign = 'center'
+      context.textBaseline = 'middle'
+      context.font = `700 ${Math.max(22, Math.floor(cardSnapshot.thumbRect.height * 0.5))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
+      context.fillText('♫', cardSnapshot.thumbRect.x + cardSnapshot.thumbRect.width / 2, cardSnapshot.thumbRect.y + cardSnapshot.thumbRect.height / 2)
+    }
+
+    if (cardSnapshot.rarityRect && cardSnapshot.rarityText) {
+      drawBadge(context, cardSnapshot.rarityRect, cardSnapshot.rarityText, cardSnapshot.rarityColor || '#ffffff', 600)
+    }
+    if (cardSnapshot.quantityRect && cardSnapshot.quantityText) {
+      drawBadge(context, cardSnapshot.quantityRect, cardSnapshot.quantityText, '#ffffff', 600)
+    }
+    if (cardSnapshot.nameRect && cardSnapshot.nameText) {
+      context.fillStyle = '#ffffff'
+      context.textAlign = 'left'
+      context.textBaseline = 'top'
+      context.font = `500 ${Math.max(11, Math.floor(cardSnapshot.nameRect.height * 0.95))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
+      const visibleName = truncateTextToWidth(context, cardSnapshot.nameText, cardSnapshot.nameRect.width)
+      context.fillText(visibleName, cardSnapshot.nameRect.x, cardSnapshot.nameRect.y)
+    }
+  }
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
+  })
+
+  if (!pngBlob) {
+    throw new Error('画像の生成に失敗しました。')
+  }
+
+  return pngBlob
+}
+
+/**
  * 指定した要素を PNG Blob に変換する。
  *
  * @param rootElement 変換対象のルート要素
  * @returns PNG Blob
  */
 async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
+  // iOS Safari は foreignObject 内の画像描画が不安定なため、座標ベース描画へ切り替える。
+  if (isSafariLikeBrowser()) {
+    return await renderElementToPngBlobByCanvasRasterization(rootElement)
+  }
+
   if (document.fonts?.ready) {
     await document.fonts.ready
   }
