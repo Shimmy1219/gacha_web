@@ -70,29 +70,33 @@ export function DrawResultRevealOverlay({
 
   const overlayStyle = useMemo<CSSProperties>(() => {
     const totalCards = Math.max(1, cards.length)
-
-    // スクロールを出さないため、表示領域に収まる最大カードサイズを列数総当たりで求める。
+    const defaultCardSize = 118
+    const minMobileCardSize = 64
+    const mobileBreakpoint = 768
     const availableWidth = Math.max(240, viewport.width - 40)
     const availableHeight = Math.max(220, viewport.height - 40 - 136)
     const horizontalGap = 12
     const verticalGap = 14
     const cardMetaHeight = 30
 
-    let bestSize = 22
-
-    for (let columns = 1; columns <= totalCards; columns += 1) {
-      const rows = Math.ceil(totalCards / columns)
-      const widthLimitedSize = (availableWidth - horizontalGap * (columns - 1)) / columns
-      const heightLimitedSize = (availableHeight - verticalGap * (rows - 1) - cardMetaHeight * rows) / rows
-      const candidateSize = Math.min(widthLimitedSize, heightLimitedSize, 118)
-
-      if (Number.isFinite(candidateSize) && candidateSize > bestSize) {
-        bestSize = candidateSize
-      }
+    if (viewport.width >= mobileBreakpoint) {
+      return {
+        '--draw-result-card-size': `${defaultCardSize}px`
+      } as CSSProperties
     }
 
+    const estimateContentHeight = (cardSize: number): number => {
+      const columns = Math.max(1, Math.floor((availableWidth + horizontalGap) / (cardSize + horizontalGap)))
+      const rows = Math.ceil(totalCards / columns)
+      const cardBlockHeight = cardSize + cardMetaHeight
+      return rows * cardBlockHeight + Math.max(0, rows - 1) * verticalGap
+    }
+
+    const willOverflowAtDefaultSize = estimateContentHeight(defaultCardSize) > availableHeight
+    const mobileCardSize = willOverflowAtDefaultSize ? minMobileCardSize : defaultCardSize
+
     return {
-      '--draw-result-card-size': `${Math.max(18, Math.floor(bestSize))}px`
+      '--draw-result-card-size': `${mobileCardSize}px`
     } as CSSProperties
   }, [cards.length, viewport.height, viewport.width])
 
@@ -145,7 +149,7 @@ export function DrawResultRevealOverlay({
           </div>
         </div>
 
-        <div className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-hidden pb-2 pr-0">
+        <div className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-y-auto overflow-x-hidden pb-2 pr-1">
           {visibleCards.map((card) => (
             <div key={`${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
               <DrawResultRevealCard card={card} />
