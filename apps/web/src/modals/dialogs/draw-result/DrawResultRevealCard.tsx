@@ -29,7 +29,7 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
   return (
     <article className="draw-gacha-result-card draw-gacha-result-card--reveal">
       <div className="draw-gacha-result-card__thumb-wrapper relative">
-        <span className="draw-gacha-result-card__rarity absolute left-1.5 top-1.5 z-[1] inline-flex max-w-[calc(100%-1.25rem)] items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white">
+        <span className="draw-gacha-result-card__rarity absolute left-1.5 top-1.5 z-[1] inline-flex max-w-[calc(100%-1.25rem)] items-center rounded-full border border-white/40 bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white">
           <RarityLabel label={card.rarityLabel} color={card.rarityColor} className="max-w-full text-[10px] font-semibold" />
         </span>
         <div className="draw-gacha-result-card__thumb flex items-center justify-center overflow-hidden bg-transparent">

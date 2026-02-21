@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 import { DrawResultRevealCard } from './DrawResultRevealCard'
@@ -26,6 +26,13 @@ export function DrawResultRevealOverlay({
   onClose
 }: DrawResultRevealOverlayProps): JSX.Element {
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
+  const [viewport, setViewport] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { width: 1366, height: 768 }
+    }
+
+    return { width: window.innerWidth, height: window.innerHeight }
+  })
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -33,6 +40,23 @@ export function DrawResultRevealOverlay({
     }
 
     setPortalElement(document.body)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const updateViewport = (): void => {
+      setViewport({ width: window.innerWidth, height: window.innerHeight })
+    }
+
+    updateViewport()
+    window.addEventListener('resize', updateViewport)
+
+    return () => {
+      window.removeEventListener('resize', updateViewport)
+    }
   }, [])
 
   const visibleCards = useMemo(() => {
@@ -44,6 +68,34 @@ export function DrawResultRevealOverlay({
     return cards.reduce((total, card) => total + card.quantity, 0)
   }, [cards])
 
+  const overlayStyle = useMemo<CSSProperties>(() => {
+    const totalCards = Math.max(1, cards.length)
+
+    // スクロールを出さないため、表示領域に収まる最大カードサイズを列数総当たりで求める。
+    const availableWidth = Math.max(240, viewport.width - 40)
+    const availableHeight = Math.max(220, viewport.height - 40 - 136)
+    const horizontalGap = 12
+    const verticalGap = 14
+    const cardMetaHeight = 30
+
+    let bestSize = 22
+
+    for (let columns = 1; columns <= totalCards; columns += 1) {
+      const rows = Math.ceil(totalCards / columns)
+      const widthLimitedSize = (availableWidth - horizontalGap * (columns - 1)) / columns
+      const heightLimitedSize = (availableHeight - verticalGap * (rows - 1) - cardMetaHeight * rows) / rows
+      const candidateSize = Math.min(widthLimitedSize, heightLimitedSize, 118)
+
+      if (Number.isFinite(candidateSize) && candidateSize > bestSize) {
+        bestSize = candidateSize
+      }
+    }
+
+    return {
+      '--draw-result-card-size': `${Math.max(18, Math.floor(bestSize))}px`
+    } as CSSProperties
+  }, [cards.length, viewport.height, viewport.width])
+
   if (!portalElement) {
     return null
   }
@@ -53,6 +105,7 @@ export function DrawResultRevealOverlay({
       id="draw-gacha-result-overlay"
       className="draw-gacha-result-overlay fixed inset-0 z-[80]"
       aria-label="ガチャ結果の演出表示"
+      style={overlayStyle}
     >
       <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/65 backdrop-blur-sm" aria-hidden="true" />
 
@@ -92,7 +145,7 @@ export function DrawResultRevealOverlay({
           </div>
         </div>
 
-        <div className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-y-auto overflow-x-hidden pb-2 pr-1">
+        <div className="draw-gacha-result-overlay__grid min-h-0 flex-1 content-start overflow-hidden pb-2 pr-0">
           {visibleCards.map((card) => (
             <div key={`${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
               <DrawResultRevealCard card={card} />
