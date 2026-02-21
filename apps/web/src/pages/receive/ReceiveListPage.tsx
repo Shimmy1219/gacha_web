@@ -1848,7 +1848,7 @@ export function ReceiveListPage(): JSX.Element {
   return (
     <div className="receive-list-page min-h-screen text-surface-foreground">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
-        <header className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
+        <header className="rounded-3xl bg-panel/85 p-6 backdrop-blur">
           <h1 className="mt-3 text-3xl font-bold">所持アイテム一覧</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             受け取り済みの景品をガチャ単位で表示します。
@@ -1979,7 +1979,7 @@ export function ReceiveListPage(): JSX.Element {
               return (
                 <div
                   key={groupKey}
-                  className="receive-list-page__group-card rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10"
+                  className="receive-list-page__group-card rounded-3xl border border-border/60 bg-panel/85 p-6"
                 >
                   <div className="receive-list-page__group-card-header flex flex-col gap-3">
                     <button

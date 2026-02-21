@@ -52,8 +52,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#ffffff26',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25)'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -65,8 +64,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#facc1540',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px #facc1540'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -78,8 +76,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#e5e7eb40',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px #e5e7eb40'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -87,8 +84,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
     return {
       backgroundColor: trimmed,
       borderColor: trimmed,
-      color: '#fff',
-      boxShadow: `0 10px 25px ${trimmed}40`
+      color: '#fff'
     };
   }
 
@@ -260,7 +256,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
   };
 
   return (
-    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
+    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
         <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
           <div className="receive-item-card-preview-container relative w-full overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:rounded-2xl">
@@ -268,7 +264,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
-                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] z-10 rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/20'
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] z-10 rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white'
                 )}
                 style={rarityBadgeStyle}
               >
