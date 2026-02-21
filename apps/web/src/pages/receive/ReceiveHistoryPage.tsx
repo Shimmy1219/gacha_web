@@ -107,6 +107,7 @@ export function ReceiveHistoryPage(): JSX.Element {
           ...entry,
           userName: hasUserName ? entry.userName : summary.userName ?? entry.userName,
           ownerName: hasOwnerName ? entry.ownerName : summary.ownerName ?? entry.ownerName,
+          ownerId: entry.ownerId && entry.ownerId.trim() ? entry.ownerId : summary.ownerId ?? entry.ownerId,
           gachaNames: hasGachaNames ? entry.gachaNames : summary.gachaNames.length > 0 ? summary.gachaNames : entry.gachaNames,
           itemNames: hasItemNames ? entry.itemNames : summary.itemNames.length > 0 ? summary.itemNames : entry.itemNames,
           pullCount:
@@ -157,7 +158,7 @@ export function ReceiveHistoryPage(): JSX.Element {
   return (
     <div className="receive-history-page min-h-screen text-surface-foreground">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
-        <header className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
+        <header className="rounded-3xl bg-panel/85 p-6 backdrop-blur">
           <h1 className="mt-3 text-3xl font-bold">受け取り履歴</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             受け取り履歴を一覧で確認出来ます。
@@ -181,7 +182,7 @@ export function ReceiveHistoryPage(): JSX.Element {
             {cards.map(({ entry, gachaLabel, displayUser, itemNames, pullCount }) => (
               <article
                 key={entry.id}
-                className="rounded-2xl border border-border/60 bg-panel/85 p-5 shadow-sm"
+                className="rounded-2xl border border-border/60 bg-panel/85 p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">

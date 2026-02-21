@@ -9,7 +9,7 @@ import {
 
 interface SelectionMetadataPayload {
   user?: { displayName?: string };
-  owner?: { displayName?: string };
+  owner?: { id?: string; displayName?: string };
   pullIds?: string[];
   historyPulls?: Array<{ pullId?: string; pullCount?: number }>;
 }
@@ -20,6 +20,7 @@ export interface ReceiveZipSummary {
   pullCount: number | null;
   userName: string | null;
   ownerName: string | null;
+  ownerId: string | null;
   itemCount: number;
   pullIds: string[];
 }
@@ -659,6 +660,14 @@ function resolveOwnerName(payload: SelectionMetadataPayload | null): string | nu
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function resolveOwnerId(payload: SelectionMetadataPayload | null): string | null {
+  if (!payload?.owner?.id) {
+    return null;
+  }
+  const trimmed = payload.owner.id.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 async function loadSelectionMetadata(zip: JSZip): Promise<SelectionMetadataPayload | null> {
   const selectionEntry = Object.values(zip.files).find(
     (entry) => !entry.dir && entry.name.endsWith('meta/selection.json')
@@ -699,17 +708,18 @@ export async function loadReceiveZipItemMetadata(blob: ReceiveZipInput): Promise
 
 export async function loadReceiveZipSelectionInfo(
   blob: ReceiveZipInput
-): Promise<{ pullIds: string[]; ownerName: string | null }> {
+): Promise<{ pullIds: string[]; ownerName: string | null; ownerId: string | null }> {
   try {
     const zip = await JSZip.loadAsync(blob);
     const selection = await loadSelectionMetadata(zip);
     return {
       pullIds: resolvePullIds(selection),
-      ownerName: resolveOwnerName(selection)
+      ownerName: resolveOwnerName(selection),
+      ownerId: resolveOwnerId(selection)
     };
   } catch (error) {
     console.error('Failed to parse receive zip selection info', error);
-    return { pullIds: [], ownerName: null };
+    return { pullIds: [], ownerName: null, ownerId: null };
   }
 }
 
@@ -734,6 +744,7 @@ export async function loadReceiveZipSummary(blob: ReceiveZipInput): Promise<Rece
     const selection = await loadSelectionMetadata(zip);
     const pullIds = resolvePullIds(selection);
     const ownerName = resolveOwnerName(selection);
+    const ownerId = resolveOwnerId(selection);
     if (selection) {
       if (typeof selection?.user?.displayName === 'string' && selection.user.displayName.trim()) {
         userName = selection.user.displayName.trim();
@@ -757,6 +768,7 @@ export async function loadReceiveZipSummary(blob: ReceiveZipInput): Promise<Rece
       pullCount,
       userName,
       ownerName,
+      ownerId,
       itemCount: metadataEntries.length,
       pullIds
     };

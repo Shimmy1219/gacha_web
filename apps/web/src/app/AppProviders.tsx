@@ -11,6 +11,7 @@ import { SiteThemeProvider } from '../features/theme/SiteThemeProvider';
 import { HapticsProvider } from '../features/haptics/HapticsProvider';
 import { DiscordInfoStoreGate } from '../features/discord/DiscordInfoStoreGate';
 import { NotificationProvider } from '../features/notification';
+import { GachaThumbnailOwnerMigrationGate } from '../features/gacha/GachaThumbnailOwnerMigrationGate';
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   const [queryClient] = useState(
@@ -38,6 +39,7 @@ export function AppProviders({ children }: PropsWithChildren): JSX.Element {
               <NotificationProvider>
                 <ModalProvider>
                   <DiscordInfoStoreGate>
+                    <GachaThumbnailOwnerMigrationGate />
                     <ToolbarStateProvider>{children}</ToolbarStateProvider>
                   </DiscordInfoStoreGate>
                 </ModalProvider>

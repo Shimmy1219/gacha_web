@@ -1034,6 +1034,11 @@ function collectAssetIdsToImport(
 ): Set<string> {
   const assetIds = new Set<string>();
   gachaIds.forEach((gachaId) => {
+    const thumbnailAssetId = addition.appState?.meta?.[gachaId]?.thumbnailAssetId;
+    if (typeof thumbnailAssetId === 'string' && thumbnailAssetId.length > 0) {
+      assetIds.add(thumbnailAssetId);
+    }
+
     const catalogSnapshot = addition.catalogState?.byGacha?.[gachaId];
     if (!catalogSnapshot?.items) {
       return;

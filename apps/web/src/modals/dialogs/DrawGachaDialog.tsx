@@ -24,6 +24,7 @@ import {
   isBlobUploadCsrfTokenMismatchError,
   useBlobUpload
 } from '../../features/save/useBlobUpload';
+import { resolveThumbnailOwnerId } from '../../features/gacha/thumbnailOwnerId';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -360,7 +361,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
     'idle' | 'building-zip' | 'uploading' | 'sending'
   >('idle');
-  const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
+  const [, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1352,6 +1353,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       if (!ownerName) {
         return;
       }
+      const resolvedOwnerId = resolveThumbnailOwnerId(staffDiscordId);
+      if (!resolvedOwnerId) {
+        const message = '配信サムネイルownerIdを解決できませんでした。';
+        notifyDiscordDeliveryError(message);
+        throw new Error(message);
+      }
 
       setIsDiscordDelivering(true);
       setDiscordDeliveryStage('building-zip');
@@ -1380,6 +1387,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           userId: targetUserId,
           userName: receiverDisplayName,
           ownerName,
+          ownerId: resolvedOwnerId,
           itemIdFilter: filteredItemIds,
           uploadZip,
           ownerDiscordId: staffDiscordId,

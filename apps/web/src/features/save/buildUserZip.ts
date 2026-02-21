@@ -85,6 +85,7 @@ interface BuildParams {
   userId: string;
   userName: string;
   ownerName?: string;
+  ownerId?: string;
   includeMetadata?: boolean;
   itemIdFilter?: Set<string>;
   excludeRiaguImages?: boolean;
@@ -250,7 +251,7 @@ function createSelectedAssets(
     .map((asset) => ({
       assetId: typeof asset?.assetId === 'string' ? asset.assetId.trim() : '',
       digitalItemType:
-        Boolean(catalogItem.riagu) ? undefined : normalizeDigitalItemType(asset?.digitalItemType) ?? undefined
+        catalogItem.riagu ? undefined : normalizeDigitalItemType(asset?.digitalItemType) ?? undefined
     }))
     .filter((entry) => entry.assetId.length > 0);
 
@@ -284,7 +285,7 @@ function createSelectedAssets(
       rarityId: catalogItem.rarityId ?? fallbackRarityId,
       count: normalizedCount,
       isRiagu: Boolean(catalogItem.riagu),
-      digitalItemType: Boolean(catalogItem.riagu) ? undefined : entry.digitalItemType
+      digitalItemType: catalogItem.riagu ? undefined : entry.digitalItemType
     });
     return acc;
   }, []);
@@ -1169,6 +1170,7 @@ export async function buildUserZipFromSelection({
   userId,
   userName,
   ownerName,
+  ownerId,
   includeMetadata = true,
   itemIdFilter,
   excludeRiaguImages
@@ -1312,6 +1314,7 @@ export async function buildUserZipFromSelection({
   const generatedAt = includeMetadata ? new Date().toISOString() : null;
   const pullIds = Array.from(includedPullIds);
   const normalizedOwnerName = typeof ownerName === 'string' ? ownerName.trim() : '';
+  const normalizedOwnerId = typeof ownerId === 'string' ? ownerId.trim() : '';
   if (includeMetadata && metaFolder && generatedAt && itemMetadataMap) {
     const catalogSummary = buildCatalogSummary(catalogState, snapshot.appState, rarityState, selection, metadataAssets);
     metaFolder.file(
@@ -1324,7 +1327,13 @@ export async function buildUserZipFromSelection({
             id: userId,
             displayName: userName
           },
-          owner: normalizedOwnerName ? { displayName: normalizedOwnerName } : undefined,
+          owner:
+            normalizedOwnerName || normalizedOwnerId
+              ? {
+                  ...(normalizedOwnerId ? { id: normalizedOwnerId } : {}),
+                  ...(normalizedOwnerName ? { displayName: normalizedOwnerName } : {})
+                }
+              : undefined,
           selection,
           itemCount: availableRecords.length,
           warnings: Array.from(warnings),

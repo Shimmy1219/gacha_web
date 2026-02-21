@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 import {
@@ -23,19 +22,6 @@ interface ReceiveItemCardProps {
   onSave: (item: ReceiveMediaItem) => void | Promise<void>;
 }
 
-function resolveKindIcon(kind: ReceiveMediaItem['kind']): JSX.Element {
-  switch (kind) {
-    case 'image':
-      return <PhotoIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-image h-5 w-5" aria-hidden="true" />;
-    case 'video':
-      return <PlayCircleIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-video h-5 w-5" aria-hidden="true" />;
-    case 'audio':
-      return <MusicalNoteIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-audio h-5 w-5" aria-hidden="true" />;
-    default:
-      return <ArrowDownTrayIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-other h-5 w-5" aria-hidden="true" />;
-  }
-}
-
 function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | undefined {
   if (!rarityColor) {
     return undefined;
@@ -52,8 +38,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#ffffff26',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.25)'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -65,8 +50,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#facc1540',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px #facc1540'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -78,8 +62,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
       WebkitBackgroundClip: 'border-box',
       borderColor: '#e5e7eb40',
       color: '#fff',
-      WebkitTextFillColor: '#fff',
-      boxShadow: '0 10px 25px #e5e7eb40'
+      WebkitTextFillColor: '#fff'
     };
   }
 
@@ -87,8 +70,7 @@ function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | und
     return {
       backgroundColor: trimmed,
       borderColor: trimmed,
-      color: '#fff',
-      boxShadow: `0 10px 25px ${trimmed}40`
+      color: '#fff'
     };
   }
 
@@ -199,13 +181,6 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     }
   }, [item.kind, item.filename, objectUrl]);
 
-  const kindChipInner = (
-    <>
-      {resolveKindIcon(item.kind)}
-      <span className="receive-item-card-kind-text">{item.kind.toUpperCase()}</span>
-    </>
-  );
-
   const canWearIconRing = item.kind === 'image' && item.metadata?.digitalItemType === 'icon-ring';
   const canPlayDigitalAudio = useMemo(
     () =>
@@ -214,6 +189,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       Boolean(objectUrl),
     [item, objectUrl]
   );
+  const hasSecondaryAction = canWearIconRing || canPlayDigitalAudio;
 
   useEffect(() => {
     return () => {
@@ -260,7 +236,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
   };
 
   return (
-    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 shadow-lg shadow-black/10 backdrop-blur">
+    <div className="receive-item-card-root group flex h-full flex-col overflow-visible rounded-2xl border border-border/60 bg-panel/85 p-4 backdrop-blur">
       <div className="receive-item-card-content flex w-full gap-4 md:flex-col md:gap-6">
         <div className="receive-item-card-preview-column flex w-24 flex-shrink-0 flex-col gap-3 md:w-full md:flex-shrink">
           <div className="receive-item-card-preview-container relative w-full overflow-visible rounded-xl border border-border/60 bg-panel-muted/70 md:rounded-2xl">
@@ -268,7 +244,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             {item.metadata?.rarity ? (
               <span
                 className={clsx(
-                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] z-10 rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white shadow-lg shadow-black/20'
+                  'receive-item-card-rarity-badge absolute left-[-25px] top-[-25px] z-10 rounded-full border border-border/60 px-4 py-1.5 text-base font-bold uppercase tracking-wider text-white'
                 )}
                 style={rarityBadgeStyle}
               >
@@ -277,11 +253,6 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
             ) : null}
             <div className="receive-item-card-preview-stage absolute inset-0 flex items-center justify-center">
               {previewNode}
-            </div>
-          </div>
-          <div className="receive-item-card-kind-chip-mobile-container md:hidden">
-            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {kindChipInner}
             </div>
           </div>
         </div>
@@ -320,17 +291,12 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               ) : null}
             </div>
           </div>
-          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="receive-item-card-kind-chip-desktop-container hidden md:flex">
-              <div className="receive-item-card-kind-chip-desktop flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {kindChipInner}
-              </div>
-            </div>
-            <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3">
+            <div className="receive-item-card-action-group flex w-full items-center gap-2">
               {canWearIconRing ? (
                 <button
                   type="button"
-                  className="receive-item-card-wear-button btn btn-muted"
+                  className="receive-item-card-wear-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
                   onClick={() =>
                     push(IconRingWearDialog, {
                       id: `icon-ring-wear-${item.id}`,
@@ -346,7 +312,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               {canPlayDigitalAudio ? (
                 <button
                   type="button"
-                  className="receive-item-card__audio-toggle-button btn btn-muted"
+                  className="receive-item-card__audio-toggle-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
                   onClick={handleToggleAudioPlayback}
                   title={isAudioPlaying ? '音声を停止' : '音声を再生'}
                 >
@@ -355,7 +321,10 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               ) : null}
               <ReceiveSaveButton
                 onClick={() => onSave(item)}
-                className="receive-item-card-save-button"
+                className={clsx(
+                  'receive-item-card-save-button !min-h-0 h-7 justify-center px-3 text-xs',
+                  hasSecondaryAction ? 'flex-1' : 'w-full'
+                )}
               />
             </div>
           </div>

@@ -10,6 +10,7 @@ interface BuildAndUploadSelectionZipParams {
   userId: string;
   userName: string;
   ownerName: string;
+  ownerId: string;
   uploadZip: (args: UploadZipArgs) => Promise<UploadZipResult>;
   ownerDiscordId?: string | null;
   ownerDiscordName?: string | null;
@@ -29,6 +30,7 @@ export async function buildAndUploadSelectionZip({
   userId,
   userName,
   ownerName,
+  ownerId,
   uploadZip,
   ownerDiscordId,
   ownerDiscordName,
@@ -42,6 +44,7 @@ export async function buildAndUploadSelectionZip({
     userId,
     userName,
     ownerName,
+    ownerId,
     itemIdFilter,
     excludeRiaguImages
   });

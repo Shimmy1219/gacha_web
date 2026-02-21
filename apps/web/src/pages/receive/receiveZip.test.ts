@@ -1,6 +1,11 @@
 import JSZip from 'jszip';
 
-import { loadReceiveZipInventory, updateReceiveZipDigitalItemType } from './receiveZip';
+import {
+  loadReceiveZipInventory,
+  loadReceiveZipSelectionInfo,
+  loadReceiveZipSummary,
+  updateReceiveZipDigitalItemType
+} from './receiveZip';
 
 interface TestZipItemMetadata {
   filePath: string | null;
@@ -20,7 +25,8 @@ interface TestZipItemMetadata {
 async function buildReceiveZipWithItemMetadata(
   metadataMap: Record<string, TestZipItemMetadata>,
   itemPath: string,
-  itemData: Uint8Array
+  itemData: Uint8Array,
+  options?: { selection?: Record<string, unknown> }
 ): Promise<Uint8Array> {
   const zip = new JSZip();
   zip.file(itemPath, itemData, {
@@ -31,6 +37,12 @@ async function buildReceiveZipWithItemMetadata(
     compression: 'DEFLATE',
     compressionOptions: { level: 6 }
   });
+  if (options?.selection) {
+    zip.file('meta/selection.json', JSON.stringify(options.selection, null, 2), {
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    });
+  }
   return await zip.generateAsync({ type: 'uint8array' });
 }
 
@@ -237,5 +249,88 @@ describe('loadReceiveZipInventory digital item type migration', () => {
     expect(inventory.mediaItems[0]?.kind).toBe('audio');
     expect(inventory.mediaItems[0]?.mimeType).toBe(expectedMimeType);
     expect(inventory.mediaItems[0]?.blob.type).toBe(expectedMimeType);
+  });
+});
+
+describe('receive zip selection owner compatibility', () => {
+  it('reads owner id from new selection metadata', async () => {
+    const metadataMap: Record<string, TestZipItemMetadata> = {
+      'asset-1': {
+        filePath: 'items/TestGacha/item.png',
+        gachaId: 'gacha-1',
+        gachaName: 'TestGacha',
+        itemId: 'item-1',
+        itemName: '画像景品',
+        rarity: 'SR',
+        rarityColor: '#6366f1',
+        isRiagu: false,
+        riaguType: null,
+        obtainedCount: 1,
+        isNewForUser: false
+      }
+    };
+    const blob = await buildReceiveZipWithItemMetadata(
+      metadataMap,
+      'items/TestGacha/item.png',
+      new Uint8Array([137, 80, 78, 71]),
+      {
+        selection: {
+          owner: {
+            id: '123456789012345678',
+            displayName: '配信オーナー'
+          },
+          pullIds: ['pull-1']
+        }
+      }
+    );
+
+    const selectionInfo = await loadReceiveZipSelectionInfo(blob);
+    expect(selectionInfo.ownerId).toBe('123456789012345678');
+    expect(selectionInfo.ownerName).toBe('配信オーナー');
+    expect(selectionInfo.pullIds).toEqual(['pull-1']);
+
+    const summary = await loadReceiveZipSummary(blob);
+    expect(summary?.ownerId).toBe('123456789012345678');
+    expect(summary?.ownerName).toBe('配信オーナー');
+  });
+
+  it('keeps working for legacy selection metadata without owner id', async () => {
+    const metadataMap: Record<string, TestZipItemMetadata> = {
+      'asset-1': {
+        filePath: 'items/TestGacha/item.png',
+        gachaId: 'gacha-1',
+        gachaName: 'TestGacha',
+        itemId: 'item-1',
+        itemName: '画像景品',
+        rarity: 'SR',
+        rarityColor: '#6366f1',
+        isRiagu: false,
+        riaguType: null,
+        obtainedCount: 1,
+        isNewForUser: false
+      }
+    };
+    const blob = await buildReceiveZipWithItemMetadata(
+      metadataMap,
+      'items/TestGacha/item.png',
+      new Uint8Array([137, 80, 78, 71]),
+      {
+        selection: {
+          owner: {
+            displayName: '旧形式オーナー'
+          },
+          pullIds: ['legacy-pull-1']
+        }
+      }
+    );
+
+    const selectionInfo = await loadReceiveZipSelectionInfo(blob);
+    expect(selectionInfo.ownerId).toBeNull();
+    expect(selectionInfo.ownerName).toBe('旧形式オーナー');
+    expect(selectionInfo.pullIds).toEqual(['legacy-pull-1']);
+
+    const summary = await loadReceiveZipSummary(blob);
+    expect(summary?.ownerId).toBeNull();
+    expect(summary?.ownerName).toBe('旧形式オーナー');
   });
 });
