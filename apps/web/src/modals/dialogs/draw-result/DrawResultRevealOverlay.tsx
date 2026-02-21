@@ -151,9 +151,9 @@ async function resolveImageDataUrl(sourceUrl: string, sourceImageElement: HTMLIm
     return resolvedFromElement
   }
 
-  // blob URL は CSP の connect-src 制約で fetch 失敗しやすいため、ここでは fetch を試みない。
+  // blob URL は CSP の connect-src 制約で fetch 失敗しやすいため、Image 経由で data URL 化する。
   if (sourceUrl.startsWith('blob:')) {
-    return null
+    return await convertImageUrlToDataUrl(sourceUrl)
   }
 
   const abortController = new AbortController()
@@ -246,9 +246,9 @@ async function inlineCloneImageSources(sourceElement: HTMLElement, clonedElement
 }
 
 /**
- * SVG データ URL を読み込み、Canvas へ描画可能な Image 要素へ変換する。
+ * 画像 URL を読み込み、Canvas へ描画可能な Image 要素へ変換する。
  *
- * @param sourceUrl SVG データ URL
+ * @param sourceUrl 画像 URL（data/blob/http(s) を含む）
  * @returns 読み込み済み Image 要素
  */
 function loadImageFromUrl(sourceUrl: string): Promise<HTMLImageElement> {
@@ -263,6 +263,41 @@ function loadImageFromUrl(sourceUrl: string): Promise<HTMLImageElement> {
     }
     image.src = sourceUrl
   })
+}
+
+/**
+ * 画像 URL を Image->Canvas 経由で data URL 化する。
+ * fetch を使わないため、blob URL の connect-src 制約を回避しやすい。
+ *
+ * @param sourceUrl 変換元 URL
+ * @returns data URL。変換不可の場合は null
+ */
+async function convertImageUrlToDataUrl(sourceUrl: string): Promise<string | null> {
+  if (!sourceUrl) {
+    return null
+  }
+  if (sourceUrl.startsWith('data:')) {
+    return sourceUrl
+  }
+
+  try {
+    const imageElement = await loadImageFromUrl(sourceUrl)
+    const width = Math.max(1, imageElement.naturalWidth || imageElement.width)
+    const height = Math.max(1, imageElement.naturalHeight || imageElement.height)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return null
+    }
+
+    context.drawImage(imageElement, 0, 0, width, height)
+    return canvas.toDataURL(DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
+  } catch {
+    return null
+  }
 }
 
 /**
