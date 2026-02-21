@@ -1113,7 +1113,7 @@ export function ReceivePage(): JSX.Element {
                       }
                     }}
                     placeholder="例: https://shimmy3.com/receive?t=XXXXXXXXXX"
-                    className="receive-page-token-input h-[52px] w-full flex-1 rounded-2xl border border-border/60 bg-surface/80 px-4 text-base text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                    className="receive-page-token-input h-[52px] min-h-[52px] w-full rounded-2xl border border-border/60 bg-surface/80 px-4 text-base text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40 lg:flex-1"
                   />
                   <button
                     type="submit"
