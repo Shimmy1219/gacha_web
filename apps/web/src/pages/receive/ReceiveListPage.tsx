@@ -1979,17 +1979,17 @@ export function ReceiveListPage(): JSX.Element {
               return (
                 <div
                   key={groupKey}
-                  className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10"
+                  className="receive-list-page__group-card rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="receive-list-page__group-card-header flex flex-col gap-3">
                     <button
                       type="button"
                       onClick={() => toggleGroup(groupKey)}
                       aria-expanded={!isCollapsed}
                       aria-controls={contentId}
-                      className="receive-list-page__group-header-button group flex-1 text-left"
+                      className="receive-list-page__group-header-button group w-full text-left"
                     >
-                      <div className="receive-list-page__group-header-row flex items-center gap-3">
+                      <div className="receive-list-page__group-header-row flex items-start gap-3">
                         <ItemPreview
                           assetId={gachaThumbnailAssetId}
                           fallbackUrl={gachaThumbnailBlobUrl}
@@ -1997,14 +1997,19 @@ export function ReceiveListPage(): JSX.Element {
                           kindHint="image"
                           imageFit="cover"
                           emptyLabel="noImage"
-                          className="receive-list-page__group-thumbnail h-12 w-12 bg-surface-deep"
+                          className="receive-list-page__group-thumbnail h-12 w-12 shrink-0 bg-surface-deep"
                         />
-                        <div className="receive-list-page__group-title-wrapper min-w-0">
-                          <div className="receive-list-page__group-title-row flex items-center gap-2">
-                            <h2 className="receive-list-page__group-title text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
+                        <div className="receive-list-page__group-title-wrapper min-w-0 flex-1">
+                          <div className="receive-list-page__group-title-row flex items-start gap-2">
+                            <h3
+                              className="receive-list-page__group-title min-w-0 flex-1 truncate text-lg font-semibold text-surface-foreground"
+                              title={group.gachaName}
+                            >
+                              {group.gachaName}
+                            </h3>
                             <ChevronDownIcon
                               className={clsx(
-                                'receive-list-page__group-chevron h-4 w-4 text-muted-foreground transition-transform',
+                                'receive-list-page__group-chevron mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
                                 isCollapsed ? '' : 'rotate-180'
                               )}
                               aria-hidden="true"
@@ -2019,12 +2024,16 @@ export function ReceiveListPage(): JSX.Element {
                         </div>
                       </div>
                     </button>
-                    <ReceiveBulkSaveButton
-                      onClick={() => handleSaveGroup(group)}
-                      isLoading={savingGroupKey === groupKey || isGroupLoading}
-                      disabled={hasSaving || isGroupLoading || group.sourceItems.length === 0}
-                      className="h-9 px-4 text-xs"
-                    />
+                    <div className="receive-list-page__group-save-row flex">
+                      <ReceiveBulkSaveButton
+                        onClick={() => handleSaveGroup(group)}
+                        isLoading={savingGroupKey === groupKey || isGroupLoading}
+                        disabled={hasSaving || isGroupLoading || group.sourceItems.length === 0}
+                        tone="accent"
+                        showIcon={false}
+                        className="receive-list-page__group-save-button w-full justify-center px-4 py-2 text-sm sm:w-auto"
+                      />
+                    </div>
                   </div>
                   {!isCollapsed ? (
                     <div id={contentId} className="mt-4 space-y-3">
