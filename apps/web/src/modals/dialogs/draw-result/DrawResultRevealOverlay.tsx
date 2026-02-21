@@ -331,8 +331,11 @@ async function copyElementAsImage(rootElement: HTMLElement): Promise<void> {
     throw new Error('このブラウザでは画像コピーに対応していません。')
   }
 
-  const pngBlob = await renderElementToPngBlob(rootElement)
-  await navigator.clipboard.write([new ClipboardItem({ [DRAW_RESULT_COPY_IMAGE_MIME_TYPE]: pngBlob })])
+  // iOS Safari では click/tap から write() までの間に await を挟むと、
+  // ユーザー操作コンテキストが失われて NotAllowedError になりやすい。
+  // Promise<Blob> を ClipboardItem に渡し、write() 自体は同期的に呼び出す。
+  const pngBlobPromise = renderElementToPngBlob(rootElement)
+  await navigator.clipboard.write([new ClipboardItem({ [DRAW_RESULT_COPY_IMAGE_MIME_TYPE]: pngBlobPromise })])
 }
 
 /**
