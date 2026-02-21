@@ -97,17 +97,63 @@ function convertBlobToDataUrl(blob: Blob): Promise<string> {
 }
 
 /**
- * 画像 URL を fetch して data URL 化する。
+ * 読み込み済みの画像要素を Canvas 描画で data URL 化する。
+ * blob URL を fetch できない CSP 環境でも、表示済み画像から埋め込み用データを作るために利用する。
  *
- * @param sourceUrl 画像 URL
- * @returns data URL。変換不可の場合は null
+ * @param imageElement 変換元の画像要素
+ * @returns 変換済み data URL。変換できない場合は null
  */
-async function resolveImageDataUrl(sourceUrl: string): Promise<string | null> {
+function convertImageElementToDataUrl(imageElement: HTMLImageElement): string | null {
+  const sourceUrl = imageElement.currentSrc || imageElement.src
   if (!sourceUrl) {
     return null
   }
   if (sourceUrl.startsWith('data:')) {
     return sourceUrl
+  }
+  if (!imageElement.complete || imageElement.naturalWidth <= 0 || imageElement.naturalHeight <= 0) {
+    return null
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = imageElement.naturalWidth
+  canvas.height = imageElement.naturalHeight
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return null
+  }
+
+  try {
+    context.drawImage(imageElement, 0, 0)
+    return canvas.toDataURL(DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
+  } catch {
+    // cross-origin 制約で Canvas を読み出せない場合は、呼び出し側で別手段へフォールバックする。
+    return null
+  }
+}
+
+/**
+ * 画像 URL を fetch して data URL 化する。
+ *
+ * @param sourceUrl 画像 URL
+ * @param sourceImageElement 変換元画像要素（blob/data を直接解決するために使用）
+ * @returns data URL。変換不可の場合は null
+ */
+async function resolveImageDataUrl(sourceUrl: string, sourceImageElement: HTMLImageElement): Promise<string | null> {
+  if (!sourceUrl) {
+    return null
+  }
+
+  // まずは描画済み画像から直接 data URL を作る。これにより blob URL の fetch を回避できる。
+  const resolvedFromElement = convertImageElementToDataUrl(sourceImageElement)
+  if (resolvedFromElement) {
+    return resolvedFromElement
+  }
+
+  // blob URL は CSP の connect-src 制約で fetch 失敗しやすいため、ここでは fetch を試みない。
+  if (sourceUrl.startsWith('blob:')) {
+    return null
   }
 
   const abortController = new AbortController()
@@ -176,7 +222,7 @@ async function inlineCloneImageSources(sourceElement: HTMLElement, clonedElement
       }
 
       const sourceUrl = sourceImageElement.currentSrc || sourceImageElement.src
-      const dataUrl = await resolveImageDataUrl(sourceUrl)
+      const dataUrl = await resolveImageDataUrl(sourceUrl, sourceImageElement)
       clonedImageElement.src = dataUrl ?? sourceUrl
     })
   )
