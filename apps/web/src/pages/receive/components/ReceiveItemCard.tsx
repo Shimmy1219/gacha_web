@@ -189,6 +189,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
       Boolean(objectUrl),
     [item, objectUrl]
   );
+  const hasSecondaryAction = canWearIconRing || canPlayDigitalAudio;
 
   useEffect(() => {
     return () => {
@@ -290,12 +291,12 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               ) : null}
             </div>
           </div>
-          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <div className="receive-item-card-action-group flex flex-row flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
+          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3">
+            <div className="receive-item-card-action-group flex w-full items-center gap-2">
               {canWearIconRing ? (
                 <button
                   type="button"
-                  className="receive-item-card-wear-button btn btn-muted flex-1 sm:flex-none"
+                  className="receive-item-card-wear-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
                   onClick={() =>
                     push(IconRingWearDialog, {
                       id: `icon-ring-wear-${item.id}`,
@@ -311,7 +312,7 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               {canPlayDigitalAudio ? (
                 <button
                   type="button"
-                  className="receive-item-card__audio-toggle-button btn btn-muted"
+                  className="receive-item-card__audio-toggle-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
                   onClick={handleToggleAudioPlayback}
                   title={isAudioPlaying ? '音声を停止' : '音声を再生'}
                 >
@@ -321,8 +322,8 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               <ReceiveSaveButton
                 onClick={() => onSave(item)}
                 className={clsx(
-                  'receive-item-card-save-button',
-                  canWearIconRing ? 'flex-1 sm:flex-none' : null
+                  'receive-item-card-save-button !min-h-0 h-7 justify-center px-3 text-xs',
+                  hasSecondaryAction ? 'flex-1' : 'w-full'
                 )}
               />
             </div>
