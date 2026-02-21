@@ -603,17 +603,13 @@ export function RaritySection(): JSX.Element {
           key={activeGachaId ?? 'rarity-empty'}
           className={clsx('rarity-section__scroll-content space-y-4', panelAnimationClass)}
         >
-          <div className="rarity-section__thumbnail-panel space-y-3 rounded-2xl border border-border/60 bg-surface/50 p-4">
-            <div className="rarity-section__thumbnail-header flex flex-wrap items-start justify-between gap-3">
+          <div className="rarity-section__thumbnail-panel space-y-3">
+            <div className="rarity-section__thumbnail-header">
               <div className="rarity-section__thumbnail-title-group">
                 <p className="rarity-section__thumbnail-title text-sm font-semibold text-surface-foreground">配信サムネイル</p>
-                <p className="rarity-section__thumbnail-subtitle text-xs text-muted-foreground">{activeGachaName}</p>
               </div>
-              {hasActiveGachaThumbnail ? (
-                <span className="rarity-section__thumbnail-status chip border-emerald-500/40 bg-emerald-500/10 text-emerald-600">設定済み</span>
-              ) : null}
             </div>
-            <div className="rarity-section__thumbnail-content flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="rarity-section__thumbnail-content flex items-center gap-4">
               <ItemPreview
                 assetId={activeGachaThumbnailAssetId}
                 fallbackUrl={activeGachaThumbnailBlobUrl}
