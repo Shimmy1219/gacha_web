@@ -1138,15 +1138,7 @@ export function ReceivePage(): JSX.Element {
 
         {shouldShowSteps ? (
           <div className="receive-page-steps-card rounded-3xl bg-panel/85 p-6 backdrop-blur">
-            <div className="receive-page-steps-content flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="receive-page-steps-description">
-                <h2 className="receive-page-steps-title text-2xl font-semibold text-surface-foreground">手順</h2>
-                <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                  <li className="receive-page-step-item">「受け取る」ボタンを押すとダウンロードが始まります（端末には自動保存されません）。</li>
-                  <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
-                  <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。</li>
-                </ol>
-              </div>
+            {(!hasTriggeredReceiveAction || Boolean(downloadError)) ? (
               <div className="receive-page-steps-actions flex flex-col gap-3">
                 {!hasTriggeredReceiveAction ? (
                   <button
@@ -1162,7 +1154,7 @@ export function ReceivePage(): JSX.Element {
                   <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">{downloadError}</div>
                 ) : null}
               </div>
-            </div>
+            ) : null}
 
             {(downloadPhase === 'downloading' || downloadPhase === 'unpacking') && (
               <div className="receive-page-progress-section mt-6 space-y-4">

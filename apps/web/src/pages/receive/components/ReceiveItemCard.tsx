@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ArrowDownTrayIcon, MusicalNoteIcon, PhotoIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 
 import {
@@ -21,19 +20,6 @@ import { getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes'
 interface ReceiveItemCardProps {
   item: ReceiveMediaItem;
   onSave: (item: ReceiveMediaItem) => void | Promise<void>;
-}
-
-function resolveKindIcon(kind: ReceiveMediaItem['kind']): JSX.Element {
-  switch (kind) {
-    case 'image':
-      return <PhotoIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-image h-5 w-5" aria-hidden="true" />;
-    case 'video':
-      return <PlayCircleIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-video h-5 w-5" aria-hidden="true" />;
-    case 'audio':
-      return <MusicalNoteIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-audio h-5 w-5" aria-hidden="true" />;
-    default:
-      return <ArrowDownTrayIcon className="receive-item-card-kind-icon receive-item-card-kind-icon-other h-5 w-5" aria-hidden="true" />;
-  }
 }
 
 function buildRarityBadgeStyle(rarityColor?: string | null): CSSProperties | undefined {
@@ -195,13 +181,6 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
     }
   }, [item.kind, item.filename, objectUrl]);
 
-  const kindChipInner = (
-    <>
-      {resolveKindIcon(item.kind)}
-      <span className="receive-item-card-kind-text">{item.kind.toUpperCase()}</span>
-    </>
-  );
-
   const canWearIconRing = item.kind === 'image' && item.metadata?.digitalItemType === 'icon-ring';
   const canPlayDigitalAudio = useMemo(
     () =>
@@ -275,11 +254,6 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               {previewNode}
             </div>
           </div>
-          <div className="receive-item-card-kind-chip-mobile-container md:hidden">
-            <div className="receive-item-card-kind-chip flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {kindChipInner}
-            </div>
-          </div>
         </div>
         <div className="receive-item-card-body flex min-w-0 flex-1 flex-col gap-3 md:gap-4">
           <div className="receive-item-card-metadata space-y-2">
@@ -316,17 +290,12 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               ) : null}
             </div>
           </div>
-          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="receive-item-card-kind-chip-desktop-container hidden md:flex">
-              <div className="receive-item-card-kind-chip-desktop flex items-center gap-2 rounded-full border border-border/60 bg-surface/40 px-3 py-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {kindChipInner}
-              </div>
-            </div>
-            <div className="receive-item-card-action-group flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+          <div className="receive-item-card-footer mt-auto flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <div className="receive-item-card-action-group flex flex-row flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end sm:gap-3">
               {canWearIconRing ? (
                 <button
                   type="button"
-                  className="receive-item-card-wear-button btn btn-muted"
+                  className="receive-item-card-wear-button btn btn-muted flex-1 sm:flex-none"
                   onClick={() =>
                     push(IconRingWearDialog, {
                       id: `icon-ring-wear-${item.id}`,
@@ -351,7 +320,10 @@ export function ReceiveItemCard({ item, onSave }: ReceiveItemCardProps): JSX.Ele
               ) : null}
               <ReceiveSaveButton
                 onClick={() => onSave(item)}
-                className="receive-item-card-save-button"
+                className={clsx(
+                  'receive-item-card-save-button',
+                  canWearIconRing ? 'flex-1 sm:flex-none' : null
+                )}
               />
             </div>
           </div>
