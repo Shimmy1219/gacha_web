@@ -1175,7 +1175,7 @@ export function DrawResultRevealOverlay({
             <h3 className="draw-gacha-result-overlay__title text-sm font-semibold text-white">{overlayTitle}</h3>
             <div className="draw-gacha-result-overlay__summary flex flex-wrap items-center gap-2 text-xs text-white/90">
               <span className="draw-gacha-result-overlay__progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-                表示カード {visibleCards.length}/{cards.length}
+                表示 {visibleCards.length}
               </span>
               <span className="draw-gacha-result-overlay__total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
                 計 {totalQuantity}連
@@ -1237,7 +1237,7 @@ export function DrawResultRevealOverlay({
           <h3 className="draw-gacha-result-overlay__copy-title text-sm font-semibold text-white">{overlayTitle}</h3>
           <div className="draw-gacha-result-overlay__copy-summary mt-1 flex flex-wrap items-center gap-2 text-xs text-white/90">
             <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
-              表示カード {visibleCards.length}/{cards.length}
+              表示 {visibleCards.length}
             </span>
             <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5">
               計 {totalQuantity}連
