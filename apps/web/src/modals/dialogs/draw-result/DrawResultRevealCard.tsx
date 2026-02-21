@@ -29,6 +29,9 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
   return (
     <article className="draw-gacha-result-card draw-gacha-result-card--reveal">
       <div className="draw-gacha-result-card__thumb-wrapper relative">
+        <span className="draw-gacha-result-card__rarity absolute left-1.5 top-1.5 z-[1] inline-flex max-w-[calc(100%-1.25rem)] items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white">
+          <RarityLabel label={card.rarityLabel} color={card.rarityColor} className="max-w-full text-[10px] font-semibold" />
+        </span>
         <div className="draw-gacha-result-card__thumb flex items-center justify-center overflow-hidden bg-transparent">
           {isAudio ? (
             <div className="draw-gacha-result-card__audio-placeholder flex h-full w-full items-center justify-center" aria-label="音声アイテム">
@@ -52,16 +55,13 @@ export function DrawResultRevealCard({ card }: DrawResultRevealCardProps): JSX.E
           ×{card.quantity}
         </span>
         {card.guaranteedQuantity > 0 ? (
-          <span className="draw-gacha-result-card__guaranteed-badge absolute left-1.5 top-1.5 rounded-full border border-amber-300/45 bg-amber-300/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
+          <span className="draw-gacha-result-card__guaranteed-badge absolute right-1.5 top-1.5 rounded-full border border-amber-300/45 bg-amber-300/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
             保証×{card.guaranteedQuantity}
           </span>
         ) : null}
       </div>
 
       <div className="draw-gacha-result-card__meta mt-2 space-y-1 text-white">
-        <span className="draw-gacha-result-card__rarity inline-flex items-center rounded-full border border-white/45 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white">
-          <RarityLabel label={card.rarityLabel} color={card.rarityColor} className="text-[10px] font-semibold" />
-        </span>
         <span className="draw-gacha-result-card__name block truncate text-xs font-medium text-white" title={card.name}>
           {card.name}
         </span>

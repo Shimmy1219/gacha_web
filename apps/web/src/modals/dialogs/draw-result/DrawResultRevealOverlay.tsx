@@ -54,7 +54,7 @@ export function DrawResultRevealOverlay({
       className="draw-gacha-result-overlay fixed inset-0 z-[80]"
       aria-label="ガチャ結果の演出表示"
     >
-      <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/82" aria-hidden="true" />
+      <div className="draw-gacha-result-overlay__backdrop absolute inset-0 bg-black/65 backdrop-blur-sm" aria-hidden="true" />
 
       <div className="draw-gacha-result-overlay__content relative z-[1] flex h-full min-h-0 flex-col p-3 sm:p-4">
         <div className="draw-gacha-result-overlay__header mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-white/30 pb-2 text-white">
