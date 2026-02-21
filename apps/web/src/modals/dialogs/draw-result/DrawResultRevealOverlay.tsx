@@ -18,6 +18,7 @@ const DRAW_RESULT_COPY_FEEDBACK_RESET_MS = 2000
 const DRAW_RESULT_IMAGE_FETCH_TIMEOUT_MS = 8000
 const DRAW_RESULT_IMAGE_WAIT_TIMEOUT_MS = 12000
 const DRAW_RESULT_CANVAS_FONT_FAMILY = "'Hiragino Sans', 'Noto Sans JP', sans-serif"
+const DRAW_RESULT_TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
 
 interface RectMetrics {
   x: number
@@ -47,6 +48,13 @@ interface CopyCardSnapshot {
   nameText: string
   imageUrl: string | null
   isAudio: boolean
+}
+
+interface ForeignObjectLayerOptions {
+  inlineImageSources: boolean
+  transparentRootBackground: boolean
+  hideThumbnailImages: boolean
+  hideAudioSymbols: boolean
 }
 
 /**
@@ -253,6 +261,37 @@ function normalizeCaptureRootElementPosition(clonedRootElement: HTMLElement): vo
 }
 
 /**
+ * foreignObject レイヤー向けにサムネイル内の画像を不可視化する。
+ * 画像は別 Canvas レイヤーで描画するため、ここではレイアウトだけを保持する。
+ *
+ * @param clonedElement クローン済み DOM 要素
+ */
+function hideThumbnailImagesForForeignObject(clonedElement: HTMLElement): void {
+  const thumbnailImageElements = Array.from(clonedElement.querySelectorAll<HTMLImageElement>('.draw-gacha-result-card__thumb img'))
+  thumbnailImageElements.forEach((thumbnailImageElement) => {
+    // Safari の foreignObject は参照先画像が不安定なため、最小 data URL に置き換える。
+    thumbnailImageElement.src = DRAW_RESULT_TRANSPARENT_PIXEL_DATA_URL
+    thumbnailImageElement.srcset = ''
+    thumbnailImageElement.style.visibility = 'hidden'
+    thumbnailImageElement.style.opacity = '0'
+  })
+}
+
+/**
+ * foreignObject レイヤー向けに音声サムネイルの記号だけを非表示にする。
+ * 音声記号は Canvas 側で描画し、文字欠けを回避する。
+ *
+ * @param clonedElement クローン済み DOM 要素
+ */
+function hideAudioSymbolsForForeignObject(clonedElement: HTMLElement): void {
+  const audioSymbolElements = Array.from(clonedElement.querySelectorAll<HTMLElement>('.draw-gacha-result-card__audio-symbol'))
+  audioSymbolElements.forEach((audioSymbolElement) => {
+    audioSymbolElement.style.visibility = 'hidden'
+    audioSymbolElement.style.opacity = '0'
+  })
+}
+
+/**
  * クローン内の画像ソースを data URL 化して埋め込み、foreignObject 描画時の欠落を回避する。
  *
  * @param sourceElement 元の DOM 要素
@@ -274,6 +313,70 @@ async function inlineCloneImageSources(sourceElement: HTMLElement, clonedElement
       clonedImageElement.src = dataUrl ?? sourceUrl
     })
   )
+}
+
+/**
+ * クローンDOMを SVG + foreignObject へ変換し、描画済み Image として返す。
+ *
+ * @param clonedRootElement foreignObject 化するルート要素
+ * @param targetWidth 出力幅
+ * @param targetHeight 出力高さ
+ * @returns 描画済み Image 要素
+ */
+async function renderForeignObjectCloneToImage(
+  clonedRootElement: HTMLElement,
+  targetWidth: number,
+  targetHeight: number
+): Promise<HTMLImageElement> {
+  const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
+  const svgText = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}">`,
+    '<foreignObject x="0" y="0" width="100%" height="100%">',
+    serializedHtml,
+    '</foreignObject>',
+    '</svg>'
+  ].join('')
+  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
+  return await loadImageFromUrl(svgDataUrl)
+}
+
+/**
+ * コピー面DOMから foreignObject 用のクローンを作成し、レイヤー画像へ変換する。
+ *
+ * @param sourceElement 元のコピー面ルート
+ * @param targetWidth 出力幅
+ * @param targetHeight 出力高さ
+ * @param options レイヤー生成オプション
+ * @returns 描画済み Image 要素
+ */
+async function createForeignObjectLayerImage(
+  sourceElement: HTMLElement,
+  targetWidth: number,
+  targetHeight: number,
+  options: ForeignObjectLayerOptions
+): Promise<HTMLImageElement> {
+  const clonedRootElement = sourceElement.cloneNode(true) as HTMLElement
+  inlineComputedStyles(sourceElement, clonedRootElement)
+  if (options.inlineImageSources) {
+    await inlineCloneImageSources(sourceElement, clonedRootElement)
+  }
+
+  if (options.hideThumbnailImages) {
+    hideThumbnailImagesForForeignObject(clonedRootElement)
+  }
+  if (options.hideAudioSymbols) {
+    hideAudioSymbolsForForeignObject(clonedRootElement)
+  }
+
+  clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
+  normalizeCaptureRootElementPosition(clonedRootElement)
+  clonedRootElement.style.margin = '0'
+  if (options.transparentRootBackground) {
+    clonedRootElement.style.backgroundColor = 'transparent'
+    clonedRootElement.style.backgroundImage = 'none'
+  }
+
+  return await renderForeignObjectCloneToImage(clonedRootElement, targetWidth, targetHeight)
 }
 
 /**
@@ -577,6 +680,134 @@ function drawContainImage(context: CanvasRenderingContext2D, image: HTMLImageEle
 }
 
 /**
+ * 指定サイズと DPR で描画用 Canvas を初期化する。
+ *
+ * @param targetWidth 論理解像度の幅
+ * @param targetHeight 論理解像度の高さ
+ * @param devicePixelRatio 使用する DPR
+ * @returns 初期化済み Canvas と 2D コンテキスト
+ */
+function createScaledCanvasContext(
+  targetWidth: number,
+  targetHeight: number,
+  devicePixelRatio: number
+): { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D } {
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.ceil(targetWidth * devicePixelRatio))
+  canvas.height = Math.max(1, Math.ceil(targetHeight * devicePixelRatio))
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('画像描画コンテキストを作成できませんでした。')
+  }
+
+  context.scale(devicePixelRatio, devicePixelRatio)
+  return { canvas, context }
+}
+
+/**
+ * 画像・音声サムネイルだけを Canvas レイヤーとして描画する。
+ *
+ * @param rootElement コピー面ルート要素
+ * @param targetWidth 論理解像度の幅
+ * @param targetHeight 論理解像度の高さ
+ * @param devicePixelRatio 使用する DPR
+ * @returns サムネイル描画済み Canvas
+ */
+async function renderThumbnailLayerToCanvas(
+  rootElement: HTMLElement,
+  targetWidth: number,
+  targetHeight: number,
+  devicePixelRatio: number
+): Promise<HTMLCanvasElement> {
+  const rootRect = rootElement.getBoundingClientRect()
+  const cardSnapshots = collectCopyCardSnapshots(rootElement, rootRect)
+  const { canvas, context } = createScaledCanvasContext(targetWidth, targetHeight, devicePixelRatio)
+
+  const imageCache = new Map<string, Promise<HTMLImageElement | null>>()
+  const resolveCachedImage = (imageUrl: string): Promise<HTMLImageElement | null> => {
+    const cachedImagePromise = imageCache.get(imageUrl)
+    if (cachedImagePromise) {
+      return cachedImagePromise
+    }
+
+    const imagePromise = resolveCanvasImage(imageUrl)
+    imageCache.set(imageUrl, imagePromise)
+    return imagePromise
+  }
+
+  for (const cardSnapshot of cardSnapshots) {
+    if (cardSnapshot.imageUrl) {
+      const resolvedImage = await resolveCachedImage(cardSnapshot.imageUrl)
+      if (resolvedImage) {
+        drawContainImage(context, resolvedImage, insetRect(cardSnapshot.thumbRect, 1))
+      }
+      continue
+    }
+
+    if (!cardSnapshot.isAudio) {
+      continue
+    }
+
+    context.fillStyle = '#ffffff'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.font = `700 ${Math.max(22, Math.floor(cardSnapshot.thumbRect.height * 0.5))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
+    context.fillText('♫', cardSnapshot.thumbRect.x + cardSnapshot.thumbRect.width / 2, cardSnapshot.thumbRect.y + cardSnapshot.thumbRect.height / 2)
+  }
+
+  return canvas
+}
+
+/**
+ * Safari 向けに、サムネイルは Canvas 描画・その他は foreignObject 描画で合成し PNG を生成する。
+ *
+ * @param rootElement 変換対象のコピー面ルート要素
+ * @returns PNG Blob
+ */
+async function renderElementToPngBlobByHybridLayerComposition(rootElement: HTMLElement): Promise<Blob> {
+  if (document.fonts?.ready) {
+    await document.fonts.ready
+  }
+  await waitForImageCompletion(rootElement)
+
+  const targetWidth = Math.max(1, Math.ceil(rootElement.scrollWidth))
+  const targetHeight = Math.max(1, Math.ceil(rootElement.scrollHeight))
+  const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
+  const { canvas: composedCanvas, context: composedContext } = createScaledCanvasContext(
+    targetWidth,
+    targetHeight,
+    devicePixelRatio
+  )
+
+  const rootComputedStyle = window.getComputedStyle(rootElement)
+  const backgroundColor = rootComputedStyle.backgroundColor
+  composedContext.fillStyle = backgroundColor && backgroundColor !== 'rgba(0, 0, 0, 0)' ? backgroundColor : '#000000'
+  composedContext.fillRect(0, 0, targetWidth, targetHeight)
+
+  const thumbnailLayerCanvas = await renderThumbnailLayerToCanvas(rootElement, targetWidth, targetHeight, devicePixelRatio)
+  composedContext.drawImage(thumbnailLayerCanvas, 0, 0, targetWidth, targetHeight)
+
+  const foregroundLayerImage = await createForeignObjectLayerImage(rootElement, targetWidth, targetHeight, {
+    inlineImageSources: false,
+    transparentRootBackground: true,
+    hideThumbnailImages: true,
+    hideAudioSymbols: true
+  })
+  composedContext.drawImage(foregroundLayerImage, 0, 0, targetWidth, targetHeight)
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => {
+    composedCanvas.toBlob((blob) => resolve(blob), DRAW_RESULT_COPY_IMAGE_MIME_TYPE)
+  })
+
+  if (!pngBlob) {
+    throw new Error('画像の生成に失敗しました。')
+  }
+
+  return pngBlob
+}
+
+/**
  * Safari 向けに、DOM 座標を使って Canvas へ直接描画して PNG を生成する。
  *
  * @param rootElement 変換対象のコピー面ルート要素
@@ -689,9 +920,15 @@ async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElem
  * @returns PNG Blob
  */
 async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
-  // iOS Safari は foreignObject 内の画像描画が不安定なため、座標ベース描画へ切り替える。
+  // iOS Safari は foreignObject 内の画像描画が不安定なため、
+  // サムネイルだけ Canvas で描画するハイブリッド方式を優先し、失敗時にフル Canvas へフォールバックする。
   if (isSafariLikeBrowser()) {
-    return await renderElementToPngBlobByCanvasRasterization(rootElement)
+    try {
+      return await renderElementToPngBlobByHybridLayerComposition(rootElement)
+    } catch (hybridError) {
+      console.warn('ハイブリッド画像合成に失敗したため、Canvas全面描画へフォールバックします。', hybridError)
+      return await renderElementToPngBlobByCanvasRasterization(rootElement)
+    }
   }
 
   if (document.fonts?.ready) {
@@ -701,35 +938,14 @@ async function renderElementToPngBlob(rootElement: HTMLElement): Promise<Blob> {
 
   const targetWidth = Math.max(1, Math.ceil(rootElement.scrollWidth))
   const targetHeight = Math.max(1, Math.ceil(rootElement.scrollHeight))
-  const clonedRootElement = rootElement.cloneNode(true) as HTMLElement
-  inlineComputedStyles(rootElement, clonedRootElement)
-  await inlineCloneImageSources(rootElement, clonedRootElement)
-  clonedRootElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml')
-  normalizeCaptureRootElementPosition(clonedRootElement)
-  clonedRootElement.style.margin = '0'
-
-  const serializedHtml = new XMLSerializer().serializeToString(clonedRootElement)
-  const svgText = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}">`,
-    '<foreignObject x="0" y="0" width="100%" height="100%">',
-    serializedHtml,
-    '</foreignObject>',
-    '</svg>'
-  ].join('')
-  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgText)}`
-  const renderedImage = await loadImageFromUrl(svgDataUrl)
-
   const devicePixelRatio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2)
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.ceil(targetWidth * devicePixelRatio))
-  canvas.height = Math.max(1, Math.ceil(targetHeight * devicePixelRatio))
-
-  const context = canvas.getContext('2d')
-  if (!context) {
-    throw new Error('画像描画コンテキストを作成できませんでした。')
-  }
-
-  context.scale(devicePixelRatio, devicePixelRatio)
+  const { canvas, context } = createScaledCanvasContext(targetWidth, targetHeight, devicePixelRatio)
+  const renderedImage = await createForeignObjectLayerImage(rootElement, targetWidth, targetHeight, {
+    inlineImageSources: true,
+    transparentRootBackground: false,
+    hideThumbnailImages: false,
+    hideAudioSymbols: false
+  })
   context.drawImage(renderedImage, 0, 0, targetWidth, targetHeight)
 
   const pngBlob = await new Promise<Blob | null>((resolve) => {
