@@ -36,25 +36,37 @@ interface RectMetrics {
   height: number
 }
 
+interface BadgeVisualStyleSnapshot {
+  backgroundColor: string
+  borderColor: string
+  textColor: string
+}
+
 interface CopyHeaderSnapshot {
   dividerY: number | null
+  dividerColor: string
   titleRect: RectMetrics | null
   titleText: string
+  titleColor: string
   progressRect: RectMetrics | null
   progressText: string
+  progressStyle: BadgeVisualStyleSnapshot
   totalRect: RectMetrics | null
   totalText: string
+  totalStyle: BadgeVisualStyleSnapshot
 }
 
 interface CopyCardSnapshot {
   thumbRect: RectMetrics
   rarityRect: RectMetrics | null
   rarityText: string
-  rarityColor: string
+  rarityStyle: BadgeVisualStyleSnapshot
   quantityRect: RectMetrics | null
   quantityText: string
+  quantityStyle: BadgeVisualStyleSnapshot
   nameRect: RectMetrics | null
   nameText: string
+  nameColor: string
   imageUrl: string | null
   isAudio: boolean
 }
@@ -86,7 +98,7 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     textColor: '#ffffff',
     mutedTextColor: 'rgba(255, 255, 255, 0.9)',
     borderColor: 'rgba(255, 255, 255, 0.3)',
-    chipBackgroundColor: 'rgba(0, 0, 0, 0.25)',
+    chipBackgroundColor: 'rgba(15, 23, 42, 0.58)',
     chipBorderColor: 'rgba(255, 255, 255, 0.45)'
   },
   white: {
@@ -95,7 +107,7 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     textColor: '#111827',
     mutedTextColor: 'rgba(17, 24, 39, 0.88)',
     borderColor: 'rgba(17, 24, 39, 0.24)',
-    chipBackgroundColor: 'rgba(255, 255, 255, 0.74)',
+    chipBackgroundColor: 'rgba(243, 244, 246, 0.94)',
     chipBorderColor: 'rgba(17, 24, 39, 0.32)'
   },
   pink: {
@@ -104,8 +116,8 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     textColor: '#111827',
     mutedTextColor: 'rgba(17, 24, 39, 0.88)',
     borderColor: 'rgba(17, 24, 39, 0.24)',
-    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
-    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+    chipBackgroundColor: 'rgba(253, 242, 248, 0.94)',
+    chipBorderColor: 'rgba(236, 72, 153, 0.35)'
   },
   purple: {
     backdropColor: 'rgba(233, 213, 255, 0.86)',
@@ -113,8 +125,8 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     textColor: '#111827',
     mutedTextColor: 'rgba(17, 24, 39, 0.88)',
     borderColor: 'rgba(17, 24, 39, 0.24)',
-    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
-    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+    chipBackgroundColor: 'rgba(245, 243, 255, 0.94)',
+    chipBorderColor: 'rgba(168, 85, 247, 0.34)'
   },
   'light-blue': {
     backdropColor: 'rgba(186, 230, 253, 0.86)',
@@ -122,8 +134,8 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     textColor: '#111827',
     mutedTextColor: 'rgba(17, 24, 39, 0.88)',
     borderColor: 'rgba(17, 24, 39, 0.24)',
-    chipBackgroundColor: 'rgba(255, 255, 255, 0.66)',
-    chipBorderColor: 'rgba(17, 24, 39, 0.32)'
+    chipBackgroundColor: 'rgba(240, 249, 255, 0.94)',
+    chipBorderColor: 'rgba(14, 165, 233, 0.35)'
   }
 }
 
@@ -607,26 +619,62 @@ function truncateTextToWidth(context: CanvasRenderingContext2D, text: string, ma
   return current.length > 0 ? `${current}${ellipsis}` : ''
 }
 
+const DEFAULT_BADGE_STYLE: BadgeVisualStyleSnapshot = {
+  backgroundColor: 'rgba(0, 0, 0, 0.65)',
+  borderColor: 'rgba(255, 255, 255, 0.4)',
+  textColor: '#ffffff'
+}
+
+/**
+ * 要素の computed style からバッジ描画用の色を取得する。
+ *
+ * @param element 色を取得したい要素
+ * @param textColorOverride 文字色を強制したい場合の色
+ * @returns バッジ描画用スタイル
+ */
+function readBadgeVisualStyleSnapshot(
+  element: Element | null,
+  textColorOverride?: string
+): BadgeVisualStyleSnapshot {
+  if (!element) {
+    return {
+      ...DEFAULT_BADGE_STYLE,
+      ...(textColorOverride ? { textColor: textColorOverride } : {})
+    }
+  }
+
+  const computedStyle = window.getComputedStyle(element)
+  const backgroundColor = computedStyle.backgroundColor || DEFAULT_BADGE_STYLE.backgroundColor
+  const borderColor = computedStyle.borderColor || DEFAULT_BADGE_STYLE.borderColor
+  const textColor = textColorOverride || computedStyle.color || DEFAULT_BADGE_STYLE.textColor
+
+  return {
+    backgroundColor,
+    borderColor,
+    textColor
+  }
+}
+
 /**
  * バッジ背景とテキストを描画する。
  *
  * @param context Canvas 2D コンテキスト
  * @param rect 描画先矩形
  * @param text テキスト
- * @param textColor 文字色
+ * @param style バッジ配色
  * @param fontWeight フォントウェイト
  */
 function drawBadge(
   context: CanvasRenderingContext2D,
   rect: RectMetrics,
   text: string,
-  textColor: string,
+  style: BadgeVisualStyleSnapshot,
   fontWeight: number
 ): void {
   buildRoundedRectPath(context, rect, rect.height / 2)
-  context.fillStyle = 'rgba(0, 0, 0, 0.65)'
+  context.fillStyle = style.backgroundColor
   context.fill()
-  context.strokeStyle = 'rgba(255, 255, 255, 0.4)'
+  context.strokeStyle = style.borderColor
   context.lineWidth = 1
   context.stroke()
 
@@ -634,7 +682,7 @@ function drawBadge(
   context.font = `${fontWeight} ${fontSize}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
   context.textBaseline = 'middle'
   context.textAlign = 'left'
-  context.fillStyle = textColor
+  context.fillStyle = style.textColor
   const textPadding = 8
   const visibleText = truncateTextToWidth(context, text, Math.max(0, rect.width - textPadding * 2))
   context.fillText(visibleText, rect.x + textPadding, rect.y + rect.height / 2)
@@ -652,16 +700,22 @@ function collectCopyHeaderSnapshot(rootElement: HTMLElement, rootRect: DOMRect):
   const titleElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-title')
   const progressElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-progress')
   const totalElement = rootElement.querySelector('.draw-gacha-result-overlay__copy-total')
+  const titleColor = titleElement ? window.getComputedStyle(titleElement).color : '#ffffff'
+  const dividerColor = headerElement ? window.getComputedStyle(headerElement).borderBottomColor : 'rgba(255, 255, 255, 0.3)'
 
   const headerRect = createRelativeRect(headerElement, rootRect)
   return {
     dividerY: headerRect ? headerRect.y + headerRect.height : null,
+    dividerColor,
     titleRect: createRelativeRect(titleElement, rootRect),
     titleText: titleElement?.textContent?.trim() ?? '',
+    titleColor,
     progressRect: createRelativeRect(progressElement, rootRect),
     progressText: progressElement?.textContent?.trim() ?? '',
+    progressStyle: readBadgeVisualStyleSnapshot(progressElement),
     totalRect: createRelativeRect(totalElement, rootRect),
-    totalText: totalElement?.textContent?.trim() ?? ''
+    totalText: totalElement?.textContent?.trim() ?? '',
+    totalStyle: readBadgeVisualStyleSnapshot(totalElement)
   }
 }
 
@@ -689,16 +743,25 @@ function collectCopyCardSnapshots(rootElement: HTMLElement, rootRect: DOMRect): 
     const imageElement = gridItemElement.querySelector('img')
     const audioSymbolElement = gridItemElement.querySelector('.draw-gacha-result-card__audio-symbol')
     const rarityTextColorSource = rarityElement?.querySelector('span') ?? rarityElement
+    const rarityTextColor = rarityTextColorSource
+      ? window.getComputedStyle(rarityTextColorSource).color
+      : DEFAULT_BADGE_STYLE.textColor
+    const quantityTextColor = quantityElement
+      ? window.getComputedStyle(quantityElement).color
+      : DEFAULT_BADGE_STYLE.textColor
+    const nameColor = nameElement ? window.getComputedStyle(nameElement).color : '#ffffff'
 
     snapshots.push({
       thumbRect,
       rarityRect: createRelativeRect(rarityElement, rootRect),
       rarityText: rarityElement?.textContent?.trim() ?? '',
-      rarityColor: rarityTextColorSource ? window.getComputedStyle(rarityTextColorSource).color : '#ffffff',
+      rarityStyle: readBadgeVisualStyleSnapshot(rarityElement, rarityTextColor),
       quantityRect: createRelativeRect(quantityElement, rootRect),
       quantityText: quantityElement?.textContent?.trim() ?? '',
+      quantityStyle: readBadgeVisualStyleSnapshot(quantityElement, quantityTextColor),
       nameRect: createRelativeRect(nameElement, rootRect),
       nameText: nameElement?.textContent?.trim() ?? '',
+      nameColor,
       imageUrl: imageElement ? imageElement.currentSrc || imageElement.src : null,
       isAudio: Boolean(audioSymbolElement)
     })
@@ -906,11 +969,14 @@ async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElem
   }
 
   context.scale(devicePixelRatio, devicePixelRatio)
-  context.fillStyle = '#000000'
+  const rootComputedStyle = window.getComputedStyle(rootElement)
+  const rootBackgroundColor = rootComputedStyle.backgroundColor
+  const rootTextColor = rootComputedStyle.color || '#ffffff'
+  context.fillStyle = rootBackgroundColor && rootBackgroundColor !== 'rgba(0, 0, 0, 0)' ? rootBackgroundColor : '#000000'
   context.fillRect(0, 0, targetWidth, targetHeight)
 
   if (headerSnapshot.dividerY !== null) {
-    context.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+    context.strokeStyle = headerSnapshot.dividerColor
     context.lineWidth = 1
     context.beginPath()
     context.moveTo(0, headerSnapshot.dividerY)
@@ -918,17 +984,17 @@ async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElem
     context.stroke()
   }
   if (headerSnapshot.titleRect && headerSnapshot.titleText) {
-    context.fillStyle = '#ffffff'
+    context.fillStyle = headerSnapshot.titleColor || rootTextColor
     context.textBaseline = 'top'
     context.textAlign = 'left'
     context.font = `600 ${Math.max(13, Math.floor(headerSnapshot.titleRect.height * 0.85))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
     context.fillText(headerSnapshot.titleText, headerSnapshot.titleRect.x, headerSnapshot.titleRect.y)
   }
   if (headerSnapshot.progressRect && headerSnapshot.progressText) {
-    drawBadge(context, headerSnapshot.progressRect, headerSnapshot.progressText, '#ffffff', 500)
+    drawBadge(context, headerSnapshot.progressRect, headerSnapshot.progressText, headerSnapshot.progressStyle, 500)
   }
   if (headerSnapshot.totalRect && headerSnapshot.totalText) {
-    drawBadge(context, headerSnapshot.totalRect, headerSnapshot.totalText, '#ffffff', 500)
+    drawBadge(context, headerSnapshot.totalRect, headerSnapshot.totalText, headerSnapshot.totalStyle, 500)
   }
 
   const imageCache = new Map<string, Promise<HTMLImageElement | null>>()
@@ -949,7 +1015,7 @@ async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElem
         drawContainImage(context, resolvedImage, insetRect(cardSnapshot.thumbRect, 1))
       }
     } else if (cardSnapshot.isAudio) {
-      context.fillStyle = '#ffffff'
+      context.fillStyle = rootTextColor
       context.textAlign = 'center'
       context.textBaseline = 'middle'
       context.font = `700 ${Math.max(22, Math.floor(cardSnapshot.thumbRect.height * 0.5))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
@@ -957,13 +1023,13 @@ async function renderElementToPngBlobByCanvasRasterization(rootElement: HTMLElem
     }
 
     if (cardSnapshot.rarityRect && cardSnapshot.rarityText) {
-      drawBadge(context, cardSnapshot.rarityRect, cardSnapshot.rarityText, cardSnapshot.rarityColor || '#ffffff', 600)
+      drawBadge(context, cardSnapshot.rarityRect, cardSnapshot.rarityText, cardSnapshot.rarityStyle, 600)
     }
     if (cardSnapshot.quantityRect && cardSnapshot.quantityText) {
-      drawBadge(context, cardSnapshot.quantityRect, cardSnapshot.quantityText, '#ffffff', 600)
+      drawBadge(context, cardSnapshot.quantityRect, cardSnapshot.quantityText, cardSnapshot.quantityStyle, 600)
     }
     if (cardSnapshot.nameRect && cardSnapshot.nameText) {
-      context.fillStyle = '#ffffff'
+      context.fillStyle = cardSnapshot.nameColor || rootTextColor
       context.textAlign = 'left'
       context.textBaseline = 'top'
       context.font = `500 ${Math.max(11, Math.floor(cardSnapshot.nameRect.height * 0.95))}px ${DRAW_RESULT_CANVAS_FONT_FAMILY}`
@@ -1156,6 +1222,13 @@ export function DrawResultRevealOverlay({
   }, [backgroundColor])
   const isDarkRevealOverlay = backgroundColor === 'black'
   const summaryBadgeStyle = useMemo<CSSProperties>(() => {
+    return {
+      borderColor: revealOverlayPalette.chipBorderColor,
+      backgroundColor: revealOverlayPalette.chipBackgroundColor,
+      color: revealOverlayPalette.textColor
+    }
+  }, [revealOverlayPalette.chipBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
+  const cardBadgeStyle = useMemo<CSSProperties>(() => {
     return {
       borderColor: revealOverlayPalette.chipBorderColor,
       backgroundColor: revealOverlayPalette.chipBackgroundColor,
@@ -1359,7 +1432,12 @@ export function DrawResultRevealOverlay({
         >
           {visibleCards.map((card) => (
             <div key={`${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
-              <DrawResultRevealCard card={card} />
+              <DrawResultRevealCard
+                card={card}
+                badgeStyle={cardBadgeStyle}
+                contentTextColor={revealOverlayPalette.textColor}
+                isDarkColorScheme={isDarkRevealOverlay}
+              />
             </div>
           ))}
         </div>
@@ -1413,7 +1491,13 @@ export function DrawResultRevealOverlay({
         <div className="draw-gacha-result-overlay__copy-grid draw-gacha-result-overlay__grid content-start overflow-visible pb-0 pr-0">
           {visibleCards.map((card) => (
             <div key={`copy-${card.itemId}-${card.revealIndex}`} className="draw-gacha-result-overlay__grid-item">
-              <DrawResultRevealCard card={card} imageLoading="eager" />
+              <DrawResultRevealCard
+                card={card}
+                imageLoading="eager"
+                badgeStyle={cardBadgeStyle}
+                contentTextColor={revealOverlayPalette.textColor}
+                isDarkColorScheme={isDarkRevealOverlay}
+              />
             </div>
           ))}
         </div>
