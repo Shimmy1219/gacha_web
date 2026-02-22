@@ -36,16 +36,6 @@ interface RectMetrics {
   height: number
 }
 
-interface RgbColor {
-  r: number
-  g: number
-  b: number
-}
-
-interface RgbaColor extends RgbColor {
-  a: number
-}
-
 interface BadgeVisualStyleSnapshot {
   backgroundColor: string
   borderColor: string
@@ -148,155 +138,6 @@ const DRAW_RESULT_REVEAL_OVERLAY_PALETTE: Record<
     chipBorderColor: 'rgba(17, 24, 39, 0.26)'
   }
 }
-
-function clampByteValue(value: number): number {
-  return Math.max(0, Math.min(255, Math.round(value)))
-}
-
-function parseHexColorToRgb(color: string): RgbColor | null {
-  const normalized = color.trim()
-  if (!normalized.startsWith('#')) {
-    return null
-  }
-
-  const hex = normalized.slice(1)
-  if (hex.length === 3) {
-    const [r, g, b] = hex.split('').map((value) => parseInt(`${value}${value}`, 16))
-    return Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) ? null : { r, g, b }
-  }
-  if (hex.length === 6) {
-    const r = parseInt(hex.slice(0, 2), 16)
-    const g = parseInt(hex.slice(2, 4), 16)
-    const b = parseInt(hex.slice(4, 6), 16)
-    return Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) ? null : { r, g, b }
-  }
-  return null
-}
-
-function parseCssColorToRgba(color: string): RgbaColor | null {
-  const hexColor = parseHexColorToRgb(color)
-  if (hexColor) {
-    return { ...hexColor, a: 1 }
-  }
-
-  const normalized = color.trim()
-  const rgbaMatch = normalized.match(
-    /^rgba?\(\s*([+-]?\d*\.?\d+)(?:\s*,\s*|\s+)([+-]?\d*\.?\d+)(?:\s*,\s*|\s+)([+-]?\d*\.?\d+)(?:\s*(?:,|\/)\s*([+-]?\d*\.?\d+%?))?\s*\)$/i
-  )
-  if (!rgbaMatch) {
-    return null
-  }
-
-  const red = clampByteValue(Number.parseFloat(rgbaMatch[1] ?? '0'))
-  const green = clampByteValue(Number.parseFloat(rgbaMatch[2] ?? '0'))
-  const blue = clampByteValue(Number.parseFloat(rgbaMatch[3] ?? '0'))
-  const rawAlpha = rgbaMatch[4]
-  if (!rawAlpha) {
-    return { r: red, g: green, b: blue, a: 1 }
-  }
-
-  const alpha = rawAlpha.trim().endsWith('%')
-    ? Number.parseFloat(rawAlpha) / 100
-    : Number.parseFloat(rawAlpha)
-
-  if (!Number.isFinite(alpha)) {
-    return { r: red, g: green, b: blue, a: 1 }
-  }
-
-  return {
-    r: red,
-    g: green,
-    b: blue,
-    a: Math.max(0, Math.min(1, alpha))
-  }
-}
-
-function convertRgbColorToCss(color: RgbColor): string {
-  return `rgb(${clampByteValue(color.r)} ${clampByteValue(color.g)} ${clampByteValue(color.b)})`
-}
-
-function compositeRgbaColorOverBackground(foregroundColor: RgbaColor, backgroundColor: RgbColor): RgbColor {
-  const alpha = Math.max(0, Math.min(1, foregroundColor.a))
-  return {
-    r: foregroundColor.r * alpha + backgroundColor.r * (1 - alpha),
-    g: foregroundColor.g * alpha + backgroundColor.g * (1 - alpha),
-    b: foregroundColor.b * alpha + backgroundColor.b * (1 - alpha)
-  }
-}
-
-function convertSrgbChannelToLinear(channel: number): number {
-  const normalized = Math.max(0, Math.min(255, channel)) / 255
-  return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
-}
-
-function calculateRelativeLuminance(color: RgbColor): number {
-  const r = convertSrgbChannelToLinear(color.r)
-  const g = convertSrgbChannelToLinear(color.g)
-  const b = convertSrgbChannelToLinear(color.b)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-
-function calculateContrastRatio(colorA: RgbColor, colorB: RgbColor): number {
-  const luminanceA = calculateRelativeLuminance(colorA)
-  const luminanceB = calculateRelativeLuminance(colorB)
-  const brighter = Math.max(luminanceA, luminanceB)
-  const darker = Math.min(luminanceA, luminanceB)
-  return (brighter + 0.05) / (darker + 0.05)
-}
-
-function blendRgbColors(fromColor: RgbColor, toColor: RgbColor, ratio: number): RgbColor {
-  const clampedRatio = Math.max(0, Math.min(1, ratio))
-  return {
-    r: fromColor.r + (toColor.r - fromColor.r) * clampedRatio,
-    g: fromColor.g + (toColor.g - fromColor.g) * clampedRatio,
-    b: fromColor.b + (toColor.b - fromColor.b) * clampedRatio
-  }
-}
-
-function deriveBadgeBackgroundColorFromSurface(
-  surfaceColor: RgbColor,
-  textColor: RgbColor,
-  targetContrastRatio: number
-): RgbColor {
-  const maxAchievableContrast = calculateContrastRatio(surfaceColor, textColor)
-  const safeTargetContrast = Math.max(1, Math.min(targetContrastRatio, maxAchievableContrast))
-
-  let lowerRatio = 0
-  let upperRatio = 1
-  let bestColor = surfaceColor
-
-  for (let index = 0; index < 24; index += 1) {
-    const currentRatio = (lowerRatio + upperRatio) / 2
-    const candidateColor = blendRgbColors(surfaceColor, textColor, currentRatio)
-    const candidateContrast = calculateContrastRatio(surfaceColor, candidateColor)
-
-    if (candidateContrast < safeTargetContrast) {
-      lowerRatio = currentRatio
-      continue
-    }
-
-    bestColor = candidateColor
-    upperRatio = currentRatio
-  }
-
-  return bestColor
-}
-
-const DRAW_RESULT_BADGE_BASE_CONTRAST_RATIO = (() => {
-  const blackSurfaceColor = parseCssColorToRgba(DRAW_RESULT_REVEAL_OVERLAY_PALETTE.black.copySurfaceColor)
-  const blackBadgeColor = parseCssColorToRgba(DRAW_RESULT_REVEAL_OVERLAY_PALETTE.black.chipBackgroundColor)
-  if (!blackSurfaceColor || !blackBadgeColor) {
-    return 1.082374503605025
-  }
-
-  const surfaceRgbColor: RgbColor = {
-    r: blackSurfaceColor.r,
-    g: blackSurfaceColor.g,
-    b: blackSurfaceColor.b
-  }
-  const composedBadgeColor = compositeRgbaColorOverBackground(blackBadgeColor, surfaceRgbColor)
-  return calculateContrastRatio(surfaceRgbColor, composedBadgeColor)
-})()
 
 /**
  * 画像の読み込み完了まで待機する。
@@ -1379,101 +1220,24 @@ export function DrawResultRevealOverlay({
       DRAW_RESULT_REVEAL_OVERLAY_PALETTE[DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR]
     )
   }, [backgroundColor])
-  const overlaySurfaceColor = useMemo(() => {
-    const backdropRgbaColor = parseCssColorToRgba(revealOverlayPalette.backdropColor)
-    if (!backdropRgbaColor) {
-      return revealOverlayPalette.copySurfaceColor
-    }
-
-    // 背景背面はモーダル由来で暗色になるため、黒背景へ合成して見た目の基準色を近似する。
-    const composedOverlaySurfaceColor = compositeRgbaColorOverBackground(backdropRgbaColor, { r: 0, g: 0, b: 0 })
-    return convertRgbColorToCss(composedOverlaySurfaceColor)
-  }, [revealOverlayPalette.backdropColor, revealOverlayPalette.copySurfaceColor])
-  const overlayBadgeBackgroundColor = useMemo(() => {
-    const surfaceRgbaColor = parseCssColorToRgba(overlaySurfaceColor)
-    const textRgbaColor = parseCssColorToRgba(revealOverlayPalette.textColor)
-    if (!surfaceRgbaColor || !textRgbaColor) {
-      return revealOverlayPalette.chipBackgroundColor
-    }
-
-    const surfaceColor: RgbColor = {
-      r: surfaceRgbaColor.r,
-      g: surfaceRgbaColor.g,
-      b: surfaceRgbaColor.b
-    }
-    const textColor: RgbColor = {
-      r: textRgbaColor.r,
-      g: textRgbaColor.g,
-      b: textRgbaColor.b
-    }
-    const badgeBackgroundColor = deriveBadgeBackgroundColorFromSurface(
-      surfaceColor,
-      textColor,
-      DRAW_RESULT_BADGE_BASE_CONTRAST_RATIO
-    )
-    return convertRgbColorToCss(badgeBackgroundColor)
-  }, [
-    overlaySurfaceColor,
-    revealOverlayPalette.chipBackgroundColor,
-    revealOverlayPalette.textColor
-  ])
-  const copyBadgeBackgroundColor = useMemo(() => {
-    const surfaceRgbaColor = parseCssColorToRgba(revealOverlayPalette.copySurfaceColor)
-    const textRgbaColor = parseCssColorToRgba(revealOverlayPalette.textColor)
-    if (!surfaceRgbaColor || !textRgbaColor) {
-      return revealOverlayPalette.chipBackgroundColor
-    }
-
-    const surfaceColor: RgbColor = {
-      r: surfaceRgbaColor.r,
-      g: surfaceRgbaColor.g,
-      b: surfaceRgbaColor.b
-    }
-    const textColor: RgbColor = {
-      r: textRgbaColor.r,
-      g: textRgbaColor.g,
-      b: textRgbaColor.b
-    }
-    const badgeBackgroundColor = deriveBadgeBackgroundColorFromSurface(
-      surfaceColor,
-      textColor,
-      DRAW_RESULT_BADGE_BASE_CONTRAST_RATIO
-    )
-    return convertRgbColorToCss(badgeBackgroundColor)
-  }, [
-    revealOverlayPalette.chipBackgroundColor,
-    revealOverlayPalette.copySurfaceColor,
-    revealOverlayPalette.textColor
-  ])
   const isDarkRevealOverlay = backgroundColor === 'black'
+
+  // バッジ色はテーマごとの固定定数をそのまま利用する。
+  // 「白ならこの色、ピンクならこの色」の要件に合わせ、動的計算は行わない。
   const summaryBadgeStyle = useMemo<CSSProperties>(() => {
     return {
       borderColor: revealOverlayPalette.chipBorderColor,
-      backgroundColor: overlayBadgeBackgroundColor,
+      backgroundColor: revealOverlayPalette.chipBackgroundColor,
       color: revealOverlayPalette.textColor
     }
-  }, [overlayBadgeBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
-  const copySummaryBadgeStyle = useMemo<CSSProperties>(() => {
-    return {
-      borderColor: revealOverlayPalette.chipBorderColor,
-      backgroundColor: copyBadgeBackgroundColor,
-      color: revealOverlayPalette.textColor
-    }
-  }, [copyBadgeBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
+  }, [revealOverlayPalette.chipBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
   const cardBadgeStyle = useMemo<CSSProperties>(() => {
     return {
       borderColor: revealOverlayPalette.chipBorderColor,
-      backgroundColor: overlayBadgeBackgroundColor,
+      backgroundColor: revealOverlayPalette.chipBackgroundColor,
       color: revealOverlayPalette.textColor
     }
-  }, [overlayBadgeBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
-  const copyCardBadgeStyle = useMemo<CSSProperties>(() => {
-    return {
-      borderColor: revealOverlayPalette.chipBorderColor,
-      backgroundColor: copyBadgeBackgroundColor,
-      color: revealOverlayPalette.textColor
-    }
-  }, [copyBadgeBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
+  }, [revealOverlayPalette.chipBackgroundColor, revealOverlayPalette.chipBorderColor, revealOverlayPalette.textColor])
   const actionButtonClassName = useMemo(() => {
     return clsx(
       'inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
@@ -1716,10 +1480,10 @@ export function DrawResultRevealOverlay({
                 className="draw-gacha-result-overlay__copy-summary mt-1 flex flex-wrap items-center gap-2 text-xs"
                 style={{ color: revealOverlayPalette.mutedTextColor }}
               >
-                <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border px-2 py-0.5" style={copySummaryBadgeStyle}>
+                <span className="draw-gacha-result-overlay__copy-progress inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
                   表示 {visibleCards.length}
                 </span>
-                <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border px-2 py-0.5" style={copySummaryBadgeStyle}>
+                <span className="draw-gacha-result-overlay__copy-total inline-flex items-center rounded-full border px-2 py-0.5" style={summaryBadgeStyle}>
                   計 {totalQuantity}連
                 </span>
               </div>
@@ -1733,7 +1497,7 @@ export function DrawResultRevealOverlay({
               <DrawResultRevealCard
                 card={card}
                 imageLoading="eager"
-                badgeStyle={copyCardBadgeStyle}
+                badgeStyle={cardBadgeStyle}
                 contentTextColor={revealOverlayPalette.textColor}
                 isDarkColorScheme={isDarkRevealOverlay}
               />
