@@ -101,7 +101,11 @@ function formatFilenameAsItemName(filename: string | null | undefined): string {
   return trimmed.slice(0, lastDotIndex);
 }
 
-export function ItemsSection(): JSX.Element {
+interface ItemsSectionProps {
+  onRegisterGacha?: () => void;
+}
+
+export function ItemsSection({ onRegisterGacha }: ItemsSectionProps): JSX.Element {
   const { catalog: catalogStore, pullHistory: pullHistoryStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
@@ -1283,6 +1287,7 @@ export function ItemsSection(): JSX.Element {
             activeId={activeGachaId}
             onSelect={(gachaId) => setActiveGachaId(gachaId)}
             onDelete={(tab) => confirmDeleteGacha(tab)}
+            onAddGacha={onRegisterGacha}
             className="items-section__tabs"
           />
 

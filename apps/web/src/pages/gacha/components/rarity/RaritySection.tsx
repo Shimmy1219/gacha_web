@@ -40,7 +40,11 @@ interface RarityRow extends RarityRateRow {
   color: string;
 }
 
-export function RaritySection(): JSX.Element {
+interface RaritySectionProps {
+  onRegisterGacha?: () => void;
+}
+
+export function RaritySection({ onRegisterGacha }: RaritySectionProps): JSX.Element {
   const {
     appState: appStateStore,
     rarities: rarityStore,
@@ -595,6 +599,7 @@ export function RaritySection(): JSX.Element {
         activeId={activeGachaId}
         onSelect={(gachaId) => setActiveGachaId(gachaId)}
         onDelete={(tab) => confirmDeleteGacha(tab)}
+        onAddGacha={onRegisterGacha}
         className="rarity-section__gacha-tabs"
       />
 
