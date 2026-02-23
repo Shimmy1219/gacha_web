@@ -77,7 +77,7 @@ export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: Gac
             >
               <span className="gacha-tab__label-text">{tab.label}</span>
             </button>
-            {onDelete ? (
+            {onDelete && isActive ? (
               <button
                 type="button"
                 className="gacha-tab__close"
