@@ -2106,7 +2106,7 @@ export function ReceiveListPage(): JSX.Element {
                           kindHint="image"
                           imageFit="cover"
                           emptyLabel="noImage"
-                          className="receive-list-page__group-thumbnail aspect-square self-stretch flex-none bg-surface-deep"
+                          className="receive-list-page__group-thumbnail h-16 w-16 flex-none bg-surface-deep"
                         />
                         <div className="receive-list-page__group-title-wrapper min-w-0 flex-1">
                           <div className="receive-list-page__group-title-row flex items-start gap-2">
