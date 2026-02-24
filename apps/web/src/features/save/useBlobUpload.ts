@@ -62,7 +62,6 @@ interface ReceiveTokenResponse {
   ok?: boolean;
   shareUrl?: string;
   token?: string;
-  shortToken?: string;
   exp?: number | string;
   error?: string;
   code?: string;
@@ -70,13 +69,6 @@ interface ReceiveTokenResponse {
   errorCode?: string;
   csrfReason?: string;
   csrfRetryable?: boolean;
-}
-
-interface ReceiveResolveResponsePayload {
-  ok?: boolean;
-  url?: string;
-  error?: string;
-  code?: string;
 }
 
 interface PrepareUploadResponsePayload {
@@ -286,48 +278,6 @@ async function verifyBlobDownloadUrlReachable(fetcher: typeof fetch, downloadUrl
   }
 }
 
-function resolveShareToken(shareUrl: string, shortToken?: string): string {
-  if (typeof shortToken === 'string' && shortToken.trim()) {
-    return shortToken.trim();
-  }
-  const parsed = new URL(shareUrl, typeof window !== 'undefined' ? window.location.origin : 'https://shimmy3.com');
-  const token = parsed.searchParams.get('t') ?? parsed.searchParams.get('key') ?? '';
-  if (!token.trim()) {
-    throw new BlobUploadError('共有リンクの検証に失敗しました (token missing)');
-  }
-  return token.trim();
-}
-
-async function verifyIssuedShareUrl(fetcher: typeof fetch, shareUrl: string, shortToken?: string): Promise<void> {
-  // 共有URLを返却する前に、resolve APIで解決できることを確認する。
-  const token = resolveShareToken(shareUrl, shortToken);
-  let response: Response;
-  try {
-    response = await fetcher(`/api/receive/resolve?t=${encodeURIComponent(token)}`, {
-      method: 'GET',
-      credentials: 'include',
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json'
-      }
-    });
-  } catch (error) {
-    throw new BlobUploadError('共有リンクの検証に失敗しました (network error)', { cause: error });
-  }
-
-  let payload: ReceiveResolveResponsePayload | null = null;
-  try {
-    payload = (await response.json()) as ReceiveResolveResponsePayload;
-  } catch (error) {
-    throw new BlobUploadError('共有リンクの検証に失敗しました (invalid json)', { cause: error });
-  }
-
-  if (!response.ok || !payload?.ok || typeof payload.url !== 'string' || !payload.url) {
-    const reason = payload?.error ?? payload?.code ?? `status ${response.status}`;
-    throw new BlobUploadError(`共有リンクの検証に失敗しました (${reason})`);
-  }
-}
-
 async function requestCsrf(fetcher: typeof fetch): Promise<string> {
   let response: Response;
   try {
@@ -356,7 +306,7 @@ async function requestCsrf(fetcher: typeof fetch): Promise<string> {
 async function issueReceiveShareUrl(
   fetcher: typeof fetch,
   args: { downloadUrl: string; fileName: string } & CsrfTokenProvider
-): Promise<{ shareUrl: string; token: string; shortToken?: string; expiresAt?: string }> {
+): Promise<{ shareUrl: string; token: string; expiresAt?: string }> {
   let response: Response;
   try {
     response = await fetchWithCsrfRetry({
@@ -406,7 +356,6 @@ async function issueReceiveShareUrl(
   return {
     shareUrl: payload.shareUrl,
     token: payload.token,
-    shortToken: typeof payload.shortToken === 'string' ? payload.shortToken : undefined,
     expiresAt: normalizeExpiration(payload.exp)
   };
 }
@@ -544,13 +493,12 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
     }
     await verifyBlobDownloadUrlReachable(fetch, downloadUrl);
 
-    const { shareUrl, token, shortToken, expiresAt } = await issueReceiveShareUrl(fetch, {
+    const { shareUrl, token, expiresAt } = await issueReceiveShareUrl(fetch, {
       downloadUrl,
       fileName: args.fileName,
       getCsrfToken: ensureCsrfToken,
       refreshCsrfToken
     });
-    await verifyIssuedShareUrl(fetch, shareUrl, shortToken);
 
     return {
       shareUrl,
