@@ -16,7 +16,7 @@ export interface UploadZipArgs {
   receiverName: string;
   ownerDiscordId?: string | null;
   ownerDiscordName?: string | null;
-  onBlobExistenceRetry?: (context: BlobExistenceRetryContext) => void;
+  onBlobReuploadRetry?: (context: BlobReuploadRetryContext) => void;
 }
 
 export interface UploadZipResult {
@@ -27,7 +27,7 @@ export interface UploadZipResult {
   pathname?: string;
 }
 
-export interface BlobExistenceRetryContext {
+export interface BlobReuploadRetryContext {
   attempt: number;
   maxAttempts: number;
   reason: string;
@@ -109,7 +109,8 @@ const UPLOAD_ENDPOINT = '/api/blob/upload';
 const RECEIVE_TOKEN_ENDPOINT = '/api/receive/token';
 const DEFAULT_PURPOSE = 'zips';
 const URL_CHECK_TIMEOUT_MS = 3000;
-const URL_CHECK_MAX_ATTEMPTS = 4;
+const URL_CHECK_MAX_ATTEMPTS = 2;
+const ZIP_REUPLOAD_MAX_ATTEMPTS = 2;
 
 function resolveCsrfMismatchFailure(payload?: unknown, message?: unknown): CsrfFailureInspection | null {
   const inspection = inspectCsrfFailurePayload(payload);
@@ -222,13 +223,7 @@ async function fetchWithTimeout(
   }
 }
 
-async function verifyBlobDownloadUrlReachable(
-  fetcher: typeof fetch,
-  downloadUrl: string,
-  options?: {
-    onRetry?: (context: BlobExistenceRetryContext) => void;
-  }
-): Promise<void> {
+async function verifyBlobDownloadUrlReachable(fetcher: typeof fetch, downloadUrl: string): Promise<void> {
   // アップロード直後のURL実在確認。ここで失敗するURLは共有処理へ進めない。
   for (let attempt = 0; attempt < URL_CHECK_MAX_ATTEMPTS; attempt += 1) {
     try {
@@ -285,17 +280,6 @@ async function verifyBlobDownloadUrlReachable(
           throw error;
         }
         throw new BlobUploadError(`アップロードURLの確認に失敗しました (${message})`, { cause: error });
-      }
-      if (options?.onRetry) {
-        try {
-          options.onRetry({
-            attempt: attempt + 1,
-            maxAttempts: URL_CHECK_MAX_ATTEMPTS,
-            reason: message
-          });
-        } catch {
-          // noop
-        }
       }
       await waitForRetry(attempt);
     }
@@ -484,55 +468,79 @@ export function useBlobUpload(): { uploadZip: (args: UploadZipArgs) => Promise<U
     const ownerDiscordId = normalizeOptionalString(args.ownerDiscordId ?? undefined);
     const ownerDiscordName = normalizeOptionalString(args.ownerDiscordName ?? undefined);
     const receiverName = normalizeOptionalString(args.receiverName);
-
-    const uploadIntent = await requestUploadAuthorization(fetch, {
-      userId: args.userId,
-      fileName: args.fileName,
-      purpose: DEFAULT_PURPOSE,
-      ownerDiscordId,
-      ownerDiscordName,
-      receiverName,
-      getCsrfToken: ensureCsrfToken,
-      refreshCsrfToken
-    });
-
-    let uploadResult;
-    try {
-      uploadResult = await put(uploadIntent.pathname, args.file, {
-        access: 'public',
-        multipart: true,
-        contentType: 'application/zip',
-        token: uploadIntent.token
+    for (let uploadAttempt = 0; uploadAttempt < ZIP_REUPLOAD_MAX_ATTEMPTS; uploadAttempt += 1) {
+      const uploadIntent = await requestUploadAuthorization(fetch, {
+        userId: args.userId,
+        fileName: args.fileName,
+        purpose: DEFAULT_PURPOSE,
+        ownerDiscordId,
+        ownerDiscordName,
+        receiverName,
+        getCsrfToken: ensureCsrfToken,
+        refreshCsrfToken
       });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
+
+      let uploadResult;
+      try {
+        uploadResult = await put(uploadIntent.pathname, args.file, {
+          access: 'public',
+          multipart: true,
+          contentType: 'application/zip',
+          token: uploadIntent.token
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw error;
+        }
+        throw new BlobUploadError('ZIPファイルのアップロードに失敗しました', { cause: error });
       }
-      throw new BlobUploadError('ZIPファイルのアップロードに失敗しました', { cause: error });
+
+      const downloadUrl = uploadResult.downloadUrl ?? uploadResult.url;
+      if (!downloadUrl) {
+        throw new BlobUploadError('アップロード応答にダウンロードURLが含まれていません');
+      }
+
+      try {
+        await verifyBlobDownloadUrlReachable(fetch, downloadUrl);
+      } catch (error) {
+        const canRetryReupload = uploadAttempt < ZIP_REUPLOAD_MAX_ATTEMPTS - 1;
+        if (!canRetryReupload) {
+          throw error;
+        }
+
+        if (args.onBlobReuploadRetry) {
+          try {
+            args.onBlobReuploadRetry({
+              attempt: uploadAttempt + 1,
+              maxAttempts: ZIP_REUPLOAD_MAX_ATTEMPTS,
+              reason: error instanceof Error ? error.message : String(error)
+            });
+          } catch {
+            // noop
+          }
+        }
+
+        await waitForRetry(uploadAttempt);
+        continue;
+      }
+
+      const { shareUrl, token, expiresAt } = await issueReceiveShareUrl(fetch, {
+        downloadUrl,
+        fileName: args.fileName,
+        getCsrfToken: ensureCsrfToken,
+        refreshCsrfToken
+      });
+
+      return {
+        shareUrl,
+        token,
+        downloadUrl,
+        expiresAt,
+        pathname: uploadResult.pathname
+      };
     }
 
-    const downloadUrl = uploadResult.downloadUrl ?? uploadResult.url;
-    if (!downloadUrl) {
-      throw new BlobUploadError('アップロード応答にダウンロードURLが含まれていません');
-    }
-    await verifyBlobDownloadUrlReachable(fetch, downloadUrl, {
-      onRetry: args.onBlobExistenceRetry
-    });
-
-    const { shareUrl, token, expiresAt } = await issueReceiveShareUrl(fetch, {
-      downloadUrl,
-      fileName: args.fileName,
-      getCsrfToken: ensureCsrfToken,
-      refreshCsrfToken
-    });
-
-    return {
-      shareUrl,
-      token,
-      downloadUrl,
-      expiresAt,
-      pathname: uploadResult.pathname
-    };
+    throw new BlobUploadError('ZIPファイルのアップロードに失敗しました');
   }, [ensureCsrfToken, refreshCsrfToken]);
 
   return { uploadZip };

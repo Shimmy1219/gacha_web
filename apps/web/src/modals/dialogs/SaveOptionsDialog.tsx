@@ -623,8 +623,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       uploadZip,
       ownerDiscordId: discordSession?.user?.id,
       ownerDiscordName: discordSession?.user?.name,
-      onBlobExistenceRetry: () => {
-        // Blob存在確認のリトライが走った時だけ、待機継続の案内を一度だけ表示する。
+      onBlobReuploadRetry: () => {
+        // Blob存在確認に失敗して再アップロードへ移る時だけ、待機継続の案内を一度だけ表示する。
         if (hasShownSlowBlobCheckNotice) {
           return;
         }

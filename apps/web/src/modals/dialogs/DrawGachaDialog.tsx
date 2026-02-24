@@ -1394,8 +1394,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           uploadZip,
           ownerDiscordId: staffDiscordId,
           ownerDiscordName: staffDiscordName ?? undefined,
-          onBlobExistenceRetry: () => {
-            // Blob存在確認でリトライに入ったことを、通知で一度だけ案内する。
+          onBlobReuploadRetry: () => {
+            // Blob存在確認に失敗して再アップロードへ入る時、通知を一度だけ案内する。
             if (hasShownSlowBlobCheckNotice) {
               return;
             }
