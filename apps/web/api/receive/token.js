@@ -114,6 +114,8 @@ function resolveBlobCheckError(status, method) {
 }
 
 async function verifyBlobExists(url) {
+  // 共有URL払い出し前に、Blob本体が実在するかを確認する。
+  // 一時的なネットワーク揺らぎは短いリトライで吸収し、恒久エラーは即時失敗させる。
   for (let attempt = 0; attempt < BLOB_CHECK_MAX_ATTEMPTS; attempt += 1) {
     try {
       const headResponse = await fetchWithTimeout(
@@ -184,6 +186,7 @@ async function storeShortToken(longToken, exp, issuedAt){
       if (result !== 'OK') {
         continue;
       }
+      // 発行時点で KV の実在を保証するため、書き込み直後に read-after-write を実施する。
       const stored = await kv.get(key);
       if (String(stored) === longToken) {
         return short;
