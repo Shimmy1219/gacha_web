@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import type { PropsWithChildren, ReactElement } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useState } from 'react';
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -65,6 +67,7 @@ type PwaClaimResult =
 
 let activePwaClaimPromise: Promise<PwaClaimResult> | null = null;
 let activePwaClaimState: string | null = null;
+const DiscordSessionContext = createContext<UseDiscordSessionResult | null>(null);
 
 function createStatePreview(state: string): string {
   return state.length > 8 ? `${state.slice(0, 4)}...` : state;
@@ -194,7 +197,7 @@ function resolveLoginContext(): 'browser' | 'pwa' {
   return mediaStandalone || isIosStandalone ? 'pwa' : 'browser';
 }
 
-async function fetchSession(): Promise<DiscordSessionData> {
+async function fetchSession({ signal }: QueryFunctionContext): Promise<DiscordSessionData> {
   logDiscordAuthEvent('Discordセッション情報の確認を開始します', {
     endpoint: '/api/discord/me?soft=1'
   });
@@ -203,6 +206,7 @@ async function fetchSession(): Promise<DiscordSessionData> {
       Accept: 'application/json'
     },
     credentials: 'include',
+    signal,
     // 304が返るとヒントcookie削除が反映できないため、HTTPキャッシュを使わず毎回取得する。
     cache: 'no-store'
   });
@@ -224,15 +228,7 @@ async function fetchSession(): Promise<DiscordSessionData> {
   return payload;
 }
 
-/**
- * Discordログイン状態を取得・維持するためのカスタムフック。
- *
- * `sid` は HttpOnly クッキーでクライアントから直接参照できないため、
- * `discord_session_hint` を使って `/api/discord/me` の自動取得可否を制御する。
- *
- * @returns Discordセッション情報とログイン/ログアウト操作
- */
-export function useDiscordSession(): UseDiscordSessionResult {
+function useDiscordSessionValue(): UseDiscordSessionResult {
   const queryClient = useQueryClient();
   const [shouldDelaySessionFetch, setShouldDelaySessionFetch] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
@@ -670,4 +666,32 @@ export function useDiscordSession(): UseDiscordSessionResult {
     logout,
     refetch
   };
+}
+
+/**
+ * Discordセッション状態をアプリ全体で一元管理するProvider。
+ *
+ * @param children Discordセッション情報を利用する子要素
+ * @returns Discordセッションコンテキストを提供する要素
+ */
+// 責務: Discordセッション取得ロジックを1インスタンスに固定し、配下へ共有する。
+export function DiscordSessionProvider({ children }: PropsWithChildren): ReactElement {
+  const value = useDiscordSessionValue();
+  return createElement(DiscordSessionContext.Provider, { value }, children);
+}
+
+/**
+ * Discordログイン状態を取得・維持するためのカスタムフック。
+ *
+ * `sid` は HttpOnly クッキーでクライアントから直接参照できないため、
+ * `discord_session_hint` を使って `/api/discord/me` の自動取得可否を制御する。
+ *
+ * @returns Discordセッション情報とログイン/ログアウト操作
+ */
+export function useDiscordSession(): UseDiscordSessionResult {
+  const context = useContext(DiscordSessionContext);
+  if (!context) {
+    throw new Error('useDiscordSession must be used within DiscordSessionProvider');
+  }
+  return context;
 }
