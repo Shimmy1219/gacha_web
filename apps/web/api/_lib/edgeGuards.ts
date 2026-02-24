@@ -1,3 +1,9 @@
+import {
+  VISITOR_ID_COOKIE_NAME,
+  ensureVisitorIdCookie,
+  resolveActorContext,
+  setVisitorIdOverride,
+} from './actorContext.js';
 import { getCookies } from './cookies.js';
 import { isAllowedOrigin } from './origin.js';
 
@@ -157,7 +163,12 @@ function enforceCsrf(request: Request, config: CsrfConfig): CsrfValidationError 
   return null;
 }
 
-function logCsrfMismatch(route: string | undefined, request: Request, error: CsrfValidationError): void {
+function logCsrfMismatch(
+  route: string | undefined,
+  request: Request,
+  error: CsrfValidationError,
+  actorContext: Record<string, unknown>
+): void {
   const routeLabel = typeof route === 'string' && route.length > 0 ? route.replace(/^\/+/u, '') : 'api';
   const csrfRetryEnabled = parseBooleanHeaderValue(request.headers.get('x-csrf-retry-enabled'));
   const csrfRetryAttempt = parseIntegerHeaderValue(request.headers.get('x-csrf-retry-attempt'));
@@ -171,7 +182,28 @@ function logCsrfMismatch(route: string | undefined, request: Request, error: Csr
     csrfRetryEnabled,
     csrfRetryAttempt,
     csrfAutoRetryPrompted,
+    ...actorContext,
   });
+}
+
+function attachVisitorCookie(response: Response, setCookieValue: string): Response {
+  const existingSetCookie = response.headers.get('set-cookie') || '';
+  if (existingSetCookie.includes(`${VISITOR_ID_COOKIE_NAME}=`)) {
+    return response;
+  }
+
+  try {
+    response.headers.append('Set-Cookie', setCookieValue);
+    return response;
+  } catch {
+    const headers = new Headers(response.headers);
+    headers.append('Set-Cookie', setCookieValue);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
 }
 
 function toCsrfResponse(error: CsrfValidationError): Record<string, unknown> {
@@ -188,16 +220,23 @@ function toCsrfResponse(error: CsrfValidationError): Record<string, unknown> {
 export function withEdgeGuards(config: EdgeGuardConfig) {
   return (handler: (request: Request) => Promise<Response>) =>
     async (request: Request): Promise<Response> => {
+      const visitorCookieHeaders = new Headers();
+      const visitorId = ensureVisitorIdCookie(visitorCookieHeaders, request);
+      setVisitorIdOverride(request, visitorId);
+      const visitorSetCookie = visitorCookieHeaders.get('Set-Cookie');
+
       const allowedMethods = Array.isArray(config.methods) ? config.methods.filter(Boolean) : null;
       if (allowedMethods && allowedMethods.length > 0 && !allowedMethods.includes(request.method)) {
         const allow = allowedMethods.join(', ');
-        return jsonResponse(405, { ok: false, error: 'Method Not Allowed' }, { headers: { Allow: allow } });
+        const headers = new Headers(visitorCookieHeaders);
+        headers.set('Allow', allow);
+        return jsonResponse(405, { ok: false, error: 'Method Not Allowed' }, { headers });
       }
 
       if (config.origin === true) {
         const check = isAllowedOrigin(request as unknown as any);
         if (!check.ok) {
-          return jsonResponse(403, { ok: false, error: 'Forbidden: origin not allowed' });
+          return jsonResponse(403, { ok: false, error: 'Forbidden: origin not allowed' }, { headers: visitorCookieHeaders });
         }
       }
 
@@ -205,9 +244,10 @@ export function withEdgeGuards(config: EdgeGuardConfig) {
         const err = enforceCsrf(request, config.csrf);
         if (err) {
           if (err.errorCode === CSRF_ERROR_CODE) {
-            logCsrfMismatch(config.route, request, err);
+            const actorContext = resolveActorContext(request, { fallbackVisitorId: visitorId });
+            logCsrfMismatch(config.route, request, err, actorContext);
           }
-          return jsonResponse(err.statusCode || 403, toCsrfResponse(err));
+          return jsonResponse(err.statusCode || 403, toCsrfResponse(err), { headers: visitorCookieHeaders });
         }
       }
 
@@ -216,10 +256,18 @@ export function withEdgeGuards(config: EdgeGuardConfig) {
           await enforceRateLimit(request, config.rateLimit);
         } catch (error) {
           const status = (error as any)?.statusCode || (error as any)?.status || 429;
-          return jsonResponse(status, { ok: false, error: (error as any)?.message || 'Too Many Requests' });
+          return jsonResponse(
+            status,
+            { ok: false, error: (error as any)?.message || 'Too Many Requests' },
+            { headers: visitorCookieHeaders }
+          );
         }
       }
 
-      return handler(request);
+      const response = await handler(request);
+      if (!visitorSetCookie) {
+        return response;
+      }
+      return attachVisitorCookie(response, visitorSetCookie);
     };
 }

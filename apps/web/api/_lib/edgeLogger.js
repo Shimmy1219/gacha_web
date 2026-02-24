@@ -1,5 +1,6 @@
 // /api/_lib/edgeLogger.js
 // Edge Runtime向けの簡易リクエストロガー。createRequestLoggerと同等のインターフェースを提供する。
+import { resolveActorContext } from './actorContext.js';
 
 let requestCounter = 0;
 
@@ -19,11 +20,12 @@ function normalizeError(error) {
   };
 }
 
-function formatMeta(request, meta = {}) {
+function formatMeta(request, meta = {}, actorContext) {
   const base = {
     requestId: meta?.requestId,
     method: request?.method,
     url: request?.url,
+    ...actorContext,
   };
 
   if (!meta) {
@@ -40,9 +42,10 @@ function formatMeta(request, meta = {}) {
 
 export function createEdgeRequestLogger(scope, request) {
   const requestId = nextRequestId();
+  const actorContext = resolveActorContext(request);
 
   function log(level, message, meta) {
-    const payload = formatMeta(request, { ...meta, requestId });
+    const payload = formatMeta(request, { ...meta, requestId }, actorContext);
     const text = `[${scope}] ${message}`;
 
     switch (level) {

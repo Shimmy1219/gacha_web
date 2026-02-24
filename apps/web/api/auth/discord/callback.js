@@ -1,6 +1,7 @@
 // /api/auth/discord/callback.js
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
+import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
 import {
   consumeDiscordAuthState,
   deleteDiscordAuthState,
@@ -21,6 +22,8 @@ function normalizeLoginContext(value) {
 }
 
 export default async function handler(req, res) {
+  const visitorId = ensureVisitorIdCookie(res, req);
+  setVisitorIdOverride(req, visitorId);
   const log = createRequestLogger('api/auth/discord/callback', req);
   log.info('Discordログインcallbackを受信しました', {
     hasCode: Boolean(req.query?.code),
