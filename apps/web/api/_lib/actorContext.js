@@ -181,8 +181,13 @@ export function ensureVisitorIdCookie(target, source, options = {}) {
  *   actorType: 'discord' | 'owner' | 'anonymous',
  *   actorLabel: string,
  *   actorTrust: 'cookie' | 'self-asserted' | 'none',
+ *   d_uid: string | null,
+ *   d_uname: string | null,
+ *   d_dname: string | null,
  *   discordId?: string,
  *   discordName?: string,
+ *   discordUsername?: string | null,
+ *   discordDisplayName?: string | null,
  *   ownerName?: string,
  * }} ログにそのまま付与できるactor情報
  */
@@ -194,17 +199,27 @@ export function resolveActorContext(source, options = {}) {
     normalizeVisitorId(options?.fallbackVisitorId || '');
 
   const discordId = sanitizeDiscordId(cookies.d_uid);
-  const discordName = sanitizeText(cookies.d_name, 80);
+  const discordUsernameCookie = sanitizeText(cookies.d_uname, 80);
+  const discordDisplayNameCookie = sanitizeText(cookies.d_dname, 80);
+  const legacyDiscordName = sanitizeText(cookies.d_name, 80);
+  const discordUsername = discordUsernameCookie || legacyDiscordName || discordId;
+  const discordDisplayName = discordDisplayNameCookie || legacyDiscordName || discordUsername || discordId;
   const ownerName = sanitizeText(cookies.owner_name, 64);
 
   if (discordId) {
-    const labelName = discordName || discordId;
+    const labelName = discordDisplayName || discordUsername || discordId;
     return compactObject({
       visitorId: visitorId || undefined,
       actorType: 'discord',
       actorTrust: 'cookie',
       actorLabel: `${labelName} (${discordId})`,
+      d_uid: discordId,
+      d_uname: discordUsername || null,
+      d_dname: discordDisplayName || null,
       discordId,
+      discordUsername: discordUsername || null,
+      discordDisplayName: discordDisplayName || null,
+      // 互換フィールド: 既存ログ参照先がdiscordNameを読んでいても壊れないように残す。
       discordName: labelName,
     });
   }
@@ -215,6 +230,9 @@ export function resolveActorContext(source, options = {}) {
       actorType: 'owner',
       actorTrust: 'self-asserted',
       actorLabel: `owner:${ownerName}`,
+      d_uid: null,
+      d_uname: null,
+      d_dname: null,
       ownerName,
     });
   }
@@ -224,5 +242,8 @@ export function resolveActorContext(source, options = {}) {
     actorType: 'anonymous',
     actorTrust: 'none',
     actorLabel: 'anonymous',
+    d_uid: null,
+    d_uname: null,
+    d_dname: null,
   });
 }

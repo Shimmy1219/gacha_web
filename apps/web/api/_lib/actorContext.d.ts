@@ -18,7 +18,12 @@ export function resolveActorContext(
   actorType: 'discord' | 'owner' | 'anonymous';
   actorLabel: string;
   actorTrust: 'cookie' | 'self-asserted' | 'none';
+  d_uid: string | null;
+  d_uname: string | null;
+  d_dname: string | null;
   discordId?: string;
   discordName?: string;
+  discordUsername?: string | null;
+  discordDisplayName?: string | null;
   ownerName?: string;
 };

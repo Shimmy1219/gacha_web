@@ -54,10 +54,21 @@ export default withApiGuards({
   }
 
   log.info('kvからセッションデータを復元しました。', { sidPreview, userId: sess.uid });
+  const sessionUsername =
+    typeof sess.username === 'string' && sess.username.trim().length > 0
+      ? sess.username.trim()
+      : typeof sess.name === 'string' && sess.name.trim().length > 0
+        ? sess.name.trim()
+        : String(sess.uid ?? '');
+  const sessionDisplayName =
+    typeof sess.displayName === 'string' && sess.displayName.trim().length > 0
+      ? sess.displayName.trim()
+      : sessionUsername;
   // callbackを経由しないケースでも actor追跡用cookieを自己修復する。
   setDiscordActorCookies(res, {
     id: sess.uid,
-    name: sess.name,
+    username: sessionUsername,
+    displayName: sessionDisplayName,
     maxAgeSec: 60 * 60 * 24 * 30
   });
   // 正常セッション時はヒントを延命しておく
@@ -66,6 +77,12 @@ export default withApiGuards({
   return res.status(200).json({
     ok: true,
     loggedIn: true,
-    user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
+    user: {
+      id: sess.uid,
+      name: sessionDisplayName,
+      username: sessionUsername,
+      displayName: sessionDisplayName,
+      avatar: sess.avatar
+    },
   });
 });

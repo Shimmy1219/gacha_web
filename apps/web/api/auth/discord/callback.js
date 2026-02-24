@@ -366,9 +366,10 @@ export default async function handler(req, res) {
       return res.status(401).send(`Fetch /users/@me failed: ${t}`);
     }
     const me = await meRes.json();
-    const discordDisplayName = resolveDiscordDisplayName(me);
     const discordUsername = normalizeDiscordProfileText(me?.username, 80);
-    const resolvedSessionName = discordDisplayName || discordUsername || String(me?.id || '');
+    const discordDisplayName = resolveDiscordDisplayName(me) || discordUsername || String(me?.id || '');
+    // 互換フィールドnameは識別向けにusername系を維持し、表示名はdisplayNameへ分離する。
+    const resolvedSessionName = discordUsername || String(me?.id || '');
 
     log.info('Discordからユーザープロフィールを受領しました', {
       userId: me.id,
@@ -390,6 +391,8 @@ export default async function handler(req, res) {
     const payload = {
       uid: me.id,
       name: resolvedSessionName,
+      username: discordUsername || resolvedSessionName,
+      displayName: discordDisplayName,
       avatar: me.avatar,
       access_token: token.access_token,
       refresh_token: token.refresh_token, // 長期ログインの要
@@ -409,7 +412,8 @@ export default async function handler(req, res) {
     // actor追跡ログで利用するDiscord情報をサーバ発行Cookieに同期する。
     setDiscordActorCookies(res, {
       id: me.id,
-      name: resolvedSessionName,
+      username: payload.username,
+      displayName: payload.displayName,
       maxAgeSec: 60 * 60 * 24 * 30
     });
     // クライアント側の /api/discord/me 自動取得可否を判断するヒントも同時に付与する
