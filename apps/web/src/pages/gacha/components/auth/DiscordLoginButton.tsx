@@ -14,6 +14,7 @@ import { useDiscordSession } from '../../../../features/discord/useDiscordSessio
 import { useAppPersistence } from '../../../../features/storage/AppPersistenceProvider';
 import { DISCORD_BOT_INVITE_URL } from '../../../../features/discord/discordInviteConfig';
 import { useModal, DiscordBotInviteDialog } from '../../../../modals';
+import { syncOwnerNameActorCookie } from '../../../../features/receive/ownerActorCookie';
 import {
   loadDiscordGuildSelection,
   type DiscordGuildSelection
@@ -66,6 +67,8 @@ export function DiscordLoginButton({
     const currentOwnerName = currentPrefs?.ownerName ?? null;
     if (userId) {
       const normalized = userName?.trim() || userId;
+      // Discordログイン中はownerNameとowner_name cookieを同じ値へ寄せる。
+      syncOwnerNameActorCookie(normalized);
       if (normalized && normalized !== currentOwnerName) {
         persistence.saveReceivePrefs({
           ...currentPrefs,
@@ -76,6 +79,8 @@ export function DiscordLoginButton({
       }
       return;
     }
+    // ログアウト時はowner actor cookieを削除する。
+    syncOwnerNameActorCookie(null);
     if (currentOwnerName) {
       persistence.saveReceivePrefs({
         ...currentPrefs,

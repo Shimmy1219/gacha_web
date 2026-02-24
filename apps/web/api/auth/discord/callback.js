@@ -2,6 +2,7 @@
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
 import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
+import { setDiscordActorCookies } from '../../_lib/actorCookies.js';
 import {
   consumeDiscordAuthState,
   deleteDiscordAuthState,
@@ -375,6 +376,12 @@ export default async function handler(req, res) {
 
     // sid をクッキーへ（30日）
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    // actor追跡ログで利用するDiscord情報をサーバ発行Cookieに同期する。
+    setDiscordActorCookies(res, {
+      id: me.id,
+      name: me.username,
+      maxAgeSec: 60 * 60 * 24 * 30
+    });
     // クライアント側の /api/discord/me 自動取得可否を判断するヒントも同時に付与する
     setDiscordSessionHintCookie(res);
 

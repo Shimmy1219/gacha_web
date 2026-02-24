@@ -2,6 +2,7 @@
 // Discord PWA ブリッジ用 state から sid を再発行する
 import crypto from 'crypto';
 import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
+import { setDiscordActorCookies } from '../../_lib/actorCookies.js';
 import { getCookies, setCookie } from '../../_lib/cookies.js';
 import {
   getDiscordPwaSession,
@@ -155,6 +156,12 @@ export default async function handler(req, res) {
     });
 
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    // PWA復旧でも actor追跡ログ用のDiscord cookieを同期する。
+    setDiscordActorCookies(res, {
+      id: session.uid,
+      name: session.name,
+      maxAgeSec: 60 * 60 * 24 * 30
+    });
     // PWA復旧成功時にもヒントクッキーを更新し、以後の /api/discord/me 自動取得を有効化する
     setDiscordSessionHintCookie(res);
     setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });

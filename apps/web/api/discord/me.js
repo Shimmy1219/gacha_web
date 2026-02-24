@@ -1,5 +1,6 @@
 // /api/discord/me.js
 import { withApiGuards } from '../_lib/apiGuards.js';
+import { setDiscordActorCookies } from '../_lib/actorCookies.js';
 import { getCookies } from '../_lib/cookies.js';
 import { clearDiscordSessionHintCookie, setDiscordSessionHintCookie } from '../_lib/discordSessionHintCookie.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
@@ -53,6 +54,12 @@ export default withApiGuards({
   }
 
   log.info('kvからセッションデータを復元しました。', { sidPreview, userId: sess.uid });
+  // callbackを経由しないケースでも actor追跡用cookieを自己修復する。
+  setDiscordActorCookies(res, {
+    id: sess.uid,
+    name: sess.name,
+    maxAgeSec: 60 * 60 * 24 * 30
+  });
   // 正常セッション時はヒントを延命しておく
   setDiscordSessionHintCookie(res);
 
