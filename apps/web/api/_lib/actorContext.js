@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { getCookies, setCookie } from './cookies.js';
 
 export const VISITOR_ID_COOKIE_NAME = 'visitor_id';
@@ -8,6 +7,7 @@ const VISITOR_ID_PREFIX = 'vst_';
 const VISITOR_ID_RANDOM_BYTES = 16;
 const VISITOR_ID_BODY_PATTERN = /^[A-Za-z0-9_-]{12,64}$/;
 const DISCORD_ID_PATTERN = /^[0-9]{5,32}$/;
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 const visitorOverrideMap = new WeakMap();
 
@@ -71,6 +71,35 @@ function readVisitorIdOverride(source) {
   return normalizeVisitorId(stored);
 }
 
+function fillRandomBytes(target) {
+  const webCrypto = typeof globalThis === 'object' ? globalThis.crypto : undefined;
+  if (webCrypto && typeof webCrypto.getRandomValues === 'function') {
+    webCrypto.getRandomValues(target);
+    return;
+  }
+  // 互換フォールバック: 実行環境に Web Crypto がない場合でも visitor_id を生成できるようにする。
+  for (let index = 0; index < target.length; index += 1) {
+    target[index] = Math.floor(Math.random() * 256);
+  }
+}
+
+function encodeBase64Url(bytes) {
+  let output = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = index + 1 < bytes.length ? bytes[index + 1] : 0;
+    const third = index + 2 < bytes.length ? bytes[index + 2] : 0;
+    const chunk = (first << 16) | (second << 8) | third;
+
+    output += BASE64_ALPHABET[(chunk >> 18) & 63];
+    output += BASE64_ALPHABET[(chunk >> 12) & 63];
+    output += index + 1 < bytes.length ? BASE64_ALPHABET[(chunk >> 6) & 63] : '=';
+    output += index + 2 < bytes.length ? BASE64_ALPHABET[chunk & 63] : '=';
+  }
+
+  return output.replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
 /**
  * visitor_id クッキー値として使える形式に正規化する。
  * @param {unknown} value 生のvisitor_id候補
@@ -96,7 +125,9 @@ export function normalizeVisitorId(value) {
  * @returns {string} `vst_` で始まる追跡用ID
  */
 export function createVisitorId() {
-  const suffix = crypto.randomBytes(VISITOR_ID_RANDOM_BYTES).toString('base64url');
+  const bytes = new Uint8Array(VISITOR_ID_RANDOM_BYTES);
+  fillRandomBytes(bytes);
+  const suffix = encodeBase64Url(bytes);
   return `${VISITOR_ID_PREFIX}${suffix}`;
 }
 
