@@ -22,6 +22,30 @@ function normalizeLoginContext(value) {
   return null;
 }
 
+function normalizeDiscordProfileText(value, maxLength = 80) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const normalized = value.normalize('NFKC').trim();
+  if (!normalized) {
+    return '';
+  }
+  return normalized.slice(0, maxLength);
+}
+
+/**
+ * Discordプロフィールから表示名を解決する。
+ * まず global_name を優先し、未設定時は username へフォールバックする。
+ * どちらも使えない場合のみ空文字を返す。
+ */
+function resolveDiscordDisplayName(profile) {
+  const globalName = normalizeDiscordProfileText(profile?.global_name, 80);
+  if (globalName) {
+    return globalName;
+  }
+  return normalizeDiscordProfileText(profile?.username, 80);
+}
+
 export default async function handler(req, res) {
   const visitorId = ensureVisitorIdCookie(res, req);
   setVisitorIdOverride(req, visitorId);
@@ -342,16 +366,22 @@ export default async function handler(req, res) {
       return res.status(401).send(`Fetch /users/@me failed: ${t}`);
     }
     const me = await meRes.json();
+    const discordDisplayName = resolveDiscordDisplayName(me);
+    const discordUsername = normalizeDiscordProfileText(me?.username, 80);
+    const resolvedSessionName = discordDisplayName || discordUsername || String(me?.id || '');
+
     log.info('Discordからユーザープロフィールを受領しました', {
       userId: me.id,
-      username: me.username,
+      username: discordUsername || null,
+      displayName: discordDisplayName || null,
       loginContext,
       statePreview,
     });
 
     log.info('Discordからユーザープロフィールを取得しました', {
       userId: me.id,
-      username: me.username,
+      username: discordUsername || null,
+      displayName: discordDisplayName || null,
       loginContext,
       statePreview,
     });
@@ -359,7 +389,7 @@ export default async function handler(req, res) {
     const now = Date.now();
     const payload = {
       uid: me.id,
-      name: me.username,
+      name: resolvedSessionName,
       avatar: me.avatar,
       access_token: token.access_token,
       refresh_token: token.refresh_token, // 長期ログインの要
@@ -379,7 +409,7 @@ export default async function handler(req, res) {
     // actor追跡ログで利用するDiscord情報をサーバ発行Cookieに同期する。
     setDiscordActorCookies(res, {
       id: me.id,
-      name: me.username,
+      name: resolvedSessionName,
       maxAgeSec: 60 * 60 * 24 * 30
     });
     // クライアント側の /api/discord/me 自動取得可否を判断するヒントも同時に付与する
