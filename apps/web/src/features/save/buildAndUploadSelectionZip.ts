@@ -14,6 +14,7 @@ interface BuildAndUploadSelectionZipParams {
   uploadZip: (args: UploadZipArgs) => Promise<UploadZipResult>;
   ownerDiscordId?: string | null;
   ownerDiscordName?: string | null;
+  onBlobExistenceRetry?: UploadZipArgs['onBlobExistenceRetry'];
   itemIdFilter?: Set<string>;
   excludeRiaguImages?: boolean;
   onZipBuilt?: (zip: ZipBuildResult) => void | Promise<void>;
@@ -34,6 +35,7 @@ export async function buildAndUploadSelectionZip({
   uploadZip,
   ownerDiscordId,
   ownerDiscordName,
+  onBlobExistenceRetry,
   itemIdFilter,
   excludeRiaguImages,
   onZipBuilt
@@ -59,7 +61,8 @@ export async function buildAndUploadSelectionZip({
     userId,
     receiverName: userName,
     ownerDiscordId,
-    ownerDiscordName
+    ownerDiscordName,
+    onBlobExistenceRetry
   });
 
   return { zip, uploadResponse };

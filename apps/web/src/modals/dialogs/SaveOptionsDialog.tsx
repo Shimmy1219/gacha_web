@@ -612,6 +612,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     if (!resolvedOwnerId) {
       throw new Error('配信サムネイルownerIdを解決できませんでした。');
     }
+    let hasShownSlowBlobCheckNotice = false;
     const { zip, uploadResponse } = await buildAndUploadSelectionZip({
       snapshot: resolveZipSnapshot(),
       selection,
@@ -622,6 +623,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       uploadZip,
       ownerDiscordId: discordSession?.user?.id,
       ownerDiscordName: discordSession?.user?.name,
+      onBlobExistenceRetry: () => {
+        // Blob存在確認のリトライが走った時だけ、待機継続の案内を一度だけ表示する。
+        if (hasShownSlowBlobCheckNotice) {
+          return;
+        }
+        hasShownSlowBlobCheckNotice = true;
+        notify({
+          variant: 'warning',
+          message: '想定よりも時間がかかっています。そのままでお待ちください'
+        });
+      },
       excludeRiaguImages
     });
 
@@ -663,7 +675,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     selection,
     uploadZip,
     userId,
-    excludeRiaguImages
+    excludeRiaguImages,
+    notify
   ]);
 
   const runUploadToShimmy = async (ownerName: string) => {

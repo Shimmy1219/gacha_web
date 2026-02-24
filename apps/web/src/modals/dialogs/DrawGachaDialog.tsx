@@ -1379,6 +1379,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 : profile.id || targetUserId;
 
         const selection = { mode: 'history', pullIds: [lastPullId] } as const;
+        let hasShownSlowBlobCheckNotice = false;
 
         const filteredItemIds =
           itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
@@ -1393,6 +1394,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           uploadZip,
           ownerDiscordId: staffDiscordId,
           ownerDiscordName: staffDiscordName ?? undefined,
+          onBlobExistenceRetry: () => {
+            // Blob存在確認でリトライに入ったことを、通知で一度だけ案内する。
+            if (hasShownSlowBlobCheckNotice) {
+              return;
+            }
+            hasShownSlowBlobCheckNotice = true;
+            notify({
+              variant: 'warning',
+              message: '想定よりも時間がかかっています。そのままでお待ちください'
+            });
+          },
           excludeRiaguImages,
           onZipBuilt: () => {
             setDiscordDeliveryStage('uploading');
@@ -1537,6 +1549,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       pullHistory,
       userProfiles,
       excludeRiaguImages,
+      notify,
       notifyDiscordDeliveryError,
       notifyDiscordDeliverySuccess
     ]
