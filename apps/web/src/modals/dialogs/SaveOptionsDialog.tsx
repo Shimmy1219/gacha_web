@@ -34,6 +34,7 @@ import {
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../features/discord/shareMessage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useNotification } from '../../features/notification';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -70,17 +71,8 @@ interface LastDownloadState {
 }
 
 function formatExpiresAt(value?: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date);
+  const formatted = formatDiscordShareExpiresAt(value);
+  return formatted ?? undefined;
 }
 
 function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: string): string {
@@ -865,8 +857,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         const shareUrl = uploadData.url;
         const shareLabelCandidate = uploadData.label ?? shareUrl;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
-        const shareComment =
-          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+        const shareComment = buildDiscordShareComment({
+          shareUrl,
+          shareLabel: shareLabelCandidate,
+          expiresAtText: uploadData.expiresAt ?? null
+        });
         const { channelId, channelName, channelParentId } = await sendDiscordShareToMember({
           push,
           discordUserId,
@@ -949,6 +944,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         shareUrl: uploadData.url,
         shareLabel: uploadData.label,
         receiverName: receiverDisplayName,
+        shareComment: buildDiscordShareComment({
+          shareUrl: uploadData.url,
+          shareLabel: uploadData.label ?? uploadData.url,
+          expiresAtText: uploadData.expiresAt ?? null
+        }),
         onShared: ({
           memberId: sharedMemberId,
           memberName,

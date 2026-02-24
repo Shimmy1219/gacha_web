@@ -35,6 +35,7 @@ import {
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../features/discord/shareMessage';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
@@ -1434,8 +1435,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         const shareUrl = uploadResponse.shareUrl;
         const shareLabelCandidate = shareUrl ?? null;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
-        const shareComment =
-          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+        const shareComment = buildDiscordShareComment({
+          shareUrl,
+          shareLabel: shareLabelCandidate,
+          expiresAtText: formatDiscordShareExpiresAt(uploadResponse.expiresAt)
+        });
         const displayNameForChannel = pickDisplayName(
           profile.discordDisplayName,
           receiverDisplayName,
