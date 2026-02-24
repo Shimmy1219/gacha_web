@@ -36,6 +36,7 @@ const SHORT_TOKEN_PREFIX = 'receive:token:';
 const BLOB_CHECK_TIMEOUT_MS = Math.max(500, Number(process.env.RECEIVE_BLOB_CHECK_TIMEOUT_MS || 3000));
 const BLOB_CHECK_MAX_ATTEMPTS = Math.max(1, Number(process.env.RECEIVE_BLOB_CHECK_MAX_ATTEMPTS || 2));
 const SHORT_TOKEN_STORE_MAX_ATTEMPTS = Math.max(3, Number(process.env.RECEIVE_SHORT_TOKEN_STORE_MAX_ATTEMPTS || 8));
+const TOKEN_SELF_CHECK_MAX_ATTEMPTS = Math.max(1, Number(process.env.RECEIVE_TOKEN_SELF_CHECK_MAX_ATTEMPTS || 2));
 
 function randomShortToken(){
   // 10 chars of base64url alphabet => 60 bits entropy
@@ -219,6 +220,57 @@ async function storeShortToken(longToken, exp, issuedAt){
   });
 }
 
+function encryptReceivePayload(payload, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const packed = Buffer.concat([ct, tag]);
+  return `v1.${b64u.enc(iv)}.${b64u.enc(packed)}`;
+}
+
+async function issueTokenWithSelfCheck(payload, key) {
+  for (let attempt = 0; attempt < TOKEN_SELF_CHECK_MAX_ATTEMPTS; attempt += 1) {
+    // 自己検証に失敗した場合は、long token/short token を再生成して取り直す。
+    const token = encryptReceivePayload(payload, key);
+    const shortToken = await storeShortToken(token, payload.exp, payload.iat);
+    try {
+      await resolveReceivePayload(shortToken);
+      return { token, shortToken };
+    } catch (error) {
+      const errorCode = error instanceof ReceiveTokenError ? error.code : undefined;
+      vLog('token self-check failed', {
+        attempt: attempt + 1,
+        maxAttempts: TOKEN_SELF_CHECK_MAX_ATTEMPTS,
+        shortToken,
+        errorCode,
+        message: error instanceof Error ? error.message : String(error)
+      });
+      try {
+        await kv.del(shortTokenKey(shortToken));
+      } catch (cleanupError) {
+        vLog('failed to cleanup short token after self-check failure', {
+          shortToken,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        });
+      }
+      if (attempt === TOKEN_SELF_CHECK_MAX_ATTEMPTS - 1) {
+        throw new ReceiveTokenIssueError('Service Unavailable: issued token failed resolve self-check', {
+          statusCode: 503,
+          code: 'TOKEN_SELF_CHECK_FAILED',
+          retryable: true
+        });
+      }
+      await waitForRetry(attempt);
+    }
+  }
+  throw new ReceiveTokenIssueError('Service Unavailable: token self-check retries exhausted', {
+    statusCode: 503,
+    code: 'TOKEN_SELF_CHECK_FAILED',
+    retryable: true
+  });
+}
+
 // filename / segment sanitize
 function sanitizeFilename(s, fallback='download.zip'){
   if (typeof s !== 'string') return fallback;
@@ -339,41 +391,8 @@ const guarded = withApiGuards({
       iat: now,
     };
 
-    // 暗号化 AES-256-GCM
     const key = readKey();
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-    const ct = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    const packed = Buffer.concat([ct, tag]);
-
-    const token = `v1.${b64u.enc(iv)}.${b64u.enc(packed)}`;
-    const shortToken = await storeShortToken(token, exp, now);
-    try {
-      // 発行した共有URLがその場で解決できることを最終確認する。
-      await resolveReceivePayload(shortToken);
-    } catch (error) {
-      try {
-        await kv.del(shortTokenKey(shortToken));
-      } catch (cleanupError) {
-        vLog('failed to cleanup short token after self-check failure', {
-          shortToken,
-          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-        });
-      }
-      if (error instanceof ReceiveTokenError) {
-        throw new ReceiveTokenIssueError('Service Unavailable: issued token failed resolve self-check', {
-          statusCode: 503,
-          code: 'TOKEN_SELF_CHECK_FAILED',
-          retryable: true
-        });
-      }
-      throw new ReceiveTokenIssueError('Service Unavailable: failed to verify issued token', {
-        statusCode: 503,
-        code: 'TOKEN_SELF_CHECK_FAILED',
-        retryable: true
-      });
-    }
+    const { token, shortToken } = await issueTokenWithSelfCheck(payload, key);
 
     // 共有URL生成
     const site = process.env.NEXT_PUBLIC_SITE_ORIGIN || hostToOrigin(req.headers.host);
