@@ -79,16 +79,10 @@ export function DiscordLoginButton({
       }
       return;
     }
-    // ログアウト時はowner actor cookieを削除する。
-    syncOwnerNameActorCookie(null);
-    if (currentOwnerName) {
-      persistence.saveReceivePrefs({
-        ...currentPrefs,
-        version: 3,
-        intro: currentPrefs?.intro ?? { skipIntro: false },
-        ownerName: null
-      });
-    }
+    // ログイン状態の判定前(初回ロード中)でもこのeffectは走るため、
+    // ここでownerNameをnullにすると画面遷移/リロードのたびに設定が消えてしまう。
+    // 未ログイン時は永続設定を保持し、cookieだけ現在値へ同期する。
+    syncOwnerNameActorCookie(currentOwnerName);
   }, [persistence, userId, userName]);
 
   useEffect(() => {
