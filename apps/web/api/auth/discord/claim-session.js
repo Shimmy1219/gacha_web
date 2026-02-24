@@ -1,6 +1,7 @@
 // /api/auth/discord/claim-session.js
 // Discord PWA ブリッジ用 state から sid を再発行する
 import crypto from 'crypto';
+import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
 import { getCookies, setCookie } from '../../_lib/cookies.js';
 import {
   getDiscordPwaSession,
@@ -35,6 +36,8 @@ function parseStateFromBody(body) {
 }
 
 export default async function handler(req, res) {
+  const visitorId = ensureVisitorIdCookie(res, req);
+  setVisitorIdOverride(req, visitorId);
   const log = createRequestLogger('api/auth/discord/claim-session', req);
   log.info('Discord PWAセッションclaimリクエストを受信しました');
 

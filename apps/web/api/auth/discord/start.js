@@ -1,6 +1,7 @@
 // /api/auth/discord/start.js
 // PKCE + state を発行して Discord 認可画面へ 302
 import crypto from 'crypto';
+import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
 import { setCookie } from '../../_lib/cookies.js';
 import {
   saveDiscordAuthState,
@@ -18,6 +19,8 @@ function createStatePreview(value) {
 }
 
 export default async function handler(req, res) {
+  const visitorId = ensureVisitorIdCookie(res, req);
+  setVisitorIdOverride(req, visitorId);
   const log = createRequestLogger('api/auth/discord/start', req);
   log.info('Discordログインstartを受け取りました', {
     query: req.query,

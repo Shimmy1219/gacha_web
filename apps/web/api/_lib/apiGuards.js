@@ -14,6 +14,7 @@
 // })(async (req, res, ctx) => { ... });
 
 import crypto from 'crypto';
+import { ensureVisitorIdCookie, resolveActorContext, setVisitorIdOverride } from './actorContext.js';
 import { getCookies } from './cookies.js';
 import { isAllowedOrigin } from './origin.js';
 
@@ -218,6 +219,9 @@ function enforceCsrf(req, ctx, config) {
 export function withApiGuards(config) {
   return (handler) =>
     async (req, res) => {
+      const visitorId = ensureVisitorIdCookie(res, req);
+      setVisitorIdOverride(req, visitorId);
+
       const route = typeof config?.route === 'string' ? config.route : undefined;
       const healthQueryKey =
         typeof config?.health?.queryKey === 'string' ? config.health.queryKey : 'health';
@@ -245,6 +249,7 @@ export function withApiGuards(config) {
       const csrfErr = enforceCsrf(req, ctx, config?.csrf);
       if (csrfErr) {
         if (csrfErr.errorCode === CSRF_ERROR_CODE) {
+          const actorContext = resolveActorContext(req, { fallbackVisitorId: visitorId });
           const routeLabel = route ? route.replace(/^\/+/u, '') : 'api';
           const csrfRetryEnabled = parseBooleanHeader(getHeader(req, 'x-csrf-retry-enabled'));
           const csrfRetryAttempt = parseIntegerHeader(getHeader(req, 'x-csrf-retry-attempt'));
@@ -258,6 +263,7 @@ export function withApiGuards(config) {
             csrfRetryEnabled,
             csrfRetryAttempt,
             csrfAutoRetryPrompted,
+            ...actorContext,
           });
         }
         return json(res, csrfErr.statusCode || 403, {
