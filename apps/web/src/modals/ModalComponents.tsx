@@ -149,6 +149,7 @@ export const ModalPanel = forwardRef<
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
   const { maxHeight: viewportMaxHeight, keyboardInset } = useModalViewportMetrics();
+  const isKeyboardVisible = (keyboardInset ?? 0) > 0;
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
     return viewportMaxHeight !== undefined;
@@ -181,11 +182,13 @@ export const ModalPanel = forwardRef<
         {...restProps}
         ref={ref}
         className={clsx(
-          'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden overflow-y-auto rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur md:overflow-hidden',
+          'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
+          isKeyboardVisible ? 'overflow-y-visible' : 'overflow-y-auto md:overflow-hidden',
           SIZE_CLASS_MAP[size],
           paddingClassName,
           className
         )}
+        data-modal-keyboard-visible={isKeyboardVisible ? '1' : '0'}
         style={{ ...mergedStyle, ['--modal-keyboard-inset' as const]: `${keyboardInset ?? 0}px` }}
       />
     </ModalKeyboardInsetContext.Provider>
@@ -227,6 +230,7 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
   ref
 ) {
   const keyboardInset = useContext(ModalKeyboardInsetContext);
+  const isKeyboardVisible = keyboardInset > 0;
 
   const mergedStyle = useMemo(() => {
     const nextStyle = { ...props.style };
@@ -251,9 +255,11 @@ export const ModalBody = forwardRef<ElementRef<'div'>, ModalBodyProps>(function 
       {...props}
       ref={ref}
       className={clsx(
-        'modal-body mt-2 space-y-2 text-sm flex-1 overflow-y-auto overscroll-contain md:pr-1',
+        'modal-body mt-2 space-y-2 text-sm md:pr-1',
+        isKeyboardVisible ? 'flex-none overflow-y-visible' : 'flex-1 overflow-y-auto overscroll-contain',
         className
       )}
+      data-modal-keyboard-visible={isKeyboardVisible ? '1' : '0'}
       style={mergedStyle}
     />
   );
