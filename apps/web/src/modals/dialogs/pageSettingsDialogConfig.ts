@@ -44,6 +44,7 @@ export function buildPageSettingsDialogProps(
     panelClassName: DEFAULT_PAGE_SETTINGS_DIALOG_PANEL_CLASS_NAME,
     panelPaddingClassName: DEFAULT_PAGE_SETTINGS_DIALOG_PANEL_PADDING_CLASS_NAME,
     showHeaderCloseButton: true,
+    disableKeyboardViewportAdjustment: true,
     payload: options.payload
   };
 }
