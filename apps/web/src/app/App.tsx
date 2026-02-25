@@ -353,8 +353,8 @@ export function App(): JSX.Element {
   };
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {
-    title: '四遊楽ガチャツール',
-    tagline: 'SHIYURA Integrated Gacha Management Tool refactor',
+    title: '四遊楽ガチャツール(β)',
+    tagline: 'SHIYURA Integrated Gacha Management Tool',
     mainRef,
     isMobile,
     onDrawGacha: handleDrawGacha,
