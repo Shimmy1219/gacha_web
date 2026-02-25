@@ -55,10 +55,11 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
               onDrawGacha={gachaLayoutProps.onDrawGacha}
               onRegisterGacha={gachaLayoutProps.onRegisterGacha}
               onOpenPageSettings={gachaLayoutProps.onOpenPageSettings}
+              onOpenHistory={gachaLayoutProps.onOpenHistory}
             />
           )
         },
-        { path: 'gacha/history', element: <GachaHistoryPage /> },
+        { path: 'gacha/history', element: <GachaHistoryPage onDrawGacha={gachaLayoutProps.onDrawGacha} /> },
         { path: 'gacha/test', element: <GachaTestPage /> },
         { path: 'receive', element: <ReceivePage /> },
         { path: 'receive/history', element: <ReceiveHistoryPage /> },

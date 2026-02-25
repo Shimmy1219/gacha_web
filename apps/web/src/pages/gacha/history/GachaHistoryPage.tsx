@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 
 import { type PullHistoryEntryV1 } from '@domain/app-persistence';
@@ -14,12 +14,22 @@ import {
   normalizeHistoryUserId
 } from '../../../modals/dialogs/history/historyUtils';
 import { DashboardDesktopGrid } from '../components/dashboard/DashboardDesktopGrid';
+import {
+  DashboardMobileTabBar,
+  type DashboardMobileTabSection
+} from '../components/dashboard/DashboardMobileTabBar';
 import { useResponsiveDashboard } from '../components/dashboard/useResponsiveDashboard';
 import { GachaTabs, type GachaTabOption } from '../components/common/GachaTabs';
 import { SectionContainer } from '../components/layout/SectionContainer';
 
 const ALL_HISTORY_SECTION_ID = 'all_history';
 const ALL_HISTORY_TAB_ID = 'all_history';
+const GACHA_HISTORY_MOBILE_SECTIONS: readonly DashboardMobileTabSection[] = [
+  { id: 'rarity', label: 'レアリティ' },
+  { id: 'items', label: 'アイテム' },
+  { id: 'users', label: 'ユーザー' },
+  { id: 'riagu', label: 'リアグ' }
+];
 
 interface TimelineHistoryCard {
   entry: PullHistoryEntryV1;
@@ -37,6 +47,10 @@ interface HistoryFilterTab {
   id: string;
   label: string;
   gachaId: string | null;
+}
+
+interface GachaHistoryPageProps {
+  onDrawGacha?: () => void;
 }
 
 function resolveExecutedAtMs(value: string | undefined): number | null {
@@ -143,7 +157,7 @@ function resolveHistoryTabs(cards: TimelineHistoryCard[], appOrder: string[] | u
  *
  * @returns 全履歴ページ要素
  */
-export function GachaHistoryPage(): JSX.Element {
+export function GachaHistoryPage({ onDrawGacha }: GachaHistoryPageProps): JSX.Element {
   const {
     pullHistory: pullHistoryStore,
     catalog: catalogStore,
@@ -152,6 +166,7 @@ export function GachaHistoryPage(): JSX.Element {
     userProfiles: userProfilesStore
   } = useDomainStores();
   const { isMobile } = useResponsiveDashboard();
+  const navigate = useNavigate();
 
   const pullHistoryState = useStoreValue(pullHistoryStore);
   const catalogState = useStoreValue(catalogStore);
@@ -247,6 +262,18 @@ export function GachaHistoryPage(): JSX.Element {
     return timelineCards.filter((card) => card.entry.gachaId === activeFilterGachaId);
   }, [activeFilterGachaId, timelineCards]);
 
+  const handleSelectMobileSection = useCallback(
+    (sectionId: string) => {
+      const searchParams = new URLSearchParams({ view: sectionId });
+      navigate(`/gacha?${searchParams.toString()}`);
+    },
+    [navigate]
+  );
+
+  const handleOpenHistory = useCallback(() => {
+    navigate('/gacha/history');
+  }, [navigate]);
+
   const historySection = (mobileLayout: boolean): JSX.Element => (
     <SectionContainer
       id={ALL_HISTORY_SECTION_ID}
@@ -325,9 +352,6 @@ export function GachaHistoryPage(): JSX.Element {
     </SectionContainer>
   );
 
-  const mobileBaseTabClass =
-    'dashboard-mobile-tabs__tab flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] transition';
-
   return (
     <div id="gacha-history-page" className="gacha-history-page min-h-0 text-surface-foreground">
       <div className="gacha-history-page__dashboard-shell dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-0">
@@ -356,34 +380,14 @@ export function GachaHistoryPage(): JSX.Element {
         )}
 
         {isMobile ? (
-          <nav className="all-history-mobile-tabs dashboard-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-surface/95 px-1 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3">
-            <div className="all-history-mobile-tabs__list dashboard-mobile-tabs__list grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                data-view={ALL_HISTORY_SECTION_ID}
-                data-active={activeTabId === ALL_HISTORY_TAB_ID}
-                onClick={() => setActiveTabId(ALL_HISTORY_TAB_ID)}
-                className={clsx(
-                  mobileBaseTabClass,
-                  activeTabId === ALL_HISTORY_TAB_ID
-                    ? 'border-accent/80 bg-accent text-accent-foreground'
-                    : 'border-transparent bg-surface/40 text-muted-foreground hover:text-surface-foreground'
-                )}
-                aria-current={activeTabId === ALL_HISTORY_TAB_ID ? 'page' : undefined}
-              >
-                <span className="all-history-mobile-tabs__all-label">全履歴</span>
-              </button>
-              <Link
-                to="/gacha"
-                className={clsx(
-                  mobileBaseTabClass,
-                  'all-history-mobile-tabs__back-link border-accent/70 bg-surface/40 text-accent hover:border-transparent hover:bg-accent hover:text-accent-foreground'
-                )}
-              >
-                <span className="all-history-mobile-tabs__back-label">戻る</span>
-              </Link>
-            </div>
-          </nav>
+          <DashboardMobileTabBar
+            sections={GACHA_HISTORY_MOBILE_SECTIONS}
+            onSelectSection={handleSelectMobileSection}
+            onDrawGacha={onDrawGacha}
+            onOpenHistory={handleOpenHistory}
+            historyTabActive
+            className="all-history-mobile-tabs"
+          />
         ) : null}
       </div>
     </div>

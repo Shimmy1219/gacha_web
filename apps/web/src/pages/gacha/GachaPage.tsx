@@ -16,9 +16,15 @@ export interface GachaPageProps {
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
   onOpenPageSettings?: () => void;
+  onOpenHistory?: () => void;
 }
 
-export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: GachaPageProps): JSX.Element {
+export function GachaPage({
+  onDrawGacha,
+  onRegisterGacha,
+  onOpenPageSettings,
+  onOpenHistory
+}: GachaPageProps): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
@@ -70,5 +76,5 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
     }
   ];
 
-  return <DashboardShell sections={sections} onDrawGacha={onDrawGacha} />;
+  return <DashboardShell sections={sections} onDrawGacha={onDrawGacha} onOpenHistory={onOpenHistory} />;
 }

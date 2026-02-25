@@ -15,6 +15,7 @@ import {
   useState
 } from 'react';
 import { clsx } from 'clsx';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { DashboardDesktopGrid } from './DashboardDesktopGrid';
 import { DashboardMobileTabs } from './DashboardMobileTabs';
@@ -38,6 +39,7 @@ interface DashboardShellProps {
   sections: DashboardSectionConfig[];
   controlsSlot?: ReactNode;
   onDrawGacha?: () => void;
+  onOpenHistory?: () => void;
 }
 
 interface DashboardContextValue {
@@ -108,8 +110,15 @@ export function useDashboardShell(): DashboardContextValue {
   return context;
 }
 
-export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
+export function DashboardShell({
+  sections,
+  controlsSlot,
+  onDrawGacha,
+  onOpenHistory
+}: DashboardShellProps): JSX.Element {
   const { isMobile, isLgDown, forceSidebarLayout } = useResponsiveDashboard();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
@@ -132,6 +141,34 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
       setActiveView(sections[0].id);
     }
   }, [sections, activeView]);
+
+  useEffect(() => {
+    // 履歴ページから /gacha?view=... で戻った際に、モバイル初期タブとして1回だけ反映する。
+    // URLを残すと再描画時に毎回適用されるため、適用後はreplaceでクエリを取り除く。
+    if (!isMobile) {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(location.search);
+    const requestedViewId = searchParams.get('view');
+    if (!requestedViewId) {
+      return;
+    }
+
+    if (sections.some((section) => section.id === requestedViewId)) {
+      setActiveView(requestedViewId);
+    }
+
+    searchParams.delete('view');
+    const nextSearch = searchParams.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : ''
+      },
+      { replace: true }
+    );
+  }, [isMobile, location.pathname, location.search, navigate, sections]);
 
   useEffect(() => {
     setActiveSidebarViews((previous) => {
@@ -403,7 +440,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </div>
         ) : null}
 
-        <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} />
+        <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} onOpenHistory={onOpenHistory} />
       </div>
     </DashboardContext.Provider>
   );
