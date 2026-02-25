@@ -80,6 +80,7 @@ interface DiscordMemberPickerSharePayload extends DiscordMemberPickerBasePayload
   shareUrl: string;
   shareLabel?: string;
   shareTitle?: string;
+  shareComment?: string;
   receiverName?: string;
   onShared?: (result: DiscordMemberShareResult) => void;
   onShareFailed?: (message: string) => void;
@@ -494,9 +495,10 @@ export function DiscordMemberPickerDialog({
       const title =
         sharePayload?.shareTitle ?? `${sharePayload?.receiverName ?? '景品'}のお渡しリンクです`;
       const comment =
-        sharePayload?.shareLabel && sharePayload.shareLabel !== sharePayload.shareUrl
+        sharePayload?.shareComment ??
+        (sharePayload?.shareLabel && sharePayload.shareLabel !== sharePayload.shareUrl
           ? sharePayload.shareLabel
-          : undefined;
+          : undefined);
 
       const sendResponse = await fetchDiscordApi('/api/discord/send', {
         method: 'POST',

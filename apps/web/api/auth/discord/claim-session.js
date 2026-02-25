@@ -1,6 +1,8 @@
 // /api/auth/discord/claim-session.js
 // Discord PWA ブリッジ用 state から sid を再発行する
 import crypto from 'crypto';
+import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
+import { setDiscordActorCookies } from '../../_lib/actorCookies.js';
 import { getCookies, setCookie } from '../../_lib/cookies.js';
 import {
   getDiscordPwaSession,
@@ -35,6 +37,8 @@ function parseStateFromBody(body) {
 }
 
 export default async function handler(req, res) {
+  const visitorId = ensureVisitorIdCookie(res, req);
+  setVisitorIdOverride(req, visitorId);
   const log = createRequestLogger('api/auth/discord/claim-session', req);
   log.info('Discord PWAセッションclaimリクエストを受信しました');
 
@@ -152,6 +156,23 @@ export default async function handler(req, res) {
     });
 
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    const sessionUsername =
+      typeof session.username === 'string' && session.username.trim().length > 0
+        ? session.username.trim()
+        : typeof session.name === 'string' && session.name.trim().length > 0
+          ? session.name.trim()
+          : String(session.uid ?? '');
+    const sessionDisplayName =
+      typeof session.displayName === 'string' && session.displayName.trim().length > 0
+        ? session.displayName.trim()
+        : sessionUsername;
+    // PWA復旧でも actor追跡ログ用のDiscord cookieを同期する。
+    setDiscordActorCookies(res, {
+      id: session.uid,
+      username: sessionUsername,
+      displayName: sessionDisplayName,
+      maxAgeSec: 60 * 60 * 24 * 30
+    });
     // PWA復旧成功時にもヒントクッキーを更新し、以後の /api/discord/me 自動取得を有効化する
     setDiscordSessionHintCookie(res);
     setCookie(res, 'd_pwa_bridge', '', { maxAge: 0 });

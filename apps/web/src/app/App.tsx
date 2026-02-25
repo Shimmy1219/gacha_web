@@ -28,6 +28,7 @@ import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
 import { useHaptics } from '../features/haptics/HapticsProvider';
 import { useNotification } from '../features/notification';
+import { syncOwnerNameActorCookie } from '../features/receive/ownerActorCookie';
 import { getUnreadReleaseNotes, RELEASE_NOTES } from '../content/releaseNotes';
 
 export function App(): JSX.Element {
@@ -173,6 +174,12 @@ export function App(): JSX.Element {
       });
     };
   }, []);
+
+  useEffect(() => {
+    // 起動時に永続設定のownerNameをactor cookieへ同期し、ログ相関を復元する。
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    syncOwnerNameActorCookie(prefs?.ownerName ?? null);
+  }, [persistence]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {

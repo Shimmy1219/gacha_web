@@ -1,6 +1,7 @@
 // /api/auth/logout.js
 // 現在の端末のセッションだけ無効化
 import { withApiGuards } from '../_lib/apiGuards.js';
+import { clearDiscordActorCookies } from '../_lib/actorCookies.js';
 import { getCookies, setCookie } from '../_lib/cookies.js';
 import { clearDiscordSessionHintCookie } from '../_lib/discordSessionHintCookie.js';
 import { deleteSession } from '../_lib/sessionStore.js';
@@ -29,6 +30,8 @@ export default withApiGuards({
   }
   // 未ログイン状態に戻るため、/api/discord/me 自動取得ヒントも必ず削除する
   clearDiscordSessionHintCookie(res);
+  // actor追跡ログが古いユーザーに固定されないようDiscord cookieも削除する
+  clearDiscordActorCookies(res);
   log.info('logout completed');
   return res.status(200).json({ ok: true });
 });

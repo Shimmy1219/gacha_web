@@ -31,6 +31,7 @@ import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import { useNotification } from '../../features/notification';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { syncOwnerNameActorCookie } from '../../features/receive/ownerActorCookie';
 import {
   DEFAULT_SITE_ZOOM_PERCENT,
   DEFAULT_GACHA_OWNER_SHARE_RATE,
@@ -377,6 +378,8 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
   useEffect(() => {
     const prefs = persistence.loadSnapshot().receivePrefs;
     setOwnerName(prefs?.ownerName ?? '');
+    // 初回表示時にlocalStorageの値をactor cookieへ反映して、APIログとの相関を維持する。
+    syncOwnerNameActorCookie(prefs?.ownerName ?? null);
   }, [discordSession?.loggedIn, discordSession?.user?.name, persistence]);
 
   const persistOwnerName = useCallback(
@@ -391,6 +394,8 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
         ownerName: normalized.length > 0 ? normalized : null
       };
       persistence.saveReceivePrefsDebounced(nextPrefs);
+      // owner_name cookieも同時更新して、APIログでowner actorを判別できるようにする。
+      syncOwnerNameActorCookie(nextPrefs.ownerName ?? null);
     },
     [persistence]
   );

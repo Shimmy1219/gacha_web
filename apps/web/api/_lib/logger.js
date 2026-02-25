@@ -1,5 +1,6 @@
 // /api/_lib/logger.js
 // APIエンドポイント用の簡易ロガー。各リクエストに requestId を割り当てて一貫したログを出力する。
+import { resolveActorContext } from './actorContext.js';
 
 let requestCounter = 0;
 
@@ -8,11 +9,12 @@ function nextRequestId() {
   return `${Date.now().toString(36)}-${counter.toString(36)}`;
 }
 
-function formatMeta(req, meta) {
+function formatMeta(req, meta, actorContext) {
   const base = {
     requestId: meta?.requestId,
     method: req.method,
     url: req.url,
+    ...actorContext,
   };
 
   if (!meta) {
@@ -38,9 +40,10 @@ function formatMeta(req, meta) {
 
 export function createRequestLogger(scope, req) {
   const requestId = nextRequestId();
+  const actorContext = resolveActorContext(req);
 
   function log(level, message, meta) {
-    const payload = formatMeta(req, { ...meta, requestId });
+    const payload = formatMeta(req, { ...meta, requestId }, actorContext);
     const text = `[${scope}] ${message}`;
 
     switch (level) {
@@ -75,4 +78,3 @@ export function createRequestLogger(scope, req) {
     },
   };
 }
-

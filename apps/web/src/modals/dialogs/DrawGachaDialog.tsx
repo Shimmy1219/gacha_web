@@ -36,6 +36,7 @@ import {
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../features/discord/shareMessage';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
@@ -1383,6 +1384,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 : profile.id || targetUserId;
 
         const selection = { mode: 'history', pullIds: [lastPullId] } as const;
+        let hasShownSlowBlobCheckNotice = false;
 
         const filteredItemIds =
           itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
@@ -1397,6 +1399,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           uploadZip,
           ownerDiscordId: staffDiscordId,
           ownerDiscordName: staffDiscordName ?? undefined,
+          onBlobReuploadRetry: () => {
+            // Blob存在確認に失敗して再アップロードへ入る時、通知を一度だけ案内する。
+            if (hasShownSlowBlobCheckNotice) {
+              return;
+            }
+            hasShownSlowBlobCheckNotice = true;
+            notify({
+              variant: 'warning',
+              message: '想定よりも時間がかかっています。そのままでお待ちください'
+            });
+          },
           excludeRiaguImages,
           onZipBuilt: () => {
             setDiscordDeliveryStage('uploading');
@@ -1439,8 +1452,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         const shareUrl = uploadResponse.shareUrl;
         const shareLabelCandidate = shareUrl ?? null;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
-        const shareComment =
-          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+        const shareComment = buildDiscordShareComment({
+          shareUrl,
+          shareLabel: shareLabelCandidate,
+          expiresAtText: formatDiscordShareExpiresAt(uploadResponse.expiresAt)
+        });
         const displayNameForChannel = pickDisplayName(
           profile.discordDisplayName,
           receiverDisplayName,
@@ -1538,6 +1554,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       pullHistory,
       userProfiles,
       excludeRiaguImages,
+      notify,
       notifyDiscordDeliveryError,
       notifyDiscordDeliverySuccess
     ]
