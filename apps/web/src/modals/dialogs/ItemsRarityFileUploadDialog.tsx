@@ -96,7 +96,7 @@ export function ItemsRarityFileUploadDialog({
           </div>
         ) : null}
         {successMessage ? (
-          <div className="items-rarity-upload-dialog__success rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+          <div className="items-rarity-upload-dialog__success rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-surface-foreground">
             {successMessage}
           </div>
         ) : null}
