@@ -252,7 +252,6 @@ export function GachaHistoryPage(): JSX.Element {
       id={ALL_HISTORY_SECTION_ID}
       title="全履歴"
       description="全ユーザーの履歴を時系列（新しい順）で確認できます。"
-      accentLabel="History"
       actions={
         mobileLayout ? undefined : (
           <Link
