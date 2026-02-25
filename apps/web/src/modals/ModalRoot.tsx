@@ -38,10 +38,6 @@ interface ModalViewportBounds {
 }
 
 const VIEWPORT_BOUNDS_UPDATE_EPSILON = 0.5;
-const KEYBOARD_SAFE_AREA_TOP_PX = 12;
-const KEYBOARD_SAFE_AREA_BOTTOM_PX = 20;
-const KEYBOARD_VISIBILITY_RATIO_THRESHOLD = 0.95;
-const MOBILE_KEYBOARD_MEDIA_QUERY = '(max-width: 1024px), (pointer: coarse)';
 
 function readModalViewportBounds(): ModalViewportBounds {
   if (typeof window === 'undefined') {
@@ -118,166 +114,10 @@ function useModalViewportBounds(): ModalViewportBounds {
   return bounds;
 }
 
-function isKeyboardTargetElement(element: HTMLElement): boolean {
-  if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
-    return true;
-  }
-
-  if (element instanceof HTMLInputElement) {
-    const unsupportedTypes = new Set([
-      'button',
-      'checkbox',
-      'color',
-      'file',
-      'hidden',
-      'image',
-      'radio',
-      'range',
-      'reset',
-      'submit'
-    ]);
-    return !unsupportedTypes.has((element.type || 'text').toLowerCase());
-  }
-
-  return element.isContentEditable;
-}
-
-function resolveScrollableAncestor(element: HTMLElement): HTMLElement | null {
-  let current: HTMLElement | null = element.parentElement;
-  while (current && current !== document.body) {
-    const style = window.getComputedStyle(current);
-    const canScrollY = style.overflowY === 'auto' || style.overflowY === 'scroll';
-    if (canScrollY && current.scrollHeight > current.clientHeight + 1) {
-      return current;
-    }
-    current = current.parentElement;
-  }
-
-  return null;
-}
-
-function keepFocusedElementVisible(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  const activeElement = document.activeElement;
-  if (!(activeElement instanceof HTMLElement) || !isKeyboardTargetElement(activeElement)) {
-    return;
-  }
-
-  if (!activeElement.closest('.modal-root')) {
-    return;
-  }
-
-  const visualViewport = window.visualViewport;
-  if (!visualViewport) {
-    return;
-  }
-
-  if (!window.matchMedia(MOBILE_KEYBOARD_MEDIA_QUERY).matches) {
-    return;
-  }
-
-  const layoutViewportHeight = window.innerHeight;
-  if (layoutViewportHeight <= 0) {
-    return;
-  }
-
-  const viewportHeightRatio = visualViewport.height / layoutViewportHeight;
-  if (viewportHeightRatio > KEYBOARD_VISIBILITY_RATIO_THRESHOLD) {
-    return;
-  }
-
-  const visibleTop = Math.max(visualViewport.offsetTop, 0) + KEYBOARD_SAFE_AREA_TOP_PX;
-  const visibleBottom = Math.max(
-    visibleTop,
-    visualViewport.offsetTop + visualViewport.height - KEYBOARD_SAFE_AREA_BOTTOM_PX
-  );
-  const elementRect = activeElement.getBoundingClientRect();
-  const isAlreadyVisible = elementRect.top >= visibleTop && elementRect.bottom <= visibleBottom;
-
-  if (isAlreadyVisible) {
-    return;
-  }
-
-  const scrollContainer = resolveScrollableAncestor(activeElement);
-  if (!scrollContainer) {
-    activeElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    return;
-  }
-
-  const overflowBottom = Math.max(elementRect.bottom - visibleBottom, 0);
-  const overflowTop = Math.min(elementRect.top - visibleTop, 0);
-  const nextScrollTop = scrollContainer.scrollTop + overflowBottom + overflowTop;
-  scrollContainer.scrollTop = nextScrollTop;
-}
-
-function useKeepFocusedElementVisible(active: boolean): void {
-  const animationFrameRef = useRef<number | null>(null);
-  const timeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!active || typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
-
-    const runAdjustment = () => {
-      keepFocusedElementVisible();
-    };
-
-    const scheduleAdjustment = () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-      }
-      animationFrameRef.current = window.requestAnimationFrame(() => {
-        animationFrameRef.current = null;
-        runAdjustment();
-      });
-
-      if (timeoutRef.current !== null) {
-        window.clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = window.setTimeout(() => {
-        timeoutRef.current = null;
-        runAdjustment();
-      }, 220);
-    };
-
-    const visualViewport = window.visualViewport;
-
-    // キーボード表示直後は viewport 変化が段階的に届くため、focus と viewport 両方を監視する。
-    // 依存配列を active のみに絞り、モーダル表示中だけ監視コストを払う。
-    document.addEventListener('focusin', scheduleAdjustment);
-    visualViewport?.addEventListener('resize', scheduleAdjustment, { passive: true });
-    visualViewport?.addEventListener('scroll', scheduleAdjustment, { passive: true });
-    window.addEventListener('resize', scheduleAdjustment, { passive: true });
-    window.addEventListener('orientationchange', scheduleAdjustment);
-    scheduleAdjustment();
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      if (timeoutRef.current !== null) {
-        window.clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      document.removeEventListener('focusin', scheduleAdjustment);
-      visualViewport?.removeEventListener('resize', scheduleAdjustment);
-      visualViewport?.removeEventListener('scroll', scheduleAdjustment);
-      window.removeEventListener('resize', scheduleAdjustment);
-      window.removeEventListener('orientationchange', scheduleAdjustment);
-    };
-  }, [active]);
-}
-
 export function ModalRoot(): JSX.Element | null {
   const { stack } = useModal();
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null);
   const viewportBounds = useModalViewportBounds();
-  useKeepFocusedElementVisible(stack.length > 0);
 
   useEffect(() => {
     setPortalElement(ensureModalRoot());
@@ -348,7 +188,7 @@ function ModalRenderer({
     () => ({
       zIndex,
       top: `${viewportTop}px`,
-      height: viewportHeight > 0 ? `${viewportHeight}px` : '100%'
+      height: viewportHeight > 0 ? `${viewportHeight}px` : '100%',
     }),
     [viewportHeight, viewportTop, zIndex]
   );
