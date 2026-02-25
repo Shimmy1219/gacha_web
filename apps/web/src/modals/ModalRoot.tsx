@@ -226,7 +226,7 @@ function ModalRenderer({
         <div
           className={clsx(
             'flex min-h-full justify-center px-4 py-4 md:py-8',
-            isKeyboardVisible ? 'items-start overflow-y-auto' : 'items-center'
+            isKeyboardVisible ? 'items-start' : 'items-center'
           )}
         >
           <Transition.Child

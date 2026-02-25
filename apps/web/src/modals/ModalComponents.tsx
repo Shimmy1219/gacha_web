@@ -48,7 +48,6 @@ interface LockedScrollableStyleSnapshot {
   maxHeight: string;
   overscrollBehaviorY: string;
   webkitOverflowScrolling: string;
-  touchAction: string;
 }
 
 function restoreLockedScrollableElements(
@@ -79,11 +78,6 @@ function restoreLockedScrollableElements(
       element.style.removeProperty('-webkit-overflow-scrolling');
     }
 
-    if (snapshot.touchAction) {
-      element.style.touchAction = snapshot.touchAction;
-    } else {
-      element.style.removeProperty('touch-action');
-    }
   });
 
   lockedScrollableElements.clear();
@@ -271,19 +265,17 @@ export const ModalPanel = forwardRef<
           overflowY: element.style.overflowY,
           maxHeight: element.style.maxHeight,
           overscrollBehaviorY: element.style.overscrollBehaviorY,
-          webkitOverflowScrolling: element.style.webkitOverflowScrolling,
-          touchAction: element.style.touchAction
+          webkitOverflowScrolling: element.style.webkitOverflowScrolling
         });
 
         element.style.overflowY = 'visible';
         element.style.maxHeight = 'none';
         element.style.overscrollBehaviorY = 'auto';
         element.style.webkitOverflowScrolling = 'auto';
-        element.style.touchAction = 'pan-x pinch-zoom';
       });
     };
 
-    // キーボード表示中はモーダル直下ラッパーへスクロール責務を集約し、内部スクロールを一時停止する。
+    // キーボード表示中はModalPanelへスクロール責務を集約し、配下の内部スクロールを一時停止する。
     lockInternalScrollAreas();
 
     // 入力補助UIや条件表示で後から生成されるスクロール領域も同じ方針で停止する。
@@ -305,7 +297,7 @@ export const ModalPanel = forwardRef<
         ref={handlePanelRef}
         className={clsx(
           'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
-          isKeyboardVisible ? 'overflow-y-visible' : 'overflow-y-auto md:overflow-hidden',
+          isKeyboardVisible ? 'overflow-y-auto overscroll-contain' : 'overflow-y-auto md:overflow-hidden',
           SIZE_CLASS_MAP[size],
           paddingClassName,
           className
