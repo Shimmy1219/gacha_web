@@ -1,16 +1,25 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { clsx } from 'clsx';
 
 import { type PullHistoryEntryV1 } from '@domain/app-persistence';
 import { useStoreValue } from '@domain/stores';
 import { useDomainStores } from '../../../features/storage/AppPersistenceProvider';
 import { useShareHandler } from '../../../hooks/useShare';
+import { useTabMotion } from '../../../hooks/useTabMotion';
 import { HistoryEntriesList } from '../../../modals/dialogs/history/HistoryEntriesList';
 import {
   DEFAULT_HISTORY_USER_ID,
   buildItemMetadataMap,
   normalizeHistoryUserId
 } from '../../../modals/dialogs/history/historyUtils';
+import { DashboardDesktopGrid } from '../components/dashboard/DashboardDesktopGrid';
+import { useResponsiveDashboard } from '../components/dashboard/useResponsiveDashboard';
+import { GachaTabs, type GachaTabOption } from '../components/common/GachaTabs';
+import { SectionContainer } from '../components/layout/SectionContainer';
+
+const ALL_HISTORY_SECTION_ID = 'all_history';
+const ALL_HISTORY_TAB_ID = 'all_history';
 
 interface TimelineHistoryCard {
   entry: PullHistoryEntryV1;
@@ -22,6 +31,12 @@ interface TimelineHistoryCard {
 
 interface HistoryUserProfilesState {
   users?: Record<string, { displayName?: string } | undefined>;
+}
+
+interface HistoryFilterTab {
+  id: string;
+  label: string;
+  gachaId: string | null;
 }
 
 function resolveExecutedAtMs(value: string | undefined): number | null {
@@ -67,11 +82,66 @@ function compareTimelineCards(a: TimelineHistoryCard, b: TimelineHistoryCard): n
   return b.orderIndex - a.orderIndex;
 }
 
+function resolveHistoryTabs(cards: TimelineHistoryCard[], appOrder: string[] | undefined): HistoryFilterTab[] {
+  if (cards.length === 0) {
+    return [
+      {
+        id: ALL_HISTORY_TAB_ID,
+        label: '全て',
+        gachaId: null
+      }
+    ];
+  }
+
+  const gachaNameById = new Map<string, string>();
+  cards.forEach((card) => {
+    if (!gachaNameById.has(card.entry.gachaId)) {
+      gachaNameById.set(card.entry.gachaId, card.gachaName);
+    }
+  });
+
+  const orderedGachaIds: string[] = [];
+  const known = new Set<string>();
+
+  (appOrder ?? []).forEach((gachaId) => {
+    if (!gachaNameById.has(gachaId) || known.has(gachaId)) {
+      return;
+    }
+    known.add(gachaId);
+    orderedGachaIds.push(gachaId);
+  });
+
+  Array.from(gachaNameById.keys())
+    .filter((gachaId) => !known.has(gachaId))
+    .sort((a, b) => {
+      const nameA = gachaNameById.get(a) ?? a;
+      const nameB = gachaNameById.get(b) ?? b;
+      return nameA.localeCompare(nameB, 'ja');
+    })
+    .forEach((gachaId) => {
+      known.add(gachaId);
+      orderedGachaIds.push(gachaId);
+    });
+
+  return [
+    {
+      id: ALL_HISTORY_TAB_ID,
+      label: '全て',
+      gachaId: null
+    },
+    ...orderedGachaIds.map((gachaId) => ({
+      id: `all_history-gacha-${gachaId}`,
+      label: gachaNameById.get(gachaId) ?? gachaId,
+      gachaId
+    }))
+  ];
+}
+
 /**
- * 全ユーザー・全ガチャの履歴を時系列（新しい順）で表示するページ。
- * 既存のユーザー履歴モーダルで利用している履歴カード（HistoryEntriesList）を再利用する。
+ * 全ユーザー・全ガチャの履歴を時系列で表示するページ。
+ * /gacha のダッシュボードDOM構造へ寄せるため、SectionContainer・GachaTabs・dashboard-* クラスを再利用する。
  *
- * @returns 履歴一覧ページ要素
+ * @returns 全履歴ページ要素
  */
 export function GachaHistoryPage(): JSX.Element {
   const {
@@ -81,6 +151,7 @@ export function GachaHistoryPage(): JSX.Element {
     appState: appStateStore,
     userProfiles: userProfilesStore
   } = useDomainStores();
+  const { isMobile } = useResponsiveDashboard();
 
   const pullHistoryState = useStoreValue(pullHistoryStore);
   const catalogState = useStoreValue(catalogStore);
@@ -135,58 +206,187 @@ export function GachaHistoryPage(): JSX.Element {
     return cards.sort(compareTimelineCards);
   }, [appState?.meta, catalogState, pullHistoryState, rarityState, userProfilesState]);
 
-  return (
-    <div id="gacha-history-page" className="gacha-history-page min-h-screen text-surface-foreground">
-      <main className="gacha-history-page__main mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-8">
-        <header className="gacha-history-page__header rounded-3xl bg-panel/85 p-6 backdrop-blur">
-          <div className="gacha-history-page__heading-group space-y-2">
-            <h1 className="gacha-history-page__title text-3xl font-bold">全履歴</h1>
-            <p className="gacha-history-page__description text-sm text-muted-foreground">
-              全ユーザーの履歴を時系列（新しい順）で表示しています。
-            </p>
-          </div>
-          <div className="gacha-history-page__header-actions mt-4">
-            <Link to="/gacha" className="gacha-history-page__back-link btn btn-muted rounded-full">
-              ガチャ画面に戻る
-            </Link>
-          </div>
-        </header>
+  const historyTabs = useMemo(
+    () => resolveHistoryTabs(timelineCards, appState?.order),
+    [appState?.order, timelineCards]
+  );
 
-        {timelineCards.length === 0 ? (
-          <p className="gacha-history-page__empty-message rounded-2xl border border-dashed border-border/60 bg-surface/40 px-4 py-6 text-sm text-muted-foreground">
-            まだガチャ履歴がありません。
-          </p>
-        ) : (
-          <section className="gacha-history-page__timeline-section flex flex-col gap-4">
-            {timelineCards.map((card) => (
-              <div key={`${card.entry.id}-${card.orderIndex}`} className="gacha-history-page__timeline-card rounded-2xl border border-border/40 bg-panel/35 p-4">
-                <div className="gacha-history-page__timeline-meta mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div className="gacha-history-page__timeline-meta-left flex min-w-0 flex-col gap-1">
-                    <p className="gacha-history-page__timeline-user-name text-sm font-semibold text-surface-foreground">
-                      {card.userName}
-                    </p>
-                    <p className="gacha-history-page__timeline-gacha-name text-xs text-muted-foreground">
-                      {card.gachaName}
-                    </p>
-                  </div>
-                  <span className="gacha-history-page__timeline-entry-id font-mono text-[11px] text-muted-foreground/80">
-                    履歴ID: {card.entry.id}
-                  </span>
-                </div>
-                <HistoryEntriesList
-                  entries={[card.entry]}
-                  userName={card.userName}
-                  gachaName={card.gachaName}
-                  executedAtFormatter={executedAtFormatter}
-                  numberFormatter={numberFormatter}
-                  itemMetadata={card.itemMetadata}
-                  shareHandlers={shareHandlers}
-                />
-              </div>
-            ))}
-          </section>
+  const gachaTabs = useMemo<GachaTabOption[]>(
+    () => historyTabs.map((tab) => ({ id: tab.id, label: tab.label })),
+    [historyTabs]
+  );
+
+  const [activeTabId, setActiveTabId] = useState<string>(ALL_HISTORY_TAB_ID);
+
+  useEffect(() => {
+    // タブ構成が変わった時に無効なactiveIdを保持しないため、常に有効な先頭タブへ補正する。
+    // 依存にはタブ一覧とactiveIdを含め、履歴更新・選択更新の両方で整合性を担保する。
+    if (historyTabs.some((tab) => tab.id === activeTabId)) {
+      return;
+    }
+    setActiveTabId(historyTabs[0]?.id ?? ALL_HISTORY_TAB_ID);
+  }, [activeTabId, historyTabs]);
+
+  const tabIds = useMemo(() => historyTabs.map((tab) => tab.id), [historyTabs]);
+  const panelMotion = useTabMotion(activeTabId, tabIds);
+  const panelAnimationClass = clsx(
+    'all-history-section__scroll-content space-y-4',
+    panelMotion === 'forward' && 'animate-tab-slide-from-right',
+    panelMotion === 'backward' && 'animate-tab-slide-from-left'
+  );
+
+  const activeFilterGachaId = useMemo(() => {
+    const activeTab = historyTabs.find((tab) => tab.id === activeTabId);
+    return activeTab?.gachaId ?? null;
+  }, [activeTabId, historyTabs]);
+
+  const filteredTimelineCards = useMemo(() => {
+    if (!activeFilterGachaId) {
+      return timelineCards;
+    }
+    return timelineCards.filter((card) => card.entry.gachaId === activeFilterGachaId);
+  }, [activeFilterGachaId, timelineCards]);
+
+  const historySection = (mobileLayout: boolean): JSX.Element => (
+    <SectionContainer
+      id={ALL_HISTORY_SECTION_ID}
+      title="全履歴"
+      description="全ユーザーの履歴を時系列（新しい順）で確認できます。"
+      accentLabel="History"
+      actions={
+        mobileLayout ? undefined : (
+          <Link
+            to="/gacha"
+            className="all-history-section__back-button btn btn-muted rounded-full"
+          >
+            ガチャ画面に戻る
+          </Link>
+        )
+      }
+      className={clsx('all-history-section min-h-0', !mobileLayout && 'h-full')}
+      contentClassName="all-history-section__content flex min-h-0 flex-col !overflow-visible !pr-0 !space-y-0"
+    >
+      <GachaTabs
+        tabs={gachaTabs}
+        activeId={activeTabId}
+        onSelect={(tabId) => setActiveTabId(tabId)}
+        className="all-history-section__gacha-tabs"
+      />
+
+      <div
+        className={clsx(
+          'all-history-section__scroll tab-panel-viewport',
+          mobileLayout ? 'all-history-section__scroll--mobile px-4 py-3' : 'section-scroll flex-1'
         )}
-      </main>
+      >
+        <div key={activeTabId} className={panelAnimationClass}>
+          {timelineCards.length === 0 ? (
+            <p className="all-history-section__empty-message rounded-2xl border border-dashed border-border/60 bg-surface/40 px-4 py-6 text-sm text-muted-foreground">
+              まだガチャ履歴がありません。
+            </p>
+          ) : filteredTimelineCards.length === 0 ? (
+            <p className="all-history-section__empty-filter-message rounded-2xl border border-dashed border-border/60 bg-surface/40 px-4 py-6 text-sm text-muted-foreground">
+              このガチャには履歴がありません。
+            </p>
+          ) : (
+            <section className="all-history-section__timeline-section flex flex-col gap-4">
+              {filteredTimelineCards.map((card) => (
+                <div
+                  key={`${card.entry.id}-${card.orderIndex}`}
+                  className="all-history-section__timeline-card rounded-2xl border border-border/40 bg-panel/35 p-4"
+                >
+                  <div className="all-history-section__timeline-meta mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="all-history-section__timeline-meta-left flex min-w-0 flex-col gap-1">
+                      <p className="all-history-section__timeline-user-name text-sm font-semibold text-surface-foreground">
+                        {card.userName}
+                      </p>
+                      <p className="all-history-section__timeline-gacha-name text-xs text-muted-foreground">
+                        {card.gachaName}
+                      </p>
+                    </div>
+                    <span className="all-history-section__timeline-entry-id font-mono text-[11px] text-muted-foreground/80">
+                      履歴ID: {card.entry.id}
+                    </span>
+                  </div>
+                  <HistoryEntriesList
+                    entries={[card.entry]}
+                    userName={card.userName}
+                    gachaName={card.gachaName}
+                    executedAtFormatter={executedAtFormatter}
+                    numberFormatter={numberFormatter}
+                    itemMetadata={card.itemMetadata}
+                    shareHandlers={shareHandlers}
+                  />
+                </div>
+              ))}
+            </section>
+          )}
+        </div>
+      </div>
+    </SectionContainer>
+  );
+
+  const mobileBaseTabClass =
+    'dashboard-mobile-tabs__tab flex flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.28em] transition';
+
+  return (
+    <div id="gacha-history-page" className="gacha-history-page min-h-0 text-surface-foreground">
+      <div className="gacha-history-page__dashboard-shell dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-0">
+        {!isMobile ? (
+          <div className="gacha-history-page__desktop dashboard-shell__desktop">
+            <DashboardDesktopGrid
+              sections={[
+                {
+                  id: ALL_HISTORY_SECTION_ID,
+                  label: '全履歴',
+                  node: (
+                    <div className="all-history-section__desktop-item-root h-full min-h-0">
+                      {historySection(false)}
+                    </div>
+                  )
+                }
+              ]}
+            />
+          </div>
+        ) : (
+          <div className="gacha-history-page__mobile dashboard-shell__mobile">
+            <div data-view={ALL_HISTORY_SECTION_ID} className="dashboard-shell__mobile-section">
+              {historySection(true)}
+            </div>
+          </div>
+        )}
+
+        {isMobile ? (
+          <nav className="all-history-mobile-tabs dashboard-mobile-tabs fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-surface/95 px-1 pb-[calc(0.85rem+env(safe-area-inset-bottom))] pt-3">
+            <div className="all-history-mobile-tabs__list dashboard-mobile-tabs__list grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                data-view={ALL_HISTORY_SECTION_ID}
+                data-active={activeTabId === ALL_HISTORY_TAB_ID}
+                onClick={() => setActiveTabId(ALL_HISTORY_TAB_ID)}
+                className={clsx(
+                  mobileBaseTabClass,
+                  activeTabId === ALL_HISTORY_TAB_ID
+                    ? 'border-accent/80 bg-accent text-accent-foreground'
+                    : 'border-transparent bg-surface/40 text-muted-foreground hover:text-surface-foreground'
+                )}
+                aria-current={activeTabId === ALL_HISTORY_TAB_ID ? 'page' : undefined}
+              >
+                <span className="all-history-mobile-tabs__all-label">全履歴</span>
+              </button>
+              <Link
+                to="/gacha"
+                className={clsx(
+                  mobileBaseTabClass,
+                  'all-history-mobile-tabs__back-link border-accent/70 bg-surface/40 text-accent hover:border-transparent hover:bg-accent hover:text-accent-foreground'
+                )}
+              >
+                <span className="all-history-mobile-tabs__back-label">戻る</span>
+              </Link>
+            </div>
+          </nav>
+        ) : null}
+      </div>
     </div>
   );
 }
