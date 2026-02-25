@@ -1,6 +1,6 @@
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useModal } from './ModalProvider';
@@ -28,96 +28,11 @@ interface ModalRendererProps {
   entry: ModalStackEntry;
   isTop: boolean;
   zIndex: number;
-  viewportTop: number;
-  viewportHeight: number;
-}
-
-interface ModalViewportBounds {
-  top: number;
-  height: number;
-}
-
-const VIEWPORT_BOUNDS_UPDATE_EPSILON = 0.5;
-
-function readModalViewportBounds(): ModalViewportBounds {
-  if (typeof window === 'undefined') {
-    return { top: 0, height: 0 };
-  }
-
-  const layoutViewportHeight = window.innerHeight;
-  const visualViewport = window.visualViewport;
-  if (!visualViewport) {
-    return { top: 0, height: layoutViewportHeight };
-  }
-
-  const top = Math.max(visualViewport.offsetTop, 0);
-  const maxVisibleHeight = Math.max(layoutViewportHeight - top, 0);
-  const rawVisibleHeight = visualViewport.height > 0 ? visualViewport.height : maxVisibleHeight;
-  const height = Math.max(Math.min(rawVisibleHeight, maxVisibleHeight), 0);
-
-  return { top, height };
-}
-
-function useModalViewportBounds(): ModalViewportBounds {
-  const [bounds, setBounds] = useState<ModalViewportBounds>(() => readModalViewportBounds());
-  const animationFrameRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const updateBounds = () => {
-      const nextBounds = readModalViewportBounds();
-      setBounds((previousBounds) => {
-        const hasTopChanged =
-          Math.abs(previousBounds.top - nextBounds.top) > VIEWPORT_BOUNDS_UPDATE_EPSILON;
-        const hasHeightChanged =
-          Math.abs(previousBounds.height - nextBounds.height) > VIEWPORT_BOUNDS_UPDATE_EPSILON;
-        if (!hasTopChanged && !hasHeightChanged) {
-          return previousBounds;
-        }
-        return nextBounds;
-      });
-    };
-
-    const scheduleBoundsUpdate = () => {
-      if (animationFrameRef.current !== null) {
-        return;
-      }
-      animationFrameRef.current = window.requestAnimationFrame(() => {
-        animationFrameRef.current = null;
-        updateBounds();
-      });
-    };
-
-    const visualViewport = window.visualViewport;
-
-    updateBounds();
-    visualViewport?.addEventListener('resize', scheduleBoundsUpdate, { passive: true });
-    visualViewport?.addEventListener('scroll', scheduleBoundsUpdate, { passive: true });
-    window.addEventListener('resize', scheduleBoundsUpdate, { passive: true });
-    window.addEventListener('orientationchange', scheduleBoundsUpdate);
-
-    return () => {
-      if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
-      visualViewport?.removeEventListener('resize', scheduleBoundsUpdate);
-      visualViewport?.removeEventListener('scroll', scheduleBoundsUpdate);
-      window.removeEventListener('resize', scheduleBoundsUpdate);
-      window.removeEventListener('orientationchange', scheduleBoundsUpdate);
-    };
-  }, []);
-
-  return bounds;
 }
 
 export function ModalRoot(): JSX.Element | null {
   const { stack } = useModal();
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null);
-  const viewportBounds = useModalViewportBounds();
 
   useEffect(() => {
     setPortalElement(ensureModalRoot());
@@ -127,18 +42,9 @@ export function ModalRoot(): JSX.Element | null {
     return stack.map((entry, index) => {
       const isTop = index === stack.length - 1;
       const zIndex = 50 + index * 5;
-      return (
-        <ModalRenderer
-          key={entry.key}
-          entry={entry}
-          isTop={isTop}
-          zIndex={zIndex}
-          viewportTop={viewportBounds.top}
-          viewportHeight={viewportBounds.height}
-        />
-      );
+      return <ModalRenderer key={entry.key} entry={entry} isTop={isTop} zIndex={zIndex} />;
     });
-  }, [stack, viewportBounds.height, viewportBounds.top]);
+  }, [stack]);
 
   if (!portalElement || modalNodes.length === 0) {
     return null;
@@ -147,13 +53,7 @@ export function ModalRoot(): JSX.Element | null {
   return createPortal(<Fragment>{modalNodes}</Fragment>, portalElement);
 }
 
-function ModalRenderer({
-  entry,
-  isTop,
-  zIndex,
-  viewportTop,
-  viewportHeight
-}: ModalRendererProps): JSX.Element {
+function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Element {
   const { pop, dismissAll, push, replace } = useModal();
   const { triggerError } = useHaptics();
   const intent = entry.props.intent ?? 'default';
@@ -184,14 +84,6 @@ function ModalRenderer({
 
   const dismissible = entry.props.dismissible ?? true;
   const showHeaderCloseButton = dismissible && entry.props.showHeaderCloseButton === true;
-  const modalRootStyle = useMemo(
-    () => ({
-      zIndex,
-      top: `${viewportTop}px`,
-      height: viewportHeight > 0 ? `${viewportHeight}px` : '100%',
-    }),
-    [viewportHeight, viewportTop, zIndex]
-  );
 
   return (
     <Transition.Root show as={Fragment} appear>
@@ -204,8 +96,8 @@ function ModalRenderer({
           }
           handleClose();
         }}
-        className="modal-root fixed inset-x-0"
-        style={modalRootStyle}
+        className="modal-root fixed inset-0"
+        style={{ zIndex }}
       >
         <div className="flex min-h-full items-center justify-center px-4 py-4 md:py-8">
           <Transition.Child
