@@ -42,9 +42,15 @@ import type {
   GachaAppStateV3,
   GachaCatalogStateV4,
   GachaRarityStateV3,
+  GachaCatalogItemAssetV4,
   PtSettingV3,
   UserProfileCardV3
 } from '@domain/app-persistence';
+import {
+  DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
+  DEFAULT_DRAW_RESULT_REVEAL_ENABLED,
+  type DrawResultRevealBackgroundColor
+} from '@domain/stores/uiPreferencesStore';
 import type { GachaResultPayload } from '@domain/gacha/gachaResult';
 import {
   buildGachaPools,
@@ -59,6 +65,12 @@ import {
   type GachaPoolDefinition
 } from '../../logic/gacha';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { DrawResultRevealOverlay } from './draw-result/DrawResultRevealOverlay';
+import {
+  buildRevealCardsFromAggregatedItems,
+  type DrawResultRevealAssetMeta,
+  type DrawResultRevealCardModel
+} from './draw-result/revealCards';
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -248,6 +260,17 @@ function formatExecutedAt(value: string | undefined): string {
   }).format(date);
 }
 
+const DRAW_RESULT_REVEAL_INTERVAL_MS = 90;
+
+function resolvePrimaryAssetMeta(assets: GachaCatalogItemAssetV4[] | undefined): DrawResultRevealAssetMeta {
+  const primaryAsset = Array.isArray(assets) ? assets[0] : undefined;
+  return {
+    assetId: primaryAsset?.assetId ?? null,
+    thumbnailAssetId: primaryAsset?.thumbnailAssetId ?? null,
+    digitalItemType: primaryAsset?.digitalItemType ?? null
+  };
+}
+
 export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
   const {
     appState: appStateStore,
@@ -282,6 +305,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const drawResultRevealEnabledPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealEnabled = drawResultRevealEnabledPreference ?? DEFAULT_DRAW_RESULT_REVEAL_ENABLED;
+  const drawResultRevealBackgroundColorPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealBackgroundColorPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealBackgroundColor: DrawResultRevealBackgroundColor =
+    drawResultRevealBackgroundColorPreference ?? DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR;
   const excludeRiaguImagesPreference = useMemo(
     () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -319,6 +353,27 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [appState, catalogState, includeOutOfStockInComplete, includeOutOfStockItems, inventoryCountsByItemId, rarityState]
   );
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    // 端末設定の「視差効果を減らす」を監視し、結果演出の自動再生有無へ反映する。
+    // 依存配列を空にしているのは、購読の開始と解除をマウント/アンマウント時だけに限定するため。
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => {
+      setPrefersReducedMotion(mediaQuery.matches);
+    };
+
+    // 初期値と変更購読を同じ関数で扱い、ユーザー設定変更に追従する。
+    updatePreference();
+    mediaQuery.addEventListener('change', updatePreference);
+
+    return () => {
+      mediaQuery.removeEventListener('change', updatePreference);
+    };
+  }, []);
+
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
     if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
       return lastPreferredGachaId;
@@ -350,6 +405,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [resultItems, setResultItems] = useState<DrawGachaDialogResultItem[] | null>(null);
   const [lastExecutedAt, setLastExecutedAt] = useState<string | undefined>(undefined);
   const [lastGachaLabel, setLastGachaLabel] = useState<string | undefined>(undefined);
+  const [lastGachaThumbnailAssetId, setLastGachaThumbnailAssetId] = useState<string | null>(null);
+  const [lastGachaThumbnailBlobUrl, setLastGachaThumbnailBlobUrl] = useState<string | null>(null);
   const [lastPointsSpent, setLastPointsSpent] = useState<number | null>(null);
   const [lastPointsRemainder, setLastPointsRemainder] = useState<number | null>(null);
   const [lastUsedManualPulls, setLastUsedManualPulls] = useState(false);
@@ -367,6 +424,37 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawGachaDialogBodyRef = useRef<HTMLDivElement | null>(null);
+  const lastRevealedPullIdRef = useRef<string | null>(null);
+  const [isRevealOverlayVisible, setIsRevealOverlayVisible] = useState(false);
+  const [revealCards, setRevealCards] = useState<DrawResultRevealCardModel[]>([]);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const [isRevealAnimating, setIsRevealAnimating] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  const clearRevealTimer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  }, []);
+  const scrollDrawGachaDialogBodyToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const bodyElement = drawGachaDialogBodyRef.current;
+    if (!bodyElement) {
+      return;
+    }
+    if (bodyElement.scrollHeight <= bodyElement.clientHeight) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      bodyElement.scrollTo({
+        top: bodyElement.scrollHeight,
+        behavior
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (!gachaOptions.length) {
@@ -463,9 +551,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   ]);
 
   useEffect(() => {
+    // ガチャ切替時に結果表示や送信状態を初期化し、前回実行の残状態を持ち越さないようにする。
+    // selectedGachaId が変わったときだけリセットを走らせる。
     setErrorMessage(null);
     setResultItems(null);
     setLastPullId(null);
+    setLastGachaLabel(undefined);
+    setLastGachaThumbnailAssetId(null);
+    setLastGachaThumbnailBlobUrl(null);
     setLastPointsSpent(null);
     setLastPointsRemainder(null);
     setLastUsedManualPulls(false);
@@ -482,7 +575,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       clearTimeout(noticeTimerRef.current);
       noticeTimerRef.current = null;
     }
-  }, [selectedGachaId]);
+    clearRevealTimer();
+    lastRevealedPullIdRef.current = null;
+    setIsRevealOverlayVisible(false);
+    setRevealCards([]);
+    setRevealedCount(0);
+    setIsRevealAnimating(false);
+  }, [clearRevealTimer, selectedGachaId]);
 
   const parsedPoints = useMemo(() => {
     if (!pointsInput.trim()) {
@@ -701,6 +800,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         noticeTimerRef.current = null;
       }
       setLastUserId(null);
+      clearRevealTimer();
+      lastRevealedPullIdRef.current = null;
+      setIsRevealOverlayVisible(false);
+      setRevealCards([]);
+      setRevealedCount(0);
+      setIsRevealAnimating(false);
 
       if (!selectedGacha) {
         setErrorMessage('ガチャの種類を選択してください。');
@@ -865,10 +970,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           return;
         }
 
+        const selectedGachaMeta = appState?.meta?.[selectedGacha.id];
         setResultItems(aggregatedItems);
         setLastPullId(pullId);
         setLastExecutedAt(executedAt);
         setLastGachaLabel(selectedGacha.label);
+        setLastGachaThumbnailAssetId(selectedGachaMeta?.thumbnailAssetId ?? null);
+        setLastGachaThumbnailBlobUrl(selectedGachaMeta?.thumbnailBlobUrl ?? null);
         setLastPointsSpent(useManualPulls ? null : executionResult.pointsSpent);
         setLastPointsRemainder(useManualPulls ? null : executionResult.pointsRemainder);
         setLastUsedManualPulls(useManualPulls);
@@ -896,6 +1004,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
     },
     [
+      appState,
       allowOutOfStockGuaranteeItem,
       applyLowerThresholdGuarantees,
       completeExecutionsOverrideForPlan,
@@ -915,13 +1024,24 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       triggerError,
       triggerSelection,
       userInventoriesState?.byItemId,
-      userProfiles
+      userProfiles,
+      clearRevealTimer
     ]
   );
 
   const handleExecute = () => {
     void executeGachaDraw();
   };
+
+  useEffect(() => {
+    if (!lastPullId) {
+      return;
+    }
+
+    // ガチャ実行成功時に結果一覧まで自動で移動し、操作直後に結果確認しやすくする。
+    // lastPullId は成功時のみ更新されるため、依存は lastPullId と helper callback のみに限定する。
+    scrollDrawGachaDialogBodyToBottom('smooth');
+  }, [lastPullId, scrollDrawGachaDialogBodyToBottom]);
 
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
   const integerFormatter = useMemo(() => new Intl.NumberFormat('ja-JP'), []);
@@ -960,6 +1080,35 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     });
     return map;
   }, [selectedGacha]);
+  const itemAssetById = useMemo(() => {
+    const map = new Map<string, DrawResultRevealAssetMeta>();
+    if (!selectedGachaId) {
+      return map;
+    }
+
+    const catalogItems = catalogState?.byGacha?.[selectedGachaId]?.items;
+    if (!catalogItems) {
+      return map;
+    }
+
+    Object.entries(catalogItems).forEach(([itemId, snapshot]) => {
+      map.set(itemId, resolvePrimaryAssetMeta(snapshot.assets));
+    });
+
+    return map;
+  }, [catalogState, selectedGachaId]);
+  const revealCardsFromResult = useMemo(() => {
+    if (!resultItems || resultItems.length === 0) {
+      return [] as DrawResultRevealCardModel[];
+    }
+
+    return buildRevealCardsFromAggregatedItems({
+      aggregatedItems: resultItems,
+      itemAssetById,
+      rarityOrderIndex,
+      itemOrderIndex
+    });
+  }, [itemAssetById, itemOrderIndex, rarityOrderIndex, resultItems]);
   const sortedResultItems = useMemo(() => {
     if (!resultItems) {
       return null;
@@ -980,6 +1129,62 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     });
     return items;
   }, [itemOrderIndex, rarityOrderIndex, resultItems]);
+
+  useEffect(() => {
+    if (!drawResultRevealEnabled || !lastPullId || revealCardsFromResult.length === 0) {
+      return;
+    }
+    if (lastRevealedPullIdRef.current === lastPullId) {
+      return;
+    }
+
+    // 同一履歴IDに対する二重開始を防ぎ、抽選完了のたびに1回だけ演出を開始する。
+    // lastPullId と変換済みカード配列の変化時のみ再評価する。
+    lastRevealedPullIdRef.current = lastPullId;
+    clearRevealTimer();
+    setRevealCards(revealCardsFromResult);
+    setIsRevealOverlayVisible(true);
+
+    if (prefersReducedMotion || revealCardsFromResult.length <= 1) {
+      setRevealedCount(revealCardsFromResult.length);
+      setIsRevealAnimating(false);
+      return;
+    }
+
+    setRevealedCount(1);
+    setIsRevealAnimating(true);
+  }, [clearRevealTimer, drawResultRevealEnabled, lastPullId, prefersReducedMotion, revealCardsFromResult]);
+
+  useEffect(() => {
+    if (drawResultRevealEnabled || !isRevealOverlayVisible) {
+      return;
+    }
+
+    clearRevealTimer();
+    setIsRevealAnimating(false);
+    setIsRevealOverlayVisible(false);
+  }, [clearRevealTimer, drawResultRevealEnabled, isRevealOverlayVisible]);
+
+  useEffect(() => {
+    if (!isRevealOverlayVisible || !isRevealAnimating) {
+      return;
+    }
+    if (revealedCount >= revealCards.length) {
+      setIsRevealAnimating(false);
+      return;
+    }
+
+    // 表示中フラグと件数に応じて 1 件ずつ解放し、カードを段階的に追加描画する。
+    // 依存配列に revealedCount を含め、1回進むごとに次タイマーを再スケジュールする。
+    revealTimerRef.current = window.setTimeout(() => {
+      setRevealedCount((previous) => Math.min(previous + 1, revealCards.length));
+      revealTimerRef.current = null;
+    }, DRAW_RESULT_REVEAL_INTERVAL_MS);
+
+    return () => {
+      clearRevealTimer();
+    };
+  }, [clearRevealTimer, isRevealAnimating, isRevealOverlayVisible, revealCards.length, revealedCount]);
   const planWarnings = displayPlan?.warnings ?? [];
   const normalizedCompleteSetting = displayPlan?.normalizedSettings.complete;
   const maxCompleteExecutions = useMemo(() => {
@@ -1185,13 +1390,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   }, [discordDeliveryCompleted, discordDeliveryStage]);
 
   useEffect(() => {
+    // モーダル破棄時にタイマーを必ず解放し、非表示後の state 更新を防ぐ。
+    // clearRevealTimer は stable な callback として依存配列に含める。
     return () => {
       if (noticeTimerRef.current) {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
       }
+      clearRevealTimer();
     };
-  }, []);
+  }, [clearRevealTimer]);
 
   useEffect(() => {
     if (!discordDeliveryNotice) {
@@ -1739,9 +1947,21 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void copyShareText('draw-result', shareContent.shareText);
   }, [copyShareText, shareContent]);
 
+  const handleRevealSkip = useCallback(() => {
+    clearRevealTimer();
+    setRevealedCount(revealCards.length);
+    setIsRevealAnimating(false);
+  }, [clearRevealTimer, revealCards.length]);
+
+  const handleRevealClose = useCallback(() => {
+    clearRevealTimer();
+    setIsRevealAnimating(false);
+    setIsRevealOverlayVisible(false);
+  }, [clearRevealTimer]);
+
   return (
-    <>
-      <ModalBody className="space-y-6">
+    <div className="draw-gacha-dialog__frame relative flex min-h-0 flex-1 flex-col" id="draw-gacha-dialog-frame">
+      <ModalBody ref={drawGachaDialogBodyRef} className="draw-gacha-dialog__body space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -2167,7 +2387,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </div>
         ) : null}
       </ModalBody>
-      <ModalFooter>
+      <ModalFooter className="draw-gacha-dialog__footer">
         <button type="button" className="btn btn-muted" onClick={close}>
           閉じる
         </button>
@@ -2189,6 +2409,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </button>
         ) : null}
       </ModalFooter>
-    </>
+      {drawResultRevealEnabled && isRevealOverlayVisible ? (
+        <DrawResultRevealOverlay
+          title={lastUserName}
+          cards={revealCards}
+          revealedCount={revealedCount}
+          isAnimating={isRevealAnimating}
+          backgroundColor={drawResultRevealBackgroundColor}
+          gachaThumbnailAssetId={lastGachaThumbnailAssetId}
+          gachaThumbnailBlobUrl={lastGachaThumbnailBlobUrl}
+          onSkip={handleRevealSkip}
+          onClose={handleRevealClose}
+        />
+      ) : null}
+    </div>
   );
 }

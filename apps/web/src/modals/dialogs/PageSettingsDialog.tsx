@@ -33,11 +33,15 @@ import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
 import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { syncOwnerNameActorCookie } from '../../features/receive/ownerActorCookie';
 import {
+  DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
+  DEFAULT_DRAW_RESULT_REVEAL_ENABLED,
   DEFAULT_SITE_ZOOM_PERCENT,
   DEFAULT_GACHA_OWNER_SHARE_RATE,
+  DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES,
   SITE_ZOOM_PERCENT_MAX,
   SITE_ZOOM_PERCENT_MIN,
-  type DashboardDesktopLayout
+  type DashboardDesktopLayout,
+  type DrawResultRevealBackgroundColor
 } from '@domain/stores/uiPreferencesStore';
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
@@ -121,6 +125,44 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewBackground: string;
   previewForeground: string;
 }>;
+
+const DRAW_RESULT_REVEAL_BACKGROUND_OPTIONS: Array<{
+  value: DrawResultRevealBackgroundColor;
+  label: string;
+  description: string;
+  previewColor: string;
+}> = [
+  {
+    value: 'black',
+    label: '黒',
+    description: '現在の演出と同様に暗めの背景で表示します。',
+    previewColor: '#000000'
+  },
+  {
+    value: 'white',
+    label: '白',
+    description: '明るい背景で表示します。',
+    previewColor: '#ffffff'
+  },
+  {
+    value: 'pink',
+    label: 'ピンク',
+    description: '淡いピンクの背景で表示します。',
+    previewColor: '#fbcfe8'
+  },
+  {
+    value: 'purple',
+    label: '紫',
+    description: '淡い紫の背景で表示します。',
+    previewColor: '#e9d5ff'
+  },
+  {
+    value: 'light-blue',
+    label: '水色',
+    description: '淡い水色の背景で表示します。',
+    previewColor: '#bae6fd'
+  }
+];
 
 function ReceiveSettingsContent(): JSX.Element {
   const { iconAssetIds, remainingSlots, isProcessing, error, addIcons, removeIcon } = useReceiveIconRegistry();
@@ -274,6 +316,17 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const drawResultRevealEnabledPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealEnabled = drawResultRevealEnabledPreference ?? DEFAULT_DRAW_RESULT_REVEAL_ENABLED;
+  const drawResultRevealBackgroundColorPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealBackgroundColorPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealBackgroundColor =
+    drawResultRevealBackgroundColorPreference ?? DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR;
   const excludeRiaguImagesPreference = useMemo(
     () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -411,6 +464,21 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleDrawResultRevealEnabledChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setDrawResultRevealEnabledPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleDrawResultRevealBackgroundColorChange = useCallback(
+    (nextColor: DrawResultRevealBackgroundColor) => {
+      if (!DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES.includes(nextColor)) {
+        return;
+      }
+      uiPreferencesStore.setDrawResultRevealBackgroundColorPreference(nextColor, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -993,6 +1061,68 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
               />
+              <SwitchField
+                label="ガチャ結果表示演出を表示"
+                description="ガチャ実行直後に表示される抽選結果オーバーレイ演出の表示/非表示を切り替えます。"
+                checked={drawResultRevealEnabled}
+                onChange={handleDrawResultRevealEnabledChange}
+              />
+              <div className="page-settings-dialog__draw-result-background-panel rounded-2xl border border-border/60 bg-panel/70 p-4">
+                <div className="page-settings-dialog__draw-result-background-header space-y-1">
+                  <h3 className="page-settings-dialog__draw-result-background-title text-sm font-semibold text-surface-foreground">
+                    抽選結果表示の背景色
+                  </h3>
+                  <p className="page-settings-dialog__draw-result-background-description text-xs leading-relaxed text-muted-foreground">
+                    抽選結果オーバーレイで使う背景色を選択します。
+                  </p>
+                </div>
+                <RadioGroup
+                  value={drawResultRevealBackgroundColor}
+                  onChange={handleDrawResultRevealBackgroundColorChange}
+                  className="page-settings-dialog__draw-result-background-options mt-3 space-y-2"
+                >
+                  {DRAW_RESULT_REVEAL_BACKGROUND_OPTIONS.map((option) => (
+                    <RadioGroup.Option
+                      key={option.value}
+                      value={option.value}
+                      className={({ checked, active }) =>
+                        clsx(
+                          'page-settings-dialog__draw-result-background-option flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-2 transition',
+                          checked
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
+                          active && !checked ? 'ring-2 ring-accent/40' : undefined
+                        )
+                      }
+                    >
+                      {({ checked }) => (
+                        <div className="page-settings-dialog__draw-result-background-option-content flex w-full items-start justify-between gap-3">
+                          <div className="page-settings-dialog__draw-result-background-option-main flex items-start gap-3">
+                            <span
+                              className="page-settings-dialog__draw-result-background-option-swatch mt-0.5 block h-8 w-8 rounded-lg border border-border/60"
+                              style={{ backgroundColor: option.previewColor }}
+                              aria-hidden="true"
+                            />
+                            <div className="page-settings-dialog__draw-result-background-option-texts space-y-0.5">
+                              <RadioGroup.Label className="page-settings-dialog__draw-result-background-option-label text-sm font-semibold text-surface-foreground">
+                                {option.label}
+                              </RadioGroup.Label>
+                              <RadioGroup.Description className="page-settings-dialog__draw-result-background-option-description text-[11px] leading-relaxed text-muted-foreground">
+                                {option.description}
+                              </RadioGroup.Description>
+                            </div>
+                          </div>
+                          {checked ? (
+                            <span className="page-settings-dialog__draw-result-background-option-status text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
+                              適用中
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </RadioGroup.Option>
+                  ))}
+                </RadioGroup>
+              </div>
               <SwitchField
                 label="リアグに登録した画像は送信・保存されないようにする"
                 description="ONにすると保存オプションやクイック送信でリアグ対象の画像を含めません。"

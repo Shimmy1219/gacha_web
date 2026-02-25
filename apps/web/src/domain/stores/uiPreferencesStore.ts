@@ -38,6 +38,19 @@ export const SITE_ZOOM_PERCENT_MIN = 50;
 export const SITE_ZOOM_PERCENT_MAX = 100;
 export const DEFAULT_SITE_ZOOM_PERCENT = 100;
 export const DEFAULT_GACHA_OWNER_SHARE_RATE = 0.15;
+export const DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES = [
+  'black',
+  'white',
+  'pink',
+  'purple',
+  'light-blue'
+] as const;
+export type DrawResultRevealBackgroundColor = (typeof DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES)[number];
+const DRAW_RESULT_REVEAL_BACKGROUND_COLOR_SET = new Set<string>(
+  DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES
+);
+export const DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR: DrawResultRevealBackgroundColor = 'black';
+export const DEFAULT_DRAW_RESULT_REVEAL_ENABLED = true;
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -188,6 +201,29 @@ function normalizeSiteZoomPercent(value: unknown): number | null {
 
   const rounded = Math.round(numeric);
   return Math.min(Math.max(rounded, SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
+
+function normalizeDrawResultRevealBackgroundColor(
+  value: unknown
+): DrawResultRevealBackgroundColor | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const aliases: Record<string, DrawResultRevealBackgroundColor> = {
+    lightblue: 'light-blue',
+    sky: 'light-blue',
+    blue: 'light-blue'
+  };
+  const resolved = aliases[normalized] ?? normalized;
+  return DRAW_RESULT_REVEAL_BACKGROUND_COLOR_SET.has(resolved)
+    ? (resolved as DrawResultRevealBackgroundColor)
+    : null;
 }
 
 function readDiscordAuthLogsEnabledFromState(state: UiPreferencesStateV3 | undefined): boolean | null {
@@ -498,6 +534,52 @@ function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined)
   }
 
   return normalizeBoolean(drawDialog.quickSendNewOnly, false);
+}
+
+function readDrawResultRevealEnabledPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'revealOverlayEnabled')) {
+    return null;
+  }
+
+  return normalizeBoolean(drawDialog.revealOverlayEnabled, DEFAULT_DRAW_RESULT_REVEAL_ENABLED);
+}
+
+function readDrawResultRevealBackgroundColorPreference(
+  state: UiPreferencesStateV3 | undefined
+): DrawResultRevealBackgroundColor | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'revealOverlayBackgroundColor')) {
+    return null;
+  }
+
+  return normalizeDrawResultRevealBackgroundColor(drawDialog.revealOverlayBackgroundColor);
 }
 
 function readExcludeRiaguImagesPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
@@ -833,6 +915,14 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getDrawResultRevealEnabledPreference(): boolean | null {
+    return readDrawResultRevealEnabledPreference(this.state);
+  }
+
+  getDrawResultRevealBackgroundColorPreference(): DrawResultRevealBackgroundColor | null {
+    return readDrawResultRevealBackgroundColorPreference(this.state);
+  }
+
   getGachaOwnerShareRatePreference(): number | null {
     return readGachaOwnerShareRatePreference(this.state);
   }
@@ -981,6 +1071,135 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
         const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
         if (nextDrawDialog) {
           delete nextDrawDialog.quickSendNewOnly;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setDrawResultRevealEnabledPreference(
+    nextValue: boolean | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = typeof nextValue === 'boolean' ? nextValue : null;
+
+    this.update(
+      (previous) => {
+        const current = readDrawResultRevealEnabledPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                revealOverlayEnabled: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.revealOverlayEnabled;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setDrawResultRevealBackgroundColorPreference(
+    nextValue: DrawResultRevealBackgroundColor | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized =
+      nextValue == null ? null : normalizeDrawResultRevealBackgroundColor(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readDrawResultRevealBackgroundColorPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                revealOverlayBackgroundColor: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.revealOverlayBackgroundColor;
         }
 
         const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);

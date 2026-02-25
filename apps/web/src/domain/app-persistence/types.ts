@@ -235,6 +235,8 @@ export interface UiPreferencesStateV3 {
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;
+      revealOverlayEnabled?: boolean;
+      revealOverlayBackgroundColor?: string;
       [key: string]: unknown;
     };
     stock?: {
