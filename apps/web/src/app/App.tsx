@@ -308,6 +308,10 @@ export function App(): JSX.Element {
     handleOpenStartWizard();
   };
 
+  const handleOpenHistory = () => {
+    navigate('/gacha/history');
+  };
+
   const handleExportAll = () => {
     push(BackupTransferDialog, {
       id: 'backup-transfer-dialog',
@@ -359,6 +363,7 @@ export function App(): JSX.Element {
     isMobile,
     onDrawGacha: handleDrawGacha,
     onRegisterGacha: handleRegisterGacha,
+    onOpenHistory: handleOpenHistory,
     onExportAll: handleExportAll,
     onOpenPageSettings: handleOpenPageSettings
   };
