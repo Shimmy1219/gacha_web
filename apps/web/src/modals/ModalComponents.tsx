@@ -6,6 +6,7 @@ import {
 } from '@headlessui/react';
 import { clsx } from 'clsx';
 import {
+  useCallback,
   createContext,
   forwardRef,
   type ComponentPropsWithoutRef,
@@ -40,6 +41,53 @@ interface ModalViewportMetrics {
 const ModalKeyboardInsetContext = createContext<number>(0);
 
 const KEYBOARD_VISIBILITY_HEIGHT_DELTA_THRESHOLD = 160;
+const INTERNAL_SCROLLABLE_OVERFLOW_VALUES = new Set(['auto', 'scroll', 'overlay']);
+
+interface LockedScrollableStyleSnapshot {
+  overflowY: string;
+  maxHeight: string;
+  overscrollBehaviorY: string;
+  webkitOverflowScrolling: string;
+  touchAction: string;
+}
+
+function restoreLockedScrollableElements(
+  lockedScrollableElements: Map<HTMLElement, LockedScrollableStyleSnapshot>
+): void {
+  lockedScrollableElements.forEach((snapshot, element) => {
+    if (snapshot.overflowY) {
+      element.style.overflowY = snapshot.overflowY;
+    } else {
+      element.style.removeProperty('overflow-y');
+    }
+
+    if (snapshot.maxHeight) {
+      element.style.maxHeight = snapshot.maxHeight;
+    } else {
+      element.style.removeProperty('max-height');
+    }
+
+    if (snapshot.overscrollBehaviorY) {
+      element.style.overscrollBehaviorY = snapshot.overscrollBehaviorY;
+    } else {
+      element.style.removeProperty('overscroll-behavior-y');
+    }
+
+    if (snapshot.webkitOverflowScrolling) {
+      element.style.webkitOverflowScrolling = snapshot.webkitOverflowScrolling;
+    } else {
+      element.style.removeProperty('-webkit-overflow-scrolling');
+    }
+
+    if (snapshot.touchAction) {
+      element.style.touchAction = snapshot.touchAction;
+    } else {
+      element.style.removeProperty('touch-action');
+    }
+  });
+
+  lockedScrollableElements.clear();
+}
 
 function isKeyboardVisible(viewport: VisualViewport | null, layoutViewportHeight: number): boolean {
   if (!viewport) {
@@ -147,9 +195,25 @@ export const ModalPanel = forwardRef<
   ElementRef<typeof DialogPanel>,
   ModalPanelProps
 >(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
+  const panelElementRef = useRef<ElementRef<typeof DialogPanel> | null>(null);
+  const lockedScrollableElementsRef = useRef<Map<HTMLElement, LockedScrollableStyleSnapshot>>(new Map());
   const { style, ...restProps } = props;
   const { maxHeight: viewportMaxHeight, keyboardInset } = useModalViewportMetrics();
   const isKeyboardVisible = (keyboardInset ?? 0) > 0;
+
+  const handlePanelRef = useCallback(
+    (node: ElementRef<typeof DialogPanel> | null) => {
+      panelElementRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+        return;
+      }
+      if (ref) {
+        ref.current = node;
+      }
+    },
+    [ref]
+  );
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
     return viewportMaxHeight !== undefined;
@@ -176,11 +240,69 @@ export const ModalPanel = forwardRef<
     return nextStyle;
   }, [keyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
 
+  useEffect(() => {
+    const panelElement = panelElementRef.current;
+    const lockedScrollableElements = lockedScrollableElementsRef.current;
+
+    if (!panelElement || typeof window === 'undefined') {
+      restoreLockedScrollableElements(lockedScrollableElements);
+      return;
+    }
+
+    if (!isKeyboardVisible) {
+      restoreLockedScrollableElements(lockedScrollableElements);
+      return;
+    }
+
+    const lockInternalScrollAreas = () => {
+      const descendants = panelElement.querySelectorAll<HTMLElement>('*');
+
+      descendants.forEach((element) => {
+        if (lockedScrollableElements.has(element)) {
+          return;
+        }
+
+        const computedStyle = window.getComputedStyle(element);
+        if (!INTERNAL_SCROLLABLE_OVERFLOW_VALUES.has(computedStyle.overflowY)) {
+          return;
+        }
+
+        lockedScrollableElements.set(element, {
+          overflowY: element.style.overflowY,
+          maxHeight: element.style.maxHeight,
+          overscrollBehaviorY: element.style.overscrollBehaviorY,
+          webkitOverflowScrolling: element.style.webkitOverflowScrolling,
+          touchAction: element.style.touchAction
+        });
+
+        element.style.overflowY = 'visible';
+        element.style.maxHeight = 'none';
+        element.style.overscrollBehaviorY = 'auto';
+        element.style.webkitOverflowScrolling = 'auto';
+        element.style.touchAction = 'pan-x pinch-zoom';
+      });
+    };
+
+    // キーボード表示中はモーダル直下ラッパーへスクロール責務を集約し、内部スクロールを一時停止する。
+    lockInternalScrollAreas();
+
+    // 入力補助UIや条件表示で後から生成されるスクロール領域も同じ方針で停止する。
+    const mutationObserver = new MutationObserver(() => {
+      lockInternalScrollAreas();
+    });
+    mutationObserver.observe(panelElement, { childList: true, subtree: true });
+
+    return () => {
+      mutationObserver.disconnect();
+      restoreLockedScrollableElements(lockedScrollableElements);
+    };
+  }, [isKeyboardVisible]);
+
   return (
     <ModalKeyboardInsetContext.Provider value={keyboardInset ?? 0}>
       <DialogPanel
         {...restProps}
-        ref={ref}
+        ref={handlePanelRef}
         className={clsx(
           'modal-panel relative z-10 flex w-full transform flex-col overflow-x-hidden rounded-2xl border border-border/70 bg-panel/95 text-surface-foreground backdrop-blur',
           isKeyboardVisible ? 'overflow-y-visible' : 'overflow-y-auto md:overflow-hidden',
