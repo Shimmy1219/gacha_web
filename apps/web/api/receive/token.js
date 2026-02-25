@@ -400,7 +400,13 @@ const guarded = withApiGuards({
     const shareUrl = `${site.replace(/\/+$/,'')}/receive?t=${encodeURIComponent(shortToken)}`;
 
     vLog('issued', { exp, name: filename, purpose: purp });
-    log.info('token issued', { purpose: purp, exp, downloadHost: new URL(normalizedUrl).host });
+    log.info('token issued', {
+      purpose: purp,
+      exp,
+      downloadHost: new URL(normalizedUrl).host,
+      shareUrl,
+      issuedId: shortToken
+    });
 
     return res.status(200).json({ ok:true, token, shortToken, shareUrl, exp });
   } catch (err){
