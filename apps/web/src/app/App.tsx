@@ -14,6 +14,7 @@ import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
 import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
 import { DiscordOauthErrorDialog } from '../modals/dialogs/DiscordOauthErrorDialog';
 import { ReleaseNotesDialog } from '../modals/dialogs/ReleaseNotesDialog';
+import { buildPageSettingsDialogProps } from '../modals/dialogs/pageSettingsDialogConfig';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -341,15 +342,7 @@ export function App(): JSX.Element {
   };
 
   const handleOpenPageSettings = () => {
-    push(PageSettingsDialog, {
-      id: 'page-settings',
-      title: 'サイト設定',
-      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
-      size: 'xl',
-      panelClassName: 'page-settings-modal overflow-hidden',
-      panelPaddingClassName: 'p-2 lg:p-6',
-      showHeaderCloseButton: true
-    });
+    push(PageSettingsDialog, buildPageSettingsDialogProps());
   };
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {

@@ -317,6 +317,47 @@
     background: rgb(var(--color-accent) / 1);
   }
 
+  .page-settings-target {
+    transition:
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      background-color 220ms ease;
+  }
+
+  .page-settings-target--highlighted {
+    border-color: rgb(var(--color-accent) / 0.95) !important;
+    background-color: rgb(var(--color-accent) / 0.09);
+    box-shadow:
+      0 0 0 2px rgb(var(--color-accent) / 0.32),
+      0 0 0 6px rgb(var(--color-accent) / 0.14);
+    animation: page-settings-target-highlight-pulse 1.4s ease-in-out 3;
+  }
+
+  .page-settings-target__input--highlighted {
+    border-color: rgb(var(--color-accent) / 0.95) !important;
+    box-shadow:
+      0 0 0 2px rgb(var(--color-accent) / 0.26),
+      0 0 0 4px rgb(var(--color-accent) / 0.12);
+  }
+
+  @keyframes page-settings-target-highlight-pulse {
+    0% {
+      box-shadow:
+        0 0 0 2px rgb(var(--color-accent) / 0.24),
+        0 0 0 4px rgb(var(--color-accent) / 0.1);
+    }
+    50% {
+      box-shadow:
+        0 0 0 3px rgb(var(--color-accent) / 0.4),
+        0 0 0 8px rgb(var(--color-accent) / 0.2);
+    }
+    100% {
+      box-shadow:
+        0 0 0 2px rgb(var(--color-accent) / 0.24),
+        0 0 0 4px rgb(var(--color-accent) / 0.1);
+    }
+  }
+
   body[data-page-settings-zoom-preview='1'] .modal-overlay {
     background: transparent;
     backdrop-filter: none;

@@ -38,6 +38,7 @@ import { useAppPersistence, useDomainStores } from '../../features/storage/AppPe
 import { useNotification } from '../../features/notification';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
+import { buildPageSettingsDialogProps } from './pageSettingsDialogConfig';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
@@ -336,13 +337,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(PageSettingsDialog, {
-            id: 'page-settings',
-            title: 'ページ設定',
-            size: 'lg',
-            panelClassName: 'page-settings-modal overflow-hidden',
-            showHeaderCloseButton: true
-          });
+          push(
+            PageSettingsDialog,
+            buildPageSettingsDialogProps({
+              payload: {
+                focusTarget: 'misc-owner-name',
+                highlightMode: 'pulse',
+                highlightDurationMs: 7000,
+                origin: 'save-options-owner-name-warning'
+              }
+            })
+          );
         }
       }
     });
