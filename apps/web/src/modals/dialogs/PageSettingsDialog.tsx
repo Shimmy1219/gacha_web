@@ -40,14 +40,18 @@ import {
 } from '@domain/stores/uiPreferencesStore';
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
+import {
+  type PageSettingsDialogPayload,
+  type PageSettingsFocusTargetKey,
+  type PageSettingsHighlightMode,
+  type PageSettingsMenuKey
+} from './pageSettingsDialogConfig';
 
 interface MenuItem {
-  id: SettingsMenuKey;
+  id: PageSettingsMenuKey;
   label: string;
   description: string;
 }
-
-type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'receive' | 'misc';
 
 const MENU_ITEMS: MenuItem[] = [
   {
@@ -153,29 +157,68 @@ function formatOwnerShareRateInput(value: number): string {
   return Number.isFinite(percent) ? String(percent).replace(/\.0$/, '') : '';
 }
 
-const REM_IN_PIXELS = 16;
-const BASE_MODAL_MIN_HEIGHT_REM = 28;
-const VIEWPORT_PADDING_REM = 12;
-const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
-const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
 const PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY = 'pageSettingsZoomPreview';
+const DEFAULT_HIGHLIGHT_DURATION_MS = 7000;
+const MIN_HIGHLIGHT_DURATION_MS = 2000;
+const MAX_HIGHLIGHT_DURATION_MS = 20000;
+
+interface FocusTargetDefinition {
+  menu: PageSettingsMenuKey;
+  containerId: string;
+  focusElementId: string;
+}
+
+const PAGE_SETTINGS_FOCUS_TARGETS: Record<PageSettingsFocusTargetKey, FocusTargetDefinition> = {
+  'misc-owner-name': {
+    menu: 'misc',
+    containerId: 'page-settings-focus-target-owner-name',
+    focusElementId: 'owner-name'
+  },
+  'gacha-owner-share-rate': {
+    menu: 'gacha',
+    containerId: 'page-settings-focus-target-gacha-owner-share-rate',
+    focusElementId: 'gacha-owner-share-rate'
+  },
+  'layout-site-zoom': {
+    menu: 'layout',
+    containerId: 'page-settings-focus-target-layout-site-zoom',
+    focusElementId: 'page-settings-site-zoom-range'
+  }
+};
 
 function clampSiteZoomPercent(value: number): number {
   return Math.min(Math.max(Math.round(value), SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
 }
 
-export const PageSettingsDialog: ModalComponent = (props) => {
-  const { close, push, isTop } = props;
+function clampHighlightDurationMs(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_HIGHLIGHT_DURATION_MS;
+  }
+  const normalized = Math.round(value as number);
+  return Math.min(Math.max(normalized, MIN_HIGHLIGHT_DURATION_MS), MAX_HIGHLIGHT_DURATION_MS);
+}
+
+// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
+export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => {
+  const { close, push, isTop, payload } = props;
+  const requestedFocusTarget = payload?.focusTarget ?? null;
+  const requestedFocusDefinition = requestedFocusTarget ? PAGE_SETTINGS_FOCUS_TARGETS[requestedFocusTarget] : null;
+  const requestedInitialMenu = payload?.initialMenu ?? null;
+  const initialMenu = requestedFocusDefinition?.menu ?? requestedInitialMenu ?? 'site-theme';
+  const highlightMode: PageSettingsHighlightMode = payload?.highlightMode === 'persistent' ? 'persistent' : 'pulse';
+  const highlightDurationMs = clampHighlightDurationMs(payload?.highlightDurationMs);
   const { notify } = useNotification();
-  const modalBodyRef = useRef<HTMLDivElement | null>(null);
-  const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
+  const deepLinkAppliedRef = useRef<string | null>(null);
+  const focusExecutionRef = useRef<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<PageSettingsMenuKey>(initialMenu);
+  const [highlightedFocusTarget, setHighlightedFocusTarget] = useState<PageSettingsFocusTargetKey | null>(
+    requestedFocusTarget
+  );
   const [showArchived, setShowArchived] = useState(true);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [isDeletingAllData, setIsDeletingAllData] = useState(false);
   const [isResettingDiscordServerInfo, setIsResettingDiscordServerInfo] = useState(false);
-  const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
-  const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return true;
@@ -186,6 +229,9 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const isSidebarLayoutForced = forceSidebarLayout;
   const [activeView, setActiveView] = useState<'menu' | 'content'>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
+      return 'content';
+    }
+    if (requestedFocusTarget) {
       return 'content';
     }
     return window.matchMedia('(min-width: 1024px)').matches ? 'content' : 'menu';
@@ -724,26 +770,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [isZoomPreviewing]);
 
   useLayoutEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const updateViewport = () => {
-      const innerHeight = window.innerHeight;
-      const next = innerHeight - VIEWPORT_PADDING_PX;
-      const limit = next > 0 ? next : innerHeight;
-      setViewportMaxHeight(limit > 0 ? limit : null);
-    };
-
-    updateViewport();
-    window.addEventListener('resize', updateViewport);
-
-    return () => {
-      window.removeEventListener('resize', updateViewport);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return;
     }
@@ -769,30 +795,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       } else {
         mediaQuery.removeListener(updateLayout);
       }
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const element = modalBodyRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new window.ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const nextHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, Math.ceil(entry.contentRect.height));
-        setMaxBodyHeight((previous) => (nextHeight > previous ? nextHeight : previous));
-      }
-    });
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
     };
   }, []);
 
@@ -842,8 +844,104 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     );
   }, [showDiscordLogsPreference]);
 
+  // 外部から指定された初期メニュー/フォーカスターゲットを初回描画時に反映する。
+  // 依存配列にはpayload由来の値だけを置き、通常操作では再適用しない。
+  useEffect(() => {
+    const deepLinkKey = `${requestedInitialMenu ?? ''}:${requestedFocusTarget ?? ''}`;
+    if (deepLinkAppliedRef.current === deepLinkKey) {
+      return;
+    }
+    deepLinkAppliedRef.current = deepLinkKey;
+    focusExecutionRef.current = null;
+
+    const nextMenu = requestedFocusDefinition?.menu ?? requestedInitialMenu;
+    if (nextMenu) {
+      setActiveMenu(nextMenu);
+    }
+
+    if (requestedFocusTarget) {
+      setHighlightedFocusTarget(requestedFocusTarget);
+      if (!isLargeLayout) {
+        setActiveView('content');
+      }
+    }
+  }, [isLargeLayout, requestedFocusDefinition, requestedFocusTarget, requestedInitialMenu]);
+
+  // ターゲット要素が表示可能になったタイミングでスクロール・フォーカスし、入力位置を明確化する。
+  // レイアウトや表示ビューが変わった時のみ再評価する。
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!requestedFocusTarget || !requestedFocusDefinition) {
+      return;
+    }
+    if (activeMenu !== requestedFocusDefinition.menu) {
+      return;
+    }
+    if (!isLargeLayout && activeView !== 'content') {
+      return;
+    }
+
+    const focusExecutionKey = `${requestedFocusTarget}:${activeMenu}:${activeView}:${isLargeLayout}`;
+    if (focusExecutionRef.current === focusExecutionKey) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      const containerElement = document.getElementById(requestedFocusDefinition.containerId);
+      if (!(containerElement instanceof HTMLElement)) {
+        return;
+      }
+
+      containerElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+
+      const focusElement = document.getElementById(requestedFocusDefinition.focusElementId);
+      if (focusElement instanceof HTMLElement) {
+        focusElement.focus({ preventScroll: true });
+      } else {
+        containerElement.focus({ preventScroll: true });
+      }
+
+      setHighlightedFocusTarget(requestedFocusTarget);
+      focusExecutionRef.current = focusExecutionKey;
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [activeMenu, activeView, isLargeLayout, requestedFocusDefinition, requestedFocusTarget]);
+
+  // pulse指定時のみハイライトを一定時間で解除し、通常表示へ戻す。
+  // highlightedFocusTargetが切り替わるたびにタイマーを張り直す。
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!highlightedFocusTarget || highlightMode === 'persistent') {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setHighlightedFocusTarget((current) => (current === highlightedFocusTarget ? null : current));
+    }, highlightDurationMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [highlightDurationMs, highlightMode, highlightedFocusTarget]);
+
+  const isFocusTargetHighlighted = useCallback(
+    (target: PageSettingsFocusTargetKey) => highlightedFocusTarget === target,
+    [highlightedFocusTarget]
+  );
+
   const handleMenuSelect = useCallback(
-    (menu: SettingsMenuKey) => {
+    (menu: PageSettingsMenuKey) => {
       setActiveMenu(menu);
       if (!isLargeLayout) {
         setActiveView('content');
@@ -915,7 +1013,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 onChange={handleApplyLowerThresholdGuaranteesChange}
               />
             </div>
-            <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+            <div
+              id="page-settings-focus-target-gacha-owner-share-rate"
+              className={clsx(
+                'page-settings-dialog__gacha-owner-share-rate-card page-settings-target rounded-2xl border border-border/60 bg-panel/70 p-4',
+                isFocusTargetHighlighted('gacha-owner-share-rate') && 'page-settings-target--highlighted'
+              )}
+            >
               <label htmlFor="gacha-owner-share-rate" className="text-sm font-semibold text-surface-foreground">
                 配信アプリからの還元率
               </label>
@@ -933,7 +1037,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   onChange={handleOwnerShareRateChange}
                   onBlur={handleOwnerShareRateCommit}
                   onKeyDown={handleOwnerShareRateKeyDown}
-                  className="w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  className={clsx(
+                    'page-settings-dialog__gacha-owner-share-rate-input w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40',
+                    isFocusTargetHighlighted('gacha-owner-share-rate') && 'page-settings-target__input--highlighted'
+                  )}
                   inputMode="decimal"
                 />
                 <span className="text-xs text-muted-foreground">%</span>
@@ -1149,10 +1256,12 @@ export const PageSettingsDialog: ModalComponent = (props) => {
             </div>
             {!isMobileDashboard ? (
               <div
+                id="page-settings-focus-target-layout-site-zoom"
                 className={clsx(
-                  'page-settings__site-zoom-panel space-y-4 transition',
+                  'page-settings__site-zoom-panel page-settings-target space-y-4 transition',
                   isZoomPreviewing &&
-                    'page-settings__site-zoom-panel--previewing rounded-2xl border border-border/60'
+                    'page-settings__site-zoom-panel--previewing rounded-2xl border border-border/60',
+                  isFocusTargetHighlighted('layout-site-zoom') && 'page-settings-target--highlighted'
                 )}
               >
                 <div className="page-settings__site-zoom-header space-y-1">
@@ -1180,7 +1289,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                     onPointerCancel={handleStopZoomPreview}
                     onBlur={handleSiteZoomSliderBlur}
                     onKeyUp={handleSiteZoomSliderKeyUp}
-                    className="page-settings__site-zoom-slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-panel-contrast accent-accent"
+                    className={clsx(
+                      'page-settings__site-zoom-slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-panel-contrast accent-accent',
+                      isFocusTargetHighlighted('layout-site-zoom') &&
+                        'page-settings-target__input--highlighted ring-2 ring-accent/45'
+                    )}
                     aria-valuemin={SITE_ZOOM_PERCENT_MIN}
                     aria-valuemax={SITE_ZOOM_PERCENT_MAX}
                     aria-valuenow={siteZoomPercent}
@@ -1407,7 +1520,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               </p>
             </div>
             <div className="space-y-4">
-              <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+              <div
+                id="page-settings-focus-target-owner-name"
+                className={clsx(
+                  'page-settings-dialog__owner-name-card page-settings-target rounded-2xl border border-border/60 bg-panel/70 p-4',
+                  isFocusTargetHighlighted('misc-owner-name') && 'page-settings-target--highlighted'
+                )}
+              >
                 <label htmlFor="owner-name" className="text-sm font-semibold text-surface-foreground">
                   オーナー名
                 </label>
@@ -1420,7 +1539,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   value={ownerName}
                   onChange={handleOwnerNameChange}
                   placeholder="例: Shimmy配信"
-                  className="mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  className={clsx(
+                    'page-settings-dialog__owner-name-input mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40',
+                    isFocusTargetHighlighted('misc-owner-name') && 'page-settings-target__input--highlighted'
+                  )}
                 />
               </div>
               <SwitchField
@@ -1508,22 +1630,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     }
   };
 
-  const desiredMinHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, maxBodyHeight);
-  const viewportLimit = viewportMaxHeight != null && viewportMaxHeight > 0 ? viewportMaxHeight : null;
-  const effectiveMinHeight = viewportLimit ? Math.min(desiredMinHeight, viewportLimit) : desiredMinHeight;
-
   return (
     <ModalBody
-      ref={modalBodyRef}
       className={clsx(
-        'page-settings-dialog flex flex-col space-y-0 overflow-hidden p-0',
+        'page-settings-dialog flex min-h-0 max-h-full flex-col space-y-0 overflow-hidden p-0',
         isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
         isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
       )}
-      style={{
-        minHeight: `${effectiveMinHeight}px`,
-        maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
-      }}
     >
       <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav

@@ -260,12 +260,17 @@ function applyDocumentZoom(percent: number): void {
   const scale = normalized / 100;
   const supportsCssZoom =
     typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('zoom', '1');
+  const isIdentityScale = Math.abs(scale - 1) < Number.EPSILON;
 
   root.style.setProperty('--site-zoom-percent', String(normalized));
   root.style.setProperty('--site-zoom-scale', String(scale));
   root.style.setProperty('--site-zoom-inverse-scale', String(1 / scale));
 
-  if (supportsCssZoom) {
+  // 等倍時は zoom/transform のどちらも適用せず、fixed 要素の座標ずれ要因を作らない。
+  if (isIdentityScale) {
+    root.dataset.siteZoomMode = 'none';
+    root.style.removeProperty('zoom');
+  } else if (supportsCssZoom) {
     root.dataset.siteZoomMode = 'native';
     root.style.setProperty('zoom', String(scale));
   } else {

@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
 import { PageSettingsDialog } from './PageSettingsDialog';
+import { buildPageSettingsDialogProps } from './pageSettingsDialogConfig';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -594,13 +595,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(PageSettingsDialog, {
-            id: 'page-settings',
-            title: 'ページ設定',
-            size: 'lg',
-            panelClassName: 'page-settings-modal overflow-hidden',
-            showHeaderCloseButton: true
-          });
+          push(
+            PageSettingsDialog,
+            buildPageSettingsDialogProps({
+              payload: {
+                focusTarget: 'misc-owner-name',
+                highlightMode: 'pulse',
+                highlightDurationMs: 7000,
+                origin: 'draw-gacha-owner-name-warning'
+              }
+            })
+          );
         }
       }
     });
