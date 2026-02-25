@@ -83,6 +83,10 @@ const numberFormatter = new Intl.NumberFormat('ja-JP');
 
 const RIAGU_PANEL_CLOSE_DELAY_MS = 300;
 
+interface RiaguSectionProps {
+  onRegisterGacha?: () => void;
+}
+
 function formatMarginPercent(value: number | null): string {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
     return '算出不可';
@@ -243,7 +247,7 @@ function createRiaguSummaryMetrics({
   };
 }
 
-export function RiaguSection(): JSX.Element {
+export function RiaguSection({ onRegisterGacha }: RiaguSectionProps): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
   const [isSummaryDetailsOpen, setIsSummaryDetailsOpen] = useState(false);
@@ -475,6 +479,7 @@ export function RiaguSection(): JSX.Element {
         activeId={activeGachaId}
         onSelect={(gachaId) => setActiveGachaId(gachaId)}
         onDelete={(tab) => confirmDeleteGacha(tab)}
+        onAddGacha={onRegisterGacha}
         className="riagu-section__tabs"
       />
 

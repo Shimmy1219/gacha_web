@@ -14,10 +14,18 @@ interface GachaTabsProps {
   activeId: string | null;
   onSelect: (gachaId: string) => void;
   onDelete?: (tab: GachaTabOption) => void;
+  onAddGacha?: () => void;
   className?: string;
 }
 
-export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: GachaTabsProps): JSX.Element {
+export function GachaTabs({
+  tabs,
+  activeId,
+  onSelect,
+  onDelete,
+  onAddGacha,
+  className
+}: GachaTabsProps): JSX.Element {
   const { triggerSelection } = useHaptics();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
@@ -95,6 +103,18 @@ export function GachaTabs({ tabs, activeId, onSelect, onDelete, className }: Gac
           </div>
         );
       })}
+      {onAddGacha ? (
+        <div className="gacha-tab gacha-tab--inactive gacha-tabs__add-tab">
+          <button
+            type="button"
+            className="gacha-tab__label gacha-tabs__add-button"
+            onClick={() => onAddGacha()}
+            aria-label="ガチャを登録"
+          >
+            <span className="gacha-tab__label-text">＋</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -352,6 +352,7 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     [uiPreferencesState, uiPreferencesStore]
   );
   const gachaOwnerShareRate = gachaOwnerShareRatePreference ?? DEFAULT_GACHA_OWNER_SHARE_RATE;
+  const confirmArchiveGacha = useGachaDeletion({ mode: 'archive' });
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -1282,6 +1283,15 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                                   onClick={() => handleRestoreGacha(entry.id)}
                                 >
                                   戻す
+                                </button>
+                              ) : null}
+                              {!entry.isArchived ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                  onClick={() => confirmArchiveGacha({ id: entry.id, name: entry.name })}
+                                >
+                                  アーカイブ
                                 </button>
                               ) : null}
                               <button

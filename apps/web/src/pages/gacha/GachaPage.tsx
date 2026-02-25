@@ -48,13 +48,13 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
       id: 'rarity',
       label: 'レアリティ',
       description: '排出率とカラーの管理',
-      node: <RaritySection />
+      node: <RaritySection onRegisterGacha={onRegisterGacha} />
     },
     {
       id: 'items',
       label: 'アイテム',
       description: 'アイテム画像とリアグ同期',
-      node: <ItemsSection />
+      node: <ItemsSection onRegisterGacha={onRegisterGacha} />
     },
     {
       id: 'users',
@@ -66,7 +66,7 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
       id: 'riagu',
       label: 'リアグ',
       description: 'リアルグッズ管理',
-      node: <RiaguSection />
+      node: <RiaguSection onRegisterGacha={onRegisterGacha} />
     }
   ];
 
