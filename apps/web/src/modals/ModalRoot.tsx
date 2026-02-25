@@ -125,7 +125,6 @@ function ModalRenderer({ entry, isTop, zIndex }: ModalRendererProps): JSX.Elemen
               size={entry.props.size ?? 'md'}
               className={entry.props.panelClassName}
               paddingClassName={entry.props.panelPaddingClassName}
-              disableKeyboardViewportAdjustment={entry.props.disableKeyboardViewportAdjustment}
             >
               {showHeaderCloseButton ? (
                 <button

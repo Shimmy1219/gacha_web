@@ -141,29 +141,18 @@ export const ModalOverlay = forwardRef<
 interface ModalPanelProps extends ComponentPropsWithoutRef<typeof DialogPanel> {
   size?: ModalSize;
   paddingClassName?: string;
-  disableKeyboardViewportAdjustment?: boolean;
 }
 
 export const ModalPanel = forwardRef<
   ElementRef<typeof DialogPanel>,
   ModalPanelProps
->(function ModalPanel(
-  {
-    size = 'md',
-    className,
-    paddingClassName = 'p-6',
-    disableKeyboardViewportAdjustment = false,
-    ...props
-  },
-  ref
-) {
+>(function ModalPanel({ size = 'md', className, paddingClassName = 'p-6', ...props }, ref) {
   const { style, ...restProps } = props;
   const { maxHeight: viewportMaxHeight, keyboardInset } = useModalViewportMetrics();
-  const resolvedKeyboardInset = disableKeyboardViewportAdjustment ? 0 : keyboardInset ?? 0;
 
   const shouldApplyInlineMaxHeight = useMemo(() => {
-    return !disableKeyboardViewportAdjustment && viewportMaxHeight !== undefined;
-  }, [disableKeyboardViewportAdjustment, viewportMaxHeight]);
+    return viewportMaxHeight !== undefined;
+  }, [viewportMaxHeight]);
 
   const mergedStyle = useMemo(() => {
     const nextStyle = { ...style };
@@ -176,18 +165,18 @@ export const ModalPanel = forwardRef<
       nextStyle.maxHeight = viewportMaxHeight;
     }
 
-    if (resolvedKeyboardInset > 0) {
+    if (keyboardInset && keyboardInset > 0) {
       const existingScrollPaddingBottom =
         typeof nextStyle.scrollPaddingBottom === 'number' ? nextStyle.scrollPaddingBottom : 0;
 
-      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + resolvedKeyboardInset;
+      nextStyle.scrollPaddingBottom = existingScrollPaddingBottom + keyboardInset;
     }
 
     return nextStyle;
-  }, [resolvedKeyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
+  }, [keyboardInset, shouldApplyInlineMaxHeight, style, viewportMaxHeight]);
 
   return (
-    <ModalKeyboardInsetContext.Provider value={resolvedKeyboardInset}>
+    <ModalKeyboardInsetContext.Provider value={keyboardInset ?? 0}>
       <DialogPanel
         {...restProps}
         ref={ref}
@@ -197,7 +186,7 @@ export const ModalPanel = forwardRef<
           paddingClassName,
           className
         )}
-        style={{ ...mergedStyle, ['--modal-keyboard-inset' as const]: `${resolvedKeyboardInset}px` }}
+        style={{ ...mergedStyle, ['--modal-keyboard-inset' as const]: `${keyboardInset ?? 0}px` }}
       />
     </ModalKeyboardInsetContext.Provider>
   );

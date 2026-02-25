@@ -14,7 +14,6 @@ export interface ModalBaseProps<T = unknown> {
   panelClassName?: string;
   panelPaddingClassName?: string;
   showHeaderCloseButton?: boolean;
-  disableKeyboardViewportAdjustment?: boolean;
 }
 
 export interface ModalComponentProps<T = unknown> extends ModalBaseProps<T> {
