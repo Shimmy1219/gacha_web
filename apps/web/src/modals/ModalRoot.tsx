@@ -1,5 +1,6 @@
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
+import { clsx } from 'clsx';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -30,24 +31,27 @@ interface ModalRendererProps {
   zIndex: number;
   viewportTop: number;
   viewportHeight: number;
+  isKeyboardVisible: boolean;
 }
 
 interface ModalViewportBounds {
   top: number;
   height: number;
+  layoutHeight: number;
 }
 
 const VIEWPORT_BOUNDS_UPDATE_EPSILON = 0.5;
+const KEYBOARD_VISIBLE_BOTTOM_INSET_THRESHOLD = 120;
 
 function readModalViewportBounds(): ModalViewportBounds {
   if (typeof window === 'undefined') {
-    return { top: 0, height: 0 };
+    return { top: 0, height: 0, layoutHeight: 0 };
   }
 
   const layoutViewportHeight = window.innerHeight;
   const visualViewport = window.visualViewport;
   if (!visualViewport) {
-    return { top: 0, height: layoutViewportHeight };
+    return { top: 0, height: layoutViewportHeight, layoutHeight: layoutViewportHeight };
   }
 
   const top = Math.max(visualViewport.offsetTop, 0);
@@ -55,7 +59,7 @@ function readModalViewportBounds(): ModalViewportBounds {
   const rawVisibleHeight = visualViewport.height > 0 ? visualViewport.height : maxVisibleHeight;
   const height = Math.max(Math.min(rawVisibleHeight, maxVisibleHeight), 0);
 
-  return { top, height };
+  return { top, height, layoutHeight: layoutViewportHeight };
 }
 
 function useModalViewportBounds(): ModalViewportBounds {
@@ -118,6 +122,16 @@ export function ModalRoot(): JSX.Element | null {
   const { stack } = useModal();
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null);
   const viewportBounds = useModalViewportBounds();
+  const isKeyboardVisible = useMemo(() => {
+    if (viewportBounds.layoutHeight <= 0) {
+      return false;
+    }
+
+    const visibleViewportBottom = viewportBounds.top + viewportBounds.height;
+    const bottomInset = Math.max(viewportBounds.layoutHeight - visibleViewportBottom, 0);
+
+    return bottomInset > KEYBOARD_VISIBLE_BOTTOM_INSET_THRESHOLD;
+  }, [viewportBounds.height, viewportBounds.layoutHeight, viewportBounds.top]);
 
   useEffect(() => {
     setPortalElement(ensureModalRoot());
@@ -135,10 +149,11 @@ export function ModalRoot(): JSX.Element | null {
           zIndex={zIndex}
           viewportTop={viewportBounds.top}
           viewportHeight={viewportBounds.height}
+          isKeyboardVisible={isKeyboardVisible}
         />
       );
     });
-  }, [stack, viewportBounds.height, viewportBounds.top]);
+  }, [isKeyboardVisible, stack, viewportBounds.height, viewportBounds.top]);
 
   if (!portalElement || modalNodes.length === 0) {
     return null;
@@ -152,7 +167,8 @@ function ModalRenderer({
   isTop,
   zIndex,
   viewportTop,
-  viewportHeight
+  viewportHeight,
+  isKeyboardVisible
 }: ModalRendererProps): JSX.Element {
   const { pop, dismissAll, push, replace } = useModal();
   const { triggerError } = useHaptics();
@@ -207,7 +223,12 @@ function ModalRenderer({
         className="modal-root fixed inset-x-0"
         style={modalRootStyle}
       >
-        <div className="flex min-h-full items-center justify-center px-4 py-4 md:py-8">
+        <div
+          className={clsx(
+            'flex min-h-full justify-center px-4 py-4 md:py-8',
+            isKeyboardVisible ? 'items-start overflow-y-auto' : 'items-center'
+          )}
+        >
           <Transition.Child
             as={Fragment}
             enter="duration-200 ease-out"
