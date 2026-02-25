@@ -1,8 +1,4 @@
 import {
-  ArrowPathIcon,
-  ClipboardIcon,
-  PaperAirplaneIcon,
-  ShareIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
@@ -17,7 +13,7 @@ import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
-import { XLogoIcon } from '../../components/icons/XLogoIcon';
+import { ResultActionButtons } from './ResultActionButtons';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
 import {
@@ -2303,66 +2299,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 </div>
               </div>
               {shareContent ? (
-                <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
-                  {isDiscordLoggedIn ? (
-                    <button
-                      type="button"
-                      className="draw-gacha-dialog__quick-send-button btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
-                      style={{ minWidth: discordDeliveryButtonMinWidth }}
-                      onClick={handleDeliverToDiscord}
-                      disabled={discordDeliveryButtonDisabled}
-                    >
-                      {isDiscordDeliveryInProgress ? (
-                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                      {discordDeliveryButtonLabel}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleShareResult}
-                    title="結果を共有"
-                    aria-label="結果を共有"
-                  >
-                    <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果を共有</span>
-                  </button>
-                  {safeTweetUrl ? (
-                    <a
-                      href={safeTweetUrl}
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Xで共有"
-                      aria-label="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </a>
-                  ) : (
-                    <span
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000]/60 p-1.5 text-white/70 !min-h-0"
-                      aria-disabled="true"
-                      title="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleCopyShareResult}
-                    title="結果をコピー"
-                    aria-label="結果をコピー"
-                  >
-                    <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果をコピー</span>
-                  </button>
-                </div>
+                <ResultActionButtons
+                  className="draw-gacha-dialog__result-action-buttons flex-wrap justify-end text-right sm:text-left"
+                  onShare={handleShareResult}
+                  onCopy={handleCopyShareResult}
+                  tweetUrl={safeTweetUrl}
+                  quickSend={
+                    isDiscordLoggedIn
+                      ? {
+                          onClick: handleDeliverToDiscord,
+                          disabled: discordDeliveryButtonDisabled,
+                          inProgress: isDiscordDeliveryInProgress,
+                          label: discordDeliveryButtonLabel,
+                          minWidth: discordDeliveryButtonMinWidth
+                        }
+                      : undefined
+                  }
+                />
               ) : null}
             </div>
             {lastExecutionWarnings.length ? (
