@@ -171,27 +171,23 @@ interface FocusTargetDefinition {
   menu: PageSettingsMenuKey;
   containerId: string;
   focusElementId: string;
-  hintMessage: string;
 }
 
 const PAGE_SETTINGS_FOCUS_TARGETS: Record<PageSettingsFocusTargetKey, FocusTargetDefinition> = {
   'misc-owner-name': {
     menu: 'misc',
     containerId: 'page-settings-focus-target-owner-name',
-    focusElementId: 'owner-name',
-    hintMessage: '「その他の設定」のオーナー名入力欄に入力してください。'
+    focusElementId: 'owner-name'
   },
   'gacha-owner-share-rate': {
     menu: 'gacha',
     containerId: 'page-settings-focus-target-gacha-owner-share-rate',
-    focusElementId: 'gacha-owner-share-rate',
-    hintMessage: '「ガチャ設定」の還元率入力欄を確認してください。'
+    focusElementId: 'gacha-owner-share-rate'
   },
   'layout-site-zoom': {
     menu: 'layout',
     containerId: 'page-settings-focus-target-layout-site-zoom',
-    focusElementId: 'page-settings-site-zoom-range',
-    hintMessage: '「レイアウトとズーム」の表示倍率スライダーを確認してください。'
+    focusElementId: 'page-settings-site-zoom-range'
   }
 };
 
@@ -991,10 +987,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     };
   }, [highlightDurationMs, highlightMode, highlightedFocusTarget]);
 
-  const highlightedFocusDefinition = highlightedFocusTarget
-    ? PAGE_SETTINGS_FOCUS_TARGETS[highlightedFocusTarget]
-    : null;
-
   const isFocusTargetHighlighted = useCallback(
     (target: PageSettingsFocusTargetKey) => highlightedFocusTarget === target,
     [highlightedFocusTarget]
@@ -1604,11 +1596,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                     isFocusTargetHighlighted('misc-owner-name') && 'page-settings-target__input--highlighted'
                   )}
                 />
-                {isFocusTargetHighlighted('misc-owner-name') ? (
-                  <p className="page-settings-dialog__focus-hint mt-3 rounded-lg border border-accent/45 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent">
-                    ここにオーナー名を入力してください。
-                  </p>
-                ) : null}
               </div>
               <SwitchField
                 label="Discordデバッグログを表示"
@@ -1774,14 +1761,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
               </button>
             </div>
           ) : null}
-          {highlightedFocusDefinition ? (
-            <div className="page-settings-dialog__focus-guide mb-4 rounded-xl border border-accent/45 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent">
-              {highlightedFocusDefinition.hintMessage}
-            </div>
-          ) : null}
-          <p className="sr-only" aria-live="polite">
-            {highlightedFocusDefinition?.hintMessage ?? ''}
-          </p>
           {renderMenuContent()}
         </div>
       </div>
