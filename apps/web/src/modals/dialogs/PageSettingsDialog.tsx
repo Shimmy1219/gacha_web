@@ -157,11 +157,6 @@ function formatOwnerShareRateInput(value: number): string {
   return Number.isFinite(percent) ? String(percent).replace(/\.0$/, '') : '';
 }
 
-const REM_IN_PIXELS = 16;
-const BASE_MODAL_MIN_HEIGHT_REM = 28;
-const VIEWPORT_PADDING_REM = 12;
-const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
-const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
 const PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY = 'pageSettingsZoomPreview';
 const DEFAULT_HIGHLIGHT_DURATION_MS = 7000;
 const MIN_HIGHLIGHT_DURATION_MS = 2000;
@@ -213,7 +208,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
   const highlightMode: PageSettingsHighlightMode = payload?.highlightMode === 'persistent' ? 'persistent' : 'pulse';
   const highlightDurationMs = clampHighlightDurationMs(payload?.highlightDurationMs);
   const { notify } = useNotification();
-  const modalBodyRef = useRef<HTMLDivElement | null>(null);
   const deepLinkAppliedRef = useRef<string | null>(null);
   const focusExecutionRef = useRef<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<PageSettingsMenuKey>(initialMenu);
@@ -225,8 +219,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [isDeletingAllData, setIsDeletingAllData] = useState(false);
   const [isResettingDiscordServerInfo, setIsResettingDiscordServerInfo] = useState(false);
-  const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
-  const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return true;
@@ -778,26 +770,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
   }, [isZoomPreviewing]);
 
   useLayoutEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const updateViewport = () => {
-      const innerHeight = window.innerHeight;
-      const next = innerHeight - VIEWPORT_PADDING_PX;
-      const limit = next > 0 ? next : innerHeight;
-      setViewportMaxHeight(limit > 0 ? limit : null);
-    };
-
-    updateViewport();
-    window.addEventListener('resize', updateViewport);
-
-    return () => {
-      window.removeEventListener('resize', updateViewport);
-    };
-  }, []);
-
-  useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return;
     }
@@ -823,30 +795,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
       } else {
         mediaQuery.removeListener(updateLayout);
       }
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const element = modalBodyRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new window.ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const nextHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, Math.ceil(entry.contentRect.height));
-        setMaxBodyHeight((previous) => (nextHeight > previous ? nextHeight : previous));
-      }
-    });
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
     };
   }, []);
 
@@ -1682,22 +1630,13 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     }
   };
 
-  const desiredMinHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, maxBodyHeight);
-  const viewportLimit = viewportMaxHeight != null && viewportMaxHeight > 0 ? viewportMaxHeight : null;
-  const effectiveMinHeight = viewportLimit ? Math.min(desiredMinHeight, viewportLimit) : desiredMinHeight;
-
   return (
     <ModalBody
-      ref={modalBodyRef}
       className={clsx(
-        'page-settings-dialog flex flex-col space-y-0 overflow-hidden p-0',
+        'page-settings-dialog flex min-h-0 max-h-full flex-col space-y-0 overflow-hidden p-0',
         isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
         isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
       )}
-      style={{
-        minHeight: `${effectiveMinHeight}px`,
-        maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
-      }}
     >
       <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
         <nav
