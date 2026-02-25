@@ -207,7 +207,7 @@ function ModalRenderer({
         className="modal-root fixed inset-x-0"
         style={modalRootStyle}
       >
-        <div className="flex min-h-full items-start justify-center px-4 py-4 md:items-center md:py-8">
+        <div className="flex min-h-full items-center justify-center px-4 py-4 md:py-8">
           <Transition.Child
             as={Fragment}
             enter="duration-200 ease-out"
