@@ -645,7 +645,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
     setUploadResult(result);
 
-    return { uploadResponse, result, zip };
+    return { result, zip };
   }, [
     discordSession?.user?.id,
     discordSession?.user?.name,
