@@ -342,6 +342,7 @@ export function GachaHistoryPage({ onDrawGacha }: GachaHistoryPageProps): JSX.El
                     numberFormatter={numberFormatter}
                     itemMetadata={card.itemMetadata}
                     shareHandlers={shareHandlers}
+                    showEntryId={false}
                   />
                 </div>
               ))}

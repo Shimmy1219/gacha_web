@@ -142,6 +142,7 @@ export interface HistoryEntriesListProps {
   numberFormatter: Intl.NumberFormat;
   itemMetadata: Map<string, HistoryItemMetadata>;
   shareHandlers: ShareHandler;
+  showEntryId?: boolean;
 }
 
 function formatOriginalPrizeWarningMessage(item: ItemEntryViewModel): string {
@@ -162,6 +163,7 @@ function formatOriginalPrizeWarningMessage(item: ItemEntryViewModel): string {
  * @param numberFormatter 数値フォーマッター
  * @param itemMetadata アイテム表示メタデータ
  * @param shareHandlers 共有/コピー処理ハンドラー
+ * @param showEntryId 履歴カード右上の ID 表示有無
  * @returns 履歴一覧要素
  */
 export function HistoryEntriesList({
@@ -171,7 +173,8 @@ export function HistoryEntriesList({
   executedAtFormatter,
   numberFormatter,
   itemMetadata,
-  shareHandlers
+  shareHandlers,
+  showEntryId = true
 }: HistoryEntriesListProps): JSX.Element {
   const { push } = useModal();
   const { notify } = useNotification();
@@ -697,7 +700,7 @@ export function HistoryEntriesList({
                 >
                   {sourceLabel}
                 </span>
-                {entry.id ? (
+                {showEntryId && entry.id ? (
                   <span className="font-mono text-[11px] text-muted-foreground/80">
                     ID: {entry.id}
                   </span>
