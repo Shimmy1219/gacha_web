@@ -1,5 +1,5 @@
 import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ChevronRightIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import {
@@ -443,18 +443,19 @@ export function UserCard({
                   {showCounts && totalSummary ? (
                     <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
                   ) : null}
+                  {onExport ? (
+                    <button
+                      type="button"
+                      className="user-card__export-button inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                      onClick={() => onExport(userId)}
+                    >
+                      景品の保存・共有
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
             <div className="user-card__actions flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="user-card__export-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-accent/70 bg-accent text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
-                onClick={() => onExport?.(userId)}
-                aria-label="保存"
-              >
-                <FolderArrowDownIcon className="h-5 w-5" />
-              </button>
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
