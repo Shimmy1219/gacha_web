@@ -1,5 +1,6 @@
 import {
   ArrowPathIcon,
+  ArrowUpTrayIcon,
   ChevronDownIcon,
   ClipboardIcon,
   PaperAirplaneIcon,
@@ -81,7 +82,12 @@ export function ResultActionButtons({
             <Menu as="div" className="result-action-buttons__quick-send-mode relative">
               <Menu.Button
                 type="button"
-                className="result-action-buttons__quick-send-mode-trigger btn flex h-full items-center justify-center rounded-r-none border-r border-white/20 bg-discord-primary px-2 py-1.5 text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70"
+                className={clsx(
+                  'result-action-buttons__quick-send-mode-trigger btn flex h-full !min-h-0 items-center justify-center rounded-r-none px-2 py-1.5 transition focus-visible:ring-2 focus-visible:ring-accent/70',
+                  isShareUrlMode
+                    ? 'border-r border-border/70 bg-white text-surface-foreground hover:bg-surface-alt'
+                    : 'border-r border-white/20 bg-discord-primary text-white hover:bg-discord-hover'
+                )}
                 aria-label="クイックアクションのモードを切り替え"
               >
                 <ChevronDownIcon className="result-action-buttons__quick-send-mode-trigger-icon h-3.5 w-3.5" aria-hidden="true" />
@@ -111,10 +117,12 @@ export function ResultActionButtons({
           <button
             type="button"
             className={clsx(
-              'result-action-buttons__quick-send btn flex h-full w-full items-center justify-center gap-1 px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:flex-1 sm:min-w-0',
-              isShareUrlMode
-                ? 'border border-border/70 bg-white text-surface-foreground hover:bg-surface-alt'
-                : 'bg-discord-primary text-white hover:bg-discord-hover',
+              'result-action-buttons__quick-send btn flex h-full w-full !min-h-0 items-center justify-center gap-1 px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:flex-1 sm:min-w-0',
+              isShareUrlMode &&
+                (shouldShowQuickSendModeSelector
+                  ? 'border border-border/70 border-l-0 bg-white text-surface-foreground hover:bg-surface-alt'
+                  : 'border border-border/70 bg-white text-surface-foreground hover:bg-surface-alt'),
+              !isShareUrlMode && 'bg-discord-primary text-white hover:bg-discord-hover',
               shouldShowQuickSendModeSelector && 'rounded-l-none'
             )}
             onClick={quickSend.onClick}
@@ -123,7 +131,7 @@ export function ResultActionButtons({
             {quickSend.inProgress ? (
               <ArrowPathIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5 animate-spin" aria-hidden="true" />
             ) : isShareUrlMode ? (
-              <ShareIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
+              <ArrowUpTrayIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
             ) : (
               <PaperAirplaneIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
             )}
