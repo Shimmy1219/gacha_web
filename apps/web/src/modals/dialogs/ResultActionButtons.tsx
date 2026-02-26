@@ -43,11 +43,16 @@ export function ResultActionButtons({
   className
 }: ResultActionButtonsProps): JSX.Element {
   return (
-    <div className={clsx('result-action-buttons flex items-center gap-2', className)}>
+    <div
+      className={clsx(
+        'result-action-buttons flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap',
+        className
+      )}
+    >
       {quickSend ? (
         <button
           type="button"
-          className="result-action-buttons__quick-send btn flex items-center gap-1 !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
+          className="result-action-buttons__quick-send btn flex w-full items-center justify-center gap-1 !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:justify-start"
           style={quickSend.minWidth ? { minWidth: quickSend.minWidth } : undefined}
           onClick={quickSend.onClick}
           disabled={quickSend.disabled}

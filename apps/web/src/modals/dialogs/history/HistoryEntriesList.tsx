@@ -780,20 +780,24 @@ export function HistoryEntriesList({
                     void shareHandlers.copy(entryKey, shareText);
                   }}
                   tweetUrl={safeTweetUrl}
-                  quickSend={{
-                    onClick: () => {
-                      void handleQuickSend({
-                        entry,
-                        entryKey,
-                        positiveItemIds,
-                        newItemIds
-                      });
-                    },
-                    disabled: quickSendDisabled,
-                    inProgress: isEntryDeliveryInProgress,
-                    label: quickSendButtonLabel,
-                    minWidth: '14.5rem'
-                  }}
+                  quickSend={
+                    isDiscordLoggedIn
+                      ? {
+                          onClick: () => {
+                            void handleQuickSend({
+                              entry,
+                              entryKey,
+                              positiveItemIds,
+                              newItemIds
+                            });
+                          },
+                          disabled: quickSendDisabled,
+                          inProgress: isEntryDeliveryInProgress,
+                          label: quickSendButtonLabel,
+                          minWidth: '14.5rem'
+                        }
+                      : undefined
+                  }
                 />
               </div>
               {currentFeedback === 'shared' ? (

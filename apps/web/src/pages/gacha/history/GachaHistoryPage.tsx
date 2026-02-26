@@ -13,7 +13,7 @@ import {
   buildItemMetadataMap,
   normalizeHistoryUserId
 } from '../../../modals/dialogs/history/historyUtils';
-import { DashboardDesktopGrid } from '../components/dashboard/DashboardDesktopGrid';
+import { DESKTOP_GRID_MAIN_HEIGHT_CSS } from '../components/dashboard/DashboardDesktopGrid';
 import {
   DashboardMobileTabBar,
   type DashboardMobileTabSection
@@ -357,19 +357,17 @@ export function GachaHistoryPage({ onDrawGacha }: GachaHistoryPageProps): JSX.El
       <div className="gacha-history-page__dashboard-shell dashboard-shell relative flex w-full flex-col gap-4 pb-[5.5rem] lg:pb-0">
         {!isMobile ? (
           <div className="gacha-history-page__desktop dashboard-shell__desktop">
-            <DashboardDesktopGrid
-              sections={[
-                {
-                  id: ALL_HISTORY_SECTION_ID,
-                  label: '全履歴',
-                  node: (
-                    <div className="all-history-section__desktop-item-root h-full min-h-0">
-                      {historySection(false)}
-                    </div>
-                  )
-                }
-              ]}
-            />
+            <div className="gacha-history-page__desktop-inner mx-auto w-full max-w-[1280px]">
+              <div
+                data-view={ALL_HISTORY_SECTION_ID}
+                className="gacha-history-page__desktop-item h-full min-h-0"
+                style={{ height: DESKTOP_GRID_MAIN_HEIGHT_CSS }}
+              >
+                <div className="all-history-section__desktop-item-root h-full min-h-0">
+                  {historySection(false)}
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="gacha-history-page__mobile dashboard-shell__mobile">
