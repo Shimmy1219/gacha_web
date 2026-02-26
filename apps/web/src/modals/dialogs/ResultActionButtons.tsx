@@ -54,6 +54,7 @@ export function ResultActionButtons({
   quickSend,
   className
 }: ResultActionButtonsProps): JSX.Element {
+  const isShareUrlMode = quickSend?.selectedModeId === 'share_url';
   const shouldShowQuickSendModeSelector = Boolean(
     quickSend?.modeOptions &&
       quickSend.modeOptions.length > 1 &&
@@ -110,7 +111,10 @@ export function ResultActionButtons({
           <button
             type="button"
             className={clsx(
-              'result-action-buttons__quick-send btn flex h-full w-full items-center justify-center gap-1 text-center !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto',
+              'result-action-buttons__quick-send btn flex h-full w-full items-center justify-center gap-1 px-3 py-1.5 text-xs transition focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:flex-1 sm:min-w-0',
+              isShareUrlMode
+                ? 'border border-border/70 bg-white text-surface-foreground hover:bg-surface-alt'
+                : 'bg-discord-primary text-white hover:bg-discord-hover',
               shouldShowQuickSendModeSelector && 'rounded-l-none'
             )}
             onClick={quickSend.onClick}
@@ -118,10 +122,14 @@ export function ResultActionButtons({
           >
             {quickSend.inProgress ? (
               <ArrowPathIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : isShareUrlMode ? (
+              <ShareIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
             ) : (
               <PaperAirplaneIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
             )}
-            <span className="result-action-buttons__quick-send-label">{quickSend.label}</span>
+            <span className="result-action-buttons__quick-send-label truncate text-center">
+              {quickSend.label}
+            </span>
           </button>
         </div>
       ) : null}
