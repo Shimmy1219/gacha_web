@@ -1,12 +1,21 @@
 import {
   ArrowPathIcon,
+  ChevronDownIcon,
   ClipboardIcon,
   PaperAirplaneIcon,
   ShareIcon
 } from '@heroicons/react/24/outline';
+import { Menu } from '@headlessui/react';
 import { clsx } from 'clsx';
 
 import { XLogoIcon } from '../../components/icons/XLogoIcon';
+
+export type ResultActionQuickSendModeId = 'discord' | 'share_url';
+
+export interface ResultActionButtonsQuickSendModeOption {
+  id: ResultActionQuickSendModeId;
+  label: string;
+}
 
 export interface ResultActionButtonsQuickSendProps {
   onClick: () => void;
@@ -14,6 +23,9 @@ export interface ResultActionButtonsQuickSendProps {
   inProgress?: boolean;
   label: string;
   minWidth?: string;
+  modeOptions?: readonly ResultActionButtonsQuickSendModeOption[];
+  selectedModeId?: ResultActionQuickSendModeId;
+  onSelectMode?: (modeId: ResultActionQuickSendModeId) => void;
 }
 
 export interface ResultActionButtonsProps {
@@ -42,6 +54,13 @@ export function ResultActionButtons({
   quickSend,
   className
 }: ResultActionButtonsProps): JSX.Element {
+  const shouldShowQuickSendModeSelector = Boolean(
+    quickSend?.modeOptions &&
+      quickSend.modeOptions.length > 1 &&
+      quickSend.selectedModeId &&
+      quickSend.onSelectMode
+  );
+
   return (
     <div
       className={clsx(
@@ -50,20 +69,61 @@ export function ResultActionButtons({
       )}
     >
       {quickSend ? (
-        <button
-          type="button"
-          className="result-action-buttons__quick-send btn flex w-full items-center justify-center gap-1 !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:justify-start"
-          style={quickSend.minWidth ? { minWidth: quickSend.minWidth } : undefined}
-          onClick={quickSend.onClick}
-          disabled={quickSend.disabled}
-        >
-          {quickSend.inProgress ? (
-            <ArrowPathIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <PaperAirplaneIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
+        <div
+          className={clsx(
+            'result-action-buttons__quick-send-group flex w-full items-stretch sm:w-auto',
+            shouldShowQuickSendModeSelector ? 'gap-0' : 'gap-2'
           )}
-          <span className="result-action-buttons__quick-send-label">{quickSend.label}</span>
-        </button>
+          style={quickSend.minWidth ? { minWidth: quickSend.minWidth } : undefined}
+        >
+          {shouldShowQuickSendModeSelector ? (
+            <Menu as="div" className="result-action-buttons__quick-send-mode relative">
+              <Menu.Button
+                type="button"
+                className="result-action-buttons__quick-send-mode-trigger btn flex h-full items-center justify-center rounded-r-none border-r border-white/20 bg-discord-primary px-2 py-1.5 text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70"
+                aria-label="クイックアクションのモードを切り替え"
+              >
+                <ChevronDownIcon className="result-action-buttons__quick-send-mode-trigger-icon h-3.5 w-3.5" aria-hidden="true" />
+              </Menu.Button>
+              <Menu.Items className="result-action-buttons__quick-send-mode-menu absolute bottom-full left-0 z-50 mb-2 min-w-[10rem] rounded-xl border border-border/70 bg-panel p-1 text-xs text-surface-foreground shadow-lg outline-none">
+                {quickSend.modeOptions?.map((modeOption) => (
+                  <Menu.Item key={modeOption.id}>
+                    {({ active }) => (
+                      <button
+                        type="button"
+                        className={clsx(
+                          'result-action-buttons__quick-send-mode-option w-full rounded-lg px-3 py-2 text-left transition',
+                          active && 'bg-surface-alt',
+                          quickSend.selectedModeId === modeOption.id && 'text-accent'
+                        )}
+                        onClick={() => quickSend.onSelectMode?.(modeOption.id)}
+                      >
+                        {modeOption.label}
+                      </button>
+                    )}
+                  </Menu.Item>
+                ))}
+              </Menu.Items>
+            </Menu>
+          ) : null}
+
+          <button
+            type="button"
+            className={clsx(
+              'result-action-buttons__quick-send btn flex w-full items-center justify-center gap-1 text-center !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto',
+              shouldShowQuickSendModeSelector && 'rounded-l-none'
+            )}
+            onClick={quickSend.onClick}
+            disabled={quickSend.disabled}
+          >
+            {quickSend.inProgress ? (
+              <ArrowPathIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <PaperAirplaneIcon className="result-action-buttons__quick-send-icon h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            <span className="result-action-buttons__quick-send-label">{quickSend.label}</span>
+          </button>
+        </div>
       ) : null}
       <button
         type="button"

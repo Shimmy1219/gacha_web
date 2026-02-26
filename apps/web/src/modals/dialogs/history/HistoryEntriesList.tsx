@@ -9,12 +9,12 @@ import {
 import { useStoreValue } from '@domain/stores';
 import { type ShareHandler } from '../../../hooks/useShare';
 import { useAppPersistence, useDomainStores } from '../../../features/storage/AppPersistenceProvider';
-import { buildAndUploadSelectionZip } from '../../../features/save/buildAndUploadSelectionZip';
 import {
   extractBlobUploadCsrfFailureReason,
   isBlobUploadCsrfTokenMismatchError,
   useBlobUpload
 } from '../../../features/save/useBlobUpload';
+import { issueShareUrlByUpload } from '../../../features/save/issueShareUrlByUpload';
 import { useDiscordSession } from '../../../features/discord/useDiscordSession';
 import {
   DiscordGuildSelectionMissingError,
@@ -26,7 +26,6 @@ import {
   formatDiscordShareExpiresAt
 } from '../../../features/discord/shareMessage';
 import { linkDiscordProfileToStore } from '../../../features/discord/linkDiscordProfileToStore';
-import { resolveThumbnailOwnerId } from '../../../features/gacha/thumbnailOwnerId';
 import { useNotification } from '../../../features/notification';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
 import { RarityLabel } from '../../../components/RarityLabel';
@@ -36,7 +35,11 @@ import { useModal } from '../../ModalProvider';
 import { QuickSendConfirmDialog } from '../QuickSendConfirmDialog';
 import { PageSettingsDialog } from '../PageSettingsDialog';
 import { buildPageSettingsDialogProps } from '../pageSettingsDialogConfig';
-import { ResultActionButtons } from '../ResultActionButtons';
+import {
+  ResultActionButtons,
+  type ResultActionButtonsQuickSendModeOption,
+  type ResultActionQuickSendModeId
+} from '../ResultActionButtons';
 import { WarningDialog } from '../WarningDialog';
 import { pushCsrfTokenMismatchWarning } from '../_lib/discordApiErrorHandling';
 import { type HistoryItemMetadata, normalizeHistoryUserId } from './historyUtils';
@@ -54,16 +57,23 @@ const SOURCE_CLASSNAMES: Record<PullHistoryEntrySourceV1, string> = {
 };
 
 type HistoryDiscordDeliveryStage = 'idle' | 'building-zip' | 'uploading' | 'sending';
+type HistoryQuickActionMode = ResultActionQuickSendModeId;
 
 interface HistoryDiscordDeliveryProgress {
   entryKey: string;
   stage: HistoryDiscordDeliveryStage;
+  mode: HistoryQuickActionMode;
 }
 
 interface QuickSendDecision {
   sendNewOnly: boolean;
   rememberChoice: boolean;
 }
+
+const HISTORY_QUICK_SEND_MODE_OPTIONS: readonly ResultActionButtonsQuickSendModeOption[] = [
+  { id: 'discord', label: 'Discord送信' },
+  { id: 'share_url', label: '共有URL発行' }
+];
 
 function formatExecutedAt(formatter: Intl.DateTimeFormat, value: string | undefined): string {
   if (!value) {
@@ -97,29 +107,30 @@ function resolveTrimmedOrNull(value: string | null | undefined): string | null {
 
 function resolveQuickSendButtonLabel(params: {
   activeDelivery: HistoryDiscordDeliveryProgress | null;
-  completedEntryKey: string | null;
+  completedAction: { entryKey: string; mode: HistoryQuickActionMode } | null;
   entryKey: string;
+  mode: HistoryQuickActionMode;
 }): string {
-  const { activeDelivery, completedEntryKey, entryKey } = params;
+  const { activeDelivery, completedAction, entryKey, mode } = params;
 
-  if (activeDelivery?.entryKey === entryKey) {
+  if (activeDelivery?.entryKey === entryKey && activeDelivery.mode === mode) {
     switch (activeDelivery.stage) {
       case 'building-zip':
         return 'ZIPファイル作成中...';
       case 'uploading':
         return 'ファイルアップロード中...';
       case 'sending':
-        return '送信中...';
+        return mode === 'discord' ? '送信中...' : '共有URL発行中...';
       default:
-        return 'お渡し部屋に景品を送信';
+        return mode === 'discord' ? 'お渡し部屋に景品を送信' : '共有URLを発行';
     }
   }
 
-  if (completedEntryKey === entryKey) {
-    return '送信済み';
+  if (completedAction?.entryKey === entryKey && completedAction.mode === mode) {
+    return mode === 'discord' ? '送信済み' : 'URL発行済み';
   }
 
-  return 'お渡し部屋に景品を送信';
+  return mode === 'discord' ? 'お渡し部屋に景品を送信' : '共有URLを発行';
 }
 
 interface ItemEntryViewModel {
@@ -190,7 +201,11 @@ export function HistoryEntriesList({
   const persistence = useAppPersistence();
 
   const [activeDelivery, setActiveDelivery] = useState<HistoryDiscordDeliveryProgress | null>(null);
-  const [completedDeliveryEntryKey, setCompletedDeliveryEntryKey] = useState<string | null>(null);
+  const [completedQuickAction, setCompletedQuickAction] = useState<{
+    entryKey: string;
+    mode: HistoryQuickActionMode;
+  } | null>(null);
+  const [quickSendMode, setQuickSendMode] = useState<HistoryQuickActionMode>('discord');
 
   const quickSendNewOnlyPreference = useMemo(
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
@@ -282,7 +297,19 @@ export function HistoryEntriesList({
     return decision.sendNewOnly;
   }, [quickSendNewOnlyPreference, requestQuickSendPreference, uiPreferencesStore]);
 
-  const handleQuickSend = useCallback(
+  const copyIssuedShareUrlToClipboard = useCallback(async (url: string): Promise<boolean> => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleQuickSendDiscord = useCallback(
     async ({
       entry,
       entryKey,
@@ -365,16 +392,6 @@ export function HistoryEntriesList({
         return;
       }
 
-      const resolvedOwnerId = resolveThumbnailOwnerId(staffDiscordId);
-      if (!resolvedOwnerId) {
-        notify({
-          variant: 'error',
-          title: 'エラー',
-          message: '配信サムネイルownerIdを解決できませんでした。'
-        });
-        return;
-      }
-
       let guildSelection;
       try {
         guildSelection = requireDiscordGuildSelection(staffDiscordId);
@@ -395,20 +412,20 @@ export function HistoryEntriesList({
       const profileDisplayName = resolveTrimmedOrNull(profile?.displayName);
       const receiverDisplayName = profileDisplayName ?? resolveTrimmedOrNull(userName) ?? normalizedTargetUserId;
 
-      setActiveDelivery({ entryKey, stage: 'building-zip' });
-      setCompletedDeliveryEntryKey(null);
+      setActiveDelivery({ entryKey, stage: 'building-zip', mode: 'discord' });
+      setCompletedQuickAction(null);
 
       try {
         const snapshot = persistence.loadSnapshot();
 
         let hasShownSlowBlobCheckNotice = false;
-        const { zip, uploadResponse } = await buildAndUploadSelectionZip({
+        const { zip, uploadResponse, shareLink } = await issueShareUrlByUpload({
+          persistence,
           snapshot,
           selection: { mode: 'history', pullIds: [pullId] },
           userId: normalizedTargetUserId,
           userName: receiverDisplayName,
           ownerName,
-          ownerId: resolvedOwnerId,
           itemIdFilter: filteredItemIds,
           uploadZip,
           ownerDiscordId: staffDiscordId,
@@ -426,21 +443,17 @@ export function HistoryEntriesList({
           },
           excludeRiaguImages,
           onZipBuilt: () => {
-            setActiveDelivery({ entryKey, stage: 'uploading' });
+            setActiveDelivery({ entryKey, stage: 'uploading', mode: 'discord' });
           }
         });
-
-        if (!uploadResponse?.shareUrl) {
-          throw new Error('Discord共有に必要なURLを取得できませんでした。');
-        }
 
         if (zip.pullIds.length > 0) {
           pullHistoryStore.markPullStatus(zip.pullIds, 'uploaded');
           pullHistoryStore.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
         }
 
-        const shareUrl = uploadResponse.shareUrl;
-        const shareLabelCandidate = shareUrl ?? null;
+        const shareUrl = shareLink.url;
+        const shareLabelCandidate = shareLink.label ?? null;
         const shareTitle = `${receiverDisplayName}のお渡しリンクです`;
         const shareComment = buildDiscordShareComment({
           shareUrl,
@@ -448,7 +461,7 @@ export function HistoryEntriesList({
           expiresAtText: formatDiscordShareExpiresAt(uploadResponse.expiresAt)
         });
 
-        setActiveDelivery({ entryKey, stage: 'sending' });
+        setActiveDelivery({ entryKey, stage: 'sending', mode: 'discord' });
 
         const { channelId, channelName, channelParentId } = await sendDiscordShareToMember({
           push,
@@ -499,7 +512,7 @@ export function HistoryEntriesList({
           share: shareInfo
         });
 
-        setCompletedDeliveryEntryKey(entryKey);
+        setCompletedQuickAction({ entryKey, mode: 'discord' });
         notify({
           variant: 'success',
           title: '成功',
@@ -548,6 +561,155 @@ export function HistoryEntriesList({
       userProfilesState,
       userProfilesStore
     ]
+  );
+
+  const handleIssueShareUrl = useCallback(
+    async ({
+      entry,
+      entryKey,
+      positiveItemIds
+    }: {
+      entry: PullHistoryEntryV1;
+      entryKey: string;
+      positiveItemIds: string[];
+    }) => {
+      if (activeDelivery) {
+        return;
+      }
+
+      const pullId = resolveTrimmedOrNull(entry.id);
+      if (!pullId) {
+        notify({
+          variant: 'error',
+          title: 'エラー',
+          message: '共有する履歴が見つかりませんでした。'
+        });
+        return;
+      }
+      if (positiveItemIds.length === 0) {
+        notify({
+          variant: 'error',
+          title: 'エラー',
+          message: '共有できるガチャ結果がありません。'
+        });
+        return;
+      }
+
+      const ownerName = ensureOwnerName();
+      if (!ownerName) {
+        return;
+      }
+
+      const normalizedTargetUserId = normalizeHistoryUserId(entry.userId);
+      const profile = userProfilesState?.users?.[normalizedTargetUserId];
+      const profileDisplayName = resolveTrimmedOrNull(profile?.displayName);
+      const receiverDisplayName = profileDisplayName ?? resolveTrimmedOrNull(userName) ?? normalizedTargetUserId;
+
+      setActiveDelivery({ entryKey, stage: 'building-zip', mode: 'share_url' });
+      setCompletedQuickAction(null);
+
+      try {
+        const snapshot = persistence.loadSnapshot();
+        let hasShownSlowBlobCheckNotice = false;
+
+        const { zip, shareLink } = await issueShareUrlByUpload({
+          persistence,
+          snapshot,
+          selection: { mode: 'history', pullIds: [pullId] },
+          userId: normalizedTargetUserId,
+          userName: receiverDisplayName,
+          ownerName,
+          ownerDiscordId: staffDiscordId,
+          ownerDiscordName: staffDiscordName ?? undefined,
+          uploadZip,
+          excludeRiaguImages,
+          onBlobReuploadRetry: () => {
+            // Blob実在確認の再試行に入った時だけ、待機案内を一度だけ出す。
+            if (hasShownSlowBlobCheckNotice) {
+              return;
+            }
+            hasShownSlowBlobCheckNotice = true;
+            notify({
+              variant: 'warning',
+              message: '想定よりも時間がかかっています。そのままでお待ちください'
+            });
+          },
+          onZipBuilt: () => {
+            setActiveDelivery({ entryKey, stage: 'uploading', mode: 'share_url' });
+          }
+        });
+
+        if (zip.pullIds.length > 0) {
+          pullHistoryStore.markPullStatus(zip.pullIds, 'ziped');
+          pullHistoryStore.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+          pullHistoryStore.markPullStatus(zip.pullIds, 'uploaded');
+          pullHistoryStore.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+        }
+
+        const copied = await copyIssuedShareUrlToClipboard(shareLink.url);
+        setCompletedQuickAction({ entryKey, mode: 'share_url' });
+        notify({
+          variant: 'success',
+          title: '成功',
+          message: copied
+            ? '共有URLを発行し、クリップボードへコピーしました'
+            : '共有URLを発行しました'
+        });
+      } catch (error) {
+        if (isBlobUploadCsrfTokenMismatchError(error)) {
+          pushCsrfTokenMismatchWarning(
+            push,
+            error instanceof Error ? error.message : undefined,
+            extractBlobUploadCsrfFailureReason(error)
+          );
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        notify({
+          variant: 'error',
+          title: 'エラー',
+          message: `共有URLの発行に失敗しました: ${message}`
+        });
+      } finally {
+        setActiveDelivery(null);
+      }
+    },
+    [
+      activeDelivery,
+      copyIssuedShareUrlToClipboard,
+      ensureOwnerName,
+      excludeRiaguImages,
+      notify,
+      persistence,
+      pullHistoryStore,
+      push,
+      staffDiscordId,
+      staffDiscordName,
+      uploadZip,
+      userName,
+      userProfilesState
+    ]
+  );
+
+  const handleQuickSend = useCallback(
+    async ({
+      entry,
+      entryKey,
+      newItemIds,
+      positiveItemIds
+    }: {
+      entry: PullHistoryEntryV1;
+      entryKey: string;
+      newItemIds: string[];
+      positiveItemIds: string[];
+    }) => {
+      if (quickSendMode === 'share_url') {
+        await handleIssueShareUrl({ entry, entryKey, positiveItemIds });
+        return;
+      }
+      await handleQuickSendDiscord({ entry, entryKey, newItemIds, positiveItemIds });
+    },
+    [handleIssueShareUrl, handleQuickSendDiscord, quickSendMode]
   );
 
   return (
@@ -661,14 +823,16 @@ export function HistoryEntriesList({
             ? shareHandlers.feedback.status
             : null;
 
-        const isEntryDeliveryInProgress = activeDelivery?.entryKey === entryKey;
+        const isEntryDeliveryInProgress =
+          activeDelivery?.entryKey === entryKey && activeDelivery.mode === quickSendMode;
         const isAnyEntryDeliveryInProgress = activeDelivery !== null;
         const quickSendDisabled = isAnyEntryDeliveryInProgress;
 
         const quickSendButtonLabel = resolveQuickSendButtonLabel({
           activeDelivery,
-          completedEntryKey: completedDeliveryEntryKey,
-          entryKey
+          completedAction: completedQuickAction,
+          entryKey,
+          mode: quickSendMode
         });
 
         const positiveItemIds = positiveItemEntries.map((item) => item.itemId);
@@ -797,7 +961,10 @@ export function HistoryEntriesList({
                           disabled: quickSendDisabled,
                           inProgress: isEntryDeliveryInProgress,
                           label: quickSendButtonLabel,
-                          minWidth: '14.5rem'
+                          minWidth: '14.5rem',
+                          modeOptions: HISTORY_QUICK_SEND_MODE_OPTIONS,
+                          selectedModeId: quickSendMode,
+                          onSelectMode: setQuickSendMode
                         }
                       : undefined
                   }
