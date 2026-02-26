@@ -478,7 +478,7 @@ export function UserCard({
           <div
             data-state={open ? 'open' : 'closed'}
             className={clsx(
-              'group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'user-card__collapsible group grid h-px overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
               'data-[state=open]:grid-rows-[1fr]',
               'data-[state=closed]:grid-rows-[0fr]'
             )}
