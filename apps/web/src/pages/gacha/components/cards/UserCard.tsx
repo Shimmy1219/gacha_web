@@ -339,7 +339,7 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5 pb-3">
           <header
             className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap"
             onClick={handleCardClick}
@@ -478,7 +478,7 @@ export function UserCard({
           <div
             data-state={open ? 'open' : 'closed'}
             className={clsx(
-              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
               'data-[state=open]:grid-rows-[1fr]',
               'data-[state=closed]:grid-rows-[0fr]'
             )}
