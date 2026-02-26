@@ -71,7 +71,7 @@ export function ResultActionButtons({
       {quickSend ? (
         <div
           className={clsx(
-            'result-action-buttons__quick-send-group flex w-full items-stretch sm:w-auto',
+            'result-action-buttons__quick-send-group flex h-8 w-full items-stretch sm:w-auto',
             shouldShowQuickSendModeSelector ? 'gap-0' : 'gap-2'
           )}
           style={quickSend.minWidth ? { minWidth: quickSend.minWidth } : undefined}
@@ -110,7 +110,7 @@ export function ResultActionButtons({
           <button
             type="button"
             className={clsx(
-              'result-action-buttons__quick-send btn flex w-full items-center justify-center gap-1 text-center !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto',
+              'result-action-buttons__quick-send btn flex h-full w-full items-center justify-center gap-1 text-center !min-h-0 bg-discord-primary px-3 py-1.5 text-xs text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto',
               shouldShowQuickSendModeSelector && 'rounded-l-none'
             )}
             onClick={quickSend.onClick}
