@@ -1,4 +1,3 @@
-import { SparklesIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 export interface DashboardMobileTabSection {
@@ -123,12 +122,12 @@ export function DashboardMobileTabBar({
         <button
           id="dashboard-mobile-gacha-fab"
           type="button"
-          className="dashboard-mobile-tabs__gacha-fab fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/20 bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          className="dashboard-mobile-tabs__gacha-fab fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex h-14 min-w-14 items-center justify-center rounded-full border border-accent/20 bg-accent px-3 text-[11px] font-semibold tracking-[0.08em] text-accent-foreground transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
           onClick={() => onDrawGacha?.()}
           aria-label="ガチャを引く"
           title="ガチャを引く"
         >
-          <SparklesIcon className="dashboard-mobile-tabs__gacha-fab-icon h-6 w-6" aria-hidden="true" />
+          <span className="dashboard-mobile-tabs__gacha-fab-label">ガチャ</span>
         </button>
       ) : null}
     </>

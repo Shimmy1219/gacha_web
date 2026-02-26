@@ -80,6 +80,17 @@ function deriveSidebarViews(
   return filtered;
 }
 
+function resolveRequestedMobileViewId(
+  search: string,
+  sections: DashboardSectionConfig[]
+): string | null {
+  const requestedViewId = new URLSearchParams(search).get('view');
+  if (!requestedViewId) {
+    return null;
+  }
+  return sections.some((section) => section.id === requestedViewId) ? requestedViewId : null;
+}
+
 function shallowEqualArrays(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) {
     return false;
@@ -124,7 +135,12 @@ export function DashboardShell({
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
   const isSidebarLayout = !isMobile && (forceSidebarLayout || desktopLayout === 'sidebar');
   const maxSidebarSelections = isLgDown ? 1 : 2;
-  const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
+  const [activeView, setActiveView] = useState(() => {
+    // 履歴ページから /gacha?view=... で戻るケースでは、初回描画から指定タブを選択して
+    // 「一瞬レアリティがアクティブになる」ちらつきを防ぐ。
+    const requestedMobileViewId = resolveRequestedMobileViewId(location.search, sections);
+    return requestedMobileViewId ?? sections[0]?.id ?? 'rarity';
+  });
   const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
     deriveSidebarViews([], sections, maxSidebarSelections)
   );
@@ -149,16 +165,16 @@ export function DashboardShell({
       return;
     }
 
-    const searchParams = new URLSearchParams(location.search);
-    const requestedViewId = searchParams.get('view');
+    const requestedViewId = resolveRequestedMobileViewId(location.search, sections);
     if (!requestedViewId) {
       return;
     }
 
-    if (sections.some((section) => section.id === requestedViewId)) {
+    if (activeView !== requestedViewId) {
       setActiveView(requestedViewId);
     }
 
+    const searchParams = new URLSearchParams(location.search);
     searchParams.delete('view');
     const nextSearch = searchParams.toString();
     navigate(
@@ -168,7 +184,7 @@ export function DashboardShell({
       },
       { replace: true }
     );
-  }, [isMobile, location.pathname, location.search, navigate, sections]);
+  }, [activeView, isMobile, location.pathname, location.search, navigate, sections]);
 
   useEffect(() => {
     setActiveSidebarViews((previous) => {
