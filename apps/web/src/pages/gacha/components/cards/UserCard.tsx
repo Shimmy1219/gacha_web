@@ -475,25 +475,16 @@ export function UserCard({
               ) : null}
             </div>
           </header>
-          <div
-            data-state={open ? 'open' : 'closed'}
-            className={clsx(
-              'group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
-              'data-[state=open]:grid-rows-[1fr]',
-              'data-[state=closed]:grid-rows-[0fr]'
-            )}
-          >
-            <UserCardPanel
-              open={open}
-              panelId={panelId}
-              inventories={inventories}
-              showCounts={showCounts}
-              userId={userId}
-              userName={userName}
-              catalogItemsMap={catalogItemsMap}
-              rarityOptionsMap={rarityOptionsMap}
-            />
-          </div>
+          <UserCardPanel
+            open={open}
+            panelId={panelId}
+            inventories={inventories}
+            showCounts={showCounts}
+            userId={userId}
+            userName={userName}
+            catalogItemsMap={catalogItemsMap}
+            rarityOptionsMap={rarityOptionsMap}
+          />
         </article>
       )}
     </Disclosure>
@@ -546,10 +537,11 @@ function UserCardPanel({
     <Disclosure.Panel
       static
       id={panelId}
+      data-state={open ? 'open' : 'closed'}
       className={clsx(
-        'overflow-hidden transition-opacity duration-300 ease-linear',
-        'group-data-[state=open]:opacity-100',
-        'group-data-[state=closed]:opacity-0'
+        'grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-linear',
+        'data-[state=open]:grid-rows-[1fr] data-[state=open]:opacity-100',
+        'data-[state=closed]:grid-rows-[0fr] data-[state=closed]:opacity-0'
       )}
     >
       <div className="user-card__inventories space-y-4">
