@@ -51,6 +51,9 @@ const DRAW_RESULT_REVEAL_BACKGROUND_COLOR_SET = new Set<string>(
 );
 export const DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR: DrawResultRevealBackgroundColor = 'black';
 export const DEFAULT_DRAW_RESULT_REVEAL_ENABLED = true;
+export const QUICK_ACTION_MODE_VALUES = ['discord', 'share_url'] as const;
+export type QuickActionMode = (typeof QUICK_ACTION_MODE_VALUES)[number];
+const QUICK_ACTION_MODE_SET = new Set<string>(QUICK_ACTION_MODE_VALUES);
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -124,6 +127,16 @@ function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeQuickActionMode(value: unknown): QuickActionMode | null {
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase();
+    if (QUICK_ACTION_MODE_SET.has(lower)) {
+      return lower as QuickActionMode;
+    }
+  }
+  return null;
 }
 
 function normalizeGachaOwnerShareRate(value: unknown): number | null {
@@ -536,6 +549,28 @@ function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined)
   return normalizeBoolean(drawDialog.quickSendNewOnly, false);
 }
 
+function readQuickActionModePreference(state: UiPreferencesStateV3 | undefined): QuickActionMode | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'quickActionMode')) {
+    return null;
+  }
+
+  return normalizeQuickActionMode(drawDialog.quickActionMode);
+}
+
 function readDrawResultRevealEnabledPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
   if (!state) {
     return null;
@@ -915,6 +950,10 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readQuickSendNewOnlyPreference(this.state);
   }
 
+  getQuickActionModePreference(): QuickActionMode | null {
+    return readQuickActionModePreference(this.state);
+  }
+
   getDrawResultRevealEnabledPreference(): boolean | null {
     return readDrawResultRevealEnabledPreference(this.state);
   }
@@ -1071,6 +1110,70 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
         const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
         if (nextDrawDialog) {
           delete nextDrawDialog.quickSendNewOnly;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setQuickActionModePreference(
+    nextValue: QuickActionMode | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = nextValue == null ? null : normalizeQuickActionMode(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readQuickActionModePreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                quickActionMode: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.quickActionMode;
         }
 
         const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);

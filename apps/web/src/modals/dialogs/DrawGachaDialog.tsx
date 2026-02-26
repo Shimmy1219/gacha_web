@@ -309,6 +309,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const quickActionModePreference = useMemo(
+    () => uiPreferencesStore.getQuickActionModePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
   const drawResultRevealEnabledPreference = useMemo(
     () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -424,7 +428,9 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
     'idle' | 'building-zip' | 'uploading' | 'sending'
   >('idle');
-  const [quickSendMode, setQuickSendMode] = useState<ResultActionQuickSendModeId>('discord');
+  const [quickSendMode, setQuickSendMode] = useState<ResultActionQuickSendModeId>(
+    () => quickActionModePreference ?? 'discord'
+  );
   const [isShareUrlIssuing, setIsShareUrlIssuing] = useState(false);
   const [shareUrlIssueStage, setShareUrlIssueStage] = useState<'idle' | 'building-zip' | 'uploading'>('idle');
   const [shareUrlIssueCompleted, setShareUrlIssueCompleted] = useState(false);
@@ -1369,6 +1375,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
+  const activeQuickSendMode: ResultActionQuickSendModeId = isDiscordLoggedIn ? quickSendMode : 'share_url';
   const lastUserProfile = lastUserId ? userProfilesState?.users?.[lastUserId] : undefined;
   const canDeliverToDiscord = Boolean(
     resultItems &&
@@ -1414,6 +1421,16 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   }, [shareUrlIssueCompleted, shareUrlIssueStage]);
   const shareUrlIssueButtonDisabled = isAnyQuickActionInProgress || !canIssueShareUrl;
   const isShareUrlIssueInProgress = isShareUrlIssuing;
+
+  useEffect(() => {
+    // ログイン中は保存済みモードに追従し、別画面での変更も反映する。
+    // 未ログイン時は常に共有URL発行モードを使うため同期しない。
+    if (!isDiscordLoggedIn) {
+      return;
+    }
+    const nextMode = quickActionModePreference ?? 'discord';
+    setQuickSendMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [isDiscordLoggedIn, quickActionModePreference]);
 
   useEffect(() => {
     // モーダル破棄時にタイマーを必ず解放し、非表示後の state 更新を防ぐ。
@@ -2094,12 +2111,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   ]);
 
   const handleQuickSendAction = useCallback(() => {
-    if (quickSendMode === 'share_url') {
+    if (activeQuickSendMode === 'share_url') {
       void handleIssueShareUrl();
       return;
     }
     void handleDeliverToDiscord();
-  }, [handleDeliverToDiscord, handleIssueShareUrl, quickSendMode]);
+  }, [activeQuickSendMode, handleDeliverToDiscord, handleIssueShareUrl]);
+
+  const handleQuickSendModeChange = useCallback(
+    (nextMode: ResultActionQuickSendModeId) => {
+      if (!isDiscordLoggedIn) {
+        return;
+      }
+      setQuickSendMode(nextMode);
+      uiPreferencesStore.setQuickActionModePreference(nextMode, { persist: 'immediate' });
+    },
+    [isDiscordLoggedIn, uiPreferencesStore]
+  );
 
   const handleCopyShareResult = useCallback(() => {
     if (!shareContent) {
@@ -2469,29 +2497,25 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   onShare={handleShareResult}
                   onCopy={handleCopyShareResult}
                   tweetUrl={safeTweetUrl}
-                  quickSend={
-                    isDiscordLoggedIn
-                      ? {
-                          onClick: handleQuickSendAction,
-                          disabled:
-                            quickSendMode === 'share_url'
-                              ? shareUrlIssueButtonDisabled
-                              : discordDeliveryButtonDisabled,
-                          inProgress:
-                            quickSendMode === 'share_url'
-                              ? isShareUrlIssueInProgress
-                              : isDiscordDeliveryInProgress,
-                          label:
-                            quickSendMode === 'share_url'
-                              ? shareUrlIssueButtonLabel
-                              : discordDeliveryButtonLabel,
-                          minWidth: discordDeliveryButtonMinWidth,
-                          modeOptions: DRAW_RESULT_QUICK_SEND_MODE_OPTIONS,
-                          selectedModeId: quickSendMode,
-                          onSelectMode: setQuickSendMode
-                        }
-                      : undefined
-                  }
+                  quickSend={{
+                    onClick: handleQuickSendAction,
+                    disabled:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonDisabled
+                        : discordDeliveryButtonDisabled,
+                    inProgress:
+                      activeQuickSendMode === 'share_url'
+                        ? isShareUrlIssueInProgress
+                        : isDiscordDeliveryInProgress,
+                    label:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonLabel
+                        : discordDeliveryButtonLabel,
+                    minWidth: discordDeliveryButtonMinWidth,
+                    modeOptions: isDiscordLoggedIn ? DRAW_RESULT_QUICK_SEND_MODE_OPTIONS : undefined,
+                    selectedModeId: activeQuickSendMode,
+                    onSelectMode: isDiscordLoggedIn ? handleQuickSendModeChange : undefined
+                  }}
                 />
               ) : null}
             </div>

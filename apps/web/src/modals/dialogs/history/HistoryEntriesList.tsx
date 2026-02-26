@@ -1,6 +1,6 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   type PullHistoryEntrySourceV1,
@@ -205,7 +205,13 @@ export function HistoryEntriesList({
     entryKey: string;
     mode: HistoryQuickActionMode;
   } | null>(null);
-  const [quickSendMode, setQuickSendMode] = useState<HistoryQuickActionMode>('discord');
+  const quickActionModePreference = useMemo(
+    () => uiPreferencesStore.getQuickActionModePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const [quickSendMode, setQuickSendMode] = useState<HistoryQuickActionMode>(
+    () => quickActionModePreference ?? 'discord'
+  );
 
   const quickSendNewOnlyPreference = useMemo(
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
@@ -220,6 +226,17 @@ export function HistoryEntriesList({
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
+  const activeQuickSendMode: HistoryQuickActionMode = isDiscordLoggedIn ? quickSendMode : 'share_url';
+
+  useEffect(() => {
+    // ログイン中は保存済みモードに同期し、別導線で切り替えた結果を反映する。
+    // 未ログイン時は共有URL発行モード固定で表示するため同期不要。
+    if (!isDiscordLoggedIn) {
+      return;
+    }
+    const nextMode = quickActionModePreference ?? 'discord';
+    setQuickSendMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [isDiscordLoggedIn, quickActionModePreference]);
 
   const resolveOwnerName = useCallback(() => {
     const prefs = persistence.loadSnapshot().receivePrefs;
@@ -703,13 +720,24 @@ export function HistoryEntriesList({
       newItemIds: string[];
       positiveItemIds: string[];
     }) => {
-      if (quickSendMode === 'share_url') {
+      if (activeQuickSendMode === 'share_url') {
         await handleIssueShareUrl({ entry, entryKey, positiveItemIds });
         return;
       }
       await handleQuickSendDiscord({ entry, entryKey, newItemIds, positiveItemIds });
     },
-    [handleIssueShareUrl, handleQuickSendDiscord, quickSendMode]
+    [activeQuickSendMode, handleIssueShareUrl, handleQuickSendDiscord]
+  );
+
+  const handleQuickSendModeChange = useCallback(
+    (nextMode: HistoryQuickActionMode) => {
+      if (!isDiscordLoggedIn) {
+        return;
+      }
+      setQuickSendMode(nextMode);
+      uiPreferencesStore.setQuickActionModePreference(nextMode, { persist: 'immediate' });
+    },
+    [isDiscordLoggedIn, uiPreferencesStore]
   );
 
   return (
@@ -824,7 +852,7 @@ export function HistoryEntriesList({
             : null;
 
         const isEntryDeliveryInProgress =
-          activeDelivery?.entryKey === entryKey && activeDelivery.mode === quickSendMode;
+          activeDelivery?.entryKey === entryKey && activeDelivery.mode === activeQuickSendMode;
         const isAnyEntryDeliveryInProgress = activeDelivery !== null;
         const quickSendDisabled = isAnyEntryDeliveryInProgress;
 
@@ -832,7 +860,7 @@ export function HistoryEntriesList({
           activeDelivery,
           completedAction: completedQuickAction,
           entryKey,
-          mode: quickSendMode
+          mode: activeQuickSendMode
         });
 
         const positiveItemIds = positiveItemEntries.map((item) => item.itemId);
@@ -947,27 +975,23 @@ export function HistoryEntriesList({
                     void shareHandlers.copy(entryKey, shareText);
                   }}
                   tweetUrl={safeTweetUrl}
-                  quickSend={
-                    isDiscordLoggedIn
-                      ? {
-                          onClick: () => {
-                            void handleQuickSend({
-                              entry,
-                              entryKey,
-                              positiveItemIds,
-                              newItemIds
-                            });
-                          },
-                          disabled: quickSendDisabled,
-                          inProgress: isEntryDeliveryInProgress,
-                          label: quickSendButtonLabel,
-                          minWidth: '14.5rem',
-                          modeOptions: HISTORY_QUICK_SEND_MODE_OPTIONS,
-                          selectedModeId: quickSendMode,
-                          onSelectMode: setQuickSendMode
-                        }
-                      : undefined
-                  }
+                  quickSend={{
+                    onClick: () => {
+                      void handleQuickSend({
+                        entry,
+                        entryKey,
+                        positiveItemIds,
+                        newItemIds
+                      });
+                    },
+                    disabled: quickSendDisabled,
+                    inProgress: isEntryDeliveryInProgress,
+                    label: quickSendButtonLabel,
+                    minWidth: '14.5rem',
+                    modeOptions: isDiscordLoggedIn ? HISTORY_QUICK_SEND_MODE_OPTIONS : undefined,
+                    selectedModeId: activeQuickSendMode,
+                    onSelectMode: isDiscordLoggedIn ? handleQuickSendModeChange : undefined
+                  }}
                 />
               </div>
               {currentFeedback === 'shared' ? (
