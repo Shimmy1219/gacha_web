@@ -20,7 +20,6 @@ import {
   type OriginalPrizeMissingItem,
   type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
-import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
 import {
   extractBlobUploadCsrfFailureReason,
   isBlobUploadCsrfTokenMismatchError,
@@ -28,7 +27,6 @@ import {
 } from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
-import { resolveThumbnailOwnerId } from '../../features/gacha/thumbnailOwnerId';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection
@@ -44,6 +42,7 @@ import { openDiscordShareDialog } from '../../features/discord/openDiscordShareD
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import { resolveSafeUrl } from '../../utils/safeUrl';
+import { issueShareUrlByUpload } from '../../features/save/issueShareUrlByUpload';
 import {
   applyLegacyAssetsToInstances,
   alignOriginalPrizeInstances,
@@ -613,21 +612,17 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   };
 
   const runZipUpload = useCallback(async (ownerName: string) => {
-    const resolvedOwnerId = resolveThumbnailOwnerId(discordSession?.user?.id ?? null);
-    if (!resolvedOwnerId) {
-      throw new Error('配信サムネイルownerIdを解決できませんでした。');
-    }
     let hasShownSlowBlobCheckNotice = false;
-    const { zip, uploadResponse } = await buildAndUploadSelectionZip({
+    const { zip, shareLink } = await issueShareUrlByUpload({
+      persistence,
       snapshot: resolveZipSnapshot(),
       selection,
       userId,
       userName: receiverDisplayName,
       ownerName,
-      ownerId: resolvedOwnerId,
-      uploadZip,
       ownerDiscordId: discordSession?.user?.id,
       ownerDiscordName: discordSession?.user?.name,
+      uploadZip,
       onBlobReuploadRetry: () => {
         // Blob存在確認に失敗して再アップロードへ移る時だけ、待機継続の案内を一度だけ表示する。
         if (hasShownSlowBlobCheckNotice) {
@@ -642,35 +637,15 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       excludeRiaguImages
     });
 
-    const expiresAtDisplay = uploadResponse.expiresAt
-      ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
-      : undefined;
-
-    const savedAt = new Date().toISOString();
-
-    persistence.savePartial({
-      saveOptions: {
-        [userId]: {
-          version: 3,
-          key: uploadResponse.token,
-          shareUrl: uploadResponse.shareUrl,
-          downloadUrl: uploadResponse.downloadUrl,
-          expiresAt: uploadResponse.expiresAt,
-          pathname: uploadResponse.pathname,
-          savedAt
-        }
-      }
-    });
-
     const result: SaveOptionsUploadResult = {
-      url: uploadResponse.shareUrl,
-      label: uploadResponse.shareUrl,
-      expiresAt: expiresAtDisplay
+      url: shareLink.url,
+      label: shareLink.label,
+      expiresAt: shareLink.expiresAt
     };
 
     setUploadResult(result);
 
-    return { uploadResponse, result, zip };
+    return { result, zip };
   }, [
     discordSession?.user?.id,
     discordSession?.user?.name,

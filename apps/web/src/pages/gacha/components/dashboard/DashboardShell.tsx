@@ -15,6 +15,7 @@ import {
   useState
 } from 'react';
 import { clsx } from 'clsx';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { DashboardDesktopGrid } from './DashboardDesktopGrid';
 import { DashboardMobileTabs } from './DashboardMobileTabs';
@@ -38,6 +39,7 @@ interface DashboardShellProps {
   sections: DashboardSectionConfig[];
   controlsSlot?: ReactNode;
   onDrawGacha?: () => void;
+  onOpenHistory?: () => void;
 }
 
 interface DashboardContextValue {
@@ -78,6 +80,17 @@ function deriveSidebarViews(
   return filtered;
 }
 
+function resolveRequestedMobileViewId(
+  search: string,
+  sections: DashboardSectionConfig[]
+): string | null {
+  const requestedViewId = new URLSearchParams(search).get('view');
+  if (!requestedViewId) {
+    return null;
+  }
+  return sections.some((section) => section.id === requestedViewId) ? requestedViewId : null;
+}
+
 function shallowEqualArrays(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) {
     return false;
@@ -108,14 +121,26 @@ export function useDashboardShell(): DashboardContextValue {
   return context;
 }
 
-export function DashboardShell({ sections, controlsSlot, onDrawGacha }: DashboardShellProps): JSX.Element {
+export function DashboardShell({
+  sections,
+  controlsSlot,
+  onDrawGacha,
+  onOpenHistory
+}: DashboardShellProps): JSX.Element {
   const { isMobile, isLgDown, forceSidebarLayout } = useResponsiveDashboard();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { uiPreferences: uiPreferencesStore } = useDomainStores();
   useStoreValue(uiPreferencesStore);
   const desktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
   const isSidebarLayout = !isMobile && (forceSidebarLayout || desktopLayout === 'sidebar');
   const maxSidebarSelections = isLgDown ? 1 : 2;
-  const [activeView, setActiveView] = useState(() => sections[0]?.id ?? 'rarity');
+  const [activeView, setActiveView] = useState(() => {
+    // 履歴ページから /gacha?view=... で戻るケースでは、初回描画から指定タブを選択して
+    // 「一瞬レアリティがアクティブになる」ちらつきを防ぐ。
+    const requestedMobileViewId = resolveRequestedMobileViewId(location.search, sections);
+    return requestedMobileViewId ?? sections[0]?.id ?? 'rarity';
+  });
   const [activeSidebarViews, setActiveSidebarViews] = useState<string[]>(() =>
     deriveSidebarViews([], sections, maxSidebarSelections)
   );
@@ -132,6 +157,34 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
       setActiveView(sections[0].id);
     }
   }, [sections, activeView]);
+
+  useEffect(() => {
+    // 履歴ページから /gacha?view=... で戻った際に、モバイル初期タブとして1回だけ反映する。
+    // URLを残すと再描画時に毎回適用されるため、適用後はreplaceでクエリを取り除く。
+    if (!isMobile) {
+      return;
+    }
+
+    const requestedViewId = resolveRequestedMobileViewId(location.search, sections);
+    if (!requestedViewId) {
+      return;
+    }
+
+    if (activeView !== requestedViewId) {
+      setActiveView(requestedViewId);
+    }
+
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.delete('view');
+    const nextSearch = searchParams.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : ''
+      },
+      { replace: true }
+    );
+  }, [activeView, isMobile, location.pathname, location.search, navigate, sections]);
 
   useEffect(() => {
     setActiveSidebarViews((previous) => {
@@ -403,7 +456,7 @@ export function DashboardShell({ sections, controlsSlot, onDrawGacha }: Dashboar
           </div>
         ) : null}
 
-        <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} />
+        <DashboardMobileTabs sections={sections} onDrawGacha={onDrawGacha} onOpenHistory={onOpenHistory} />
       </div>
     </DashboardContext.Provider>
   );

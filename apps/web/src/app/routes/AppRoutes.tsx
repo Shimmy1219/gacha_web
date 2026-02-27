@@ -9,6 +9,7 @@ import { ReceiveHistoryPage } from '../../pages/receive/ReceiveHistoryPage';
 import { ReceiveListPage } from '../../pages/receive/ReceiveListPage';
 import { TermsOfServicePage } from '../../pages/terms-of-service/TermsOfServicePage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
+import { GachaHistoryPage } from '../../pages/gacha/history/GachaHistoryPage';
 import { GachaTestPage } from '../../pages/gachaTest/GachaTestPage';
 
 interface AppRoutesProps {
@@ -54,9 +55,11 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
               onDrawGacha={gachaLayoutProps.onDrawGacha}
               onRegisterGacha={gachaLayoutProps.onRegisterGacha}
               onOpenPageSettings={gachaLayoutProps.onOpenPageSettings}
+              onOpenHistory={gachaLayoutProps.onOpenHistory}
             />
           )
         },
+        { path: 'gacha/history', element: <GachaHistoryPage onDrawGacha={gachaLayoutProps.onDrawGacha} /> },
         { path: 'gacha/test', element: <GachaTestPage /> },
         { path: 'receive', element: <ReceivePage /> },
         { path: 'receive/history', element: <ReceiveHistoryPage /> },

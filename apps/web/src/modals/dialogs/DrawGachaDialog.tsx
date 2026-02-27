@@ -1,8 +1,4 @@
 import {
-  ArrowPathIcon,
-  ClipboardIcon,
-  PaperAirplaneIcon,
-  ShareIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
@@ -17,15 +13,18 @@ import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
-import { XLogoIcon } from '../../components/icons/XLogoIcon';
+import {
+  ResultActionButtons,
+  type ResultActionButtonsQuickSendModeOption,
+  type ResultActionQuickSendModeId
+} from './ResultActionButtons';
 import { resolveSafeUrl } from '../../utils/safeUrl';
-import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
 import {
   extractBlobUploadCsrfFailureReason,
   isBlobUploadCsrfTokenMismatchError,
   useBlobUpload
 } from '../../features/save/useBlobUpload';
-import { resolveThumbnailOwnerId } from '../../features/gacha/thumbnailOwnerId';
+import { issueShareUrlByUpload } from '../../features/save/issueShareUrlByUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
@@ -103,6 +102,11 @@ interface QueuedDiscordDeliveryRequest {
   requestedAt: number;
   itemIdFilter?: string[];
 }
+
+const DRAW_RESULT_QUICK_SEND_MODE_OPTIONS: readonly ResultActionButtonsQuickSendModeOption[] = [
+  { id: 'discord', label: 'Discord送信' },
+  { id: 'share_url', label: '共有URL発行' }
+];
 
 function resolvePlanForPulls({
   pulls,
@@ -305,6 +309,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const quickActionModePreference = useMemo(
+    () => uiPreferencesStore.getQuickActionModePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
   const drawResultRevealEnabledPreference = useMemo(
     () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -420,6 +428,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
     'idle' | 'building-zip' | 'uploading' | 'sending'
   >('idle');
+  const [quickSendMode, setQuickSendMode] = useState<ResultActionQuickSendModeId>(
+    () => quickActionModePreference ?? 'discord'
+  );
+  const [isShareUrlIssuing, setIsShareUrlIssuing] = useState(false);
+  const [shareUrlIssueStage, setShareUrlIssueStage] = useState<'idle' | 'building-zip' | 'uploading'>('idle');
+  const [shareUrlIssueCompleted, setShareUrlIssueCompleted] = useState(false);
   const [, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
@@ -1361,6 +1375,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
+  const activeQuickSendMode: ResultActionQuickSendModeId = isDiscordLoggedIn ? quickSendMode : 'share_url';
   const lastUserProfile = lastUserId ? userProfilesState?.users?.[lastUserId] : undefined;
   const canDeliverToDiscord = Boolean(
     resultItems &&
@@ -1369,8 +1384,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       isDiscordLoggedIn &&
       staffDiscordId
   );
+  const canIssueShareUrl = Boolean(resultItems && lastPullId && lastUserId);
+  const isAnyQuickActionInProgress =
+    isDiscordDelivering || queuedDiscordDelivery !== null || isShareUrlIssuing;
   const discordDeliveryButtonDisabled =
-    isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
+    isAnyQuickActionInProgress || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
   const discordDeliveryButtonMinWidth = '14.5rem';
   const discordDeliveryButtonLabel = useMemo(() => {
@@ -1388,6 +1406,31 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return 'お渡し部屋に景品を送信';
     }
   }, [discordDeliveryCompleted, discordDeliveryStage]);
+  const shareUrlIssueButtonLabel = useMemo(() => {
+    if (shareUrlIssueCompleted) {
+      return 'URL発行済み';
+    }
+    switch (shareUrlIssueStage) {
+      case 'building-zip':
+        return 'ZIPファイル作成中...';
+      case 'uploading':
+        return 'ファイルアップロード中...';
+      default:
+        return '共有URLを発行';
+    }
+  }, [shareUrlIssueCompleted, shareUrlIssueStage]);
+  const shareUrlIssueButtonDisabled = isAnyQuickActionInProgress || !canIssueShareUrl;
+  const isShareUrlIssueInProgress = isShareUrlIssuing;
+
+  useEffect(() => {
+    // ログイン中は保存済みモードに追従し、別画面での変更も反映する。
+    // 未ログイン時は常に共有URL発行モードを使うため同期しない。
+    if (!isDiscordLoggedIn) {
+      return;
+    }
+    const nextMode = quickActionModePreference ?? 'discord';
+    setQuickSendMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [isDiscordLoggedIn, quickActionModePreference]);
 
   useEffect(() => {
     // モーダル破棄時にタイマーを必ず解放し、非表示後の state 更新を防ぐ。
@@ -1500,6 +1543,18 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return decision.sendNewOnly;
   }, [quickSendNewOnlyPreference, requestQuickSendPreference, uiPreferencesStore]);
 
+  const copyIssuedShareUrlToClipboard = useCallback(async (url: string): Promise<boolean> => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const handleShareResult = useCallback(() => {
     if (!shareContent) {
       return;
@@ -1567,12 +1622,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       if (!ownerName) {
         return;
       }
-      const resolvedOwnerId = resolveThumbnailOwnerId(staffDiscordId);
-      if (!resolvedOwnerId) {
-        const message = '配信サムネイルownerIdを解決できませんでした。';
-        notifyDiscordDeliveryError(message);
-        throw new Error(message);
-      }
 
       setIsDiscordDelivering(true);
       setDiscordDeliveryStage('building-zip');
@@ -1596,13 +1645,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
         const filteredItemIds =
           itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
-        const { zip, uploadResponse } = await buildAndUploadSelectionZip({
+        const { zip, uploadResponse, shareLink } = await issueShareUrlByUpload({
+          persistence,
           snapshot,
           selection,
           userId: targetUserId,
           userName: receiverDisplayName,
           ownerName,
-          ownerId: resolvedOwnerId,
           itemIdFilter: filteredItemIds,
           uploadZip,
           ownerDiscordId: staffDiscordId,
@@ -1623,10 +1672,6 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
             setDiscordDeliveryStage('uploading');
           }
         });
-
-        if (!uploadResponse?.shareUrl) {
-          throw new Error('Discord共有に必要なURLを取得できませんでした。');
-        }
 
         if (zip.pullIds.length > 0) {
           pullHistory.markPullStatus(zip.pullIds, 'uploaded');
@@ -1657,8 +1702,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           profile.id
         );
 
-        const shareUrl = uploadResponse.shareUrl;
-        const shareLabelCandidate = shareUrl ?? null;
+        const shareUrl = shareLink.url;
+        const shareLabelCandidate = shareLink.label ?? null;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
         const shareComment = buildDiscordShareComment({
           shareUrl,
@@ -1939,6 +1984,150 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     userProfiles,
     notifyDiscordDeliveryError
   ]);
+
+  const handleIssueShareUrl = useCallback(async () => {
+    if (!resultItems || resultItems.length === 0) {
+      notifyDiscordDeliveryError('共有できるガチャ結果がありません。');
+      return;
+    }
+    if (!lastPullId) {
+      notifyDiscordDeliveryError('共有する履歴が見つかりませんでした。');
+      return;
+    }
+    if (!lastUserId) {
+      notifyDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
+      return;
+    }
+
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
+
+    setDiscordDeliveryError(null);
+    setDiscordDeliveryNotice(null);
+    setShareUrlIssueCompleted(false);
+    setIsShareUrlIssuing(true);
+    setShareUrlIssueStage('building-zip');
+
+    try {
+      const snapshot = persistence.loadSnapshot();
+      const profile = lastUserProfile;
+      const receiverDisplayName =
+        profile?.displayName?.trim() && profile.displayName.trim().length > 0
+          ? profile.displayName.trim()
+          : lastUserName && lastUserName.trim().length > 0
+            ? lastUserName.trim()
+            : normalizedUserName && normalizedUserName.length > 0
+              ? normalizedUserName
+              : lastUserId;
+      let hasShownSlowBlobCheckNotice = false;
+
+      const { zip, shareLink } = await issueShareUrlByUpload({
+        persistence,
+        snapshot,
+        selection: { mode: 'history', pullIds: [lastPullId] },
+        userId: lastUserId,
+        userName: receiverDisplayName,
+        ownerName,
+        ownerDiscordId: staffDiscordId,
+        ownerDiscordName: staffDiscordName ?? undefined,
+        uploadZip,
+        excludeRiaguImages,
+        onBlobReuploadRetry: () => {
+          // Blob存在確認に失敗して再アップロードへ入る時、通知を一度だけ案内する。
+          if (hasShownSlowBlobCheckNotice) {
+            return;
+          }
+          hasShownSlowBlobCheckNotice = true;
+          notify({
+            variant: 'warning',
+            message: '想定よりも時間がかかっています。そのままでお待ちください'
+          });
+        },
+        onZipBuilt: () => {
+          setShareUrlIssueStage('uploading');
+        }
+      });
+
+      if (zip.pullIds.length > 0) {
+        pullHistory.markPullStatus(zip.pullIds, 'ziped');
+        pullHistory.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+        pullHistory.markPullStatus(zip.pullIds, 'uploaded');
+        pullHistory.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+      }
+
+      const copied = await copyIssuedShareUrlToClipboard(shareLink.url);
+      const successMessage = copied
+        ? '共有URLを発行し、クリップボードへコピーしました'
+        : '共有URLを発行しました';
+      setShareUrlIssueCompleted(true);
+      setDiscordDeliveryNotice(successMessage);
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: successMessage
+      });
+    } catch (error) {
+      if (isBlobUploadCsrfTokenMismatchError(error)) {
+        pushCsrfTokenMismatchWarning(
+          push,
+          error instanceof Error ? error.message : undefined,
+          extractBlobUploadCsrfFailureReason(error)
+        );
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      const displayMessage = `共有URLの発行に失敗しました: ${message}`;
+      setDiscordDeliveryError(displayMessage);
+      setShareUrlIssueCompleted(false);
+      notify({
+        variant: 'error',
+        title: 'エラー',
+        message: displayMessage
+      });
+    } finally {
+      setIsShareUrlIssuing(false);
+      setShareUrlIssueStage('idle');
+    }
+  }, [
+    resultItems,
+    lastPullId,
+    lastUserId,
+    ensureOwnerName,
+    persistence,
+    lastUserProfile,
+    lastUserName,
+    normalizedUserName,
+    staffDiscordId,
+    staffDiscordName,
+    uploadZip,
+    excludeRiaguImages,
+    notify,
+    pullHistory,
+    copyIssuedShareUrlToClipboard,
+    setDiscordDeliveryError,
+    notifyDiscordDeliveryError,
+    push
+  ]);
+
+  const handleQuickSendAction = useCallback(() => {
+    if (activeQuickSendMode === 'share_url') {
+      void handleIssueShareUrl();
+      return;
+    }
+    void handleDeliverToDiscord();
+  }, [activeQuickSendMode, handleDeliverToDiscord, handleIssueShareUrl]);
+
+  const handleQuickSendModeChange = useCallback(
+    (nextMode: ResultActionQuickSendModeId) => {
+      if (!isDiscordLoggedIn) {
+        return;
+      }
+      setQuickSendMode(nextMode);
+      uiPreferencesStore.setQuickActionModePreference(nextMode, { persist: 'immediate' });
+    },
+    [isDiscordLoggedIn, uiPreferencesStore]
+  );
 
   const handleCopyShareResult = useCallback(() => {
     if (!shareContent) {
@@ -2303,66 +2492,31 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 </div>
               </div>
               {shareContent ? (
-                <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
-                  {isDiscordLoggedIn ? (
-                    <button
-                      type="button"
-                      className="draw-gacha-dialog__quick-send-button btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
-                      style={{ minWidth: discordDeliveryButtonMinWidth }}
-                      onClick={handleDeliverToDiscord}
-                      disabled={discordDeliveryButtonDisabled}
-                    >
-                      {isDiscordDeliveryInProgress ? (
-                        <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                      {discordDeliveryButtonLabel}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleShareResult}
-                    title="結果を共有"
-                    aria-label="結果を共有"
-                  >
-                    <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果を共有</span>
-                  </button>
-                  {safeTweetUrl ? (
-                    <a
-                      href={safeTweetUrl}
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Xで共有"
-                      aria-label="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </a>
-                  ) : (
-                    <span
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000]/60 p-1.5 text-white/70 !min-h-0"
-                      aria-disabled="true"
-                      title="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleCopyShareResult}
-                    title="結果をコピー"
-                    aria-label="結果をコピー"
-                  >
-                    <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果をコピー</span>
-                  </button>
-                </div>
+                <ResultActionButtons
+                  className="draw-gacha-dialog__result-action-buttons flex-wrap justify-end text-right sm:text-left"
+                  onShare={handleShareResult}
+                  onCopy={handleCopyShareResult}
+                  tweetUrl={safeTweetUrl}
+                  quickSend={{
+                    onClick: handleQuickSendAction,
+                    disabled:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonDisabled
+                        : discordDeliveryButtonDisabled,
+                    inProgress:
+                      activeQuickSendMode === 'share_url'
+                        ? isShareUrlIssueInProgress
+                        : isDiscordDeliveryInProgress,
+                    label:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonLabel
+                        : discordDeliveryButtonLabel,
+                    minWidth: discordDeliveryButtonMinWidth,
+                    modeOptions: isDiscordLoggedIn ? DRAW_RESULT_QUICK_SEND_MODE_OPTIONS : undefined,
+                    selectedModeId: activeQuickSendMode,
+                    onSelectMode: isDiscordLoggedIn ? handleQuickSendModeChange : undefined
+                  }}
+                />
               ) : null}
             </div>
             {lastExecutionWarnings.length ? (

@@ -1,13 +1,15 @@
 import { clsx } from 'clsx';
-import { ArrowUpTrayIcon, PlusCircleIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon, ClockIcon, PlusCircleIcon, SparklesIcon } from '@heroicons/react/24/outline';
 
 interface ToolbarActionsProps {
   mode?: 'desktop' | 'mobile';
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
+  onOpenHistory?: () => void;
   onExportAll?: () => void;
   showDrawGachaButton?: boolean;
   showRegisterGachaButton?: boolean;
+  showHistoryButton?: boolean;
   showExportButton?: boolean;
 }
 
@@ -15,9 +17,11 @@ export function ToolbarActions({
   mode = 'desktop',
   onDrawGacha,
   onRegisterGacha,
+  onOpenHistory,
   onExportAll,
   showDrawGachaButton = true,
   showRegisterGachaButton = true,
+  showHistoryButton = true,
   showExportButton = true
 }: ToolbarActionsProps): JSX.Element {
   const containerClass =
@@ -47,6 +51,16 @@ export function ToolbarActions({
         >
           <PlusCircleIcon className="h-4 w-4" />
           ガチャを登録
+        </button>
+      ) : null}
+      {showHistoryButton ? (
+        <button
+          type="button"
+          onClick={() => onOpenHistory?.()}
+          className="toolbar-actions__history-button btn-muted inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-surface-foreground lg:w-auto"
+        >
+          <ClockIcon className="h-4 w-4" />
+          全履歴
         </button>
       ) : null}
       {showExportButton ? (

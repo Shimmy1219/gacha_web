@@ -235,6 +235,7 @@ export interface UiPreferencesStateV3 {
     drawDialog?: {
       lastSelectedGachaId?: string;
       quickSendNewOnly?: boolean;
+      quickActionMode?: 'discord' | 'share_url';
       revealOverlayEnabled?: boolean;
       revealOverlayBackgroundColor?: string;
       [key: string]: unknown;
