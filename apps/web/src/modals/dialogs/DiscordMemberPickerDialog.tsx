@@ -520,10 +520,16 @@ export function DiscordMemberPickerDialog({
         .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
         ok?: boolean;
         error?: string;
+        errorCode?: string;
+        csrfReason?: string;
       };
 
       if (!sendResponse.ok || !sendPayload.ok) {
-        throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
+        const message = sendPayload.error || 'Discordへの共有に失敗しました';
+        if (pushDiscordApiWarningByErrorCode(push, sendPayload.errorCode, message, { csrfReason: sendPayload.csrfReason })) {
+          return;
+        }
+        throw new Error(message);
       }
 
       const selectedMember = selectedMemberSummary ?? members.find((member) => member.id === selectedMemberId);

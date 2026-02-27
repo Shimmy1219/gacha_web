@@ -18,6 +18,8 @@ interface FindChannelsResponsePayload {
 interface SendDiscordResponsePayload {
   ok?: boolean;
   error?: string;
+  errorCode?: string;
+  csrfReason?: string;
 }
 
 function normalizeOptionalString(value: string | null | undefined): string | null {
@@ -155,7 +157,15 @@ export async function sendDiscordShareToMember({
     .catch(() => ({ ok: false, error: 'unexpected response' }))) as SendDiscordResponsePayload;
 
   if (!sendResponse.ok || !sendPayload.ok) {
-    throw new Error(sendPayload.error || 'Discordへの共有に失敗しました');
+    const message = sendPayload.error || 'Discordへの共有に失敗しました';
+    if (
+      pushDiscordApiWarningByErrorCode(push, sendPayload.errorCode, message, {
+        csrfReason: sendPayload.csrfReason
+      })
+    ) {
+      throw new Error('Discord共有設定を確認してください。');
+    }
+    throw new Error(message);
   }
 
   return {

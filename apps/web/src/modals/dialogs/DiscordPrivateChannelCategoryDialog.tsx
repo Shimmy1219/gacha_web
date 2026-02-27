@@ -255,10 +255,17 @@ export function DiscordPrivateChannelCategoryDialog({
         .catch(() => ({ ok: false, error: 'unexpected response' }))) as {
         ok?: boolean;
         error?: string;
+        errorCode?: string;
+        csrfReason?: string;
       };
 
       if (!sendResponse.ok || !sendPayload.ok) {
-        throw new Error(sendPayload.error || 'テストメッセージの送信に失敗しました');
+        const message = sendPayload.error || 'テストメッセージの送信に失敗しました';
+        if (pushDiscordApiWarningByErrorCode(push, sendPayload.errorCode, message, { csrfReason: sendPayload.csrfReason })) {
+          setSubmitError(null);
+          return;
+        }
+        throw new Error(message);
       }
 
       setSubmitStage('saving-selection');

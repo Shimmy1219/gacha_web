@@ -7,6 +7,7 @@ import {
 
 export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild' as const;
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions' as const;
+export const DISCORD_API_ERROR_CODE_UNKNOWN_CHANNEL = 'discord_unknown_channel' as const;
 
 export function isDiscordUnknownGuildErrorCode(value: unknown): boolean {
   return value === DISCORD_API_ERROR_CODE_UNKNOWN_GUILD;
@@ -16,6 +17,10 @@ export function isDiscordMissingPermissionsErrorCode(value: unknown): boolean {
   return value === DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS;
 }
 
+export function isDiscordUnknownChannelErrorCode(value: unknown): boolean {
+  return value === DISCORD_API_ERROR_CODE_UNKNOWN_CHANNEL;
+}
+
 export function isCsrfTokenMismatchErrorCode(value: unknown): boolean {
   return value === API_ERROR_CODE_CSRF_TOKEN_MISMATCH;
 }
@@ -23,6 +28,8 @@ export function isCsrfTokenMismatchErrorCode(value: unknown): boolean {
 export const DISCORD_UNKNOWN_GUILD_FALLBACK_MESSAGE =
   '選択されたDiscordギルドを操作できません。ボットが参加しているか確認してください。';
 export const DISCORD_MISSING_PERMISSIONS_FALLBACK_MESSAGE = 'Discord botの権限が不足しています。';
+export const DISCORD_UNKNOWN_CHANNEL_FALLBACK_MESSAGE =
+  '選択されたDiscordチャンネルが見つかりません。チャンネルを選択しなおしてください。';
 
 export function pushDiscordUnknownGuildWarning(
   push: ModalComponentProps['push'],
@@ -64,6 +71,26 @@ export function pushDiscordMissingPermissionsWarning(
   });
 }
 
+export function pushDiscordUnknownChannelWarning(
+  push: ModalComponentProps['push'],
+  message: unknown
+): void {
+  const resolvedMessage =
+    typeof message === 'string' && message.trim().length > 0
+      ? message.trim()
+      : DISCORD_UNKNOWN_CHANNEL_FALLBACK_MESSAGE;
+
+  push(WarningDialog, {
+    id: 'discord-unknown-channel-warning',
+    title: 'Discordチャンネルを再選択してください',
+    intent: 'warning',
+    payload: {
+      message: resolvedMessage,
+      confirmLabel: '閉じる'
+    }
+  });
+}
+
 export function pushCsrfTokenMismatchWarning(
   push: ModalComponentProps['push'],
   message?: unknown,
@@ -91,6 +118,10 @@ export function pushDiscordApiWarningByErrorCode(
   message: unknown,
   options?: { csrfReason?: unknown }
 ): boolean {
+  if (isDiscordUnknownChannelErrorCode(errorCode)) {
+    pushDiscordUnknownChannelWarning(push, message);
+    return true;
+  }
   if (isDiscordUnknownGuildErrorCode(errorCode)) {
     pushDiscordUnknownGuildWarning(push, message);
     return true;

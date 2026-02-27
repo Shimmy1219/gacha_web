@@ -76,6 +76,8 @@ export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild';
 
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions';
 
+export const DISCORD_API_ERROR_CODE_UNKNOWN_CHANNEL = 'discord_unknown_channel';
+
 export const DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA =
   '申し訳ございません。Discord botの権限確認中にエラーが発生しました。でも大丈夫です。ギルド設定でBotに「チャンネルの管理(Manage Channels)」権限を付与してください。そしたらもう一度試してみてください。\n\n１．サーバー設定を開く\n２．画面下の「ロール」を開く\n３．「四遊楽ガチャ」をタップ\n４．「権限」をタップ\n５．「チャンネルの管理」をON\n６．再度カテゴリを選ぶ';
 
@@ -109,6 +111,22 @@ export function isDiscordUnknownGuildError(error) {
   }
   const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
   return raw.includes('unknown guild');
+}
+
+export function isDiscordUnknownChannelError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 404) {
+    return false;
+  }
+  const code = typeof info?.jsonBody?.code === 'number' ? info.jsonBody.code : null;
+  if (code === 10003) {
+    return true;
+  }
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
+  return raw.includes('unknown channel');
 }
 
 export function build1to1Overwrites({ guildId, ownerId, memberId, botId }){
