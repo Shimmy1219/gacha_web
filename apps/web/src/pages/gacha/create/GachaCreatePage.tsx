@@ -66,12 +66,14 @@ export function GachaCreatePage({ onDrawGacha }: GachaCreatePageProps): JSX.Elem
         )
       }
       className={clsx('gacha-create-section min-h-0', !mobileLayout && 'h-full')}
-      contentClassName="gacha-create-section__content flex min-h-0 flex-col !overflow-visible !pr-0 !space-y-0"
+      contentClassName="gacha-create-section__content flex min-h-0 flex-col !pr-0 !space-y-0"
     >
       <div
         className={clsx(
-          'gacha-create-section__scroll tab-panel-viewport',
-          mobileLayout ? 'gacha-create-section__scroll--mobile px-4 py-3' : 'section-scroll flex-1'
+          'gacha-create-section__scroll',
+          mobileLayout
+            ? 'gacha-create-section__scroll--mobile px-4 py-3 pb-24'
+            : 'section-scroll flex-1 px-4 py-3'
         )}
       >
         <div className="gacha-create-section__wizard-panel flex min-h-0 flex-col rounded-2xl border border-border/40 bg-panel/35 p-4 sm:p-5">

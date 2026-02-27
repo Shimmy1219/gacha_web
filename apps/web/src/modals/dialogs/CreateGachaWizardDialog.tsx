@@ -190,7 +190,14 @@ export interface CreateGachaWizardStandaloneProps {
   onClose: () => void;
 }
 
-export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
+type CreateGachaWizardRenderMode = 'modal' | 'standalone';
+
+interface CreateGachaWizardContentProps {
+  onClose: () => void;
+  renderMode: CreateGachaWizardRenderMode;
+}
+
+function CreateGachaWizardContent({ onClose, renderMode }: CreateGachaWizardContentProps): JSX.Element {
   const {
     appState: appStateStore,
     rarities: rarityStore,
@@ -1061,7 +1068,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
       committedRef.current = true;
       createdAssetIdsRef.current.clear();
-      close();
+      onClose();
     } catch (error) {
       console.error('新規ガチャの登録に失敗しました', error);
       notify({
@@ -1087,7 +1094,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, [
     appStateStore,
     catalogStore,
-    close,
+    onClose,
     gachaName,
     gachaThumbnailAsset,
     isCompleteGachaEnabled,
@@ -1483,57 +1490,84 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     );
   };
 
+  const stepContent = step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep();
+
+  const footerButtons = (
+    <>
+      {step === 'basic' ? (
+        <button
+          type="button"
+          className="create-gacha-wizard__cancel-button btn btn-muted"
+          onClick={onClose}
+          disabled={isSubmitting || isProcessingAssets}
+        >
+          キャンセル
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="create-gacha-wizard__back-button btn btn-muted"
+          onClick={() => setStep(step === 'assets' ? 'basic' : 'assets')}
+          disabled={isSubmitting || isProcessingAssets}
+        >
+          戻る
+        </button>
+      )}
+      {step === 'pt' ? (
+        <button
+          type="button"
+          className="create-gacha-wizard__submit-button btn btn-primary"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? '登録中…' : '登録する'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="create-gacha-wizard__next-button btn btn-primary"
+          onClick={() => {
+            if (step === 'basic') {
+              handleProceedFromBasicStep();
+            } else {
+              setStep('pt');
+            }
+          }}
+          disabled={step === 'basic' ? !canProceedToAssets || isSubmitting || isProcessingAssets : !canProceedToPt}
+        >
+          次へ
+        </button>
+      )}
+    </>
+  );
+
   return (
     <>
-      <ModalBody className="space-y-6">
-        <div className="flex justify-end">
-          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-            ステップ{stepIndex} / {totalSteps}
-          </span>
+      {renderMode === 'modal' ? (
+        <>
+          <ModalBody className="space-y-6">
+            <div className="create-gacha-wizard__step-summary flex justify-end">
+              <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                ステップ{stepIndex} / {totalSteps}
+              </span>
+            </div>
+            {stepContent}
+          </ModalBody>
+          <ModalFooter>{footerButtons}</ModalFooter>
+        </>
+      ) : (
+        <div className="create-gacha-wizard__standalone-frame flex min-h-0 flex-col gap-4">
+          <div className="create-gacha-wizard__standalone-body space-y-6">
+            <div className="create-gacha-wizard__step-summary flex justify-end">
+              <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                ステップ{stepIndex} / {totalSteps}
+              </span>
+            </div>
+            {stepContent}
+          </div>
+          <div className="create-gacha-wizard__standalone-footer modal-footer !pt-0">{footerButtons}</div>
         </div>
-        {step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep()}
-      </ModalBody>
-      <ModalFooter>
-        {step === 'basic' ? (
-          <button type="button" className="btn btn-muted" onClick={close} disabled={isSubmitting || isProcessingAssets}>
-            キャンセル
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-muted"
-            onClick={() => setStep(step === 'assets' ? 'basic' : 'assets')}
-            disabled={isSubmitting || isProcessingAssets}
-          >
-            戻る
-          </button>
-        )}
-        {step === 'pt' ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? '登録中…' : '登録する'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              if (step === 'basic') {
-                handleProceedFromBasicStep();
-              } else {
-                setStep('pt');
-              }
-            }}
-            disabled={step === 'basic' ? !canProceedToAssets || isSubmitting || isProcessingAssets : !canProceedToPt}
-          >
-            次へ
-          </button>
-        )}
-      </ModalFooter>
+      )}
       <input
         ref={gachaThumbnailInputRef}
         id="create-gacha-wizard-thumbnail-input"
@@ -1574,23 +1608,21 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 }
 
 /**
+ * 新規ガチャ作成フォームをモーダルとして表示する。
+ *
+ * @param close モーダルを閉じる処理
+ * @returns 新規ガチャ作成モーダル
+ */
+export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
+  return <CreateGachaWizardContent onClose={close} renderMode="modal" />;
+}
+
+/**
  * 新規ガチャ作成フォームをモーダル外（ページ内）で再利用するためのラッパー。
  *
  * @param onClose キャンセル時・登録完了時の遷移処理
  * @returns モーダル非依存で利用できる新規作成フォーム
  */
 export function CreateGachaWizardStandalone({ onClose }: CreateGachaWizardStandaloneProps): JSX.Element {
-  const { dismiss, push, replace } = useModal();
-
-  return (
-    <CreateGachaWizardDialog
-      id="create-gacha-wizard-standalone"
-      title="新規ガチャを作成"
-      close={onClose}
-      dismiss={dismiss}
-      push={push}
-      replace={replace}
-      isTop
-    />
-  );
+  return <CreateGachaWizardContent onClose={onClose} renderMode="standalone" />;
 }
