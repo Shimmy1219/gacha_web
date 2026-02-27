@@ -186,6 +186,10 @@ function removeCompleteFromPtSettings(settings: PtSettingV3 | undefined): PtSett
 
 export interface CreateGachaWizardDialogPayload {}
 
+export interface CreateGachaWizardStandaloneProps {
+  onClose: () => void;
+}
+
 export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
   const {
     appState: appStateStore,
@@ -1566,5 +1570,27 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         }}
       />
     </>
+  );
+}
+
+/**
+ * 新規ガチャ作成フォームをモーダル外（ページ内）で再利用するためのラッパー。
+ *
+ * @param onClose キャンセル時・登録完了時の遷移処理
+ * @returns モーダル非依存で利用できる新規作成フォーム
+ */
+export function CreateGachaWizardStandalone({ onClose }: CreateGachaWizardStandaloneProps): JSX.Element {
+  const { dismiss, push, replace } = useModal();
+
+  return (
+    <CreateGachaWizardDialog
+      id="create-gacha-wizard-standalone"
+      title="新規ガチャを作成"
+      close={onClose}
+      dismiss={dismiss}
+      push={push}
+      replace={replace}
+      isTop
+    />
   );
 }
