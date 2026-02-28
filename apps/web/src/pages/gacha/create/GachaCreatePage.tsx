@@ -1,7 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 
-import { CreateGachaWizardStandalone } from '../../../modals/dialogs/CreateGachaWizardDialog';
+import {
+  CreateGachaWizardStandalone,
+  type CreateGachaWizardStepState
+} from '../../../modals/dialogs/CreateGachaWizardDialog';
+import { useGachaRegistrationState } from '../hooks/useGachaRegistrationState';
 import {
   DashboardMobileTabBar,
   type DashboardMobileTabSection
@@ -17,20 +21,20 @@ const GACHA_CREATE_MOBILE_SECTIONS: readonly DashboardMobileTabSection[] = [
   { id: 'riagu', label: 'リアグ' }
 ];
 
-interface GachaCreatePageProps {
-  onDrawGacha?: () => void;
-}
-
 /**
  * /gacha から独立した新規ガチャ作成画面を表示する。
  * モバイル時のみページとして表示し、PC時は /gacha へ戻す。
  *
- * @param onDrawGacha モバイル下部タブの「ガチャ」ボタン押下時処理
  * @returns 新規ガチャ作成ページ
  */
-export function GachaCreatePage({ onDrawGacha }: GachaCreatePageProps): JSX.Element {
+export function GachaCreatePage(): JSX.Element {
   const { isMobile } = useResponsiveDashboard();
+  const { shouldShowSplash } = useGachaRegistrationState();
   const navigate = useNavigate();
+  const [stepState, setStepState] = useState<CreateGachaWizardStepState>({
+    currentStep: 1,
+    totalSteps: 3
+  });
 
   if (!isMobile) {
     return <Navigate to="/gacha" replace />;
@@ -57,12 +61,24 @@ export function GachaCreatePage({ onDrawGacha }: GachaCreatePageProps): JSX.Elem
       id={CREATE_SECTION_ID}
       title="新規ガチャを作成"
       description="ガチャ名・配信サムネイル・レアリティ・景品・PT設定をこの画面でまとめて登録できます。"
+      actions={
+        <span
+          id="gacha-create-step-indicator"
+          className="gacha-create-section__step-indicator text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground"
+        >
+          ステップ{stepState.currentStep} / {stepState.totalSteps}
+        </span>
+      }
       className="gacha-create-section min-h-0"
       contentClassName="gacha-create-section__content flex min-h-0 flex-col !pr-0 !space-y-0"
     >
       <div className="gacha-create-section__scroll gacha-create-section__scroll--mobile px-4 py-3 pb-24">
-        <div className="gacha-create-section__wizard-panel flex min-h-0 flex-col rounded-2xl border border-border/40 bg-panel/35 p-4 sm:p-5">
-          <CreateGachaWizardStandalone onClose={handleBackToGacha} />
+        <div className="gacha-create-section__wizard-panel flex min-h-0 flex-col">
+          <CreateGachaWizardStandalone
+            onClose={handleBackToGacha}
+            onStepChange={setStepState}
+            showStepSummary={false}
+          />
         </div>
       </div>
     </SectionContainer>
@@ -77,13 +93,14 @@ export function GachaCreatePage({ onDrawGacha }: GachaCreatePageProps): JSX.Elem
           </div>
         </div>
 
-        <DashboardMobileTabBar
-          sections={GACHA_CREATE_MOBILE_SECTIONS}
-          onSelectSection={handleSelectMobileSection}
-          onDrawGacha={onDrawGacha}
-          onOpenHistory={handleOpenHistory}
-          className="gacha-create-mobile-tabs"
-        />
+        {!shouldShowSplash ? (
+          <DashboardMobileTabBar
+            sections={GACHA_CREATE_MOBILE_SECTIONS}
+            onSelectSection={handleSelectMobileSection}
+            onOpenHistory={handleOpenHistory}
+            className="gacha-create-mobile-tabs"
+          />
+        ) : null}
       </div>
     </div>
   );

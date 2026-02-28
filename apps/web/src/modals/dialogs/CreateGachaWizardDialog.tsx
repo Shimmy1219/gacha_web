@@ -186,8 +186,15 @@ function removeCompleteFromPtSettings(settings: PtSettingV3 | undefined): PtSett
 
 export interface CreateGachaWizardDialogPayload {}
 
+export interface CreateGachaWizardStepState {
+  currentStep: number;
+  totalSteps: number;
+}
+
 export interface CreateGachaWizardStandaloneProps {
   onClose: () => void;
+  onStepChange?: (state: CreateGachaWizardStepState) => void;
+  showStepSummary?: boolean;
 }
 
 type CreateGachaWizardRenderMode = 'modal' | 'standalone';
@@ -195,9 +202,16 @@ type CreateGachaWizardRenderMode = 'modal' | 'standalone';
 interface CreateGachaWizardContentProps {
   onClose: () => void;
   renderMode: CreateGachaWizardRenderMode;
+  onStepChange?: (state: CreateGachaWizardStepState) => void;
+  showStandaloneStepSummary?: boolean;
 }
 
-function CreateGachaWizardContent({ onClose, renderMode }: CreateGachaWizardContentProps): JSX.Element {
+function CreateGachaWizardContent({
+  onClose,
+  renderMode,
+  onStepChange,
+  showStandaloneStepSummary = true
+}: CreateGachaWizardContentProps): JSX.Element {
   const {
     appState: appStateStore,
     rarities: rarityStore,
@@ -469,6 +483,13 @@ function CreateGachaWizardContent({ onClose, renderMode }: CreateGachaWizardCont
 
   const stepIndex = step === 'basic' ? 1 : step === 'assets' ? 2 : 3;
   const totalSteps = 3;
+  useEffect(() => {
+    onStepChange?.({
+      currentStep: stepIndex,
+      totalSteps
+    });
+  }, [onStepChange, stepIndex, totalSteps]);
+
   const canProceedToAssets = rarities.length > 0;
   const canProceedToPt = !isProcessingAssets;
   const rarityCount = rarities.length;
@@ -1558,11 +1579,13 @@ function CreateGachaWizardContent({ onClose, renderMode }: CreateGachaWizardCont
       ) : (
         <div className="create-gacha-wizard__standalone-frame flex min-h-0 flex-col gap-4">
           <div className="create-gacha-wizard__standalone-body space-y-6">
-            <div className="create-gacha-wizard__step-summary flex justify-end">
-              <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                ステップ{stepIndex} / {totalSteps}
-              </span>
-            </div>
+            {showStandaloneStepSummary ? (
+              <div className="create-gacha-wizard__step-summary flex justify-end">
+                <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  ステップ{stepIndex} / {totalSteps}
+                </span>
+              </div>
+            ) : null}
             {stepContent}
           </div>
           <div className="create-gacha-wizard__standalone-footer modal-footer !pt-0">{footerButtons}</div>
@@ -1621,8 +1644,21 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
  * 新規ガチャ作成フォームをモーダル外（ページ内）で再利用するためのラッパー。
  *
  * @param onClose キャンセル時・登録完了時の遷移処理
+ * @param onStepChange 現在のステップが変わった時に通知するコールバック
+ * @param showStepSummary standalone内部でステップ表示を描画するかどうか
  * @returns モーダル非依存で利用できる新規作成フォーム
  */
-export function CreateGachaWizardStandalone({ onClose }: CreateGachaWizardStandaloneProps): JSX.Element {
-  return <CreateGachaWizardContent onClose={onClose} renderMode="standalone" />;
+export function CreateGachaWizardStandalone({
+  onClose,
+  onStepChange,
+  showStepSummary = true
+}: CreateGachaWizardStandaloneProps): JSX.Element {
+  return (
+    <CreateGachaWizardContent
+      onClose={onClose}
+      renderMode="standalone"
+      onStepChange={onStepChange}
+      showStandaloneStepSummary={showStepSummary}
+    />
+  );
 }
