@@ -440,22 +440,15 @@ export function UserCard({
                   {memo ? (
                     <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
                   ) : null}
-                  {(showCounts && totalSummary) || onExport ? (
+                  {onExport ? (
                     <div className="user-card__summary-footer flex flex-wrap items-center gap-2 pt-0.5">
-                      {showCounts && totalSummary ? (
-                        <p className="user-card__total text-[11px] text-muted-foreground">
-                          {totalSummary}
-                        </p>
-                      ) : null}
-                      {onExport ? (
-                        <button
-                          type="button"
-                          className="user-card__export-button inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-                          onClick={() => onExport(userId)}
-                        >
-                          景品の保存・共有
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        className="user-card__export-button inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                        onClick={() => onExport(userId)}
+                      >
+                        景品の保存・共有
+                      </button>
                     </div>
                   ) : null}
                 </div>
