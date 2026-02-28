@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { clsx } from 'clsx';
 
 import {
   CreateGachaWizardStandalone,
@@ -61,7 +62,7 @@ export function GachaCreatePage(): JSX.Element {
       id={CREATE_SECTION_ID}
       title="新規ガチャを作成"
       description="ガチャ名・配信サムネイル・レアリティ・景品・PT設定をこの画面でまとめて登録できます。"
-      actions={
+      filterButton={
         <span
           id="gacha-create-step-indicator"
           className="gacha-create-section__step-indicator text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground"
@@ -72,7 +73,12 @@ export function GachaCreatePage(): JSX.Element {
       className="gacha-create-section min-h-0"
       contentClassName="gacha-create-section__content flex min-h-0 flex-col !pr-0 !space-y-0"
     >
-      <div className="gacha-create-section__scroll gacha-create-section__scroll--mobile px-4 py-3 pb-24">
+      <div
+        className={clsx(
+          'gacha-create-section__scroll gacha-create-section__scroll--mobile px-4 py-3',
+          shouldShowSplash ? 'pb-4' : 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]'
+        )}
+      >
         <div className="gacha-create-section__wizard-panel flex min-h-0 flex-col">
           <CreateGachaWizardStandalone
             onClose={handleBackToGacha}

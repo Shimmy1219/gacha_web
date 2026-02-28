@@ -1512,13 +1512,17 @@ function CreateGachaWizardContent({
   };
 
   const stepContent = step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep();
+  const isStandalone = renderMode === 'standalone';
+  const standaloneFooterButtonClass = isStandalone
+    ? 'create-gacha-wizard__footer-button--standalone flex-1 basis-0 justify-center'
+    : undefined;
 
   const footerButtons = (
     <>
       {step === 'basic' ? (
         <button
           type="button"
-          className="create-gacha-wizard__cancel-button btn btn-muted"
+          className={clsx('create-gacha-wizard__cancel-button btn btn-muted', standaloneFooterButtonClass)}
           onClick={onClose}
           disabled={isSubmitting || isProcessingAssets}
         >
@@ -1527,7 +1531,7 @@ function CreateGachaWizardContent({
       ) : (
         <button
           type="button"
-          className="create-gacha-wizard__back-button btn btn-muted"
+          className={clsx('create-gacha-wizard__back-button btn btn-muted', standaloneFooterButtonClass)}
           onClick={() => setStep(step === 'assets' ? 'basic' : 'assets')}
           disabled={isSubmitting || isProcessingAssets}
         >
@@ -1537,7 +1541,7 @@ function CreateGachaWizardContent({
       {step === 'pt' ? (
         <button
           type="button"
-          className="create-gacha-wizard__submit-button btn btn-primary"
+          className={clsx('create-gacha-wizard__submit-button btn btn-primary', standaloneFooterButtonClass)}
           onClick={handleSubmit}
           disabled={isSubmitting}
         >
@@ -1546,7 +1550,7 @@ function CreateGachaWizardContent({
       ) : (
         <button
           type="button"
-          className="create-gacha-wizard__next-button btn btn-primary"
+          className={clsx('create-gacha-wizard__next-button btn btn-primary', standaloneFooterButtonClass)}
           onClick={() => {
             if (step === 'basic') {
               handleProceedFromBasicStep();
@@ -1588,7 +1592,9 @@ function CreateGachaWizardContent({
             ) : null}
             {stepContent}
           </div>
-          <div className="create-gacha-wizard__standalone-footer modal-footer !pt-0">{footerButtons}</div>
+          <div className="create-gacha-wizard__standalone-footer flex w-full shrink-0 flex-nowrap items-center justify-center gap-3 border-t border-white/5 pt-0">
+            {footerButtons}
+          </div>
         </div>
       )}
       <input
