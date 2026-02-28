@@ -7,12 +7,38 @@ import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIcon
 import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { saveReceiveItem } from '../../pages/receive/receiveSave';
 import { ReceiveIconSettingsDialog } from './ReceiveIconSettingsDialog';
+import { IconRingAdjustDialog, type IconRingAdjustResult } from './IconRingAdjustDialog';
 
 export interface IconRingWearDialogPayload {
   ringItem: ReceiveMediaItem;
 }
 
 type DrawableImage = ImageBitmap | HTMLImageElement;
+
+interface IconRingCompositeTransform {
+  scale: number;
+  offsetXRatio: number;
+  offsetYRatio: number;
+}
+
+interface IconRingCompositeEntry {
+  iconAssetId: string;
+  previewUrl: string;
+  blob: Blob;
+  downloadName: string;
+  transform: IconRingCompositeTransform;
+}
+
+const DEFAULT_ICON_RING_COMPOSITE_TRANSFORM: IconRingCompositeTransform = {
+  scale: 1,
+  offsetXRatio: 0,
+  offsetYRatio: 0
+};
+
+const ICON_RING_COMPOSITE_SCALE_MIN = 0.6;
+const ICON_RING_COMPOSITE_SCALE_MAX = 2.4;
+const ICON_RING_COMPOSITE_OFFSET_RATIO_MIN = -1;
+const ICON_RING_COMPOSITE_OFFSET_RATIO_MAX = 1;
 
 function sanitizeFileComponent(value: string): string {
   const trimmed = value.trim();
@@ -77,22 +103,46 @@ function closeDrawable(drawable: DrawableImage): void {
   }
 }
 
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+
+function normalizeCompositeTransform(transform: Partial<IconRingCompositeTransform> | null | undefined): IconRingCompositeTransform {
+  return {
+    scale: clampNumber(transform?.scale ?? DEFAULT_ICON_RING_COMPOSITE_TRANSFORM.scale, ICON_RING_COMPOSITE_SCALE_MIN, ICON_RING_COMPOSITE_SCALE_MAX),
+    offsetXRatio: clampNumber(
+      transform?.offsetXRatio ?? DEFAULT_ICON_RING_COMPOSITE_TRANSFORM.offsetXRatio,
+      ICON_RING_COMPOSITE_OFFSET_RATIO_MIN,
+      ICON_RING_COMPOSITE_OFFSET_RATIO_MAX
+    ),
+    offsetYRatio: clampNumber(
+      transform?.offsetYRatio ?? DEFAULT_ICON_RING_COMPOSITE_TRANSFORM.offsetYRatio,
+      ICON_RING_COMPOSITE_OFFSET_RATIO_MIN,
+      ICON_RING_COMPOSITE_OFFSET_RATIO_MAX
+    )
+  };
+}
+
 function drawCover(
   ctx: CanvasRenderingContext2D,
   image: DrawableImage,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  transform: IconRingCompositeTransform
 ): void {
   const { width: imageWidth, height: imageHeight } = getDrawableSize(image);
   if (imageWidth <= 0 || imageHeight <= 0) {
     return;
   }
 
-  const scale = Math.max(canvasWidth / imageWidth, canvasHeight / imageHeight);
+  const scale = Math.max(canvasWidth / imageWidth, canvasHeight / imageHeight) * transform.scale;
   const drawWidth = imageWidth * scale;
   const drawHeight = imageHeight * scale;
-  const dx = (canvasWidth - drawWidth) / 2;
-  const dy = (canvasHeight - drawHeight) / 2;
+  const dx = (canvasWidth - drawWidth) / 2 + canvasWidth * transform.offsetXRatio;
+  const dy = (canvasHeight - drawHeight) / 2 + canvasHeight * transform.offsetYRatio;
   ctx.drawImage(image as CanvasImageSource, dx, dy, drawWidth, drawHeight);
 }
 
@@ -120,9 +170,8 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
   const [status, setStatus] = useState<'idle' | 'generating' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [composites, setComposites] = useState<
-    Array<{ iconAssetId: string; previewUrl: string; blob: Blob; downloadName: string }>
-  >([]);
+  const [composites, setComposites] = useState<Array<IconRingCompositeEntry>>([]);
+  const [customTransforms, setCustomTransforms] = useState<Record<string, IconRingCompositeTransform>>({});
   const urlsRef = useRef<string[]>([]);
 
   const ringItemName = useMemo(() => {
@@ -132,6 +181,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
 
   const canGenerate = Boolean(ringItem && ringItem.kind === 'image' && iconAssetIds.length > 0);
 
+  // モーダルを閉じる時に object URL を必ず解放し、不要なメモリ保持を防ぐ。
   useEffect(() => {
     return () => {
       urlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -139,6 +189,20 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     };
   }, []);
 
+  // 登録アイコンの一覧が変わった時に、存在しないIDの調節値だけを取り除く。
+  // 依存配列には iconAssetIds のみを置き、変更検知時に最小限の差分更新を行う。
+  useEffect(() => {
+    setCustomTransforms((current) => {
+      const nextEntries = Object.entries(current).filter(([iconAssetId]) => iconAssetIds.includes(iconAssetId));
+      if (nextEntries.length === Object.keys(current).length) {
+        return current;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+  }, [iconAssetIds]);
+
+  // リング画像、登録アイコン、または調節値が変わるたびにプレビューを再合成する。
+  // 合成結果を object URL で保持するため、開始時に既存URLを破棄してから再生成する。
   useEffect(() => {
     urlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     urlsRef.current = [];
@@ -167,7 +231,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
           throw new Error('アイコンリング画像のサイズ取得に失敗しました。');
         }
 
-        const nextComposites: Array<{ iconAssetId: string; previewUrl: string; blob: Blob; downloadName: string }> = [];
+        const nextComposites: Array<IconRingCompositeEntry> = [];
         const loadErrors: string[] = [];
 
         for (const iconAssetId of iconAssetIds) {
@@ -197,8 +261,10 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
             continue;
           }
 
+          const transform = normalizeCompositeTransform(customTransforms[iconAssetId]);
+
           // base icon -> ring overlay (ring size defines output size)
-          drawCover(ctx, iconDrawable, canvasWidth, canvasHeight);
+          drawCover(ctx, iconDrawable, canvasWidth, canvasHeight, transform);
           ctx.drawImage(ringDrawable as CanvasImageSource, 0, 0, canvasWidth, canvasHeight);
 
           const blob = await canvasToPngBlob(canvas);
@@ -214,7 +280,8 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
             iconAssetId,
             previewUrl,
             blob,
-            downloadName
+            downloadName,
+            transform
           });
 
           closeDrawable(iconDrawable);
@@ -252,7 +319,7 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     return () => {
       active = false;
     };
-  }, [canGenerate, iconAssetIds, ringItem, ringItemName]);
+  }, [canGenerate, customTransforms, iconAssetIds, ringItem, ringItemName]);
 
   const handleOpenIconSettings = () => {
     push(ReceiveIconSettingsDialog, {
@@ -261,6 +328,31 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
       size: 'lg',
       payload: {
         autoOpenFilePicker: true
+      }
+    });
+  };
+
+  const handleOpenAdjustDialog = (entry: IconRingCompositeEntry) => {
+    if (!ringItem || ringItem.kind !== 'image') {
+      return;
+    }
+
+    push(IconRingAdjustDialog, {
+      id: `icon-ring-adjust-${entry.iconAssetId}`,
+      title: 'アイコンを調節',
+      description: 'アイコンリングは固定のまま、アイコンの拡大・縮小・移動を行います。',
+      size: 'lg',
+      payload: {
+        ringItem,
+        iconAssetId: entry.iconAssetId,
+        iconLabel: entry.downloadName,
+        initialTransform: entry.transform,
+        onSave: (nextTransform: IconRingAdjustResult) => {
+          setCustomTransforms((current) => ({
+            ...current,
+            [entry.iconAssetId]: normalizeCompositeTransform(nextTransform)
+          }));
+        }
       }
     });
   };
@@ -379,6 +471,15 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
                     disabled={savingKey === entry.iconAssetId}
                   >
                     {savingKey === entry.iconAssetId ? '保存中…' : '保存する'}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-ring-wear-dialog__adjust-button btn btn-muted mt-2 h-9 w-full px-3 text-xs"
+                    onClick={() => {
+                      handleOpenAdjustDialog(entry);
+                    }}
+                  >
+                    調節する
                   </button>
                 </div>
               ))}

@@ -9,6 +9,7 @@ export * from './DigitalItemTypeDialog';
 export * from './DrawGachaDialog';
 export * from './GachaDeleteConfirmDialog';
 export * from './GuideInfoDialog';
+export * from './IconRingAdjustDialog';
 export * from './IconRingWearDialog';
 export * from './ItemAssetPreviewDialog';
 export * from './ItemDeleteConfirmDialog';
