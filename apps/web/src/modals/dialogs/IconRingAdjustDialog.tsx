@@ -415,7 +415,7 @@ export function IconRingAdjustDialog({
           onClick={handleSave}
           disabled={isLoading || Boolean(error)}
         >
-          保存
+          確定
         </button>
       </ModalFooter>
     </>
