@@ -126,6 +126,11 @@ function normalizeCompositeTransform(transform: Partial<IconRingCompositeTransfo
   };
 }
 
+function drawWhiteBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+}
+
 function drawCover(
   ctx: CanvasRenderingContext2D,
   image: DrawableImage,
@@ -263,7 +268,9 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
 
           const transform = normalizeCompositeTransform(customTransforms[iconAssetId]);
 
-          // base icon -> ring overlay (ring size defines output size)
+          // 最背面に白背景を敷いてから、アイコン本体とリングを重ねる。
+          // こうすることで、透過画像同士を重ねても保存結果に透過が残らない。
+          drawWhiteBackground(ctx, canvasWidth, canvasHeight);
           drawCover(ctx, iconDrawable, canvasWidth, canvasHeight, transform);
           ctx.drawImage(ringDrawable as CanvasImageSource, 0, 0, canvasWidth, canvasHeight);
 
@@ -340,12 +347,10 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     push(IconRingAdjustDialog, {
       id: `icon-ring-adjust-${entry.iconAssetId}`,
       title: 'アイコンを調節',
-      description: 'アイコンリングは固定のまま、アイコンの拡大・縮小・移動を行います。',
       size: 'lg',
       payload: {
         ringItem,
         iconAssetId: entry.iconAssetId,
-        iconLabel: entry.downloadName,
         initialTransform: entry.transform,
         onSave: (nextTransform: IconRingAdjustResult) => {
           setCustomTransforms((current) => ({

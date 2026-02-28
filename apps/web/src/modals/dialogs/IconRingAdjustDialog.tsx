@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { loadAsset } from '@domain/assets/assetStorage';
@@ -26,14 +26,12 @@ export interface IconRingAdjustResult {
  *
  * @property ringItem 合成先となるアイコンリング画像。
  * @property iconAssetId 調節対象の登録アイコンID。
- * @property iconLabel 対象アイコンの表示ラベル。
  * @property initialTransform 初期表示時に適用する調節値。
  * @property onSave ユーザーが保存を押した時に呼ばれるコールバック。
  */
 export interface IconRingAdjustDialogPayload {
   ringItem: ReceiveMediaItem;
   iconAssetId: string;
-  iconLabel: string;
   initialTransform: IconRingAdjustResult;
   onSave: (nextTransform: IconRingAdjustResult) => void;
 }
@@ -94,15 +92,12 @@ export function IconRingAdjustDialog({
   const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [interactionMode, setInteractionMode] = useState<'idle' | 'dragging' | 'pinching'>('idle');
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const transformRef = useRef<IconRingAdjustResult>(transform);
   const pointersRef = useRef<Map<number, PointerSnapshot>>(new Map());
   const dragRef = useRef<DragState | null>(null);
   const pinchRef = useRef<PinchState | null>(null);
-
-  const scalePercent = useMemo(() => Math.round(transform.scale * 100), [transform.scale]);
 
   useEffect(() => {
     transformRef.current = transform;
@@ -129,7 +124,6 @@ export function IconRingAdjustDialog({
       setError(null);
       setRingPreviewUrl(null);
       setIconPreviewUrl(null);
-      setInteractionMode('idle');
       pointersRef.current.clear();
       dragRef.current = null;
       pinchRef.current = null;
@@ -203,7 +197,6 @@ export function IconRingAdjustDialog({
       previewHeight: rect.height
     };
     pinchRef.current = null;
-    setInteractionMode('dragging');
   }, []);
 
   const startPinch = useCallback((pointerIdA: number, pointerIdB: number) => {
@@ -221,7 +214,6 @@ export function IconRingAdjustDialog({
       startScale: transformRef.current.scale
     };
     dragRef.current = null;
-    setInteractionMode('pinching');
   }, []);
 
   const reconcileGestureMode = useCallback(() => {
@@ -236,7 +228,6 @@ export function IconRingAdjustDialog({
       const pointerId = pointerIds[0];
       const pointer = pointersRef.current.get(pointerId);
       if (!pointer) {
-        setInteractionMode('idle');
         dragRef.current = null;
         pinchRef.current = null;
         return;
@@ -247,7 +238,6 @@ export function IconRingAdjustDialog({
 
     dragRef.current = null;
     pinchRef.current = null;
-    setInteractionMode('idle');
   }, [startDrag, startPinch]);
 
   const handlePointerDown = useCallback(
@@ -332,7 +322,6 @@ export function IconRingAdjustDialog({
       event.preventDefault();
       const nextScaleDelta = -event.deltaY * WHEEL_SCALE_SENSITIVITY;
       updateTransform((current) => ({ ...current, scale: current.scale + nextScaleDelta }));
-      setInteractionMode('idle');
     },
     [error, isLoading, updateTransform]
   );
@@ -349,24 +338,7 @@ export function IconRingAdjustDialog({
     <>
       <ModalBody className="icon-ring-adjust-dialog__body rounded-2xl bg-surface/20 p-0 md:pr-0">
         <div className="icon-ring-adjust-dialog__content space-y-5">
-          <p className="icon-ring-adjust-dialog__guide-text text-sm text-muted-foreground">
-            PCはドラッグで移動・ホイールで拡大縮小、モバイルは1本指ドラッグと2本指ピンチで操作できます。
-          </p>
-          <p className="icon-ring-adjust-dialog__target-text text-xs text-muted-foreground">
-            対象:{' '}
-            <span className="icon-ring-adjust-dialog__target-label font-semibold text-surface-foreground">
-              {payload?.iconLabel ?? '登録アイコン'}
-            </span>
-          </p>
-
           <div className="icon-ring-adjust-dialog__preview-block rounded-2xl border border-border/60 bg-panel-muted/40 p-3 sm:p-4">
-            <div className="icon-ring-adjust-dialog__status-row mb-3 flex items-center justify-between gap-3">
-              <span className="icon-ring-adjust-dialog__status-label text-xs text-muted-foreground">現在倍率</span>
-              <span className="icon-ring-adjust-dialog__status-value rounded-full border border-border/50 bg-panel px-2 py-0.5 text-xs font-semibold text-surface-foreground">
-                {scalePercent}%
-              </span>
-            </div>
-
             {isLoading ? (
               <div className="icon-ring-adjust-dialog__loading-message flex items-center justify-center rounded-xl border border-border/60 bg-surface/40 px-4 py-8 text-sm text-muted-foreground">
                 プレビューを読み込み中です…
@@ -382,7 +354,7 @@ export function IconRingAdjustDialog({
             {!isLoading && !error && ringPreviewUrl && iconPreviewUrl ? (
               <div
                 ref={stageRef}
-                className="icon-ring-adjust-dialog__preview-stage relative mx-auto aspect-square w-full max-w-[340px] cursor-grab overflow-hidden rounded-2xl border border-border/60 bg-surface/20 shadow-inner active:cursor-grabbing"
+                className="icon-ring-adjust-dialog__preview-stage relative mx-auto aspect-square w-full max-w-[340px] cursor-grab overflow-hidden rounded-2xl border border-border/60 bg-white shadow-inner active:cursor-grabbing"
                 style={{ touchAction: 'none' }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
@@ -403,12 +375,6 @@ export function IconRingAdjustDialog({
                   alt="アイコンリング"
                   className="icon-ring-adjust-dialog__preview-ring pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
                 />
-
-                {interactionMode !== 'idle' ? (
-                  <div className="icon-ring-adjust-dialog__interaction-indicator pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/55 px-2 py-1 text-center text-xs text-white">
-                    {interactionMode === 'pinching' ? '拡大縮小中' : '移動中'}
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>
