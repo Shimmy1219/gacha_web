@@ -40,6 +40,19 @@ export function SettingsPage(): JSX.Element {
               description="ガチャ設定、サイトカラー、表示レイアウトなどを調整できます。"
               className="settings-section min-h-0"
               contentClassName="settings-section__content flex min-h-0 flex-col !pr-0 !space-y-0"
+              leadingAction={
+                <button
+                  id="settings-page-back-button"
+                  type="button"
+                  className="settings-page__back-button inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  aria-label="ガチャページに戻る"
+                  onClick={handleBackToGacha}
+                >
+                  <span className="settings-page__back-button-icon text-base leading-none" aria-hidden="true">
+                    ←
+                  </span>
+                </button>
+              }
             >
               <div className="settings-section__scroll settings-section__scroll--mobile px-4 py-3 pb-4">
                 <div className="settings-section__panel flex min-h-0 flex-col">

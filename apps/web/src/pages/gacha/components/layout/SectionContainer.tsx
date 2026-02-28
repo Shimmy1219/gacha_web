@@ -8,6 +8,7 @@ interface SectionContainerProps {
   title: string;
   description?: string;
   actions?: ReactNode;
+  leadingAction?: ReactNode;
   filterButton?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -20,6 +21,7 @@ export function SectionContainer({
   title,
   description,
   actions,
+  leadingAction,
   filterButton,
   children,
   className,
@@ -85,11 +87,20 @@ export function SectionContainer({
         <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4 px-4">
           <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
             <div className="section-container__title-block space-y-1 sm:max-w-none">
-              <div className="section-container__title-row flex items-center gap-3">
-                <h2 className="section-container__title flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+              <div className="section-container__title-row flex items-center justify-between gap-3">
+                <div className="section-container__title-row-left flex min-w-0 flex-1 items-center gap-2">
+                  {leadingAction ? (
+                    <div className="section-container__leading-action-wrapper flex shrink-0 items-center">
+                      {leadingAction}
+                    </div>
+                  ) : null}
+                  <h2 className="section-container__title min-w-0 flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+                </div>
                 {filterButton ? (
-                  <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
-                    {filterButton}
+                  <div className="section-container__title-row-right flex shrink-0 items-center">
+                    <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
+                      {filterButton}
+                    </div>
                   </div>
                 ) : null}
               </div>
