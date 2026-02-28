@@ -339,7 +339,7 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article className="user-card space-y-3 rounded-2xl border border-border/60 bg-[var(--color-user-card)] px-4 py-4 sm:px-5 sm:py-4">
+        <article className="user-card space-y-3 rounded-2xl border border-border/60 bg-[var(--color-user-card)] px-4 pb-1 pt-4 sm:px-5">
           <header
             className="user-card__header flex flex-wrap items-start justify-between gap-2.5 sm:flex-nowrap"
             onClick={handleCardClick}
