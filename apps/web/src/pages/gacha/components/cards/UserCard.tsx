@@ -1,5 +1,5 @@
 import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ChevronRightIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import {
@@ -339,12 +339,17 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+        <article
+          className={clsx(
+            'user-card space-y-3 rounded-2xl border border-border/60 bg-[var(--color-user-card)] px-4 pt-4 sm:px-5',
+            open ? 'pb-4' : 'pb-1'
+          )}
+        >
           <header
-            className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap"
+            className="user-card__header flex flex-wrap items-start justify-between gap-2.5 sm:flex-nowrap"
             onClick={handleCardClick}
           >
-            <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="user-card__header-main flex min-w-0 flex-1 items-start gap-3">
               <Disclosure.Button
                 ref={toggleButtonRef}
                 type="button"
@@ -364,7 +369,7 @@ export function UserCard({
                   )}
                 />
               </Disclosure.Button>
-              <div className="flex min-w-0 flex-1 items-start gap-1">
+              <div className="user-card__identity flex min-w-0 flex-1 items-start gap-2">
                 {avatarSrc ? (
                   <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
                     <img
@@ -378,7 +383,7 @@ export function UserCard({
                     <span aria-hidden="true">{avatarFallback}</span>
                   </div>
                 ) : null}
-                <div className="user-card__summary min-w-0 space-y-1">
+                <div className="user-card__summary flex min-w-0 flex-1 flex-col gap-1.5">
                   {isEditingName ? (
                     <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
                       <label className="sr-only" htmlFor={nameFieldId}>
@@ -418,14 +423,14 @@ export function UserCard({
                   ) : (
                     <button
                       type="button"
-                      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      className="user-card__name-trigger flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 text-left leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       aria-expanded={open}
                       aria-controls={panelId}
                       onClick={() => {
                         toggleButtonRef.current?.click();
                       }}
                     >
-                      <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
+                      <h3 className="user-card__name text-[15px] font-semibold leading-tight text-surface-foreground sm:text-base">{userName}</h3>
                       {normalizedDiscordDisplayName ? (
                         <span className="user-card__discord-display text-xs text-muted-foreground">
                           {normalizedDiscordDisplayName}
@@ -440,21 +445,21 @@ export function UserCard({
                   {memo ? (
                     <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
                   ) : null}
-                  {showCounts && totalSummary ? (
-                    <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
+                  {onExport ? (
+                    <div className="user-card__summary-footer flex flex-wrap items-center gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        className="user-card__export-button inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                        onClick={() => onExport(userId)}
+                      >
+                        景品の保存・共有
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>
             </div>
-            <div className="user-card__actions flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="user-card__export-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-accent/70 bg-accent text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
-                onClick={() => onExport?.(userId)}
-                aria-label="保存"
-              >
-                <FolderArrowDownIcon className="h-5 w-5" />
-              </button>
+            <div className="user-card__actions flex shrink-0 items-start gap-2 pt-0.5">
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -477,7 +482,7 @@ export function UserCard({
           <div
             data-state={open ? 'open' : 'closed'}
             className={clsx(
-              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
               'data-[state=open]:grid-rows-[1fr]',
               'data-[state=closed]:grid-rows-[0fr]'
             )}

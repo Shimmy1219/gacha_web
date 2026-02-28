@@ -1086,28 +1086,28 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
         <div className="grid gap-4 lg:grid-cols-3">
           <SaveOptionCard
-            title="デバイスに保存"
+            title="景品をzipにして端末に保存"
             busyTitle="生成中…"
-            description="端末にZIPを保存し、後からお好みのサービスにアップロードして共有します。"
+            description="ユーザーが獲得した景品をzipファイルにまとめ、端末に保存します。その後はギ〇ファイル便などにご自身でアップロードする形となります。"
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
             onClick={handleSaveToDevice}
             disabled={isUploading}
             isBusy={isProcessing}
-            helperText="デバイスに保存"
+            helperText="景品をzipにして端末に保存"
           />
           <SaveOptionCard
-            title="zipファイルをアップロード"
+            title="景品のダウンロードURLを発行"
             busyTitle="アップロード中…"
-            description="ZIPをshimmy3.comにアップロードし、受け取り用の共有リンクを発行します。"
+            description="ユーザーが獲得した景品をアップロードして、ダウンロードURLを発行します。その後はXやdiscordにご自身で発行されたURLを送信してもらう形となります。"
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
             onClick={handleUploadToShimmy}
             disabled={isProcessing}
             isBusy={isUploading}
-            helperText="zipファイルをアップロード"
+            helperText="景品のダウンロードURLを発行"
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
+            description="ダウンロードURL発行から設定されたDiscordサーバーのお渡しチャンネルに送信までやります。ログインが必要ですので、先にログインとDiscord鯖の設定を行ってください。"
             disabled={isProcessing || isUploading || isDiscordSharing}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={handleShareToDiscord}
