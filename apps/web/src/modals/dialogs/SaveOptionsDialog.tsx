@@ -1132,7 +1132,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="ダウンロードURL発行からDiscordに共有まで全てやります。ログインが必要ですので、先にログインとお渡し鯖の設定を行ってください。"
+            description="ダウンロードURL発行から設定されたDiscordサーバーのお渡しチャンネルに送信までやります。ログインが必要ですので、先にログインとDiscord鯖の設定を行ってください。"
             disabled={isProcessing || isUploading || isDiscordSharing}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={handleShareToDiscord}
