@@ -287,6 +287,14 @@ export interface ReceivePrefsStateV3 {
   };
   ownerName?: string | null;
   iconAssetIds?: string[];
+  iconRingTransforms?: Record<
+    string,
+    {
+      scale: number;
+      offsetXRatio: number;
+      offsetYRatio: number;
+    }
+  >;
 }
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';

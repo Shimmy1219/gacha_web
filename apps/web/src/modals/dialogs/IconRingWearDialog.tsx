@@ -8,6 +8,8 @@ import { loadAsset, type StoredAssetRecord } from '@domain/assets/assetStorage';
 import { saveReceiveItem } from '../../pages/receive/receiveSave';
 import { ReceiveIconSettingsDialog } from './ReceiveIconSettingsDialog';
 import { IconRingAdjustDialog, type IconRingAdjustResult } from './IconRingAdjustDialog';
+import { useAppPersistence } from '../../features/storage/AppPersistenceProvider';
+import type { ReceivePrefsStateV3 } from '@domain/app-persistence';
 
 export interface IconRingWearDialogPayload {
   ringItem: ReceiveMediaItem;
@@ -29,11 +31,6 @@ interface IconRingCompositeEntry {
   transform: IconRingCompositeTransform;
 }
 
-interface IconRingCompositeTransformStorageSchema {
-  version: 1;
-  transforms: Record<string, IconRingCompositeTransform>;
-}
-
 const DEFAULT_ICON_RING_COMPOSITE_TRANSFORM: IconRingCompositeTransform = {
   scale: 1,
   offsetXRatio: 0,
@@ -44,7 +41,6 @@ const ICON_RING_COMPOSITE_SCALE_MIN = 0.6;
 const ICON_RING_COMPOSITE_SCALE_MAX = 2.4;
 const ICON_RING_COMPOSITE_OFFSET_RATIO_MIN = -1;
 const ICON_RING_COMPOSITE_OFFSET_RATIO_MAX = 1;
-const ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY = 'receive-icon-ring-composite-transforms:v1';
 
 function sanitizeFileComponent(value: string): string {
   const trimmed = value.trim();
@@ -132,61 +128,57 @@ function normalizeCompositeTransform(transform: Partial<IconRingCompositeTransfo
   };
 }
 
-function loadPersistedCompositeTransforms(): Record<string, IconRingCompositeTransform> {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+function sanitizeCompositeTransforms(raw: unknown): Record<string, IconRingCompositeTransform> {
+  if (!raw || typeof raw !== 'object') {
     return {};
   }
 
-  try {
-    const raw = window.localStorage.getItem(ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY);
-    if (!raw) {
-      return {};
+  const next: Record<string, IconRingCompositeTransform> = {};
+  Object.entries(raw as Record<string, unknown>).forEach(([iconAssetId, transform]) => {
+    const normalizedId = iconAssetId.trim();
+    if (!normalizedId) {
+      return;
     }
+    next[normalizedId] = normalizeCompositeTransform(transform as Partial<IconRingCompositeTransform>);
+  });
 
-    const parsed = JSON.parse(raw) as Partial<IconRingCompositeTransformStorageSchema> | null;
-    if (!parsed || parsed.version !== 1 || typeof parsed.transforms !== 'object' || !parsed.transforms) {
-      return {};
-    }
-
-    const next: Record<string, IconRingCompositeTransform> = {};
-    Object.entries(parsed.transforms).forEach(([iconAssetId, transform]) => {
-      const normalizedId = iconAssetId.trim();
-      if (!normalizedId) {
-        return;
-      }
-      next[normalizedId] = normalizeCompositeTransform(transform);
-    });
-
-    return next;
-  } catch (error) {
-    console.warn('Failed to load icon ring composite transforms from localStorage', error);
-    return {};
-  }
+  return next;
 }
 
-function savePersistedCompositeTransforms(transforms: Record<string, IconRingCompositeTransform>): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
-    return;
+function areCompositeTransformRecordsEqual(
+  left: Record<string, IconRingCompositeTransform>,
+  right: Record<string, IconRingCompositeTransform>
+): boolean {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
   }
 
-  try {
-    const normalizedTransforms: Record<string, IconRingCompositeTransform> = {};
-    Object.entries(transforms).forEach(([iconAssetId, transform]) => {
-      const normalizedId = iconAssetId.trim();
-      if (!normalizedId) {
-        return;
-      }
-      normalizedTransforms[normalizedId] = normalizeCompositeTransform(transform);
-    });
-
-    const payload: IconRingCompositeTransformStorageSchema = {
-      version: 1,
-      transforms: normalizedTransforms
-    };
-    window.localStorage.setItem(ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY, JSON.stringify(payload));
-  } catch (error) {
-    console.warn('Failed to persist icon ring composite transforms to localStorage', error);
+  for (const [iconAssetId, leftTransform] of leftEntries) {
+    const rightTransform = right[iconAssetId];
+    if (!rightTransform) {
+      return false;
+    }
+    if (
+      leftTransform.scale !== rightTransform.scale ||
+      leftTransform.offsetXRatio !== rightTransform.offsetXRatio ||
+      leftTransform.offsetYRatio !== rightTransform.offsetYRatio
+    ) {
+      return false;
+    }
   }
+
+  return true;
+}
+
+function buildNextReceivePrefs(current: ReceivePrefsStateV3 | undefined, patch: Partial<ReceivePrefsStateV3>): ReceivePrefsStateV3 {
+  return {
+    ...current,
+    ...patch,
+    version: 3,
+    intro: current?.intro ?? { skipIntro: false }
+  };
 }
 
 function drawWhiteBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
@@ -233,15 +225,22 @@ async function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 export function IconRingWearDialog({ payload, close, push }: ModalComponentProps<IconRingWearDialogPayload>): JSX.Element {
+  const persistence = useAppPersistence();
   const ringItem = payload?.ringItem;
   const { iconAssetIds, isProcessing: isRegistryProcessing, error: registryError } = useReceiveIconRegistry();
   const [status, setStatus] = useState<'idle' | 'generating' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [composites, setComposites] = useState<Array<IconRingCompositeEntry>>([]);
-  const [customTransforms, setCustomTransforms] = useState<Record<string, IconRingCompositeTransform>>(() =>
-    loadPersistedCompositeTransforms()
-  );
+  const [customTransforms, setCustomTransforms] = useState<Record<string, IconRingCompositeTransform>>(() => {
+    try {
+      const snapshot = persistence.loadSnapshot();
+      return sanitizeCompositeTransforms(snapshot.receivePrefs?.iconRingTransforms);
+    } catch (loadError) {
+      console.warn('Failed to load icon ring composite transforms from receive:prefs', loadError);
+      return {};
+    }
+  });
   const urlsRef = useRef<string[]>([]);
 
   const ringItemName = useMemo(() => {
@@ -259,11 +258,23 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     };
   }, []);
 
-  // 調節値をlocalStorageへ保存し、別モーダル起動時や再読み込み後も同じ見た目を再利用できるようにする。
+  // 調節値を receive:prefs へ保存し、別モーダル起動時や再読み込み後も同じ見た目を再利用できるようにする。
   // 依存配列には customTransforms のみを置き、調節が変わった時だけ保存する。
   useEffect(() => {
-    savePersistedCompositeTransforms(customTransforms);
-  }, [customTransforms]);
+    try {
+      const snapshot = persistence.loadSnapshot();
+      const currentReceivePrefs = snapshot.receivePrefs;
+      const currentTransforms = sanitizeCompositeTransforms(currentReceivePrefs?.iconRingTransforms);
+      const nextTransforms = sanitizeCompositeTransforms(customTransforms);
+      if (areCompositeTransformRecordsEqual(nextTransforms, currentTransforms)) {
+        return;
+      }
+      const nextReceivePrefs = buildNextReceivePrefs(currentReceivePrefs, { iconRingTransforms: nextTransforms });
+      persistence.saveReceivePrefs(nextReceivePrefs);
+    } catch (saveError) {
+      console.warn('Failed to persist icon ring composite transforms to receive:prefs', saveError);
+    }
+  }, [customTransforms, persistence]);
 
   // リング画像、登録アイコン、または調節値が変わるたびにプレビューを再合成する。
   // 合成結果を object URL で保持するため、開始時に既存URLを破棄してから再生成する。
