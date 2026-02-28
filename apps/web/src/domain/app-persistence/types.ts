@@ -237,6 +237,7 @@ export interface UiPreferencesStateV3 {
       quickSendNewOnly?: boolean;
       quickActionMode?: 'discord' | 'share_url';
       revealOverlayEnabled?: boolean;
+      revealOverlayPreferenceConfirmed?: boolean;
       revealOverlayBackgroundColor?: string;
       [key: string]: unknown;
     };
