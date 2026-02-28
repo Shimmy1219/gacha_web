@@ -441,9 +441,9 @@ export function UserCard({
                     <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
                   ) : null}
                   {(showCounts && totalSummary) || onExport ? (
-                    <div className="user-card__summary-footer flex flex-col items-start gap-1 pt-0.5">
+                    <div className="user-card__summary-footer flex flex-wrap items-center gap-2 pt-0.5">
                       {showCounts && totalSummary ? (
-                        <p className="user-card__total inline-flex items-center rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+                        <p className="user-card__total text-[11px] text-muted-foreground">
                           {totalSummary}
                         </p>
                       ) : null}
