@@ -36,8 +36,6 @@ import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../fea
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useNotification } from '../../features/notification';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { PageSettingsDialog } from './PageSettingsDialog';
-import { buildPageSettingsDialogProps } from './pageSettingsDialogConfig';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
@@ -49,6 +47,7 @@ import {
   buildOriginalPrizeInstanceMap
 } from '@domain/originalPrize';
 import { OriginalPrizeSettingsDialog, type OriginalPrizeSettingsDialogPayload } from './OriginalPrizeSettingsDialog';
+import { useOpenPageSettings } from '../../features/settings/openPageSettings';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -106,6 +105,7 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
   const { notify } = useNotification();
+  const openPageSettings = useOpenPageSettings();
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
@@ -328,22 +328,19 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(
-            PageSettingsDialog,
-            buildPageSettingsDialogProps({
-              payload: {
-                focusTarget: 'misc-owner-name',
-                highlightMode: 'pulse',
-                highlightDurationMs: 7000,
-                origin: 'save-options-owner-name-warning'
-              }
-            })
-          );
+          openPageSettings({
+            payload: {
+              focusTarget: 'misc-owner-name',
+              highlightMode: 'pulse',
+              highlightDurationMs: 7000,
+              origin: 'save-options-owner-name-warning'
+            }
+          });
         }
       }
     });
     return null;
-  }, [push, resolveOwnerName]);
+  }, [openPageSettings, push, resolveOwnerName]);
   const linkDiscordProfile = useCallback(
     (params: {
       discordUserId: string;

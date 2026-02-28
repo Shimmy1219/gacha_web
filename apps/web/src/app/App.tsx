@@ -6,7 +6,6 @@ import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useR
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
 import { CreateGachaWizardDialog } from '../modals/dialogs/CreateGachaWizardDialog';
-import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
@@ -14,7 +13,6 @@ import { TransferCreateDialog } from '../modals/dialogs/TransferCreateDialog';
 import { TransferImportDialog } from '../modals/dialogs/TransferImportDialog';
 import { DiscordOauthErrorDialog } from '../modals/dialogs/DiscordOauthErrorDialog';
 import { ReleaseNotesDialog } from '../modals/dialogs/ReleaseNotesDialog';
-import { buildPageSettingsDialogProps } from '../modals/dialogs/pageSettingsDialogConfig';
 import { useAppPersistence, useDomainStores } from '../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import {
@@ -30,6 +28,7 @@ import { useHaptics } from '../features/haptics/HapticsProvider';
 import { useNotification } from '../features/notification';
 import { syncOwnerNameActorCookie } from '../features/receive/ownerActorCookie';
 import { getUnreadReleaseNotes, RELEASE_NOTES } from '../content/releaseNotes';
+import { useOpenPageSettings } from '../features/settings/openPageSettings';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
@@ -44,6 +43,7 @@ export function App(): JSX.Element {
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const { triggerConfirmation, triggerError } = useHaptics();
   const { notify } = useNotification();
+  const openPageSettings = useOpenPageSettings();
   const showDiscordAuthLogs = useMemo(
     () => uiPreferencesStore.getDiscordAuthLogsEnabled(),
     [uiPreferencesState, uiPreferencesStore]
@@ -358,7 +358,7 @@ export function App(): JSX.Element {
   };
 
   const handleOpenPageSettings = () => {
-    push(PageSettingsDialog, buildPageSettingsDialogProps());
+    openPageSettings();
   };
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {

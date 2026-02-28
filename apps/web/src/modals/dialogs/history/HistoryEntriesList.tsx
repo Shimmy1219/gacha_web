@@ -33,8 +33,6 @@ import { resolveSafeUrl } from '../../../utils/safeUrl';
 import { ConfirmDialog } from '../../ConfirmDialog';
 import { useModal } from '../../ModalProvider';
 import { QuickSendConfirmDialog } from '../QuickSendConfirmDialog';
-import { PageSettingsDialog } from '../PageSettingsDialog';
-import { buildPageSettingsDialogProps } from '../pageSettingsDialogConfig';
 import {
   ResultActionButtons,
   type ResultActionButtonsQuickSendModeOption,
@@ -43,6 +41,7 @@ import {
 import { WarningDialog } from '../WarningDialog';
 import { pushCsrfTokenMismatchWarning } from '../_lib/discordApiErrorHandling';
 import { type HistoryItemMetadata, normalizeHistoryUserId } from './historyUtils';
+import { useOpenPageSettings } from '../../../features/settings/openPageSettings';
 
 const SOURCE_LABELS: Record<PullHistoryEntrySourceV1, string> = {
   insiteResult: 'ガチャ結果',
@@ -198,6 +197,7 @@ export function HistoryEntriesList({
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const { uploadZip } = useBlobUpload();
   const { data: discordSession } = useDiscordSession();
+  const openPageSettings = useOpenPageSettings();
   const persistence = useAppPersistence();
 
   const [activeDelivery, setActiveDelivery] = useState<HistoryDiscordDeliveryProgress | null>(null);
@@ -257,22 +257,19 @@ export function HistoryEntriesList({
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(
-            PageSettingsDialog,
-            buildPageSettingsDialogProps({
-              payload: {
-                focusTarget: 'misc-owner-name',
-                highlightMode: 'pulse',
-                highlightDurationMs: 7000,
-                origin: 'history-entry-owner-name-warning'
-              }
-            })
-          );
+          openPageSettings({
+            payload: {
+              focusTarget: 'misc-owner-name',
+              highlightMode: 'pulse',
+              highlightDurationMs: 7000,
+              origin: 'history-entry-owner-name-warning'
+            }
+          });
         }
       }
     });
     return null;
-  }, [push, resolveOwnerName]);
+  }, [openPageSettings, push, resolveOwnerName]);
 
   const requestQuickSendPreference = useCallback(() => {
     return new Promise<QuickSendDecision | null>((resolve) => {

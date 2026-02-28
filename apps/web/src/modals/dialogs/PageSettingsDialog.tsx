@@ -17,8 +17,8 @@ import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
-import { ConfirmDialog, ModalBody } from '..';
-import { type ModalComponent } from '../ModalTypes';
+import { ConfirmDialog, ModalBody, useModal } from '..';
+import { type ModalComponent, type ModalComponentProps } from '../ModalTypes';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
@@ -46,6 +46,7 @@ import {
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
 import {
+  buildPageSettingsDialogProps,
   type PageSettingsDialogPayload,
   type PageSettingsFocusTargetKey,
   type PageSettingsHighlightMode,
@@ -1851,3 +1852,30 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     </ModalBody>
   );
 };
+
+export interface PageSettingsStandaloneProps {
+  onClose: () => void;
+  payload?: PageSettingsDialogPayload;
+}
+
+/**
+ * サイト設定UIをモーダル外（ページ内）で表示するためのラッパー。
+ *
+ * @param onClose 閉じる/戻るアクション時の処理
+ * @param payload 初期メニューやハイライト対象の指定
+ * @returns モーダル非依存で利用できるサイト設定UI
+ */
+export function PageSettingsStandalone({ onClose, payload }: PageSettingsStandaloneProps): JSX.Element {
+  const { dismissAll, push, replace } = useModal();
+  const modalProps = buildPageSettingsDialogProps({ payload });
+  const componentProps: ModalComponentProps<PageSettingsDialogPayload> = {
+    ...modalProps,
+    close: onClose,
+    dismiss: dismissAll,
+    push,
+    replace,
+    isTop: true
+  };
+
+  return <>{PageSettingsDialog(componentProps)}</>;
+}
