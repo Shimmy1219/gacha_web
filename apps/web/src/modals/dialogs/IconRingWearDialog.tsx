@@ -29,6 +29,11 @@ interface IconRingCompositeEntry {
   transform: IconRingCompositeTransform;
 }
 
+interface IconRingCompositeTransformStorageSchema {
+  version: 1;
+  transforms: Record<string, IconRingCompositeTransform>;
+}
+
 const DEFAULT_ICON_RING_COMPOSITE_TRANSFORM: IconRingCompositeTransform = {
   scale: 1,
   offsetXRatio: 0,
@@ -39,6 +44,7 @@ const ICON_RING_COMPOSITE_SCALE_MIN = 0.6;
 const ICON_RING_COMPOSITE_SCALE_MAX = 2.4;
 const ICON_RING_COMPOSITE_OFFSET_RATIO_MIN = -1;
 const ICON_RING_COMPOSITE_OFFSET_RATIO_MAX = 1;
+const ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY = 'receive-icon-ring-composite-transforms:v1';
 
 function sanitizeFileComponent(value: string): string {
   const trimmed = value.trim();
@@ -126,6 +132,63 @@ function normalizeCompositeTransform(transform: Partial<IconRingCompositeTransfo
   };
 }
 
+function loadPersistedCompositeTransforms(): Record<string, IconRingCompositeTransform> {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as Partial<IconRingCompositeTransformStorageSchema> | null;
+    if (!parsed || parsed.version !== 1 || typeof parsed.transforms !== 'object' || !parsed.transforms) {
+      return {};
+    }
+
+    const next: Record<string, IconRingCompositeTransform> = {};
+    Object.entries(parsed.transforms).forEach(([iconAssetId, transform]) => {
+      const normalizedId = iconAssetId.trim();
+      if (!normalizedId) {
+        return;
+      }
+      next[normalizedId] = normalizeCompositeTransform(transform);
+    });
+
+    return next;
+  } catch (error) {
+    console.warn('Failed to load icon ring composite transforms from localStorage', error);
+    return {};
+  }
+}
+
+function savePersistedCompositeTransforms(transforms: Record<string, IconRingCompositeTransform>): void {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return;
+  }
+
+  try {
+    const normalizedTransforms: Record<string, IconRingCompositeTransform> = {};
+    Object.entries(transforms).forEach(([iconAssetId, transform]) => {
+      const normalizedId = iconAssetId.trim();
+      if (!normalizedId) {
+        return;
+      }
+      normalizedTransforms[normalizedId] = normalizeCompositeTransform(transform);
+    });
+
+    const payload: IconRingCompositeTransformStorageSchema = {
+      version: 1,
+      transforms: normalizedTransforms
+    };
+    window.localStorage.setItem(ICON_RING_COMPOSITE_TRANSFORM_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to persist icon ring composite transforms to localStorage', error);
+  }
+}
+
 function drawWhiteBackground(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -176,7 +239,9 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [composites, setComposites] = useState<Array<IconRingCompositeEntry>>([]);
-  const [customTransforms, setCustomTransforms] = useState<Record<string, IconRingCompositeTransform>>({});
+  const [customTransforms, setCustomTransforms] = useState<Record<string, IconRingCompositeTransform>>(() =>
+    loadPersistedCompositeTransforms()
+  );
   const urlsRef = useRef<string[]>([]);
 
   const ringItemName = useMemo(() => {
@@ -194,17 +259,11 @@ export function IconRingWearDialog({ payload, close, push }: ModalComponentProps
     };
   }, []);
 
-  // 登録アイコンの一覧が変わった時に、存在しないIDの調節値だけを取り除く。
-  // 依存配列には iconAssetIds のみを置き、変更検知時に最小限の差分更新を行う。
+  // 調節値をlocalStorageへ保存し、別モーダル起動時や再読み込み後も同じ見た目を再利用できるようにする。
+  // 依存配列には customTransforms のみを置き、調節が変わった時だけ保存する。
   useEffect(() => {
-    setCustomTransforms((current) => {
-      const nextEntries = Object.entries(current).filter(([iconAssetId]) => iconAssetIds.includes(iconAssetId));
-      if (nextEntries.length === Object.keys(current).length) {
-        return current;
-      }
-      return Object.fromEntries(nextEntries);
-    });
-  }, [iconAssetIds]);
+    savePersistedCompositeTransforms(customTransforms);
+  }, [customTransforms]);
 
   // リング画像、登録アイコン、または調節値が変わるたびにプレビューを再合成する。
   // 合成結果を object URL で保持するため、開始時に既存URLを破棄してから再生成する。

@@ -326,6 +326,19 @@ export function IconRingAdjustDialog({
     [error, isLoading, updateTransform]
   );
 
+  const handleReset = useCallback(() => {
+    const resetTransform: IconRingAdjustResult = {
+      scale: 1,
+      offsetXRatio: 0,
+      offsetYRatio: 0
+    };
+    pointersRef.current.clear();
+    dragRef.current = null;
+    pinchRef.current = null;
+    transformRef.current = resetTransform;
+    setTransform(resetTransform);
+  }, []);
+
   const handleSave = useCallback(() => {
     if (!payload?.onSave) {
       return;
@@ -339,6 +352,17 @@ export function IconRingAdjustDialog({
       <ModalBody className="icon-ring-adjust-dialog__body rounded-2xl bg-surface/20 p-0 md:pr-0">
         <div className="icon-ring-adjust-dialog__content space-y-5">
           <div className="icon-ring-adjust-dialog__preview-block rounded-2xl border border-border/60 bg-panel-muted/40 p-3 sm:p-4">
+            <div className="icon-ring-adjust-dialog__preview-actions mb-3 flex justify-end">
+              <button
+                type="button"
+                className="icon-ring-adjust-dialog__reset-button btn btn-muted h-7 px-2 text-[11px]"
+                onClick={handleReset}
+                disabled={isLoading || Boolean(error)}
+              >
+                リセット
+              </button>
+            </div>
+
             {isLoading ? (
               <div className="icon-ring-adjust-dialog__loading-message flex items-center justify-center rounded-xl border border-border/60 bg-surface/40 px-4 py-8 text-sm text-muted-foreground">
                 プレビューを読み込み中です…
