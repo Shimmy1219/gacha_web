@@ -242,9 +242,17 @@ function clampHighlightDurationMs(value: number | undefined): number {
   return Math.min(Math.max(normalized, MIN_HIGHLIGHT_DURATION_MS), MAX_HIGHLIGHT_DURATION_MS);
 }
 
-// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
-export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => {
-  const { close, push, isTop, payload } = props;
+interface PageSettingsDialogViewProps {
+  close: ModalComponentProps<PageSettingsDialogPayload>['close'];
+  push: ModalComponentProps<PageSettingsDialogPayload>['push'];
+  isTop: ModalComponentProps<PageSettingsDialogPayload>['isTop'];
+  payload?: PageSettingsDialogPayload;
+  standaloneMode?: boolean;
+}
+
+// サイト設定UI本体。モーダル表示とページ表示（standalone）の両方で共有する。
+function PageSettingsDialogView(props: PageSettingsDialogViewProps): JSX.Element {
+  const { close, push, isTop, payload, standaloneMode = false } = props;
   const requestedFocusTarget = payload?.focusTarget ?? null;
   const requestedFocusDefinition = requestedFocusTarget ? PAGE_SETTINGS_FOCUS_TARGETS[requestedFocusTarget] : null;
   const requestedInitialMenu = payload?.initialMenu ?? null;
@@ -1776,82 +1784,103 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     }
   };
 
-  return (
-    <ModalBody
-      className={clsx(
-        'page-settings-dialog flex min-h-0 max-h-full flex-col space-y-0 overflow-hidden p-0',
-        isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
-        isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
-      )}
-    >
-      <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
-        <nav
-          className={clsx(
-            'page-settings__menu-scroll m-2 w-[calc(100%-1rem)] min-h-0 flex-1 overflow-y-auto p-2 lg:m-0 lg:w-full lg:flex-none lg:self-stretch lg:p-0',
-            isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
-            activeView === 'menu' ? 'block' : 'hidden',
-            'lg:block'
-          )}
-        >
-          <ul className="space-y-2">
-            {menuItems.map((item) => {
-              const isActive = activeMenu === item.id;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect(item.id)}
-                    className={clsx(
-                      'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
-                      isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
-                        : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <span className="block text-sm font-semibold">{item.label}</span>
-                        <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                          {item.description}
-                        </span>
-                      </div>
-                      <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
-                        〉
+  const isStandaloneMobileLayout = standaloneMode && !isLargeLayout;
+  const dialogRootClassName = clsx(
+    'page-settings-dialog flex min-h-0 flex-col space-y-0 p-0',
+    isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
+    standaloneMode ? 'max-h-none overflow-visible' : 'max-h-full overflow-hidden',
+    isLargeLayout ? 'mt-6' : standaloneMode ? 'mt-0 bg-transparent' : 'mt-4 bg-panel/95'
+  );
+  const splitContainerClassName = clsx(
+    'page-settings__split-scroll-container flex flex-col gap-4 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8',
+    isStandaloneMobileLayout
+      ? 'flex-none overflow-visible rounded-none bg-transparent'
+      : 'flex-1 overflow-hidden rounded-3xl bg-panel/95 lg:rounded-none lg:bg-transparent'
+  );
+  const menuScrollClassName = clsx(
+    'page-settings__menu-scroll min-h-0 lg:w-full lg:flex-none lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'm-0 w-full flex-none overflow-visible p-0 lg:m-0 lg:p-0'
+      : 'm-2 w-[calc(100%-1rem)] flex-1 overflow-y-auto p-2 lg:m-0 lg:p-0',
+    isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
+    activeView === 'menu' ? 'block' : 'hidden',
+    'lg:block'
+  );
+  const contentScrollClassName = clsx(
+    'page-settings__content-scroll min-h-0 lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'flex-none max-h-none overflow-visible rounded-none border-0 bg-transparent p-0 pr-0 shadow-none'
+      : 'flex-1 max-h-full overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
+    isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
+  );
+  const mainContent = (
+    <div className={splitContainerClassName}>
+      <nav className={menuScrollClassName}>
+        <ul className="space-y-2">
+          {menuItems.map((item) => {
+            const isActive = activeMenu === item.id;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => handleMenuSelect(item.id)}
+                  className={clsx(
+                    'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
+                    isActive
+                      ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
+                      : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-sm font-semibold">{item.label}</span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                        {item.description}
                       </span>
                     </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="page-settings-nav__official-x-contact mt-3">
-            <OfficialXAccountPanel variant="compact" />
-          </div>
-        </nav>
-        <div
-          className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:self-stretch lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
-            isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
-          )}
-        >
-          {!isLargeLayout ? (
-            <div className="mb-4 flex items-center lg:hidden">
-              <button
-                type="button"
-                onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <span aria-hidden="true">〈</span>
-                <span>メニューに戻る</span>
-              </button>
-            </div>
-          ) : null}
-          {renderMenuContent()}
+                    <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
+                      〉
+                    </span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="page-settings-nav__official-x-contact mt-3">
+          <OfficialXAccountPanel variant="compact" />
         </div>
+      </nav>
+      <div className={contentScrollClassName}>
+        {!isLargeLayout ? (
+          <div className="mb-4 flex items-center lg:hidden">
+            <button
+              type="button"
+              onClick={handleBackToMenu}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <span aria-hidden="true">〈</span>
+              <span>メニューに戻る</span>
+            </button>
+          </div>
+        ) : null}
+        {renderMenuContent()}
       </div>
-    </ModalBody>
+    </div>
   );
-};
+
+  if (standaloneMode) {
+    // ページ表示ではモーダル専用の内部スクロール制御を使わず、通常のページスクロールへ委譲する。
+    return <div className={dialogRootClassName}>{mainContent}</div>;
+  }
+
+  return <ModalBody className={dialogRootClassName}>{mainContent}</ModalBody>;
+}
+
+// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
+export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => (
+  <PageSettingsDialogView {...props} />
+);
 
 export interface PageSettingsStandaloneProps {
   onClose: () => void;
@@ -1877,5 +1906,5 @@ export function PageSettingsStandalone({ onClose, payload }: PageSettingsStandal
     isTop: true
   };
 
-  return <>{PageSettingsDialog(componentProps)}</>;
+  return <PageSettingsDialogView {...componentProps} standaloneMode />;
 }

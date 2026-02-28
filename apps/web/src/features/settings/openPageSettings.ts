@@ -107,6 +107,11 @@ export function useOpenPageSettings(): (options?: PageSettingsDialogOpenOptions)
       if (isMobile) {
         // モバイルでは重なったモーダルを閉じてからページ遷移し、スクロールロック残留を防ぐ。
         dismissAll();
+        if (typeof document !== 'undefined') {
+          // 稀にモーダル遷移直後にbodyのoverflowが残るため、ページ表示前に明示解除する。
+          document.body.dataset.modalOpen = '0';
+          document.body.style.removeProperty('overflow');
+        }
         navigate({
           pathname: '/settings',
           search: buildSettingsSearch(options.payload)
