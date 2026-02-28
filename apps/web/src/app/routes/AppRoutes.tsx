@@ -7,8 +7,10 @@ import { PrivacyPolicyPage } from '../../pages/privacy-policy/PrivacyPolicyPage'
 import { ReceivePage } from '../../pages/receive/ReceivePage';
 import { ReceiveHistoryPage } from '../../pages/receive/ReceiveHistoryPage';
 import { ReceiveListPage } from '../../pages/receive/ReceiveListPage';
+import { SettingsPage } from '../../pages/settings/SettingsPage';
 import { TermsOfServicePage } from '../../pages/terms-of-service/TermsOfServicePage';
 import { GachaPage } from '../../pages/gacha/GachaPage';
+import { GachaCreatePage } from '../../pages/gacha/create/GachaCreatePage';
 import { GachaHistoryPage } from '../../pages/gacha/history/GachaHistoryPage';
 import { GachaTestPage } from '../../pages/gachaTest/GachaTestPage';
 
@@ -59,8 +61,10 @@ export function AppRoutes({ gachaLayoutProps }: AppRoutesProps): JSX.Element | n
             />
           )
         },
+        { path: 'gacha/create', element: <GachaCreatePage /> },
         { path: 'gacha/history', element: <GachaHistoryPage onDrawGacha={gachaLayoutProps.onDrawGacha} /> },
         { path: 'gacha/test', element: <GachaTestPage /> },
+        { path: 'settings', element: <SettingsPage /> },
         { path: 'receive', element: <ReceivePage /> },
         { path: 'receive/history', element: <ReceiveHistoryPage /> },
         { path: 'receive/list', element: <ReceiveListPage /> }

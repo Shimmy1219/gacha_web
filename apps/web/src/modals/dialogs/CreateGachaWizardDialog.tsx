@@ -186,7 +186,32 @@ function removeCompleteFromPtSettings(settings: PtSettingV3 | undefined): PtSett
 
 export interface CreateGachaWizardDialogPayload {}
 
-export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
+export interface CreateGachaWizardStepState {
+  currentStep: number;
+  totalSteps: number;
+}
+
+export interface CreateGachaWizardStandaloneProps {
+  onClose: () => void;
+  onStepChange?: (state: CreateGachaWizardStepState) => void;
+  showStepSummary?: boolean;
+}
+
+type CreateGachaWizardRenderMode = 'modal' | 'standalone';
+
+interface CreateGachaWizardContentProps {
+  onClose: () => void;
+  renderMode: CreateGachaWizardRenderMode;
+  onStepChange?: (state: CreateGachaWizardStepState) => void;
+  showStandaloneStepSummary?: boolean;
+}
+
+function CreateGachaWizardContent({
+  onClose,
+  renderMode,
+  onStepChange,
+  showStandaloneStepSummary = true
+}: CreateGachaWizardContentProps): JSX.Element {
   const {
     appState: appStateStore,
     rarities: rarityStore,
@@ -458,6 +483,13 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
   const stepIndex = step === 'basic' ? 1 : step === 'assets' ? 2 : 3;
   const totalSteps = 3;
+  useEffect(() => {
+    onStepChange?.({
+      currentStep: stepIndex,
+      totalSteps
+    });
+  }, [onStepChange, stepIndex, totalSteps]);
+
   const canProceedToAssets = rarities.length > 0;
   const canProceedToPt = !isProcessingAssets;
   const rarityCount = rarities.length;
@@ -1057,7 +1089,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
 
       committedRef.current = true;
       createdAssetIdsRef.current.clear();
-      close();
+      onClose();
     } catch (error) {
       console.error('新規ガチャの登録に失敗しました', error);
       notify({
@@ -1083,7 +1115,7 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
   }, [
     appStateStore,
     catalogStore,
-    close,
+    onClose,
     gachaName,
     gachaThumbnailAsset,
     isCompleteGachaEnabled,
@@ -1479,57 +1511,92 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
     );
   };
 
+  const stepContent = step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep();
+  const isStandalone = renderMode === 'standalone';
+  const standaloneFooterButtonClass = isStandalone
+    ? 'create-gacha-wizard__footer-button--standalone flex-1 basis-0 justify-center'
+    : undefined;
+
+  const footerButtons = (
+    <>
+      {step === 'basic' ? (
+        <button
+          type="button"
+          className={clsx('create-gacha-wizard__cancel-button btn btn-muted', standaloneFooterButtonClass)}
+          onClick={onClose}
+          disabled={isSubmitting || isProcessingAssets}
+        >
+          キャンセル
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={clsx('create-gacha-wizard__back-button btn btn-muted', standaloneFooterButtonClass)}
+          onClick={() => setStep(step === 'assets' ? 'basic' : 'assets')}
+          disabled={isSubmitting || isProcessingAssets}
+        >
+          戻る
+        </button>
+      )}
+      {step === 'pt' ? (
+        <button
+          type="button"
+          className={clsx('create-gacha-wizard__submit-button btn btn-primary', standaloneFooterButtonClass)}
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? '登録中…' : '登録する'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={clsx('create-gacha-wizard__next-button btn btn-primary', standaloneFooterButtonClass)}
+          onClick={() => {
+            if (step === 'basic') {
+              handleProceedFromBasicStep();
+            } else {
+              setStep('pt');
+            }
+          }}
+          disabled={step === 'basic' ? !canProceedToAssets || isSubmitting || isProcessingAssets : !canProceedToPt}
+        >
+          次へ
+        </button>
+      )}
+    </>
+  );
+
   return (
     <>
-      <ModalBody className="space-y-6">
-        <div className="flex justify-end">
-          <span className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-            ステップ{stepIndex} / {totalSteps}
-          </span>
+      {renderMode === 'modal' ? (
+        <>
+          <ModalBody className="space-y-6">
+            <div className="create-gacha-wizard__step-summary flex justify-end">
+              <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                ステップ{stepIndex} / {totalSteps}
+              </span>
+            </div>
+            {stepContent}
+          </ModalBody>
+          <ModalFooter>{footerButtons}</ModalFooter>
+        </>
+      ) : (
+        <div className="create-gacha-wizard__standalone-frame flex min-h-0 flex-col gap-4">
+          <div className="create-gacha-wizard__standalone-body space-y-6">
+            {showStandaloneStepSummary ? (
+              <div className="create-gacha-wizard__step-summary flex justify-end">
+                <span className="create-gacha-wizard__step-summary-label text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+                  ステップ{stepIndex} / {totalSteps}
+                </span>
+              </div>
+            ) : null}
+            {stepContent}
+          </div>
+          <div className="create-gacha-wizard__standalone-footer flex w-full shrink-0 flex-nowrap items-center justify-center gap-3 border-t border-white/5 pt-0">
+            {footerButtons}
+          </div>
         </div>
-        {step === 'basic' ? renderBasicStep() : step === 'assets' ? renderAssetStep() : renderPtStep()}
-      </ModalBody>
-      <ModalFooter>
-        {step === 'basic' ? (
-          <button type="button" className="btn btn-muted" onClick={close} disabled={isSubmitting || isProcessingAssets}>
-            キャンセル
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-muted"
-            onClick={() => setStep(step === 'assets' ? 'basic' : 'assets')}
-            disabled={isSubmitting || isProcessingAssets}
-          >
-            戻る
-          </button>
-        )}
-        {step === 'pt' ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? '登録中…' : '登録する'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              if (step === 'basic') {
-                handleProceedFromBasicStep();
-              } else {
-                setStep('pt');
-              }
-            }}
-            disabled={step === 'basic' ? !canProceedToAssets || isSubmitting || isProcessingAssets : !canProceedToPt}
-          >
-            次へ
-          </button>
-        )}
-      </ModalFooter>
+      )}
       <input
         ref={gachaThumbnailInputRef}
         id="create-gacha-wizard-thumbnail-input"
@@ -1566,5 +1633,38 @@ export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGac
         }}
       />
     </>
+  );
+}
+
+/**
+ * 新規ガチャ作成フォームをモーダルとして表示する。
+ *
+ * @param close モーダルを閉じる処理
+ * @returns 新規ガチャ作成モーダル
+ */
+export function CreateGachaWizardDialog({ close }: ModalComponentProps<CreateGachaWizardDialogPayload>): JSX.Element {
+  return <CreateGachaWizardContent onClose={close} renderMode="modal" />;
+}
+
+/**
+ * 新規ガチャ作成フォームをモーダル外（ページ内）で再利用するためのラッパー。
+ *
+ * @param onClose キャンセル時・登録完了時の遷移処理
+ * @param onStepChange 現在のステップが変わった時に通知するコールバック
+ * @param showStepSummary standalone内部でステップ表示を描画するかどうか
+ * @returns モーダル非依存で利用できる新規作成フォーム
+ */
+export function CreateGachaWizardStandalone({
+  onClose,
+  onStepChange,
+  showStepSummary = true
+}: CreateGachaWizardStandaloneProps): JSX.Element {
+  return (
+    <CreateGachaWizardContent
+      onClose={onClose}
+      renderMode="standalone"
+      onStepChange={onStepChange}
+      showStandaloneStepSummary={showStepSummary}
+    />
   );
 }

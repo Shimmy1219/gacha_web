@@ -17,8 +17,8 @@ import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
-import { ConfirmDialog, ModalBody } from '..';
-import { type ModalComponent } from '../ModalTypes';
+import { ConfirmDialog, ModalBody, useModal } from '..';
+import { type ModalComponent, type ModalComponentProps } from '../ModalTypes';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
@@ -30,7 +30,6 @@ import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/u
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
 import { useNotification } from '../../features/notification';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
-import { ItemPreview } from '../../components/ItemPreviewThumbnail';
 import { syncOwnerNameActorCookie } from '../../features/receive/ownerActorCookie';
 import {
   DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
@@ -46,6 +45,7 @@ import {
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
 import {
+  buildPageSettingsDialogProps,
   type PageSettingsDialogPayload,
   type PageSettingsFocusTargetKey,
   type PageSettingsHighlightMode,
@@ -241,9 +241,17 @@ function clampHighlightDurationMs(value: number | undefined): number {
   return Math.min(Math.max(normalized, MIN_HIGHLIGHT_DURATION_MS), MAX_HIGHLIGHT_DURATION_MS);
 }
 
-// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
-export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => {
-  const { close, push, isTop, payload } = props;
+interface PageSettingsDialogViewProps {
+  close: ModalComponentProps<PageSettingsDialogPayload>['close'];
+  push: ModalComponentProps<PageSettingsDialogPayload>['push'];
+  isTop: ModalComponentProps<PageSettingsDialogPayload>['isTop'];
+  payload?: PageSettingsDialogPayload;
+  standaloneMode?: boolean;
+}
+
+// サイト設定UI本体。モーダル表示とページ表示（standalone）の両方で共有する。
+function PageSettingsDialogView(props: PageSettingsDialogViewProps): JSX.Element {
+  const { close, push, isTop, payload, standaloneMode = false } = props;
   const requestedFocusTarget = payload?.focusTarget ?? null;
   const requestedFocusDefinition = requestedFocusTarget ? PAGE_SETTINGS_FOCUS_TARGETS[requestedFocusTarget] : null;
   const requestedInitialMenu = payload?.initialMenu ?? null;
@@ -684,8 +692,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
         name: string;
         isSelected: boolean;
         isArchived: boolean;
-        thumbnailAssetId: string | null;
-        thumbnailBlobUrl: string | null;
       }>;
     }
 
@@ -697,8 +703,6 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
       name: string;
       isSelected: boolean;
       isArchived: boolean;
-      thumbnailAssetId: string | null;
-      thumbnailBlobUrl: string | null;
     }> = [];
 
     const append = (gachaId: string | undefined | null) => {
@@ -711,9 +715,7 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
         id: gachaId,
         name: displayName && displayName.length > 0 ? displayName : gachaId,
         isSelected: appState.selectedGachaId === gachaId,
-        isArchived: meta[gachaId]?.isArchived === true,
-        thumbnailAssetId: meta[gachaId]?.thumbnailAssetId ?? null,
-        thumbnailBlobUrl: meta[gachaId]?.thumbnailBlobUrl ?? null
+        isArchived: meta[gachaId]?.isArchived === true
       });
     };
 
@@ -1196,17 +1198,8 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                     .map((entry) => (
                       <li key={entry.id}>
                         <div className="rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="page-settings-dialog__gacha-entry-main flex min-w-[200px] flex-1 items-start gap-3">
-                              <ItemPreview
-                                assetId={entry.thumbnailAssetId}
-                                fallbackUrl={entry.thumbnailBlobUrl}
-                                alt={`${entry.name}の配信サムネイル`}
-                                kindHint="image"
-                                imageFit="cover"
-                                emptyLabel="noImage"
-                                className="page-settings-dialog__gacha-entry-thumbnail h-12 w-12 bg-surface-deep"
-                              />
+                          <div className="page-settings-dialog__gacha-entry-layout flex flex-col gap-3">
+                            <div className="page-settings-dialog__gacha-entry-top flex items-start justify-between gap-3">
                               <div className="page-settings-dialog__gacha-entry-info flex min-w-0 flex-1 flex-col gap-2">
                                 {editingGachaId === entry.id ? (
                                   <>
@@ -1253,7 +1246,7 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                                       <p className="page-settings-dialog__gacha-entry-name font-semibold leading-tight">{entry.name}</p>
                                       <button
                                         type="button"
-                                        className="page-settings-dialog__gacha-entry-edit-button inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                        className="page-settings-dialog__gacha-entry-edit-button inline-flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                                         onClick={() => handleStartEditingGacha(entry.id, entry.name)}
                                         aria-label={`${entry.name}を編集`}
                                       >
@@ -1264,39 +1257,42 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
                                   </>
                                 )}
                               </div>
-                            </div>
-                            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
                               {entry.isSelected ? (
-                                <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                <span className="page-settings-dialog__gacha-entry-selected inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
                                   選択中
                                 </span>
                               ) : null}
-                              {entry.isArchived ? (
-                                <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
+                            </div>
+                            <div className="page-settings-dialog__gacha-entry-actions flex flex-wrap items-center gap-2">
+                              {!entry.isArchived ? (
+                                <button
+                                  type="button"
+                                  className="page-settings-dialog__gacha-entry-archive-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                  onClick={() => confirmArchiveGacha({ id: entry.id, name: entry.name })}
+                                >
+                                  アーカイブ
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="page-settings-dialog__gacha-entry-archived-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-panel-muted/70 px-3 py-1.5 text-xs font-semibold tracking-[0.2em] text-muted-foreground"
+                                  disabled
+                                >
                                   アーカイブ済み
-                                </span>
-                              ) : null}
+                                </button>
+                              )}
                               {entry.isArchived ? (
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                  className="page-settings-dialog__gacha-entry-restore-button inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                                   onClick={() => handleRestoreGacha(entry.id)}
                                 >
                                   戻す
                                 </button>
                               ) : null}
-                              {!entry.isArchived ? (
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
-                                  onClick={() => confirmArchiveGacha({ id: entry.id, name: entry.name })}
-                                >
-                                  アーカイブ
-                                </button>
-                              ) : null}
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+                                className="page-settings-dialog__gacha-entry-delete-button inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
                                 onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
                               >
                                 削除
@@ -1775,79 +1771,127 @@ export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (pr
     }
   };
 
-  return (
-    <ModalBody
-      className={clsx(
-        'page-settings-dialog flex min-h-0 max-h-full flex-col space-y-0 overflow-hidden p-0',
-        isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
-        isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
-      )}
-    >
-      <div className="page-settings__split-scroll-container flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8 lg:rounded-none lg:bg-transparent">
-        <nav
-          className={clsx(
-            'page-settings__menu-scroll m-2 w-[calc(100%-1rem)] min-h-0 flex-1 overflow-y-auto p-2 lg:m-0 lg:w-full lg:flex-none lg:self-stretch lg:p-0',
-            isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
-            activeView === 'menu' ? 'block' : 'hidden',
-            'lg:block'
-          )}
-        >
-          <ul className="space-y-2">
-            {menuItems.map((item) => {
-              const isActive = activeMenu === item.id;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect(item.id)}
-                    className={clsx(
-                      'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
-                      isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
-                        : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <span className="block text-sm font-semibold">{item.label}</span>
-                        <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                          {item.description}
-                        </span>
-                      </div>
-                      <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
-                        〉
+  const isStandaloneMobileLayout = standaloneMode && !isLargeLayout;
+  const dialogRootClassName = clsx(
+    'page-settings-dialog flex min-h-0 flex-col space-y-0 p-0',
+    isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
+    standaloneMode ? 'max-h-none overflow-visible' : 'max-h-full overflow-hidden',
+    isLargeLayout ? 'mt-6' : standaloneMode ? 'mt-0 bg-transparent' : 'mt-4 bg-panel/95'
+  );
+  const splitContainerClassName = clsx(
+    'page-settings__split-scroll-container flex flex-col gap-4 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8',
+    isStandaloneMobileLayout
+      ? 'flex-none overflow-visible rounded-none bg-transparent'
+      : 'flex-1 overflow-hidden rounded-3xl bg-panel/95 lg:rounded-none lg:bg-transparent'
+  );
+  const menuScrollClassName = clsx(
+    'page-settings__menu-scroll min-h-0 lg:w-full lg:flex-none lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'm-0 w-full flex-none overflow-visible p-0 lg:m-0 lg:p-0'
+      : 'm-2 w-[calc(100%-1rem)] flex-1 overflow-y-auto p-2 lg:m-0 lg:p-0',
+    isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
+    activeView === 'menu' ? 'block' : 'hidden',
+    'lg:block'
+  );
+  const contentScrollClassName = clsx(
+    'page-settings__content-scroll min-h-0 lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'flex-none max-h-none overflow-visible rounded-none border-0 bg-transparent p-0 pr-0 shadow-none'
+      : 'flex-1 max-h-full overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
+    isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
+  );
+  const mainContent = (
+    <div className={splitContainerClassName}>
+      <nav className={menuScrollClassName}>
+        <ul className="space-y-2">
+          {menuItems.map((item) => {
+            const isActive = activeMenu === item.id;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => handleMenuSelect(item.id)}
+                  className={clsx(
+                    'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
+                    isActive
+                      ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
+                      : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-sm font-semibold">{item.label}</span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                        {item.description}
                       </span>
                     </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="page-settings-nav__official-x-contact mt-3">
-            <OfficialXAccountPanel variant="compact" />
-          </div>
-        </nav>
-        <div
-          className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:self-stretch lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
-            isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
-          )}
-        >
-          {!isLargeLayout ? (
-            <div className="mb-4 flex items-center lg:hidden">
-              <button
-                type="button"
-                onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <span aria-hidden="true">〈</span>
-                <span>メニューに戻る</span>
-              </button>
-            </div>
-          ) : null}
-          {renderMenuContent()}
+                    <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
+                      〉
+                    </span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="page-settings-nav__official-x-contact mt-3">
+          <OfficialXAccountPanel variant="compact" />
         </div>
+      </nav>
+      <div className={contentScrollClassName}>
+        {!isLargeLayout ? (
+          <div className="mb-4 flex items-center lg:hidden">
+            <button
+              type="button"
+              onClick={handleBackToMenu}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <span aria-hidden="true">〈</span>
+              <span>メニューに戻る</span>
+            </button>
+          </div>
+        ) : null}
+        {renderMenuContent()}
       </div>
-    </ModalBody>
+    </div>
   );
-};
+
+  if (standaloneMode) {
+    // ページ表示ではモーダル専用の内部スクロール制御を使わず、通常のページスクロールへ委譲する。
+    return <div className={dialogRootClassName}>{mainContent}</div>;
+  }
+
+  return <ModalBody className={dialogRootClassName}>{mainContent}</ModalBody>;
+}
+
+// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
+export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => (
+  <PageSettingsDialogView {...props} />
+);
+
+export interface PageSettingsStandaloneProps {
+  onClose: () => void;
+  payload?: PageSettingsDialogPayload;
+}
+
+/**
+ * サイト設定UIをモーダル外（ページ内）で表示するためのラッパー。
+ *
+ * @param onClose 閉じる/戻るアクション時の処理
+ * @param payload 初期メニューやハイライト対象の指定
+ * @returns モーダル非依存で利用できるサイト設定UI
+ */
+export function PageSettingsStandalone({ onClose, payload }: PageSettingsStandaloneProps): JSX.Element {
+  const { dismissAll, push, replace } = useModal();
+  const modalProps = buildPageSettingsDialogProps({ payload });
+  const componentProps: ModalComponentProps<PageSettingsDialogPayload> = {
+    ...modalProps,
+    close: onClose,
+    dismiss: dismissAll,
+    push,
+    replace,
+    isTop: true
+  };
+
+  return <PageSettingsDialogView {...componentProps} standaloneMode />;
+}

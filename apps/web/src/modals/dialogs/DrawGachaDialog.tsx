@@ -6,8 +6,6 @@ import clsx from 'clsx';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
-import { PageSettingsDialog } from './PageSettingsDialog';
-import { buildPageSettingsDialogProps } from './pageSettingsDialogConfig';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
@@ -70,6 +68,7 @@ import {
   type DrawResultRevealAssetMeta,
   type DrawResultRevealCardModel
 } from './draw-result/revealCards';
+import { useOpenPageSettings } from '../../features/settings/openPageSettings';
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -686,6 +685,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
   const { uploadZip } = useBlobUpload();
   const { data: discordSession } = useDiscordSession();
+  const openPageSettings = useOpenPageSettings();
   const persistence = useAppPersistence();
   const isPullsMode = pointsInputMode === 'pulls';
   const completeExecutionsOverrideForPlan = isPullsMode ? 0 : completeExecutionsOverride;
@@ -709,22 +709,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(
-            PageSettingsDialog,
-            buildPageSettingsDialogProps({
-              payload: {
-                focusTarget: 'misc-owner-name',
-                highlightMode: 'pulse',
-                highlightDurationMs: 7000,
-                origin: 'draw-gacha-owner-name-warning'
-              }
-            })
-          );
+          openPageSettings({
+            payload: {
+              focusTarget: 'misc-owner-name',
+              highlightMode: 'pulse',
+              highlightDurationMs: 7000,
+              origin: 'draw-gacha-owner-name-warning'
+            }
+          });
         }
       }
     });
     return null;
-  }, [push, resolveOwnerName]);
+  }, [openPageSettings, push, resolveOwnerName]);
 
   const planResolution = useMemo(() => {
     if (!selectedGacha) {
