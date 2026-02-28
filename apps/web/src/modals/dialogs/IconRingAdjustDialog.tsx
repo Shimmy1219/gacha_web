@@ -1,12 +1,4 @@
-import {
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  MinusIcon,
-  PlusIcon
-} from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { loadAsset } from '@domain/assets/assetStorage';
@@ -14,11 +6,10 @@ import type { ReceiveMediaItem } from '../../pages/receive/types';
 
 const SCALE_MIN = 0.6;
 const SCALE_MAX = 2.4;
-const SCALE_STEP = 0.01;
-const SCALE_BUTTON_STEP = 0.1;
-const MOVE_NUDGE_STEP = 0.02;
 const OFFSET_RATIO_MIN = -1;
 const OFFSET_RATIO_MAX = 1;
+const WHEEL_SCALE_SENSITIVITY = 0.0015;
+const MIN_PINCH_DISTANCE_PX = 8;
 
 /**
  * アイコンリング装着時に適用する、アイコン側の調整情報。
@@ -47,6 +38,28 @@ export interface IconRingAdjustDialogPayload {
   onSave: (nextTransform: IconRingAdjustResult) => void;
 }
 
+interface PointerSnapshot {
+  x: number;
+  y: number;
+}
+
+interface DragState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffsetXRatio: number;
+  startOffsetYRatio: number;
+  previewWidth: number;
+  previewHeight: number;
+}
+
+interface PinchState {
+  pointerIdA: number;
+  pointerIdB: number;
+  startDistance: number;
+  startScale: number;
+}
+
 function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) {
     return min;
@@ -62,18 +75,15 @@ function normalizeTransform(transform: Partial<IconRingAdjustResult> | null | un
   };
 }
 
-interface DragState {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  startOffsetXRatio: number;
-  startOffsetYRatio: number;
-  previewWidth: number;
-  previewHeight: number;
+function resolveDistance(pointerA: PointerSnapshot, pointerB: PointerSnapshot): number {
+  return Math.hypot(pointerA.x - pointerB.x, pointerA.y - pointerB.y);
 }
 
 /**
  * 責務: アイコンリングを固定表示したまま、アイコン画像の拡大・縮小・移動を調節して親モーダルへ保存する。
+ *
+ * @param props モーダルの基本プロパティと、調節対象のリング・アイコン情報。
+ * @returns アイコン調節モーダル。
  */
 export function IconRingAdjustDialog({
   payload,
@@ -84,10 +94,19 @@ export function IconRingAdjustDialog({
   const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [interactionMode, setInteractionMode] = useState<'idle' | 'dragging' | 'pinching'>('idle');
+
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const transformRef = useRef<IconRingAdjustResult>(transform);
+  const pointersRef = useRef<Map<number, PointerSnapshot>>(new Map());
   const dragRef = useRef<DragState | null>(null);
+  const pinchRef = useRef<PinchState | null>(null);
 
   const scalePercent = useMemo(() => Math.round(transform.scale * 100), [transform.scale]);
+
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
 
   // 親モーダルから渡される初期調節値が変化した時だけ、編集中の値を同期する。
   // 依存配列には各プリミティブ値を並べ、不要な再初期化を避ける。
@@ -110,6 +129,10 @@ export function IconRingAdjustDialog({
       setError(null);
       setRingPreviewUrl(null);
       setIconPreviewUrl(null);
+      setInteractionMode('idle');
+      pointersRef.current.clear();
+      dragRef.current = null;
+      pinchRef.current = null;
 
       try {
         // 成功時: リング画像とアイコン画像の双方を object URL 化してプレビューへ反映する。
@@ -152,6 +175,9 @@ export function IconRingAdjustDialog({
       // 後処理: 生成済み object URL を解放し、メモリリークを防止する。
       active = false;
       createdUrls.forEach((url) => URL.revokeObjectURL(url));
+      pointersRef.current.clear();
+      dragRef.current = null;
+      pinchRef.current = null;
     };
   }, [payload?.iconAssetId, payload?.ringItem]);
 
@@ -159,10 +185,70 @@ export function IconRingAdjustDialog({
     setTransform((current) => normalizeTransform(updater(current)));
   }, []);
 
-  const endDrag = useCallback(() => {
-    dragRef.current = null;
-    setIsDragging(false);
+  const startDrag = useCallback((pointerId: number, point: PointerSnapshot) => {
+    const stageElement = stageRef.current;
+    if (!stageElement) {
+      return;
+    }
+
+    const rect = stageElement.getBoundingClientRect();
+    const currentTransform = transformRef.current;
+    dragRef.current = {
+      pointerId,
+      startX: point.x,
+      startY: point.y,
+      startOffsetXRatio: currentTransform.offsetXRatio,
+      startOffsetYRatio: currentTransform.offsetYRatio,
+      previewWidth: rect.width,
+      previewHeight: rect.height
+    };
+    pinchRef.current = null;
+    setInteractionMode('dragging');
   }, []);
+
+  const startPinch = useCallback((pointerIdA: number, pointerIdB: number) => {
+    const pointerA = pointersRef.current.get(pointerIdA);
+    const pointerB = pointersRef.current.get(pointerIdB);
+    if (!pointerA || !pointerB) {
+      return;
+    }
+
+    const startDistance = Math.max(resolveDistance(pointerA, pointerB), MIN_PINCH_DISTANCE_PX);
+    pinchRef.current = {
+      pointerIdA,
+      pointerIdB,
+      startDistance,
+      startScale: transformRef.current.scale
+    };
+    dragRef.current = null;
+    setInteractionMode('pinching');
+  }, []);
+
+  const reconcileGestureMode = useCallback(() => {
+    const pointerIds = Array.from(pointersRef.current.keys());
+
+    if (pointerIds.length >= 2) {
+      startPinch(pointerIds[0], pointerIds[1]);
+      return;
+    }
+
+    if (pointerIds.length === 1) {
+      const pointerId = pointerIds[0];
+      const pointer = pointersRef.current.get(pointerId);
+      if (!pointer) {
+        setInteractionMode('idle');
+        dragRef.current = null;
+        pinchRef.current = null;
+        return;
+      }
+      startDrag(pointerId, pointer);
+      return;
+    }
+
+    dragRef.current = null;
+    pinchRef.current = null;
+    setInteractionMode('idle');
+  }, [startDrag, startPinch]);
 
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
@@ -173,26 +259,36 @@ export function IconRingAdjustDialog({
         return;
       }
 
-      const target = event.currentTarget;
-      const rect = target.getBoundingClientRect();
-      dragRef.current = {
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        startOffsetXRatio: transform.offsetXRatio,
-        startOffsetYRatio: transform.offsetYRatio,
-        previewWidth: rect.width,
-        previewHeight: rect.height
-      };
-
-      target.setPointerCapture(event.pointerId);
-      setIsDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      reconcileGestureMode();
     },
-    [error, isLoading, transform.offsetXRatio, transform.offsetYRatio]
+    [error, isLoading, reconcileGestureMode]
   );
 
   const handlePointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
+      if (!pointersRef.current.has(event.pointerId)) {
+        return;
+      }
+
+      pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      const pinchState = pinchRef.current;
+      if (pinchState && pointersRef.current.size >= 2) {
+        const pointerA = pointersRef.current.get(pinchState.pointerIdA);
+        const pointerB = pointersRef.current.get(pinchState.pointerIdB);
+        if (!pointerA || !pointerB) {
+          reconcileGestureMode();
+          return;
+        }
+
+        const currentDistance = Math.max(resolveDistance(pointerA, pointerB), MIN_PINCH_DISTANCE_PX);
+        const distanceRatio = currentDistance / pinchState.startDistance;
+        updateTransform((current) => ({ ...current, scale: pinchState.startScale * distanceRatio }));
+        return;
+      }
+
       const dragState = dragRef.current;
       if (!dragState || dragState.pointerId !== event.pointerId) {
         return;
@@ -202,79 +298,75 @@ export function IconRingAdjustDialog({
       const deltaYRatio =
         dragState.previewHeight > 0 ? (event.clientY - dragState.startY) / dragState.previewHeight : 0;
 
-      updateTransform(() => ({
-        scale: transform.scale,
+      updateTransform((current) => ({
+        ...current,
         offsetXRatio: dragState.startOffsetXRatio + deltaXRatio,
         offsetYRatio: dragState.startOffsetYRatio + deltaYRatio
       }));
     },
-    [transform.scale, updateTransform]
+    [reconcileGestureMode, updateTransform]
   );
 
-  const handlePointerUp = useCallback(
+  const handlePointerUpOrCancel = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      const dragState = dragRef.current;
-      if (!dragState || dragState.pointerId !== event.pointerId) {
-        return;
-      }
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
-      endDrag();
+      pointersRef.current.delete(event.pointerId);
+      if (dragRef.current?.pointerId === event.pointerId) {
+        dragRef.current = null;
+      }
+      if (pinchRef.current?.pointerIdA === event.pointerId || pinchRef.current?.pointerIdB === event.pointerId) {
+        pinchRef.current = null;
+      }
+      reconcileGestureMode();
     },
-    [endDrag]
+    [reconcileGestureMode]
   );
 
-  const handleScaleSliderChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const nextScale = Number.parseFloat(event.currentTarget.value);
-      updateTransform((current) => ({ ...current, scale: nextScale }));
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      if (isLoading || error) {
+        return;
+      }
+      event.preventDefault();
+      const nextScaleDelta = -event.deltaY * WHEEL_SCALE_SENSITIVITY;
+      updateTransform((current) => ({ ...current, scale: current.scale + nextScaleDelta }));
+      setInteractionMode('idle');
     },
-    [updateTransform]
+    [error, isLoading, updateTransform]
   );
-
-  const handleScaleByStep = useCallback(
-    (delta: number) => {
-      updateTransform((current) => ({ ...current, scale: current.scale + delta }));
-    },
-    [updateTransform]
-  );
-
-  const handleMoveByStep = useCallback(
-    (deltaXRatio: number, deltaYRatio: number) => {
-      updateTransform((current) => ({
-        ...current,
-        offsetXRatio: current.offsetXRatio + deltaXRatio,
-        offsetYRatio: current.offsetYRatio + deltaYRatio
-      }));
-    },
-    [updateTransform]
-  );
-
-  const handleReset = useCallback(() => {
-    setTransform({ scale: 1, offsetXRatio: 0, offsetYRatio: 0 });
-  }, []);
 
   const handleSave = useCallback(() => {
     if (!payload?.onSave) {
       return;
     }
-    payload.onSave(transform);
+    payload.onSave(transformRef.current);
     close();
-  }, [close, payload, transform]);
+  }, [close, payload]);
 
   return (
     <>
       <ModalBody className="icon-ring-adjust-dialog__body rounded-2xl bg-surface/20 p-0 md:pr-0">
         <div className="icon-ring-adjust-dialog__content space-y-5">
           <p className="icon-ring-adjust-dialog__guide-text text-sm text-muted-foreground">
-            ドラッグで位置調整し、必要に応じてサイズと微調整ボタンを使ってください。
+            PCはドラッグで移動・ホイールで拡大縮小、モバイルは1本指ドラッグと2本指ピンチで操作できます。
           </p>
           <p className="icon-ring-adjust-dialog__target-text text-xs text-muted-foreground">
-            対象: <span className="icon-ring-adjust-dialog__target-label font-semibold text-surface-foreground">{payload?.iconLabel ?? '登録アイコン'}</span>
+            対象:{' '}
+            <span className="icon-ring-adjust-dialog__target-label font-semibold text-surface-foreground">
+              {payload?.iconLabel ?? '登録アイコン'}
+            </span>
           </p>
 
           <div className="icon-ring-adjust-dialog__preview-block rounded-2xl border border-border/60 bg-panel-muted/40 p-3 sm:p-4">
+            <div className="icon-ring-adjust-dialog__status-row mb-3 flex items-center justify-between gap-3">
+              <span className="icon-ring-adjust-dialog__status-label text-xs text-muted-foreground">現在倍率</span>
+              <span className="icon-ring-adjust-dialog__status-value rounded-full border border-border/50 bg-panel px-2 py-0.5 text-xs font-semibold text-surface-foreground">
+                {scalePercent}%
+              </span>
+            </div>
+
             {isLoading ? (
               <div className="icon-ring-adjust-dialog__loading-message flex items-center justify-center rounded-xl border border-border/60 bg-surface/40 px-4 py-8 text-sm text-muted-foreground">
                 プレビューを読み込み中です…
@@ -289,18 +381,14 @@ export function IconRingAdjustDialog({
 
             {!isLoading && !error && ringPreviewUrl && iconPreviewUrl ? (
               <div
-                className="icon-ring-adjust-dialog__preview-stage relative mx-auto aspect-square w-full max-w-[340px] overflow-hidden rounded-2xl border border-border/60 bg-surface/20 shadow-inner"
+                ref={stageRef}
+                className="icon-ring-adjust-dialog__preview-stage relative mx-auto aspect-square w-full max-w-[340px] cursor-grab overflow-hidden rounded-2xl border border-border/60 bg-surface/20 shadow-inner active:cursor-grabbing"
                 style={{ touchAction: 'none' }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={endDrag}
-                onPointerLeave={(event) => {
-                  const dragState = dragRef.current;
-                  if (dragState && dragState.pointerId === event.pointerId && event.pointerType === 'mouse') {
-                    handlePointerUp(event);
-                  }
-                }}
+                onPointerUp={handlePointerUpOrCancel}
+                onPointerCancel={handlePointerUpOrCancel}
+                onWheel={handleWheel}
               >
                 <img
                   src={iconPreviewUrl}
@@ -315,123 +403,14 @@ export function IconRingAdjustDialog({
                   alt="アイコンリング"
                   className="icon-ring-adjust-dialog__preview-ring pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
                 />
-                {isDragging ? (
-                  <div className="icon-ring-adjust-dialog__drag-indicator pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/55 px-2 py-1 text-center text-xs text-white">
-                    ドラッグ中
+
+                {interactionMode !== 'idle' ? (
+                  <div className="icon-ring-adjust-dialog__interaction-indicator pointer-events-none absolute inset-x-3 bottom-3 rounded-lg bg-black/55 px-2 py-1 text-center text-xs text-white">
+                    {interactionMode === 'pinching' ? '拡大縮小中' : '移動中'}
                   </div>
                 ) : null}
               </div>
             ) : null}
-          </div>
-
-          <div className="icon-ring-adjust-dialog__control-panel space-y-4 rounded-2xl border border-border/60 bg-surface/30 p-4">
-            <div className="icon-ring-adjust-dialog__scale-control space-y-3">
-              <div className="icon-ring-adjust-dialog__scale-header flex items-center justify-between gap-3">
-                <label htmlFor="icon-ring-adjust-scale-slider" className="icon-ring-adjust-dialog__scale-label text-sm font-semibold text-surface-foreground">
-                  サイズ
-                </label>
-                <span className="icon-ring-adjust-dialog__scale-value rounded-full border border-border/50 bg-panel px-2 py-0.5 text-xs font-semibold text-surface-foreground">
-                  {scalePercent}%
-                </span>
-              </div>
-              <div className="icon-ring-adjust-dialog__scale-row flex items-center gap-2">
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__scale-down-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleScaleByStep(-SCALE_BUTTON_STEP);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="アイコンを縮小"
-                >
-                  <MinusIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <input
-                  id="icon-ring-adjust-scale-slider"
-                  className="icon-ring-adjust-dialog__scale-slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-panel-contrast accent-accent"
-                  type="range"
-                  min={SCALE_MIN}
-                  max={SCALE_MAX}
-                  step={SCALE_STEP}
-                  value={transform.scale}
-                  onChange={handleScaleSliderChange}
-                  disabled={isLoading || Boolean(error)}
-                />
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__scale-up-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleScaleByStep(SCALE_BUTTON_STEP);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="アイコンを拡大"
-                >
-                  <PlusIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-
-            <div className="icon-ring-adjust-dialog__move-control space-y-3">
-              <p className="icon-ring-adjust-dialog__move-title text-sm font-semibold text-surface-foreground">移動</p>
-              <div className="icon-ring-adjust-dialog__move-grid mx-auto grid max-w-[180px] grid-cols-3 gap-2">
-                <div className="icon-ring-adjust-dialog__move-spacer-top-left" />
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__move-up-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleMoveByStep(0, -MOVE_NUDGE_STEP);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="上に移動"
-                >
-                  <ArrowUpIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <div className="icon-ring-adjust-dialog__move-spacer-top-right" />
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__move-left-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleMoveByStep(-MOVE_NUDGE_STEP, 0);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="左に移動"
-                >
-                  <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__reset-button btn btn-muted h-10 px-2 text-xs"
-                  onClick={handleReset}
-                  disabled={isLoading || Boolean(error)}
-                >
-                  中央
-                </button>
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__move-right-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleMoveByStep(MOVE_NUDGE_STEP, 0);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="右に移動"
-                >
-                  <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <div className="icon-ring-adjust-dialog__move-spacer-bottom-left" />
-                <button
-                  type="button"
-                  className="icon-ring-adjust-dialog__move-down-button btn btn-muted inline-flex h-10 w-10 items-center justify-center p-0"
-                  onClick={() => {
-                    handleMoveByStep(0, MOVE_NUDGE_STEP);
-                  }}
-                  disabled={isLoading || Boolean(error)}
-                  aria-label="下に移動"
-                >
-                  <ArrowDownIcon className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <div className="icon-ring-adjust-dialog__move-spacer-bottom-right" />
-              </div>
-            </div>
           </div>
         </div>
       </ModalBody>
