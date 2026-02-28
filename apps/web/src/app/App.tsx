@@ -5,6 +5,7 @@ import { type GachaLayoutProps } from '../layouts/GachaLayout';
 import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
+import { CreateGachaWizardDialog } from '../modals/dialogs/CreateGachaWizardDialog';
 import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
@@ -285,7 +286,16 @@ export function App(): JSX.Element {
           });
         },
         onCreateNew: () => {
-          navigate('/gacha/create');
+          if (isMobile) {
+            navigate('/gacha/create');
+            return;
+          }
+
+          push(CreateGachaWizardDialog, {
+            id: 'create-gacha-wizard',
+            title: '新規ガチャを作成',
+            size: 'xl'
+          });
         }
       }
     });
