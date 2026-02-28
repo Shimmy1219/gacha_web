@@ -165,6 +165,7 @@ interface UploadZipResult {
    - `key` は受け取りページ用の 10 桁 ID（後続の `GET /api/receive/edge-resolve?key=` で利用）。
 4. `localStorage.setItem('last-upload:' + userId, JSON.stringify({ key, shareUrl, expiresAt }))` に保存。
    - 保存データは `{ key: string; shareUrl: string; expiresAt: string; pathname: string }` を想定。`pathname` は重複アップロードの検出用に同時保存。
+   - サーバー側でも `pathname` と `expiresAt` を `receive_keys` などの DB/KV に永続化し、日次の期限切れ削除 Cron が照会できるようにする。
 
 ### エラーハンドリング
 - `upload` / `resolveEdgeReceive` どちらか失敗時に `BlobUploadError` を投げる。
