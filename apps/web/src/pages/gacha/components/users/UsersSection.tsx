@@ -18,11 +18,16 @@ import {
   type InventoryRarityOption
 } from '../cards/UserCard';
 import { SectionContainer } from '../layout/SectionContainer';
+import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useModal } from '../../../../modals';
 import { SaveTargetDialog } from '../../../../modals/dialogs/SaveTargetDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
-import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
+import {
+  buildUserFilterGachaOptions,
+  useFilteredUsers
+} from '../../../../features/users/logic/userFilters';
+import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 
 const USERS_FILTER_AUTO_CLOSE_SCROLL_DELTA_THRESHOLD = 8;
@@ -33,11 +38,24 @@ const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
 const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
 const USERS_FILTER_CLOSE_ANIMATION_MS = 300;
+const USERS_ALL_TAB_ID = 'users-all';
 
+interface UsersGachaTab {
+  id: string;
+  label: string;
+  gachaId: string | null;
+}
+
+/**
+ * ユーザーごとの獲得内訳を表示し、フィルタ・ガチャタブ・保存操作を提供するセクション。
+ *
+ * @returns ユーザー集計セクション
+ */
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [filtersOverflowVisible, setFiltersOverflowVisible] = useState(true);
   const [isScrollLockedDuringClosing, setIsScrollLockedDuringClosing] = useState(false);
+  const [activeUsersTabId, setActiveUsersTabId] = useState<string>(USERS_ALL_TAB_ID);
   const usersContentRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
@@ -50,6 +68,78 @@ export function UsersSection(): JSX.Element {
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
+  const usersGachaTabs = useMemo<UsersGachaTab[]>(() => {
+    const gachaOptions = buildUserFilterGachaOptions(data?.appState);
+    return [
+      {
+        id: USERS_ALL_TAB_ID,
+        label: '全て',
+        gachaId: null
+      },
+      ...gachaOptions.map((option) => ({
+        id: `users-gacha-${option.value}`,
+        label: option.label,
+        gachaId: option.value
+      }))
+    ];
+  }, [data?.appState]);
+  const gachaTabs = useMemo<GachaTabOption[]>(
+    () => usersGachaTabs.map((tab) => ({ id: tab.id, label: tab.label })),
+    [usersGachaTabs]
+  );
+  const usersTabIds = useMemo(() => usersGachaTabs.map((tab) => tab.id), [usersGachaTabs]);
+  const usersTabMotion = useTabMotion(activeUsersTabId, usersTabIds);
+  const usersTabPanelAnimationClass = clsx(
+    'users-section__tab-panel-content space-y-3',
+    usersTabMotion === 'forward' && 'animate-tab-slide-from-right',
+    usersTabMotion === 'backward' && 'animate-tab-slide-from-left'
+  );
+  const activeTabGachaId = useMemo(() => {
+    const activeTab = usersGachaTabs.find((tab) => tab.id === activeUsersTabId);
+    return activeTab?.gachaId ?? null;
+  }, [activeUsersTabId, usersGachaTabs]);
+  const activeTabLabel = useMemo(() => {
+    const activeTab = usersGachaTabs.find((tab) => tab.id === activeUsersTabId);
+    return activeTab?.label ?? '選択中のガチャ';
+  }, [activeUsersTabId, usersGachaTabs]);
+  const tabbedUsers = useMemo(() => {
+    if (!activeTabGachaId) {
+      return users;
+    }
+
+    const usersPerGacha = users
+      .map((user) => {
+        const filteredInventories = user.inventories.filter((inventory) => inventory.gachaId === activeTabGachaId);
+        if (filteredInventories.length === 0) {
+          return null;
+        }
+        const totalPullCount = filteredInventories.reduce(
+          (sum, inventory) => sum + inventory.pulls.reduce((inventorySum, item) => inventorySum + item.count, 0),
+          0
+        );
+        return {
+          ...user,
+          inventories: filteredInventories,
+          totalSummary: `${totalPullCount}連`
+        };
+      })
+      .filter((user): user is (typeof users)[number] => user !== null);
+
+    // ガチャ絞り込み後も先頭カードを既定展開に寄せ、従来の可読性を維持する。
+    return usersPerGacha.map((user, index) => ({
+      ...user,
+      expandedByDefault: index === 0
+    }));
+  }, [activeTabGachaId, users]);
+
+  useEffect(() => {
+    // タブ一覧が変化した場合に無効タブを保持しないため、常に有効な先頭タブへ補正する。
+    // 依存に activeUsersTabId と usersGachaTabs を含め、選択変更と構成変更の両方で整合性を保つ。
+    if (usersGachaTabs.some((tab) => tab.id === activeUsersTabId)) {
+      return;
+    }
+    setActiveUsersTabId(usersGachaTabs[0]?.id ?? USERS_ALL_TAB_ID);
+  }, [activeUsersTabId, usersGachaTabs]);
 
   const isUsersSectionScrollable = useCallback((element: HTMLDivElement | null): boolean => {
     if (!element) {
@@ -467,27 +557,43 @@ export function UsersSection(): JSX.Element {
         </div>
       </div>
 
-      {status !== 'ready' ? (
-        <p className="text-sm text-muted-foreground">ローカルストレージからユーザーデータを読み込み中です…</p>
-      ) : null}
-      {status === 'ready' && users.length === 0 ? (
-        <p className="text-sm text-muted-foreground">表示できるユーザーがいません。ガチャの履歴や在庫を確認してください。</p>
-      ) : null}
+      <GachaTabs
+        tabs={gachaTabs}
+        activeId={activeUsersTabId}
+        onSelect={setActiveUsersTabId}
+        className="users-section__gacha-tabs"
+      />
 
-      {users.length > 0 ? (
-        <div className="users-section__list space-y-3">
-          {users.map((user) => (
-            <UserCard
-              key={user.userId}
-              {...user}
-              onExport={handleOpenSaveOptions}
-              showCounts={showCounts}
-              catalogItemsByGacha={catalogItemsByGacha}
-              rarityOptionsByGacha={rarityOptionsByGacha}
-            />
-          ))}
+      <div className="users-section__tab-panel tab-panel-viewport">
+        <div key={activeUsersTabId} className={usersTabPanelAnimationClass}>
+          {status !== 'ready' ? (
+            <p className="users-section__status-message text-sm text-muted-foreground">ローカルストレージからユーザーデータを読み込み中です…</p>
+          ) : null}
+          {status === 'ready' && users.length === 0 ? (
+            <p className="users-section__empty-message text-sm text-muted-foreground">表示できるユーザーがいません。ガチャの履歴や在庫を確認してください。</p>
+          ) : null}
+          {status === 'ready' && users.length > 0 && tabbedUsers.length === 0 ? (
+            <p className="users-section__empty-tab-message text-sm text-muted-foreground">
+              {activeTabLabel} に表示できるユーザーがいません。
+            </p>
+          ) : null}
+
+          {tabbedUsers.length > 0 ? (
+            <div className="users-section__list space-y-3">
+              {tabbedUsers.map((user) => (
+                <UserCard
+                  key={user.userId}
+                  {...user}
+                  onExport={handleOpenSaveOptions}
+                  showCounts={showCounts}
+                  catalogItemsByGacha={catalogItemsByGacha}
+                  rarityOptionsByGacha={rarityOptionsByGacha}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </SectionContainer>
   );
 }

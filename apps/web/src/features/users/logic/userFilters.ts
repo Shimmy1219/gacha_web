@@ -57,7 +57,14 @@ export interface UserFilterController {
   reset(): void;
 }
 
-function buildGachaOptions(state?: GachaAppStateV3): UserFilterOption[] {
+/**
+ * ユーザーフィルタで利用するガチャ選択肢を組み立てる。
+ * アーカイブ済みガチャを除外し、表示名（同値時はID）で安定ソートする。
+ *
+ * @param state ガチャのアプリ状態
+ * @returns フィルタ用ガチャ選択肢
+ */
+export function buildUserFilterGachaOptions(state?: GachaAppStateV3): UserFilterOption[] {
   if (!state || !Array.isArray(state.order) || state.order.length === 0) {
     return [];
   }
@@ -150,7 +157,7 @@ export function useUserFilterOptions(): { gachaOptions: UserFilterOption[]; rari
   const appStateValue = useStoreState(appState);
   const rarityStateValue = useStoreState(rarities);
 
-  const gachaOptions = useMemo(() => buildGachaOptions(appStateValue), [appStateValue]);
+  const gachaOptions = useMemo(() => buildUserFilterGachaOptions(appStateValue), [appStateValue]);
   const rarityOptions = useMemo(
     () => buildRarityOptions(appStateValue, rarityStateValue),
     [appStateValue, rarityStateValue]
