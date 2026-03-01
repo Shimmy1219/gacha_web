@@ -37,7 +37,7 @@ function SortSelectFilter({ id, label, options, value, onChange }: SortSelectFil
         classNames={{
           root: 'user-filter-panel__sort-select-wrapper relative',
           button:
-            'user-filter-panel__sort-select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm text-surface-foreground transition',
+            'user-filter-panel__sort-select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm font-normal text-surface-foreground transition',
           buttonOpen: 'border-accent text-accent',
           buttonClosed: 'hover:border-accent/70',
           icon: 'user-filter-panel__sort-select-icon h-4 w-4 transition-transform',
