@@ -372,17 +372,10 @@ export function DiscordPrivateChannelCategoryDialog({
             <br />
             ※これまでにあなたが手動で作成したお渡しチャンネルには送られません。ご了承ください。
           </p>
-          {selectedCategorySeries.categoryIds.length > 1 ? (
-            <p className="text-xs text-surface-foreground">
-              同シリーズカテゴリを自動選択中:
-              {' '}
-              {selectedCategorySeries.entries.map((entry) => entry.name).join(' / ')}
-            </p>
-          ) : null}
         </section>
 
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-surface-foreground">カテゴリ一覧</h3>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <button
@@ -443,8 +436,8 @@ export function DiscordPrivateChannelCategoryDialog({
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{category.name || '(名称未設定)'}</span>
                         <span className="text-xs text-muted-foreground">ID: {category.id}</span>
-                        {isAutoSelected && !isPrimarySelected ? (
-                          <span className="text-xs text-accent">同シリーズとして自動選択</span>
+                        {isAutoSelected && selectedCategorySeries.categoryIds.length > 1 ? (
+                          <span className="text-xs text-accent">自動選択</span>
                         ) : null}
                       </div>
                       {isPrimarySelected ? (
