@@ -1,4 +1,14 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type Ref,
+  type TouchEventHandler,
+  type UIEventHandler,
+  type WheelEventHandler,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
 import { clsx } from 'clsx';
 
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
@@ -14,6 +24,13 @@ interface SectionContainerProps {
   className?: string;
   contentClassName?: string;
   forceMobile?: boolean;
+  contentElementRef?: Ref<HTMLDivElement>;
+  onContentScroll?: UIEventHandler<HTMLDivElement>;
+  onContentWheel?: WheelEventHandler<HTMLDivElement>;
+  onContentTouchStart?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchMove?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchEnd?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchCancel?: TouchEventHandler<HTMLDivElement>;
 }
 
 export function SectionContainer({
@@ -26,12 +43,34 @@ export function SectionContainer({
   children,
   className,
   contentClassName,
-  forceMobile = false
+  forceMobile = false,
+  contentElementRef,
+  onContentScroll,
+  onContentWheel,
+  onContentTouchStart,
+  onContentTouchMove,
+  onContentTouchEnd,
+  onContentTouchCancel
 }: SectionContainerProps): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
   const { isMobile } = useResponsiveDashboard();
   const isMobileLayout = forceMobile || isMobile;
+
+  const setContentElementRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      if (!contentElementRef) {
+        return;
+      }
+      if (typeof contentElementRef === 'function') {
+        contentElementRef(node);
+        return;
+      }
+      contentElementRef.current = node;
+    },
+    [contentElementRef]
+  );
 
   const updateScrollbarState = useCallback(() => {
     const element = contentRef.current;
@@ -118,13 +157,19 @@ export function SectionContainer({
           )}
         >
           <div
-            ref={contentRef}
+            ref={setContentElementRef}
             className={clsx(
               'section-container__content min-h-0 space-y-4',
               isMobileLayout ? 'h-auto overflow-visible' : 'section-scroll h-full',
               !isMobileLayout && !hasScrollbar && 'section-scroll--no-scrollbar',
               contentClassName
             )}
+            onScroll={onContentScroll}
+            onWheel={onContentWheel}
+            onTouchStart={onContentTouchStart}
+            onTouchMove={onContentTouchMove}
+            onTouchEnd={onContentTouchEnd}
+            onTouchCancel={onContentTouchCancel}
           >
             {children}
           </div>

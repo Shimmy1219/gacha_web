@@ -102,6 +102,10 @@ interface QueuedDiscordDeliveryRequest {
   itemIdFilter?: string[];
 }
 
+interface DrawGachaDialogPayload {
+  initialUserName?: string;
+}
+
 const DRAW_RESULT_QUICK_SEND_MODE_OPTIONS: readonly ResultActionButtonsQuickSendModeOption[] = [
   { id: 'discord', label: 'Discord送信' },
   { id: 'share_url', label: '共有URL発行' }
@@ -264,6 +268,8 @@ function formatExecutedAt(value: string | undefined): string {
 }
 
 const DRAW_RESULT_REVEAL_INTERVAL_MS = 90;
+const DRAW_RESULT_REVEAL_PREFERENCE_CONFIRM_MESSAGE =
+  '今後もビジュアルガチャ結果表示を有効しますか？これは後からサイト設定から変更出来ます。';
 
 function resolvePrimaryAssetMeta(assets: GachaCatalogItemAssetV4[] | undefined): DrawResultRevealAssetMeta {
   const primaryAsset = Array.isArray(assets) ? assets[0] : undefined;
@@ -274,7 +280,7 @@ function resolvePrimaryAssetMeta(assets: GachaCatalogItemAssetV4[] | undefined):
   };
 }
 
-export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
+export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<DrawGachaDialogPayload>): JSX.Element {
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -308,6 +314,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const drawDialogLastPointsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPointsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawDialogLastPullsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPullsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
   const quickActionModePreference = useMemo(
     () => uiPreferencesStore.getQuickActionModePreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -317,6 +331,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [uiPreferencesState, uiPreferencesStore]
   );
   const drawResultRevealEnabled = drawResultRevealEnabledPreference ?? DEFAULT_DRAW_RESULT_REVEAL_ENABLED;
+  const drawResultRevealPreferenceConfirmed = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealPreferenceConfirmed(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const shouldPromptDrawResultRevealPreference = useMemo(
+    () => drawResultRevealEnabledPreference === null && !drawResultRevealPreferenceConfirmed,
+    [drawResultRevealEnabledPreference, drawResultRevealPreferenceConfirmed]
+  );
+  const isDrawResultRevealEnabled = shouldPromptDrawResultRevealPreference
+    ? true
+    : drawResultRevealEnabled;
   const drawResultRevealBackgroundColorPreference = useMemo(
     () => uiPreferencesStore.getDrawResultRevealBackgroundColorPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -400,11 +425,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     },
     [applySelectedGacha]
   );
-  const [pointsInput, setPointsInput] = useState('100');
+  const [pointsInput, setPointsInput] = useState(() =>
+    String(drawDialogLastPointsInputPreference ?? 100)
+  );
   const [pointsInputMode, setPointsInputMode] = useState<'points' | 'pulls'>('points');
-  const [pullsInput, setPullsInput] = useState('10');
+  const [pullsInput, setPullsInput] = useState(() =>
+    String(drawDialogLastPullsInputPreference ?? 10)
+  );
   const [completeExecutionsOverride, setCompleteExecutionsOverride] = useState<number | null>(null);
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(() => payload?.initialUserName?.trim() ?? '');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -438,6 +467,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealPreferencePromptQueuedRef = useRef(false);
   const drawGachaDialogBodyRef = useRef<HTMLDivElement | null>(null);
   const lastRevealedPullIdRef = useRef<string | null>(null);
   const [isRevealOverlayVisible, setIsRevealOverlayVisible] = useState(false);
@@ -590,6 +620,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     clearRevealTimer();
     lastRevealedPullIdRef.current = null;
+    revealPreferencePromptQueuedRef.current = false;
     setIsRevealOverlayVisible(false);
     setRevealCards([]);
     setRevealedCount(0);
@@ -630,6 +661,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setPullsInput(String(nextValue));
   }, [pullsInput]);
 
+  const setQuickAdjustInputToZero = useCallback(() => {
+    if (pointsInputMode === 'pulls') {
+      setPullsInput('0');
+      return;
+    }
+    setPointsInput('0');
+  }, [pointsInputMode]);
+
   const handleQuickAdjust = useCallback((delta: number) => {
     if (pointsInputMode === 'pulls') {
       adjustPullsInput(delta);
@@ -637,6 +676,24 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     adjustPointsInput(delta);
   }, [adjustPointsInput, adjustPullsInput, pointsInputMode]);
+
+  useEffect(() => {
+    // ポイント入力はUI設定へ保存し、次回モーダル起動時に直近値を復元する。
+    const parsed = Number(pointsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPointsInputPreference(parsed, { persist: 'debounced' });
+  }, [pointsInput, uiPreferencesStore]);
+
+  useEffect(() => {
+    // 連数入力も同様に保存し、直前に使った値を保持する。
+    const parsed = Number(pullsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPullsInputPreference(parsed, { persist: 'debounced' });
+  }, [pullsInput, uiPreferencesStore]);
 
   const normalizedUserName = userName.trim();
 
@@ -813,6 +870,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setLastUserId(null);
       clearRevealTimer();
       lastRevealedPullIdRef.current = null;
+      revealPreferencePromptQueuedRef.current = false;
       setIsRevealOverlayVisible(false);
       setRevealCards([]);
       setRevealedCount(0);
@@ -1142,7 +1200,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   }, [itemOrderIndex, rarityOrderIndex, resultItems]);
 
   useEffect(() => {
-    if (!drawResultRevealEnabled || !lastPullId || revealCardsFromResult.length === 0) {
+    if (!isDrawResultRevealEnabled || !lastPullId || revealCardsFromResult.length === 0) {
       return;
     }
     if (lastRevealedPullIdRef.current === lastPullId) {
@@ -1164,17 +1222,17 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
     setRevealedCount(1);
     setIsRevealAnimating(true);
-  }, [clearRevealTimer, drawResultRevealEnabled, lastPullId, prefersReducedMotion, revealCardsFromResult]);
+  }, [clearRevealTimer, isDrawResultRevealEnabled, lastPullId, prefersReducedMotion, revealCardsFromResult]);
 
   useEffect(() => {
-    if (drawResultRevealEnabled || !isRevealOverlayVisible) {
+    if (isDrawResultRevealEnabled || !isRevealOverlayVisible) {
       return;
     }
 
     clearRevealTimer();
     setIsRevealAnimating(false);
     setIsRevealOverlayVisible(false);
-  }, [clearRevealTimer, drawResultRevealEnabled, isRevealOverlayVisible]);
+  }, [clearRevealTimer, isDrawResultRevealEnabled, isRevealOverlayVisible]);
 
   useEffect(() => {
     if (!isRevealOverlayVisible || !isRevealAnimating) {
@@ -2133,6 +2191,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void copyShareText('draw-result', shareContent.shareText);
   }, [copyShareText, shareContent]);
 
+  const applyDrawResultRevealPreference = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setDrawResultRevealEnabledPreference(enabled, { persist: 'immediate' });
+      uiPreferencesStore.setDrawResultRevealPreferenceConfirmed(true, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
   const handleRevealSkip = useCallback(() => {
     clearRevealTimer();
     setRevealedCount(revealCards.length);
@@ -2143,7 +2209,33 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     clearRevealTimer();
     setIsRevealAnimating(false);
     setIsRevealOverlayVisible(false);
-  }, [clearRevealTimer]);
+
+    if (!shouldPromptDrawResultRevealPreference || revealPreferencePromptQueuedRef.current) {
+      return;
+    }
+
+    // 連打や再描画で同じ確認モーダルが多重起動しないようにガードする。
+    revealPreferencePromptQueuedRef.current = true;
+
+    push(ConfirmDialog, {
+      id: 'draw-result-reveal-preference-confirm',
+      title: '表示設定の確認',
+      size: 'sm',
+      dismissible: false,
+      showHeaderCloseButton: false,
+      payload: {
+        message: DRAW_RESULT_REVEAL_PREFERENCE_CONFIRM_MESSAGE,
+        confirmLabel: '有効',
+        cancelLabel: '無効',
+        onConfirm: () => {
+          applyDrawResultRevealPreference(true);
+        },
+        onCancel: () => {
+          applyDrawResultRevealPreference(false);
+        }
+      }
+    });
+  }, [applyDrawResultRevealPreference, clearRevealTimer, push, shouldPromptDrawResultRevealPreference]);
 
   return (
     <div className="draw-gacha-dialog__frame relative flex min-h-0 flex-1 flex-col" id="draw-gacha-dialog-frame">
@@ -2240,6 +2332,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   { label: '+100', delta: 100 },
                   { label: '+10', delta: 10 },
                   { label: '+1', delta: 1 },
+                  { label: '0', setZero: true },
                   { label: '-1', delta: -1 },
                   { label: '-10', delta: -10 },
                   { label: '-100', delta: -100 },
@@ -2248,7 +2341,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   <button
                     key={item.label}
                     type="button"
-                    onClick={() => handleQuickAdjust(item.delta)}
+                    onClick={() => {
+                      if ('setZero' in item && item.setZero) {
+                        setQuickAdjustInputToZero();
+                        return;
+                      }
+                      if ('delta' in item) {
+                        handleQuickAdjust(item.delta);
+                      }
+                    }}
                     className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent"
                   >
                     {item.label}
@@ -2560,7 +2661,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </button>
         ) : null}
       </ModalFooter>
-      {drawResultRevealEnabled && isRevealOverlayVisible ? (
+      {isDrawResultRevealEnabled && isRevealOverlayVisible ? (
         <DrawResultRevealOverlay
           title={lastUserName}
           cards={revealCards}

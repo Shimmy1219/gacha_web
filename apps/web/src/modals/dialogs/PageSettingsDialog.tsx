@@ -479,6 +479,8 @@ function PageSettingsDialogView(props: PageSettingsDialogViewProps): JSX.Element
   const handleDrawResultRevealEnabledChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setDrawResultRevealEnabledPreference(enabled, { persist: 'immediate' });
+      // サイト設定で明示的にON/OFFを選んだ場合は、初回確認モーダルの再表示対象から外す。
+      uiPreferencesStore.setDrawResultRevealPreferenceConfirmed(true, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
