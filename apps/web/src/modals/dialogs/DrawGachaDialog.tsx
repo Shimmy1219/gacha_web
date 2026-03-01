@@ -102,6 +102,10 @@ interface QueuedDiscordDeliveryRequest {
   itemIdFilter?: string[];
 }
 
+interface DrawGachaDialogPayload {
+  initialUserName?: string;
+}
+
 const DRAW_RESULT_QUICK_SEND_MODE_OPTIONS: readonly ResultActionButtonsQuickSendModeOption[] = [
   { id: 'discord', label: 'Discord送信' },
   { id: 'share_url', label: '共有URL発行' }
@@ -276,7 +280,7 @@ function resolvePrimaryAssetMeta(assets: GachaCatalogItemAssetV4[] | undefined):
   };
 }
 
-export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
+export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<DrawGachaDialogPayload>): JSX.Element {
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -417,7 +421,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [pointsInputMode, setPointsInputMode] = useState<'points' | 'pulls'>('points');
   const [pullsInput, setPullsInput] = useState('10');
   const [completeExecutionsOverride, setCompleteExecutionsOverride] = useState<number | null>(null);
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(() => payload?.initialUserName?.trim() ?? '');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);

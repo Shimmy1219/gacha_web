@@ -18,6 +18,7 @@ import { getRarityTextPresentation } from '../../../../features/rarity/utils/rar
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import {
   ConfirmDialog,
+  DrawGachaDialog,
   InventoryHistoryDialog,
   OriginalPrizeSettingsDialog,
   useModal,
@@ -294,6 +295,18 @@ export function UserCard({
     });
   }, [push, userId, userName]);
 
+  const handleOpenDrawGacha = useCallback(() => {
+    setUserMenuAnchor(null);
+    push(DrawGachaDialog, {
+      id: 'draw-gacha-dialog',
+      title: 'ガチャを引く',
+      size: 'lg',
+      payload: {
+        initialUserName: userName
+      }
+    });
+  }, [push, userName]);
+
   const handleDeleteUser = useCallback(() => {
     setUserMenuAnchor(null);
     push(ConfirmDialog, {
@@ -468,6 +481,13 @@ export function UserCard({
                       onClick={() => onExport(userId)}
                     >
                       景品の保存・共有
+                    </button>
+                    <button
+                      type="button"
+                      className="user-card__draw-button toolbar-actions__draw-button btn-primary inline-flex min-h-0 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-1.5 text-xs lg:w-auto"
+                      onClick={handleOpenDrawGacha}
+                    >
+                      ガチャを引く
                     </button>
                   </div>
                 ) : null}
