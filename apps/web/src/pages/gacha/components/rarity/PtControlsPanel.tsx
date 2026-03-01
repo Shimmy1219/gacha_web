@@ -605,7 +605,7 @@ export function PtControlsPanel({
             setComplete(value);
           }}
           disabled={!isCompleteEnabled}
-          placeholder="1000"
+          placeholder="未設定"
           className={clsx(
             'ml-auto w-[12ch]',
             !isCompleteEnabled && 'pt-controls-panel__number-field--disabled'

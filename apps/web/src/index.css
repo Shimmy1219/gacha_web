@@ -501,8 +501,15 @@
     gap: 0;
     overflow-x: auto;
     overflow-y: clip;
+    scroll-padding-inline: 1rem;
     scrollbar-width: thin;
     scrollbar-color: rgba(var(--color-accent) / 0) transparent;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-scroll-area {
+      scroll-behavior: smooth;
+    }
   }
 
   .tab-scroll-area:hover {
