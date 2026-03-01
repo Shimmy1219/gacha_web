@@ -98,6 +98,22 @@ export function isDiscordMissingPermissionsError(error) {
   return raw.includes('missing permissions');
 }
 
+export function isDiscordMissingAccessError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 403) {
+    return false;
+  }
+  const code = typeof info?.jsonBody?.code === 'number' ? info.jsonBody.code : null;
+  if (code === 50001) {
+    return true;
+  }
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
+  return raw.includes('missing access');
+}
+
 export function isDiscordUnknownGuildError(error) {
   const info = extractDiscordApiErrorInfo(error);
   if (!info) {

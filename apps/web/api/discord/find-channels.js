@@ -12,6 +12,7 @@ import {
   DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS,
   DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
   isDiscordCategoryChannelLimitReachedError,
+  isDiscordMissingAccessError,
   isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError,
   PERM
@@ -503,7 +504,7 @@ export default withApiGuards({
   }
 
   const matchWithBot = matchesForMember.find((candidate) => candidate.botHasView);
-  const matchWithoutBot = matchesForMember.find((candidate) => !candidate.botHasView);
+  const matchesWithoutBot = matchesForMember.filter((candidate) => !candidate.botHasView);
 
   if (matchWithBot){
     log.info('existing channel found with bot access', {
@@ -519,42 +520,54 @@ export default withApiGuards({
     });
   }
 
-  if (matchWithoutBot){
+  if (matchesWithoutBot.length > 0){
     if (!botUserId){
       log.error('bot user id missing, cannot grant access to existing channel', {
-        channelId: matchWithoutBot.channelId,
+        channelIds: matchesWithoutBot.map((candidate) => candidate.channelId),
       });
       return res.status(500).json({
         ok:false,
         error:'DiscordボットのユーザーIDが設定されていません。',
       });
     }
-    try {
-      await dFetch(`/channels/${matchWithoutBot.channelId}/permissions/${botUserId}`, {
-        token: process.env.DISCORD_BOT_TOKEN,
-        isBot:true,
-        method:'PUT',
-        body: {
-          type: 1,
-          allow: allowMaskString,
-          deny: '0'
-        }
-      });
-      log.info('granted bot permission on existing channel', {
-        channelId: matchWithoutBot.channelId,
-        parentId: matchWithoutBot.parentId
-      });
-    } catch (error) {
-      return respondDiscordApiError(error, 'guild-channel-grant-bot');
-    }
 
-    return res.json({
-      ok:true,
-      channel_id: matchWithoutBot.channelId,
-      channel_name: matchWithoutBot.channelName ?? null,
-      created:false,
-      parent_id: matchWithoutBot.parentId
-    });
+    for (const candidate of matchesWithoutBot) {
+      try {
+        await dFetch(`/channels/${candidate.channelId}/permissions/${botUserId}`, {
+          token: process.env.DISCORD_BOT_TOKEN,
+          isBot:true,
+          method:'PUT',
+          body: {
+            type: 1,
+            allow: allowMaskString,
+            deny: '0'
+          }
+        });
+        log.info('granted bot permission on existing channel', {
+          channelId: candidate.channelId,
+          parentId: candidate.parentId
+        });
+        return res.json({
+          ok:true,
+          channel_id: candidate.channelId,
+          channel_name: candidate.channelName ?? null,
+          created:false,
+          parent_id: candidate.parentId
+        });
+      } catch (error) {
+        if (isDiscordMissingAccessError(error)) {
+          log.warn('skip inaccessible existing channel without bot access and continue fallback', {
+            channelId: candidate.channelId,
+            parentId: candidate.parentId,
+            memberId,
+            categoryIds,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+        return respondDiscordApiError(error, 'guild-channel-grant-bot');
+      }
+    }
   }
 
   const ownerBotOnlyCandidates = extractOwnerBotOnlyGiftChannelCandidates({
