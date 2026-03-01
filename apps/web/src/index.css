@@ -194,6 +194,12 @@
     padding-right: 1rem;
   }
 
+  .users-section__content--closing-scroll-lock {
+    overflow: hidden !important;
+    overscroll-behavior: contain;
+    touch-action: none;
+  }
+
   @media (min-width: 901px) {
     .rarity-section__scroll.section-scroll,
     .users-section__content.section-scroll,

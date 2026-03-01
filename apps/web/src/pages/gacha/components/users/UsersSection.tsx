@@ -31,15 +31,18 @@ const USERS_FILTER_REOPEN_WHEEL_DELTA_THRESHOLD = 12;
 const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
 const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
+const USERS_FILTER_CLOSE_ANIMATION_MS = 300;
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [filtersOverflowVisible, setFiltersOverflowVisible] = useState(true);
+  const [isScrollLockedDuringClosing, setIsScrollLockedDuringClosing] = useState(false);
   const usersContentRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
   const reachedTopAfterAutoCloseRef = useRef(false);
   const autoToggleCooldownUntilRef = useRef(0);
+  const closeAnimationUnlockTimerRef = useRef<number | null>(null);
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
@@ -76,6 +79,15 @@ export function UsersSection(): JSX.Element {
     const contentElement = usersContentRef.current;
     setFiltersOpen(false);
     setFiltersOverflowVisible(false);
+    setIsScrollLockedDuringClosing(true);
+    if (closeAnimationUnlockTimerRef.current != null) {
+      window.clearTimeout(closeAnimationUnlockTimerRef.current);
+    }
+    // transitionend が取りこぼされても解除されるよう、durationに合わせた保険タイマーを置く。
+    closeAnimationUnlockTimerRef.current = window.setTimeout(() => {
+      setIsScrollLockedDuringClosing(false);
+      closeAnimationUnlockTimerRef.current = null;
+    }, USERS_FILTER_CLOSE_ANIMATION_MS + 80);
     reachedTopAfterAutoCloseRef.current = isUsersSectionAtTop(contentElement);
     autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
     return true;
@@ -140,6 +152,11 @@ export function UsersSection(): JSX.Element {
 
   const handleUsersContentWheel = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (isScrollLockedDuringClosing) {
+        event.preventDefault();
+        return;
+      }
+
       const contentElement = usersContentRef.current;
 
       if (filtersOpen && event.deltaY >= USERS_FILTER_CLOSE_WHEEL_DELTA_THRESHOLD) {
@@ -157,7 +174,13 @@ export function UsersSection(): JSX.Element {
 
       void tryOpenFiltersByTopOverscroll();
     },
-    [closeFiltersByScrollIntent, filtersOpen, isUsersSectionAtTop, tryOpenFiltersByTopOverscroll]
+    [
+      closeFiltersByScrollIntent,
+      filtersOpen,
+      isScrollLockedDuringClosing,
+      isUsersSectionAtTop,
+      tryOpenFiltersByTopOverscroll
+    ]
   );
 
   const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
@@ -166,6 +189,11 @@ export function UsersSection(): JSX.Element {
 
   const handleUsersContentTouchMove = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (isScrollLockedDuringClosing) {
+        event.preventDefault();
+        return;
+      }
+
       const contentElement = usersContentRef.current;
       if (!contentElement) {
         return;
@@ -203,7 +231,7 @@ export function UsersSection(): JSX.Element {
         touchStartYRef.current = currentY;
       }
     },
-    [closeFiltersByScrollIntent, filtersOpen, tryOpenFiltersByTopOverscroll]
+    [closeFiltersByScrollIntent, filtersOpen, isScrollLockedDuringClosing, tryOpenFiltersByTopOverscroll]
   );
 
   const handleUsersContentTouchEnd = useCallback(() => {
@@ -234,6 +262,15 @@ export function UsersSection(): JSX.Element {
     }
   }, [filtersOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (closeAnimationUnlockTimerRef.current != null) {
+        window.clearTimeout(closeAnimationUnlockTimerRef.current);
+        closeAnimationUnlockTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleFiltersContainerTransitionEnd = useCallback(
     (event: ReactTransitionEvent<HTMLDivElement>) => {
       if (event.target !== event.currentTarget) {
@@ -244,6 +281,12 @@ export function UsersSection(): JSX.Element {
       }
       if (filtersOpen) {
         setFiltersOverflowVisible(true);
+      } else {
+        setIsScrollLockedDuringClosing(false);
+        if (closeAnimationUnlockTimerRef.current != null) {
+          window.clearTimeout(closeAnimationUnlockTimerRef.current);
+          closeAnimationUnlockTimerRef.current = null;
+        }
       }
     },
     [filtersOpen]
@@ -342,7 +385,10 @@ export function UsersSection(): JSX.Element {
           フィルタ
         </button>
       }
-      contentClassName="users-section__content"
+      contentClassName={clsx(
+        'users-section__content',
+        isScrollLockedDuringClosing && 'users-section__content--closing-scroll-lock'
+      )}
       contentElementRef={usersContentRef}
       onContentScroll={handleUsersContentScroll}
       onContentWheel={handleUsersContentWheel}
