@@ -25,6 +25,8 @@ import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
 
 const USERS_FILTER_AUTO_CLOSE_SCROLL_DELTA_THRESHOLD = 8;
+const USERS_FILTER_CLOSE_WHEEL_DELTA_THRESHOLD = 12;
+const USERS_FILTER_CLOSE_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_REOPEN_WHEEL_DELTA_THRESHOLD = 12;
 const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
@@ -49,19 +51,46 @@ export function UsersSection(): JSX.Element {
     return element.scrollHeight - element.clientHeight > 1;
   }, []);
 
-  const tryOpenFiltersByTopOverscroll = useCallback((): boolean => {
-    const contentElement = usersContentRef.current;
-    if (!contentElement || filtersOpen) {
-      return false;
-    }
-    if (!isUsersSectionScrollable(contentElement)) {
+  const isUsersSectionAtTop = useCallback(
+    (element: HTMLDivElement | null): boolean => {
+      if (!element) {
+        return true;
+      }
+      if (!isUsersSectionScrollable(element)) {
+        // スクロール領域が無い場合は「常に先頭扱い」にして、ジェスチャーだけで再オープン可能にする。
+        return true;
+      }
+      return element.scrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+    },
+    [isUsersSectionScrollable]
+  );
+
+  const closeFiltersByScrollIntent = useCallback((): boolean => {
+    if (!filtersOpen) {
       return false;
     }
     if (Date.now() < autoToggleCooldownUntilRef.current) {
       return false;
     }
 
-    const isAtTop = contentElement.scrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+    const contentElement = usersContentRef.current;
+    setFiltersOpen(false);
+    setFiltersOverflowVisible(false);
+    reachedTopAfterAutoCloseRef.current = isUsersSectionAtTop(contentElement);
+    autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+    return true;
+  }, [filtersOpen, isUsersSectionAtTop]);
+
+  const tryOpenFiltersByTopOverscroll = useCallback((): boolean => {
+    const contentElement = usersContentRef.current;
+    if (!contentElement || filtersOpen) {
+      return false;
+    }
+    if (Date.now() < autoToggleCooldownUntilRef.current) {
+      return false;
+    }
+
+    const isAtTop = isUsersSectionAtTop(contentElement);
     if (!isAtTop || !reachedTopAfterAutoCloseRef.current) {
       return false;
     }
@@ -70,7 +99,7 @@ export function UsersSection(): JSX.Element {
     reachedTopAfterAutoCloseRef.current = false;
     autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
     return true;
-  }, [filtersOpen, isUsersSectionScrollable]);
+  }, [filtersOpen, isUsersSectionAtTop]);
 
   const handleUsersContentScroll = useCallback(
     (event: ReactUIEvent<HTMLDivElement>) => {
@@ -102,22 +131,33 @@ export function UsersSection(): JSX.Element {
         Date.now() >= autoToggleCooldownUntilRef.current
       ) {
         // 下方向スクロール開始時はまずツールバーを閉じて、コンテンツ閲覧を優先する。
-        setFiltersOpen(false);
         reachedTopAfterAutoCloseRef.current = false;
-        autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+        void closeFiltersByScrollIntent();
       }
     },
-    [filtersOpen, isUsersSectionScrollable]
+    [closeFiltersByScrollIntent, filtersOpen, isUsersSectionScrollable]
   );
 
   const handleUsersContentWheel = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
+      const contentElement = usersContentRef.current;
+
+      if (filtersOpen && event.deltaY >= USERS_FILTER_CLOSE_WHEEL_DELTA_THRESHOLD) {
+        void closeFiltersByScrollIntent();
+        return;
+      }
+
       if (event.deltaY > -USERS_FILTER_REOPEN_WHEEL_DELTA_THRESHOLD) {
         return;
       }
+
+      if (contentElement && !isUsersSectionAtTop(contentElement)) {
+        return;
+      }
+
       void tryOpenFiltersByTopOverscroll();
     },
-    [tryOpenFiltersByTopOverscroll]
+    [closeFiltersByScrollIntent, filtersOpen, isUsersSectionAtTop, tryOpenFiltersByTopOverscroll]
   );
 
   const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
@@ -126,12 +166,8 @@ export function UsersSection(): JSX.Element {
 
   const handleUsersContentTouchMove = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
-      if (filtersOpen) {
-        return;
-      }
-
       const contentElement = usersContentRef.current;
-      if (!contentElement || !isUsersSectionScrollable(contentElement)) {
+      if (!contentElement) {
         return;
       }
 
@@ -141,11 +177,23 @@ export function UsersSection(): JSX.Element {
         return;
       }
 
+      const dragDistance = currentY - initialY;
+
+      if (filtersOpen) {
+        // 指が上に動く（内容は下へスクロールされる）ときに自動クローズする。
+        if (dragDistance <= -USERS_FILTER_CLOSE_TOUCH_DELTA_THRESHOLD) {
+          const closed = closeFiltersByScrollIntent();
+          if (closed) {
+            touchStartYRef.current = currentY;
+          }
+        }
+        return;
+      }
+
       if (contentElement.scrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE) {
         reachedTopAfterAutoCloseRef.current = true;
       }
 
-      const dragDistance = currentY - initialY;
       if (dragDistance < USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD) {
         return;
       }
@@ -155,7 +203,7 @@ export function UsersSection(): JSX.Element {
         touchStartYRef.current = currentY;
       }
     },
-    [filtersOpen, isUsersSectionScrollable, tryOpenFiltersByTopOverscroll]
+    [closeFiltersByScrollIntent, filtersOpen, tryOpenFiltersByTopOverscroll]
   );
 
   const handleUsersContentTouchEnd = useCallback(() => {
