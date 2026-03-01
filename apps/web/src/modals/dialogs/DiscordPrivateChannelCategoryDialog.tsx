@@ -366,9 +366,11 @@ export function DiscordPrivateChannelCategoryDialog({
     <>
       <ModalBody className="space-y-6">
         <section className="space-y-2 rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
-          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルのカテゴリを選択</h2>
+          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルを自動作成するカテゴリを選択</h2>
           <p>
-            選択したカテゴリの配下に1:1のお渡しチャンネルを自動作成します。カテゴリはこの端末に保存され、次回以降の共有に利用されます。
+            ユーザーに景品を送る際、選択したカテゴリの配下に1 on 1の景品お渡しチャンネルを自動で作成します。そのユーザーに対して、2回目以降送る時は、1回目に使用されたチャンネルに対して景品が送られます。
+            <br />
+            ※これまでにあなたが手動で作成したお渡しチャンネルには送られません。ご了承ください。
           </p>
           {selectedCategorySeries.categoryIds.length > 1 ? (
             <p className="text-xs text-surface-foreground">
@@ -383,12 +385,6 @@ export function DiscordPrivateChannelCategoryDialog({
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h3 className="text-sm font-semibold text-surface-foreground">カテゴリ一覧</h3>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {categoriesQuery.isFetching ? (
-                <span className="inline-flex items-center gap-1" aria-live="polite">
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  更新中…
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 font-medium text-surface-foreground transition hover:bg-surface/60"
@@ -398,8 +394,11 @@ export function DiscordPrivateChannelCategoryDialog({
                 disabled={categoriesQuery.isFetching}
                 aria-busy={categoriesQuery.isFetching}
               >
-                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                再取得
+                <ArrowPathIcon
+                  className={`h-4 w-4 ${categoriesQuery.isFetching ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                {categoriesQuery.isFetching ? '更新中' : '更新'}
               </button>
             </div>
           </div>
