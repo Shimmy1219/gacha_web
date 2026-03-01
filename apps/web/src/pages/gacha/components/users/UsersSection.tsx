@@ -38,6 +38,7 @@ const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
 const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
 const USERS_FILTER_CLOSE_ANIMATION_MS = 300;
+const USERS_FILTER_INTERACTIVE_SCROLL_GUARD_SELECTOR = '[role="listbox"]';
 const USERS_ALL_TAB_ID = 'users-all';
 
 interface UsersGachaTab {
@@ -61,6 +62,7 @@ export function UsersSection(): JSX.Element {
   const touchStartYRef = useRef<number | null>(null);
   const touchLastYRef = useRef<number | null>(null);
   const touchStartedAtTopRef = useRef(false);
+  const touchStartedFromListboxRef = useRef(false);
   const reachedTopAfterAutoCloseRef = useRef(false);
   const autoToggleCooldownUntilRef = useRef(0);
   const closeAnimationUnlockTimerRef = useRef<number | null>(null);
@@ -178,6 +180,14 @@ export function UsersSection(): JSX.Element {
     [isMobile, isUsersSectionAtTop, isUsersSectionScrollable]
   );
 
+  const isEventFromListbox = useCallback((target: EventTarget | null): boolean => {
+    // フィルタドロップダウン内部のスクロール操作は、ツールバー開閉ジェスチャーから除外する。
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    return target.closest(USERS_FILTER_INTERACTIVE_SCROLL_GUARD_SELECTOR) !== null;
+  }, []);
+
   const closeFiltersByScrollIntent = useCallback((): boolean => {
     if (!filtersOpen) {
       return false;
@@ -262,6 +272,10 @@ export function UsersSection(): JSX.Element {
 
   const handleUsersContentWheel = useCallback(
     (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (isEventFromListbox(event.target)) {
+        return;
+      }
+
       if (isScrollLockedDuringClosing) {
         event.preventDefault();
         return;
@@ -287,6 +301,7 @@ export function UsersSection(): JSX.Element {
     [
       closeFiltersByScrollIntent,
       filtersOpen,
+      isEventFromListbox,
       isScrollLockedDuringClosing,
       isUsersSectionAtTop,
       tryOpenFiltersByTopOverscroll
@@ -294,14 +309,25 @@ export function UsersSection(): JSX.Element {
   );
 
   const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    touchStartedFromListboxRef.current = isEventFromListbox(event.target);
+    if (touchStartedFromListboxRef.current) {
+      touchStartYRef.current = null;
+      touchLastYRef.current = null;
+      touchStartedAtTopRef.current = false;
+      return;
+    }
     const touchY = event.touches[0]?.clientY ?? null;
     touchStartYRef.current = touchY;
     touchLastYRef.current = touchY;
     touchStartedAtTopRef.current = isUsersGestureAtTop(usersContentRef.current);
-  }, [isUsersGestureAtTop]);
+  }, [isEventFromListbox, isUsersGestureAtTop]);
 
   const handleUsersContentTouchMove = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (touchStartedFromListboxRef.current || isEventFromListbox(event.target)) {
+        return;
+      }
+
       if (isScrollLockedDuringClosing) {
         event.preventDefault();
         return;
@@ -362,6 +388,7 @@ export function UsersSection(): JSX.Element {
     [
       closeFiltersByScrollIntent,
       filtersOpen,
+      isEventFromListbox,
       isScrollLockedDuringClosing,
       isUsersGestureAtTop,
       tryOpenFiltersByTopOverscroll
@@ -369,12 +396,14 @@ export function UsersSection(): JSX.Element {
   );
 
   const handleUsersContentTouchEnd = useCallback(() => {
+    touchStartedFromListboxRef.current = false;
     touchStartYRef.current = null;
     touchLastYRef.current = null;
     touchStartedAtTopRef.current = false;
   }, []);
 
   const handleUsersContentTouchCancel = useCallback(() => {
+    touchStartedFromListboxRef.current = false;
     touchStartYRef.current = null;
     touchLastYRef.current = null;
     touchStartedAtTopRef.current = false;
