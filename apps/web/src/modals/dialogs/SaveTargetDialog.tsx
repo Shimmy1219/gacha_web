@@ -420,6 +420,16 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
 
   useEffect(() => {
     setSelectedGachaIds((previous) => {
+      if (gachaEntries.length === 0) {
+        if (status !== 'ready') {
+          // 初期ロード中は呼び出し元の既定選択を維持し、全選択へのフォールバック誤作動を防ぐ。
+          return previous;
+        }
+        if (previous.length > 0) {
+          setGachaSelectionInitialized(false);
+        }
+        return [];
+      }
       if (previous.length === 0) {
         return previous;
       }
@@ -432,7 +442,7 @@ export function SaveTargetDialog({ payload, replace, close }: ModalComponentProp
       }
       return validIds;
     });
-  }, [gachaEntries]);
+  }, [gachaEntries, status]);
 
   useEffect(() => {
     setSelectedHistoryIds((previous) => {
