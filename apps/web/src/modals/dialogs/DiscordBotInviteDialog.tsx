@@ -7,6 +7,7 @@ import {
 
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
+import { DiscordBotInvitePermissionDialog } from './DiscordBotInvitePermissionDialog';
 import { useDiscordOwnedGuilds, type DiscordGuildSummary } from '../../features/discord/useDiscordOwnedGuilds';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import {
@@ -20,7 +21,10 @@ import {
   normalizeDiscordMemberGiftChannels,
   type DiscordGuildMemberSummary
 } from '../../features/discord/discordMemberCacheStorage';
-import { DISCORD_BOT_INVITE_URL } from '../../features/discord/discordInviteConfig';
+import {
+  DISCORD_BOT_INVITE_ADMIN_URL,
+  DISCORD_BOT_INVITE_URL
+} from '../../features/discord/discordInviteConfig';
 import { resolveSafeUrl } from '../../utils/safeUrl';
 import { pushDiscordApiWarningByErrorCode } from './_lib/discordApiErrorHandling';
 
@@ -28,6 +32,7 @@ interface DiscordBotInviteDialogPayload {
   userId: string;
   userName?: string;
   inviteUrl?: string;
+  inviteAdminUrl?: string;
   onGuildSelected?: (selection: DiscordGuildSelection) => void;
 }
 
@@ -61,7 +66,12 @@ export function DiscordBotInviteDialog({
 }: ModalComponentProps<DiscordBotInviteDialogPayload>): JSX.Element {
   const userId = payload?.userId;
   const inviteUrl = payload?.inviteUrl ?? DISCORD_BOT_INVITE_URL;
+  const inviteAdminUrl = payload?.inviteAdminUrl ?? DISCORD_BOT_INVITE_ADMIN_URL;
   const safeInviteUrl = useMemo(() => resolveSafeUrl(inviteUrl, { allowedProtocols: ['https:'] }), [inviteUrl]);
+  const safeInviteAdminUrl = useMemo(
+    () => resolveSafeUrl(inviteAdminUrl, { allowedProtocols: ['https:'] }),
+    [inviteAdminUrl]
+  );
   const { data, isLoading, isError, refetch, isFetching } = useDiscordOwnedGuilds(userId);
   const [selectedGuildId, setSelectedGuildId] = useState<string | null>(null);
   const [submitStage, setSubmitStage] = useState<'idle' | 'members' | 'channels'>('idle');
@@ -107,6 +117,18 @@ export function DiscordBotInviteDialog({
         onCategorySelected: (category) => {
           payload?.onGuildSelected?.({ ...selection, privateChannelCategory: category });
         }
+      }
+    });
+  };
+
+  const openInvitePermissionDialog = () => {
+    push(DiscordBotInvitePermissionDialog, {
+      id: 'discord-bot-invite-permission-dialog',
+      title: 'Bot招待権限の選択',
+      size: 'lg',
+      payload: {
+        standardInviteUrl: inviteUrl,
+        adminInviteUrl: inviteAdminUrl
       }
     });
   };
@@ -222,19 +244,19 @@ export function DiscordBotInviteDialog({
               <br />
               ※登録されたサーバーのメッセージを運営側が読むことは絶対にありません。また、メンバー情報や個人情報、メッセージ情報を運営が保存することもありません。
             </p>
-            {safeInviteUrl ? (
-              <a
-                href={safeInviteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-discord-hover"
+            {safeInviteUrl || safeInviteAdminUrl ? (
+              <button
+                type="button"
+                id="discord-bot-invite-open-permission-dialog-button"
+                className="discord-bot-invite-dialog__action-button inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-discord-hover"
+                onClick={openInvitePermissionDialog}
               >
                 <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
                 Botを招待する
-              </a>
+              </button>
             ) : (
               <span
-                className="inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary/60 px-4 py-2 text-sm font-semibold text-white/70"
+                className="discord-bot-invite-dialog__action-button inline-flex items-center gap-2 rounded-full border border-discord-primary/50 bg-discord-primary/60 px-4 py-2 text-sm font-semibold text-white/70"
                 aria-disabled="true"
               >
                 <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
