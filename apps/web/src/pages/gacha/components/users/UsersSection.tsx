@@ -32,6 +32,7 @@ const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
 const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
 const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
 const USERS_FILTER_CLOSE_ANIMATION_MS = 300;
+const USERS_FILTER_TOUCH_UPWARD_NOISE_THRESHOLD = -2;
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -40,6 +41,8 @@ export function UsersSection(): JSX.Element {
   const usersContentRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
+  const touchLastYRef = useRef<number | null>(null);
+  const touchMovedUpSinceStartRef = useRef(false);
   const reachedTopAfterAutoCloseRef = useRef(false);
   const autoToggleCooldownUntilRef = useRef(0);
   const closeAnimationUnlockTimerRef = useRef<number | null>(null);
@@ -184,7 +187,11 @@ export function UsersSection(): JSX.Element {
   );
 
   const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
-    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+    const touchY = event.touches[0]?.clientY ?? null;
+    touchStartYRef.current = touchY;
+    touchLastYRef.current = touchY;
+    // 上方向へ一度でも指が動いたジェスチャーでは再オープンしない判定に使う。
+    touchMovedUpSinceStartRef.current = false;
   }, []);
 
   const handleUsersContentTouchMove = useCallback(
@@ -204,6 +211,15 @@ export function UsersSection(): JSX.Element {
       if (initialY == null || currentY == null) {
         return;
       }
+
+      const previousY = touchLastYRef.current;
+      if (previousY != null) {
+        const moveDelta = currentY - previousY;
+        if (moveDelta <= USERS_FILTER_TOUCH_UPWARD_NOISE_THRESHOLD) {
+          touchMovedUpSinceStartRef.current = true;
+        }
+      }
+      touchLastYRef.current = currentY;
 
       const dragDistance = currentY - initialY;
 
@@ -226,9 +242,17 @@ export function UsersSection(): JSX.Element {
         return;
       }
 
+      // iOS Safariのラバーバンドで指が上方向に動いた後の戻り値が混ざると誤開きしやすいため、
+      // 「下方向へまっすぐ引いたジェスチャー」のみ再オープン対象にする。
+      if (touchMovedUpSinceStartRef.current) {
+        return;
+      }
+
       const opened = tryOpenFiltersByTopOverscroll();
       if (opened) {
         touchStartYRef.current = currentY;
+        touchLastYRef.current = currentY;
+        touchMovedUpSinceStartRef.current = false;
       }
     },
     [closeFiltersByScrollIntent, filtersOpen, isScrollLockedDuringClosing, tryOpenFiltersByTopOverscroll]
@@ -236,6 +260,8 @@ export function UsersSection(): JSX.Element {
 
   const handleUsersContentTouchEnd = useCallback(() => {
     touchStartYRef.current = null;
+    touchLastYRef.current = null;
+    touchMovedUpSinceStartRef.current = false;
   }, []);
 
   const handleFilterToggle = useCallback(() => {
