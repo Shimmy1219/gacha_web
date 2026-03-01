@@ -536,6 +536,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
     );
 
     const discordDisplayName = profile.discordDisplayName?.trim();
+    const discordUserName = profile.discordUserName?.trim();
     const discordAvatarAssetId =
       Object.prototype.hasOwnProperty.call(profile, 'discordAvatarAssetId')
         ? profile.discordAvatarAssetId ?? null
@@ -552,6 +553,7 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
       inventories,
       expandedByDefault: users.length === 0,
       discordDisplayName: discordDisplayName || undefined,
+      discordUserName: discordUserName || undefined,
       discordAvatarAssetId,
       discordAvatarUrl
     });
