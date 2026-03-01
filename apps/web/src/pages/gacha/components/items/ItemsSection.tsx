@@ -114,6 +114,7 @@ export function ItemsSection({ onRegisterGacha }: ItemsSectionProps): JSX.Elemen
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
+  const previousSelectedGachaIdRef = useRef<string | null | undefined>(data?.appState?.selectedGachaId);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
   const [sortDirection, setSortDirection] = useState<ItemSortDirection>(
@@ -407,19 +408,26 @@ export function ItemsSection({ onRegisterGacha }: ItemsSectionProps): JSX.Elemen
   }, [flatItems]);
 
   useEffect(() => {
+    const selectedGachaId = data?.appState?.selectedGachaId;
+    const selectedGachaIdChanged = previousSelectedGachaIdRef.current !== selectedGachaId;
+    previousSelectedGachaIdRef.current = selectedGachaId;
+
     if (!gachaTabs.length) {
       setActiveGachaId(null);
       return;
     }
 
     setActiveGachaId((current) => {
+      // 新規ガチャ作成時のみ selectedGachaId 変更を優先して、追加直後の表示先を新規ガチャへ合わせる。
+      if (selectedGachaIdChanged && selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
+      }
       if (current && gachaTabs.some((tab) => tab.id === current)) {
         return current;
       }
 
-      const preferred = data?.appState?.selectedGachaId;
-      if (preferred && gachaTabs.some((tab) => tab.id === preferred)) {
-        return preferred;
+      if (selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
       }
 
       return gachaTabs[0].id;

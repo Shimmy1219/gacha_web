@@ -65,20 +65,29 @@ export function RaritySection({ onRegisterGacha }: RaritySectionProps): JSX.Elem
   const [isUpdatingThumbnail, setIsUpdatingThumbnail] = useState(false);
   const [thumbnailError, setThumbnailError] = useState<string | null>(null);
   const gachaThumbnailInputRef = useRef<HTMLInputElement | null>(null);
+  const previousSelectedGachaIdRef = useRef<string | null | undefined>(appState?.selectedGachaId);
 
   useEffect(() => {
     const availableIds = (appState?.order ?? []).filter((id) => appState?.meta?.[id]?.isArchived !== true);
+    const selectedGachaId = appState?.selectedGachaId;
+    const selectedGachaIdChanged = previousSelectedGachaIdRef.current !== selectedGachaId;
+    previousSelectedGachaIdRef.current = selectedGachaId;
+
     if (availableIds.length === 0) {
       setActiveGachaId(null);
       return;
     }
 
     setActiveGachaId((current) => {
+      // 新規登録直後は selectedGachaId が更新されるため、そのタイミングだけ新規ガチャへ追従する。
+      if (selectedGachaIdChanged && selectedGachaId && availableIds.includes(selectedGachaId)) {
+        return selectedGachaId;
+      }
       if (current && availableIds.includes(current)) {
         return current;
       }
-      if (appState?.selectedGachaId && availableIds.includes(appState.selectedGachaId)) {
-        return appState.selectedGachaId;
+      if (selectedGachaId && availableIds.includes(selectedGachaId)) {
+        return selectedGachaId;
       }
       return availableIds[0];
     });
