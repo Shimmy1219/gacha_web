@@ -2,9 +2,11 @@ import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 import {
   type TouchEvent as ReactTouchEvent,
+  type TransitionEvent as ReactTransitionEvent,
   type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState
@@ -30,6 +32,7 @@ const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
 
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filtersOverflowVisible, setFiltersOverflowVisible] = useState(true);
   const usersContentRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
@@ -170,9 +173,33 @@ export function UsersSection(): JSX.Element {
         ? false
         : currentScrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
       autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+      if (!nextOpen) {
+        setFiltersOverflowVisible(false);
+      }
       return nextOpen;
     });
   }, []);
+
+  useEffect(() => {
+    if (!filtersOpen) {
+      setFiltersOverflowVisible(false);
+    }
+  }, [filtersOpen]);
+
+  const handleFiltersContainerTransitionEnd = useCallback(
+    (event: ReactTransitionEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (event.propertyName !== 'grid-template-rows') {
+        return;
+      }
+      if (filtersOpen) {
+        setFiltersOverflowVisible(true);
+      }
+    },
+    [filtersOpen]
+  );
 
   const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
     const catalogState = data?.catalogState;
@@ -280,11 +307,13 @@ export function UsersSection(): JSX.Element {
           'users-section__filters grid transition-[grid-template-rows] duration-300 ease-linear',
           filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         )}
+        onTransitionEnd={handleFiltersContainerTransitionEnd}
       >
         <div
           className={clsx(
             'transition-opacity duration-300 ease-linear',
-            filtersOpen ? 'opacity-100 overflow-visible' : 'opacity-0 overflow-hidden'
+            filtersOpen ? 'opacity-100' : 'opacity-0',
+            filtersOverflowVisible ? 'overflow-visible' : 'overflow-hidden'
           )}
         >
           <UserFilterPanel id="users-filter-panel" open={filtersOpen} />
