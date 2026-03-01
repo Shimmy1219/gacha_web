@@ -1,6 +1,8 @@
 // /api/auth/discord/callback.js
 // 認可コードをアクセストークンに交換 → /users/@me 取得 → sid を発行してKVへ保存
 import { getCookies, setCookie } from '../../_lib/cookies.js';
+import { ensureVisitorIdCookie, setVisitorIdOverride } from '../../_lib/actorContext.js';
+import { setDiscordActorCookies } from '../../_lib/actorCookies.js';
 import {
   consumeDiscordAuthState,
   deleteDiscordAuthState,
@@ -8,6 +10,7 @@ import {
   saveDiscordPwaSession,
   digestDiscordPwaClaimToken,
 } from '../../_lib/discordAuthStore.js';
+import { setDiscordSessionHintCookie } from '../../_lib/discordSessionHintCookie.js';
 import { newSid, saveSession } from '../../_lib/sessionStore.js';
 import { createRequestLogger } from '../../_lib/logger.js';
 import { resolveDiscordRedirectUri } from '../../_lib/discordAuthConfig.js';
@@ -19,7 +22,33 @@ function normalizeLoginContext(value) {
   return null;
 }
 
+function normalizeDiscordProfileText(value, maxLength = 80) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const normalized = value.normalize('NFKC').trim();
+  if (!normalized) {
+    return '';
+  }
+  return normalized.slice(0, maxLength);
+}
+
+/**
+ * Discordプロフィールから表示名を解決する。
+ * まず global_name を優先し、未設定時は username へフォールバックする。
+ * どちらも使えない場合のみ空文字を返す。
+ */
+function resolveDiscordDisplayName(profile) {
+  const globalName = normalizeDiscordProfileText(profile?.global_name, 80);
+  if (globalName) {
+    return globalName;
+  }
+  return normalizeDiscordProfileText(profile?.username, 80);
+}
+
 export default async function handler(req, res) {
+  const visitorId = ensureVisitorIdCookie(res, req);
+  setVisitorIdOverride(req, visitorId);
   const log = createRequestLogger('api/auth/discord/callback', req);
   log.info('Discordログインcallbackを受信しました', {
     hasCode: Boolean(req.query?.code),
@@ -337,16 +366,23 @@ export default async function handler(req, res) {
       return res.status(401).send(`Fetch /users/@me failed: ${t}`);
     }
     const me = await meRes.json();
+    const discordUsername = normalizeDiscordProfileText(me?.username, 80);
+    const discordDisplayName = resolveDiscordDisplayName(me) || discordUsername || String(me?.id || '');
+    // 互換フィールドnameは識別向けにusername系を維持し、表示名はdisplayNameへ分離する。
+    const resolvedSessionName = discordUsername || String(me?.id || '');
+
     log.info('Discordからユーザープロフィールを受領しました', {
       userId: me.id,
-      username: me.username,
+      username: discordUsername || null,
+      displayName: discordDisplayName || null,
       loginContext,
       statePreview,
     });
 
     log.info('Discordからユーザープロフィールを取得しました', {
       userId: me.id,
-      username: me.username,
+      username: discordUsername || null,
+      displayName: discordDisplayName || null,
       loginContext,
       statePreview,
     });
@@ -354,7 +390,9 @@ export default async function handler(req, res) {
     const now = Date.now();
     const payload = {
       uid: me.id,
-      name: me.username,
+      name: resolvedSessionName,
+      username: discordUsername || resolvedSessionName,
+      displayName: discordDisplayName,
       avatar: me.avatar,
       access_token: token.access_token,
       refresh_token: token.refresh_token, // 長期ログインの要
@@ -371,6 +409,15 @@ export default async function handler(req, res) {
 
     // sid をクッキーへ（30日）
     setCookie(res, 'sid', sid, { maxAge: 60 * 60 * 24 * 30 });
+    // actor追跡ログで利用するDiscord情報をサーバ発行Cookieに同期する。
+    setDiscordActorCookies(res, {
+      id: me.id,
+      username: payload.username,
+      displayName: payload.displayName,
+      maxAgeSec: 60 * 60 * 24 * 30
+    });
+    // クライアント側の /api/discord/me 自動取得可否を判断するヒントも同時に付与する
+    setDiscordSessionHintCookie(res);
 
     const formatParam = Array.isArray(req.query?.format)
       ? req.query?.format[0]

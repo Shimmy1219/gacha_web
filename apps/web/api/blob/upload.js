@@ -7,6 +7,7 @@
 // - デバッグログ（VERBOSE_BLOB_LOG=1 のとき詳細）
 import crypto from 'crypto';
 import { withApiGuards } from '../_lib/apiGuards.js';
+import { getCookies } from '../_lib/cookies.js';
 import { createRequestLogger } from '../_lib/logger.js';
 const VERBOSE = process.env.VERBOSE_BLOB_LOG === '1';
 const ERROR_CODE_CSRF_TOKEN_MISMATCH = 'csrf_token_mismatch';
@@ -121,7 +122,10 @@ function deriveUploadPolicy(req, payload) {
   const userId = sanitizeSegment(payload?.userId, 'anon');
   const purpose = sanitizeSegment(payload?.purpose, 'misc');
   const ownerDiscordId = sanitizeSegment(payload?.ownerDiscordId, 'anon');
-  const ownerDirectory = sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
+  const cookies = getCookies(req);
+  const cookieDiscordUsername = sanitizeDirectoryName(cookies?.d_uname || cookies?.d_name, '');
+  // ownerDirectory は d_uname(username) を優先し、未設定時のみ payload へフォールバックする。
+  const ownerDirectory = cookieDiscordUsername || sanitizeDirectoryName(payload?.ownerDiscordName, ownerDiscordId || 'anonymous');
   const receiverFromPayload = sanitizeDirectoryName(payload?.receiverName, '');
   const receiverFromFileName = sanitizeDirectoryName(
     extractReceiverDirectoryCandidate(payload?.fileName),

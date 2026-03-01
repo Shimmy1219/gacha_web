@@ -1,4 +1,10 @@
+import { useCallback } from 'react';
+import { type DashboardDesktopLayout } from '@domain/stores/uiPreferencesStore';
+import { useStoreValue } from '@domain/stores';
+
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { DashboardShell } from './components/dashboard/DashboardShell';
+import { useResponsiveDashboard } from './components/dashboard/useResponsiveDashboard';
 import { ItemsSection } from './components/items/ItemsSection';
 import { RaritySection } from './components/rarity/RaritySection';
 import { RiaguSection } from './components/riagu/RiaguSection';
@@ -10,9 +16,25 @@ export interface GachaPageProps {
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
   onOpenPageSettings?: () => void;
+  onOpenHistory?: () => void;
 }
 
-export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: GachaPageProps): JSX.Element {
+export function GachaPage({
+  onDrawGacha,
+  onRegisterGacha,
+  onOpenPageSettings,
+  onOpenHistory
+}: GachaPageProps): JSX.Element {
+  const { isMobile } = useResponsiveDashboard();
+  const { uiPreferences: uiPreferencesStore } = useDomainStores();
+  useStoreValue(uiPreferencesStore);
+  const selectedDesktopLayout = uiPreferencesStore.getDashboardDesktopLayout();
+  const handleSelectDesktopLayout = useCallback(
+    (layout: DashboardDesktopLayout) => {
+      uiPreferencesStore.setDashboardDesktopLayout(layout, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
   const { shouldShowSplash } = useGachaRegistrationState();
 
   if (shouldShowSplash) {
@@ -20,6 +42,9 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
       <GachaSplashScreen
         onRegisterGacha={onRegisterGacha}
         onOpenPageSettings={onOpenPageSettings}
+        showDesktopLayoutSelector={!isMobile}
+        selectedDesktopLayout={selectedDesktopLayout}
+        onSelectDesktopLayout={handleSelectDesktopLayout}
       />
     );
   }
@@ -29,13 +54,13 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
       id: 'rarity',
       label: 'レアリティ',
       description: '排出率とカラーの管理',
-      node: <RaritySection />
+      node: <RaritySection onRegisterGacha={onRegisterGacha} />
     },
     {
       id: 'items',
       label: 'アイテム',
       description: 'アイテム画像とリアグ同期',
-      node: <ItemsSection />
+      node: <ItemsSection onRegisterGacha={onRegisterGacha} />
     },
     {
       id: 'users',
@@ -47,9 +72,9 @@ export function GachaPage({ onDrawGacha, onRegisterGacha, onOpenPageSettings }: 
       id: 'riagu',
       label: 'リアグ',
       description: 'リアルグッズ管理',
-      node: <RiaguSection />
+      node: <RiaguSection onRegisterGacha={onRegisterGacha} />
     }
   ];
 
-  return <DashboardShell sections={sections} onDrawGacha={onDrawGacha} />;
+  return <DashboardShell sections={sections} onDrawGacha={onDrawGacha} onOpenHistory={onOpenHistory} />;
 }

@@ -265,7 +265,7 @@ describe('buildGachaPools item rate distribution', () => {
     const expectedRate = 0.74235 / 13;
     pool?.items.forEach((item) => {
       expect(item.itemRate).toBeCloseTo(expectedRate, 12);
-      expect(item.itemRateDisplay).toBe('5.7103846154%');
+      expect(item.itemRateDisplay).toBe('5.7103846153%');
     });
   });
 

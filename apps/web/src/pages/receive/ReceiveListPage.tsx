@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { clsx } from 'clsx';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
-import { ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
+import { ItemPreview, ItemPreviewButton } from '../../components/ItemPreviewThumbnail';
 import {
   getRarityTextPresentation,
   getWhiteRarityTextOutlineStyle,
@@ -26,9 +26,13 @@ import {
   saveHistoryFile
 } from './historyStorage';
 import type { ReceiveMediaItem, ReceiveMediaKind } from './types';
+import { useObjectUrl } from './hooks/useObjectUrl';
 import { DIGITAL_ITEM_TYPE_OPTIONS, type DigitalItemTypeKey, getDigitalItemTypeLabel } from '@domain/digital-items/digitalItemTypes';
 import { DigitalItemTypeDialog, IconRingWearDialog, ReceiveMediaPreviewDialog, useModal } from '../../modals';
 import { ensureReceiveHistoryThumbnailsForEntry, resolveReceiveMediaAssetId } from './receiveThumbnails';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useStoreValue } from '@domain/stores';
+import { resolveGachaThumbnailFromBlob } from '../../features/gacha/thumbnailBlobApi';
 
 interface ReceiveInventoryItem {
   key: string;
@@ -54,6 +58,7 @@ interface ReceiveGachaGroup {
   gachaName: string;
   gachaId: string | null;
   ownerNames: string[];
+  ownerIds: string[];
   items: ReceiveInventoryItem[];
   ownedKinds: number;
   totalKinds: number;
@@ -474,6 +479,16 @@ function isLikelyImageSource(sourceItem: ReceiveMediaItem): boolean {
   return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(sourceItem.filename);
 }
 
+function isLikelyAudioSource(sourceItem: ReceiveMediaItem): boolean {
+  if (sourceItem.kind === 'audio') {
+    return true;
+  }
+  if (sourceItem.mimeType?.startsWith('audio/')) {
+    return true;
+  }
+  return /\.(mp3|wav|m4a|aac|ogg)$/i.test(sourceItem.filename);
+}
+
 function resolveItemKey(gachaKey: string, itemId: string | null, itemName: string, assetId?: string | null): string {
   if (itemId && itemId.trim()) {
     return assetId && assetId.trim() ? `${gachaKey}:${itemId.trim()}:${assetId.trim()}` : `${gachaKey}:${itemId.trim()}`;
@@ -524,6 +539,8 @@ function ReceiveInventoryItemCard({
   previewCacheMaxEntries: number;
 }): JSX.Element {
   const { push } = useModal();
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const rarityPresentation = useMemo(
     () => getRarityTextPresentation(item.rarityColor ?? undefined),
     [item.rarityColor]
@@ -545,6 +562,11 @@ function ReceiveInventoryItemCard({
     () => item.sourceItems.find((sourceItem) => isLikelyImageSource(sourceItem)) ?? null,
     [item.sourceItems]
   );
+  const audioSourceItem = useMemo(
+    () => item.sourceItems.find((sourceItem) => isLikelyAudioSource(sourceItem)) ?? null,
+    [item.sourceItems]
+  );
+  const audioSourceUrl = useObjectUrl(audioSourceItem?.blob ?? null);
   const previewBlob = useMemo(
     () => item.previewThumbnailBlob ?? imageSourceItem?.blob ?? null,
     [imageSourceItem, item.previewThumbnailBlob]
@@ -571,6 +593,52 @@ function ReceiveInventoryItemCard({
   );
   const canOpenPreview = item.isOwned && hasSource && Boolean(previewSourceItem);
   const canWearIconRing = item.isOwned && item.kind === 'image' && item.digitalItemType === 'icon-ring' && Boolean(ringSourceItem);
+  const canPlayDigitalAudio = item.isOwned && item.digitalItemType === 'audio' && Boolean(audioSourceUrl);
+  const hasSecondaryAction = canWearIconRing || canPlayDigitalAudio;
+
+  useEffect(() => {
+    return () => {
+      const audioPlayer = audioPlayerRef.current;
+      if (!audioPlayer) {
+        return;
+      }
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+    };
+  }, [item.key, audioSourceUrl]);
+
+  useEffect(() => {
+    if (canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    setIsAudioPlaying(false);
+  }, [canPlayDigitalAudio]);
+
+  const handleToggleAudioPlayback = (): void => {
+    if (!canPlayDigitalAudio) {
+      return;
+    }
+    const audioPlayer = audioPlayerRef.current;
+    if (!audioPlayer) {
+      return;
+    }
+    if (isAudioPlaying) {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      return;
+    }
+    audioPlayer.currentTime = 0;
+    void audioPlayer.play().catch((error) => {
+      console.warn('Failed to play receive list item audio', { itemKey: item.key, error });
+      setIsAudioPlaying(false);
+    });
+  };
 
   return (
     <div
@@ -661,6 +729,17 @@ function ReceiveInventoryItemCard({
           </div>
           {item.isOwned ? (
             <div className="receive-list-item-card__action-row mt-1 flex items-center gap-2">
+              {canPlayDigitalAudio ? (
+                <audio
+                  ref={audioPlayerRef}
+                  src={audioSourceUrl ?? undefined}
+                  className="receive-list-item-card__audio-player hidden"
+                  preload="metadata"
+                  onPlay={() => setIsAudioPlaying(true)}
+                  onPause={() => setIsAudioPlaying(false)}
+                  onEnded={() => setIsAudioPlaying(false)}
+                />
+              ) : null}
               {canWearIconRing ? (
                 <button
                   type="button"
@@ -681,12 +760,22 @@ function ReceiveInventoryItemCard({
                   装着
                 </button>
               ) : null}
+              {canPlayDigitalAudio ? (
+                <button
+                  type="button"
+                  className="receive-list-item-card__audio-toggle-button btn btn-muted !min-h-0 h-7 flex-1 justify-center px-3 text-xs"
+                  onClick={handleToggleAudioPlayback}
+                  title={isAudioPlaying ? '音声を停止' : '音声を再生'}
+                >
+                  {isAudioPlaying ? '再生中' : '再生'}
+                </button>
+              ) : null}
               <ReceiveSaveButton
                 onClick={onSave}
                 disabled={isSaving || !hasSource}
                 className={clsx(
                   'receive-list-item-card__save-button !min-h-0 h-7 justify-center px-3 text-xs',
-                  canWearIconRing ? 'flex-1' : 'w-full'
+                  hasSecondaryAction ? 'flex-1' : 'w-full'
                 )}
               />
             </div>
@@ -700,6 +789,8 @@ function ReceiveInventoryItemCard({
 }
 
 export function ReceiveListPage(): JSX.Element {
+  const { appState: appStateStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
   const [groups, setGroups] = useState<ReceiveGachaGroup[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -709,6 +800,7 @@ export function ReceiveListPage(): JSX.Element {
   const [updatingDigitalTypeItemKey, setUpdatingDigitalTypeItemKey] = useState<string | null>(null);
   const [loadingGroupKeys, setLoadingGroupKeys] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [resolvedGroupThumbnailUrlByKey, setResolvedGroupThumbnailUrlByKey] = useState<Record<string, string | null>>({});
   const [digitalItemTypeFilter, setDigitalItemTypeFilter] = useState<DigitalItemTypeKey[] | '*'>('*');
   const [showUnownedItems, setShowUnownedItems] = useState<boolean>(true);
   const groupsRef = useRef<ReceiveGachaGroup[]>([]);
@@ -733,6 +825,30 @@ export function ReceiveListPage(): JSX.Element {
       })),
     []
   );
+
+  const gachaThumbnailMetaById = useMemo(() => {
+    const map = new Map<string, { assetId: string | null; blobUrl: string | null; ownerId: string | null }>();
+    const meta = appState?.meta ?? {};
+    Object.entries(meta).forEach(([gachaId, entry]) => {
+      if (!gachaId) {
+        return;
+      }
+      const assetId =
+        typeof entry?.thumbnailAssetId === 'string' && entry.thumbnailAssetId.length > 0
+          ? entry.thumbnailAssetId
+          : null;
+      const blobUrl =
+        typeof entry?.thumbnailBlobUrl === 'string' && entry.thumbnailBlobUrl.length > 0
+          ? entry.thumbnailBlobUrl
+          : null;
+      const ownerId =
+        typeof entry?.thumbnailOwnerId === 'string' && entry.thumbnailOwnerId.length > 0
+          ? entry.thumbnailOwnerId
+          : null;
+      map.set(gachaId, { assetId, blobUrl, ownerId });
+    });
+    return map;
+  }, [appState]);
 
   useEffect(() => {
     groupsRef.current = groups;
@@ -779,6 +895,7 @@ export function ReceiveListPage(): JSX.Element {
             gachaId: string | null;
             gachaName: string;
             ownerNames: Set<string>;
+            ownerIds: Set<string>;
             itemMap: Map<string, ReceiveInventoryItem>;
             sourceItems: ReceiveMediaItem[];
             baseKeySet: Set<string>;
@@ -795,6 +912,7 @@ export function ReceiveListPage(): JSX.Element {
           const selectionInfo = await loadReceiveZipSelectionInfo(blob);
           const pullIds = selectionInfo.pullIds;
           const ownerName = selectionInfo.ownerName;
+          const ownerId = selectionInfo.ownerId ?? entry.ownerId ?? null;
           if (pullIds.length > 0 && (!entry.pullIds || entry.pullIds.length === 0)) {
             const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
             if (index >= 0) {
@@ -806,6 +924,13 @@ export function ReceiveListPage(): JSX.Element {
             const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
             if (index >= 0) {
               updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], ownerName };
+              metadataChanged = true;
+            }
+          }
+          if (ownerId && (!entry.ownerId || !entry.ownerId.trim())) {
+            const index = updatedHistoryEntries.findIndex((candidate) => candidate.id === entry.id);
+            if (index >= 0) {
+              updatedHistoryEntries[index] = { ...updatedHistoryEntries[index], ownerId };
               metadataChanged = true;
             }
           }
@@ -878,12 +1003,16 @@ export function ReceiveListPage(): JSX.Element {
                   gachaId,
                   gachaName,
                   ownerNames: new Set<string>(),
+                  ownerIds: new Set<string>(),
                   itemMap: new Map<string, ReceiveInventoryItem>(),
                   sourceItems: [],
                   baseKeySet: new Set<string>(),
                   entryIds: new Set<string>()
                 };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
               existingGroup.baseKeySet.add(baseKey);
               existingGroup.entryIds.add(entry.id);
 
@@ -950,12 +1079,16 @@ export function ReceiveListPage(): JSX.Element {
                   gachaId,
                   gachaName,
                   ownerNames: new Set<string>(),
+                  ownerIds: new Set<string>(),
                   itemMap: new Map<string, ReceiveInventoryItem>(),
                   sourceItems: [],
                   baseKeySet: new Set<string>(),
                   entryIds: new Set<string>()
                 };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
               existingGroup.baseKeySet.add(baseKey);
               existingGroup.entryIds.add(entry.id);
 
@@ -1026,12 +1159,16 @@ export function ReceiveListPage(): JSX.Element {
                 gachaId,
                 gachaName,
                 ownerNames: new Set<string>(),
+                ownerIds: new Set<string>(),
                 itemMap: new Map<string, ReceiveInventoryItem>(),
                 sourceItems: [],
                 baseKeySet: new Set<string>(),
                 entryIds: new Set<string>()
               };
               existingGroup.ownerNames.add(ownerLabel);
+              if (ownerId) {
+                existingGroup.ownerIds.add(ownerId);
+              }
 
               const itemMap = existingGroup.itemMap;
               for (const item of gacha.items) {
@@ -1089,11 +1226,12 @@ export function ReceiveListPage(): JSX.Element {
           }
         }
 
-        const nextGroups = Array.from(gachaMap.values()).map(({ ownerNames, gachaId, gachaName, itemMap, sourceItems, entryIds }) => {
+        const nextGroups = Array.from(gachaMap.values()).map(({ ownerNames, ownerIds, gachaId, gachaName, itemMap, sourceItems, entryIds }) => {
           const items = sortInventoryItems(Array.from(itemMap.values()));
           const { ownedKinds, totalKinds, ownedCount } = summarizeGroupItems(items);
           return {
             ownerNames: Array.from(ownerNames).sort((a, b) => a.localeCompare(b)),
+            ownerIds: Array.from(ownerIds).sort((a, b) => a.localeCompare(b)),
             gachaId,
             gachaName,
             items,
@@ -1142,6 +1280,87 @@ export function ReceiveListPage(): JSX.Element {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const requestEntries = groups
+      .map((group) => {
+        const gachaId = group.gachaId?.trim();
+        if (!gachaId) {
+          return null;
+        }
+        const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
+        if (group.ownerIds.length > 1) {
+          return {
+            groupKey,
+            gachaId,
+            ownerId: null,
+            isAmbiguousGroup: true
+          };
+        }
+        return {
+          groupKey,
+          gachaId,
+          ownerId: group.ownerIds[0] ?? null,
+          isAmbiguousGroup: false
+        };
+      })
+      .filter((entry): entry is { groupKey: string; gachaId: string; ownerId: string | null; isAmbiguousGroup: boolean } => Boolean(entry));
+
+    if (requestEntries.length === 0) {
+      setResolvedGroupThumbnailUrlByKey({});
+      return;
+    }
+
+    const fixedMap: Record<string, string | null> = {};
+    const apiTargets = requestEntries.filter((entry) => {
+      if (entry.isAmbiguousGroup) {
+        fixedMap[entry.groupKey] = null;
+        return false;
+      }
+      return true;
+    });
+    if (apiTargets.length === 0) {
+      setResolvedGroupThumbnailUrlByKey(fixedMap);
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const resolved = await resolveGachaThumbnailFromBlob(
+          apiTargets.map((entry) => ({
+            gachaId: entry.gachaId,
+            ownerId: entry.ownerId
+          }))
+        );
+        if (!active) {
+          return;
+        }
+        const nextMap: Record<string, string | null> = { ...fixedMap };
+        apiTargets.forEach((entry, index) => {
+          const resolvedEntry = resolved[index];
+          if (!resolvedEntry || (resolvedEntry.match !== 'owner' && resolvedEntry.match !== 'fallback')) {
+            nextMap[entry.groupKey] = null;
+            return;
+          }
+          nextMap[entry.groupKey] =
+            typeof resolvedEntry.url === 'string' && resolvedEntry.url.length > 0
+              ? resolvedEntry.url
+              : null;
+        });
+        setResolvedGroupThumbnailUrlByKey(nextMap);
+      } catch (error) {
+        console.warn('Failed to resolve gacha thumbnails for receive list', error);
+        if (active) {
+          setResolvedGroupThumbnailUrlByKey(fixedMap);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [groups]);
 
   const displayGroups = useMemo<ReceiveGachaGroup[]>(() => {
     const selectedDigitalTypeSet =
@@ -1208,20 +1427,98 @@ export function ReceiveListPage(): JSX.Element {
   const totalOwnedCount = useMemo(() => displayGroups.reduce((sum, group) => sum + group.ownedCount, 0), [displayGroups]);
   const hasSaving = Boolean(savingGroupKey || savingItemKey || updatingDigitalTypeItemKey);
 
+  const resolveGroupSourceItemsForSave = useCallback(
+    (targetGroup: ReceiveGachaGroup): ReceiveMediaItem[] => {
+      const selectedDigitalTypeSet =
+        digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+      const seenSourceIds = new Set<string>();
+      const sourceItems: ReceiveMediaItem[] = [];
+
+      targetGroup.items.forEach((item) => {
+        if (!showUnownedItems && !item.isOwned) {
+          return;
+        }
+        if (selectedDigitalTypeSet) {
+          if (!item.digitalItemType || !selectedDigitalTypeSet.has(item.digitalItemType)) {
+            return;
+          }
+        }
+        item.sourceItems.forEach((source) => {
+          if (seenSourceIds.has(source.id)) {
+            return;
+          }
+          seenSourceIds.add(source.id);
+          sourceItems.push(source);
+        });
+      });
+
+      return sourceItems;
+    },
+    [digitalItemTypeFilter, showUnownedItems]
+  );
+
+  const filterLoadedSourceItemsForSave = useCallback(
+    (sourceItems: ReceiveMediaItem[]): ReceiveMediaItem[] => {
+      // UIと同じデジタルタイプ条件を、直接読み込んだ保存候補にも適用する。
+      const selectedDigitalTypeSet =
+        digitalItemTypeFilter === '*' ? null : new Set(digitalItemTypeFilter);
+      if (!selectedDigitalTypeSet) {
+        return sourceItems;
+      }
+      return sourceItems.filter((sourceItem) => {
+        const digitalItemType = sourceItem.metadata?.isRiagu ? null : sourceItem.metadata?.digitalItemType ?? null;
+        return Boolean(digitalItemType) && selectedDigitalTypeSet.has(digitalItemType);
+      });
+    },
+    [digitalItemTypeFilter]
+  );
+
+  const loadGroupSourceItemsFromHistory = useCallback(async (groupKey: string, entryIds: string[]): Promise<ReceiveMediaItem[]> => {
+    if (entryIds.length === 0) {
+      return [];
+    }
+
+    const sourceItemMap = new Map<string, ReceiveMediaItem>();
+    for (const entryId of entryIds) {
+      const historyBlob = await loadHistoryFile(entryId);
+      if (!historyBlob) {
+        continue;
+      }
+
+      const { mediaItems } = await loadReceiveZipInventory(historyBlob, {
+        migrateDigitalItemTypes: false,
+        includeMedia: true,
+        metadataFilter: (metadata) => resolveGroupKey(metadata.gachaId, metadata.gachaName) === groupKey
+      });
+
+      mediaItems.forEach((sourceItem) => {
+        const sourceGroupKey = resolveGroupKey(sourceItem.metadata?.gachaId, sourceItem.metadata?.gachaName);
+        if (sourceGroupKey !== groupKey) {
+          return;
+        }
+        sourceItemMap.set(sourceItem.id, sourceItem);
+      });
+    }
+
+    return Array.from(sourceItemMap.values());
+  }, []);
+
   const loadGroupMedia = useCallback(async (groupKey: string) => {
     const targetGroup = groupsRef.current.find((group) => resolveGroupKey(group.gachaId, group.gachaName) === groupKey);
     if (!targetGroup || targetGroup.mediaLoaded) {
       return;
     }
     if (targetGroup.entryIds.length === 0) {
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
           return { ...group, mediaLoaded: true };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
       return;
     }
 
@@ -1370,8 +1667,8 @@ export function ReceiveListPage(): JSX.Element {
         });
       }
 
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
@@ -1423,13 +1720,15 @@ export function ReceiveListPage(): JSX.Element {
             sourceItems: Array.from(mergedSourceMap.values()),
             mediaLoaded: true
           };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
     } catch (loadError) {
       console.error('Failed to lazy-load receive list group media', { groupKey, loadError });
       // Prevent infinite retry loop when a group media load fails.
-      setGroups((prev) =>
-        prev.map((group) => {
+      setGroups((prev) => {
+        const nextGroups = prev.map((group) => {
           if (resolveGroupKey(group.gachaId, group.gachaName) !== groupKey) {
             return group;
           }
@@ -1437,8 +1736,10 @@ export function ReceiveListPage(): JSX.Element {
             return group;
           }
           return { ...group, mediaLoaded: true };
-        })
-      );
+        });
+        groupsRef.current = nextGroups;
+        return nextGroups;
+      });
     } finally {
       const next = { ...loadingGroupKeysRef.current };
       delete next[groupKey];
@@ -1499,9 +1800,6 @@ export function ReceiveListPage(): JSX.Element {
   }, []);
 
   const handleSaveGroup = useCallback(async (group: ReceiveGachaGroup) => {
-    if (group.sourceItems.length === 0) {
-      return;
-    }
     if (typeof document === 'undefined') {
       setSaveError('まとめて保存機能はブラウザ環境でのみ利用できます。');
       return;
@@ -1510,14 +1808,44 @@ export function ReceiveListPage(): JSX.Element {
     const groupKey = resolveGroupKey(group.gachaId, group.gachaName);
     setSavingGroupKey(groupKey);
     try {
-      await saveReceiveItems(group.sourceItems);
+      let sourceItemsToSave = resolveGroupSourceItemsForSave(group);
+
+      if (sourceItemsToSave.length === 0) {
+        const currentGroup = groupsRef.current.find(
+          (candidate) => resolveGroupKey(candidate.gachaId, candidate.gachaName) === groupKey
+        );
+        if (currentGroup && !currentGroup.mediaLoaded) {
+          await loadGroupMedia(groupKey);
+        }
+        const latestGroup = groupsRef.current.find(
+          (candidate) => resolveGroupKey(candidate.gachaId, candidate.gachaName) === groupKey
+        );
+        if (latestGroup) {
+          sourceItemsToSave = resolveGroupSourceItemsForSave(latestGroup);
+        }
+
+        if (sourceItemsToSave.length === 0) {
+          // state反映タイミングで空配列になるケースを避けるため、
+          // 履歴ZIPから直接メディアを解決して保存対象を確定する。
+          const entryIdsForDirectLoad = latestGroup?.entryIds ?? currentGroup?.entryIds ?? group.entryIds;
+          const directlyLoadedSourceItems = await loadGroupSourceItemsFromHistory(groupKey, entryIdsForDirectLoad);
+          sourceItemsToSave = filterLoadedSourceItemsForSave(directlyLoadedSourceItems);
+        }
+      }
+
+      if (sourceItemsToSave.length === 0) {
+        setSaveError('保存対象の景品が見つかりませんでした。フィルタ条件をご確認ください。');
+        return;
+      }
+
+      await saveReceiveItems(sourceItemsToSave);
     } catch (saveError) {
       console.error('Failed to save receive inventory group', saveError);
       setSaveError('まとめて保存中にエラーが発生しました。個別保存をお試しください。');
     } finally {
       setSavingGroupKey(null);
     }
-  }, []);
+  }, [filterLoadedSourceItemsForSave, loadGroupMedia, loadGroupSourceItemsFromHistory, resolveGroupSourceItemsForSave]);
 
   const handleUpdateDigitalItemType = useCallback(
     async (group: ReceiveGachaGroup, item: ReceiveInventoryItem, digitalItemType: DigitalItemTypeKey) => {
@@ -1629,7 +1957,7 @@ export function ReceiveListPage(): JSX.Element {
   return (
     <div className="receive-list-page min-h-screen text-surface-foreground">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
-        <header className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
+        <header className="rounded-3xl bg-panel/85 p-6 backdrop-blur">
           <h1 className="mt-3 text-3xl font-bold">所持アイテム一覧</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             受け取り済みの景品をガチャ単位で表示します。
@@ -1747,43 +2075,74 @@ export function ReceiveListPage(): JSX.Element {
               const isCollapsed = Boolean(collapsedGroups[groupKey]);
               const isGroupLoading = Boolean(loadingGroupKeys[groupKey]);
               const contentId = createGroupDomId(groupKey);
+              const localMeta = group.gachaId ? gachaThumbnailMetaById.get(group.gachaId) ?? null : null;
+              const isLocalOwnerMatched =
+                Boolean(localMeta?.ownerId) &&
+                group.ownerIds.length === 1 &&
+                group.ownerIds[0] === localMeta?.ownerId;
+              const gachaThumbnailAssetId = isLocalOwnerMatched ? localMeta?.assetId ?? null : null;
+              const gachaThumbnailBlobUrl =
+                resolvedGroupThumbnailUrlByKey[groupKey] ??
+                (isLocalOwnerMatched ? localMeta?.blobUrl ?? null : null);
 
               return (
                 <div
                   key={groupKey}
-                  className="rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10"
+                  className="receive-list-page__group-card rounded-3xl border border-border/60 bg-panel/85 p-6"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="receive-list-page__group-card-header flex flex-col gap-3">
                     <button
                       type="button"
                       onClick={() => toggleGroup(groupKey)}
                       aria-expanded={!isCollapsed}
                       aria-controls={contentId}
-                      className="group flex-1 text-left"
+                      className="receive-list-page__group-header-button group w-full text-left"
                     >
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-lg font-semibold text-surface-foreground">{group.gachaName}</h2>
-                        <ChevronDownIcon
-                          className={clsx(
-                            'h-4 w-4 text-muted-foreground transition-transform',
-                            isCollapsed ? '' : 'rotate-180'
-                          )}
-                          aria-hidden="true"
+                      <div className="receive-list-page__group-header-row flex items-stretch gap-3">
+                        <ItemPreview
+                          assetId={gachaThumbnailAssetId}
+                          fallbackUrl={gachaThumbnailBlobUrl}
+                          alt={`${group.gachaName}の配信サムネイル`}
+                          kindHint="image"
+                          imageFit="cover"
+                          emptyLabel="noImage"
+                          className="receive-list-page__group-thumbnail h-16 w-16 flex-none bg-surface-deep"
                         />
+                        <div className="receive-list-page__group-title-wrapper min-w-0 flex-1">
+                          <div className="receive-list-page__group-title-row flex items-start gap-2">
+                            <h3
+                              className="receive-list-page__group-title min-w-0 flex-1 truncate text-lg font-semibold text-surface-foreground"
+                              title={group.gachaName}
+                            >
+                              {group.gachaName}
+                            </h3>
+                            <ChevronDownIcon
+                              className={clsx(
+                                'receive-list-page__group-chevron mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                                isCollapsed ? '' : 'rotate-180'
+                              )}
+                              aria-hidden="true"
+                            />
+                          </div>
+                          <p className="receive-list-page__group-stats text-xs text-muted-foreground">
+                            所持 {group.ownedKinds} 種類 / 全 {group.totalKinds} 種類 ・ 合計 {group.ownedCount} 個
+                          </p>
+                          <p className="receive-list-page__group-owner text-xs text-muted-foreground">
+                            オーナー: {formatOwnerNames(group.ownerNames)}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        所持 {group.ownedKinds} 種類 / 全 {group.totalKinds} 種類 ・ 合計 {group.ownedCount} 個
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        オーナー: {formatOwnerNames(group.ownerNames)}
-                      </p>
                     </button>
-                    <ReceiveBulkSaveButton
-                      onClick={() => handleSaveGroup(group)}
-                      isLoading={savingGroupKey === groupKey || isGroupLoading}
-                      disabled={hasSaving || isGroupLoading || group.sourceItems.length === 0}
-                      className="h-9 px-4 text-xs"
-                    />
+                    <div className="receive-list-page__group-save-row flex">
+                      <ReceiveBulkSaveButton
+                        onClick={() => handleSaveGroup(group)}
+                        isLoading={savingGroupKey === groupKey || isGroupLoading}
+                        disabled={hasSaving || isGroupLoading || group.ownedCount === 0}
+                        tone="accent"
+                        showIcon={false}
+                        className="receive-list-page__group-save-button w-full justify-center px-4 py-2 text-sm sm:w-auto"
+                      />
+                    </div>
                   </div>
                   {!isCollapsed ? (
                     <div id={contentId} className="mt-4 space-y-3">

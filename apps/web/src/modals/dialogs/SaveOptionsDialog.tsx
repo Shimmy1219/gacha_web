@@ -6,8 +6,7 @@ import {
   FolderArrowDownIcon,
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { GachaLocalStorageSnapshot, PullHistoryEntryV1 } from '@domain/app-persistence';
 import { getPullHistoryStatusLabel } from '@domain/pullHistoryStatusLabels';
@@ -21,8 +20,11 @@ import {
   type OriginalPrizeMissingItem,
   type ZipSelectedAsset
 } from '../../features/save/buildUserZip';
-import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
-import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
+import {
+  extractBlobUploadCsrfFailureReason,
+  isBlobUploadCsrfTokenMismatchError,
+  useBlobUpload
+} from '../../features/save/useBlobUpload';
 import type { SaveTargetSelection } from '../../features/save/types';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import {
@@ -30,19 +32,22 @@ import {
   requireDiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../features/discord/shareMessage';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
+import { useNotification } from '../../features/notification';
 import { ConfirmDialog, ModalBody, ModalFooter, type ModalComponentProps } from '..';
-import { PageSettingsDialog } from './PageSettingsDialog';
 import { openDiscordShareDialog } from '../../features/discord/openDiscordShareDialog';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import { resolveSafeUrl } from '../../utils/safeUrl';
+import { issueShareUrlByUpload } from '../../features/save/issueShareUrlByUpload';
 import {
   applyLegacyAssetsToInstances,
   alignOriginalPrizeInstances,
   buildOriginalPrizeInstanceMap
 } from '@domain/originalPrize';
 import { OriginalPrizeSettingsDialog, type OriginalPrizeSettingsDialogPayload } from './OriginalPrizeSettingsDialog';
+import { useOpenPageSettings } from '../../features/settings/openPageSettings';
 
 export interface SaveOptionsUploadResult {
   url: string;
@@ -65,17 +70,8 @@ interface LastDownloadState {
 }
 
 function formatExpiresAt(value?: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-  return new Intl.DateTimeFormat('ja-JP', {
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  }).format(date);
+  const formatted = formatDiscordShareExpiresAt(value);
+  return formatted ?? undefined;
 }
 
 function formatHistoryEntry(entry: PullHistoryEntryV1 | undefined, gachaName: string): string {
@@ -108,9 +104,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   const [isDiscordSharing, setIsDiscordSharing] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [lastDownload, setLastDownload] = useState<LastDownloadState | null>(null);
-  const [uploadNotice, setUploadNotice] = useState<{ id: number; message: string } | null>(null);
-  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noticePortalRef = useRef<HTMLDivElement | null>(null);
+  const { notify } = useNotification();
+  const openPageSettings = useOpenPageSettings();
 
   const { uploadZip } = useBlobUpload();
   const persistence = useAppPersistence();
@@ -333,18 +328,19 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(PageSettingsDialog, {
-            id: 'page-settings',
-            title: 'ページ設定',
-            size: 'lg',
-            panelClassName: 'page-settings-modal overflow-hidden',
-            showHeaderCloseButton: true
+          openPageSettings({
+            payload: {
+              focusTarget: 'misc-owner-name',
+              highlightMode: 'pulse',
+              highlightDurationMs: 7000,
+              origin: 'save-options-owner-name-warning'
+            }
           });
         }
       }
     });
     return null;
-  }, [push, resolveOwnerName]);
+  }, [openPageSettings, push, resolveOwnerName]);
   const linkDiscordProfile = useCallback(
     (params: {
       discordUserId: string;
@@ -404,52 +400,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     () => resolveSafeUrl(uploadResult?.url, { allowedProtocols: ['http:', 'https:'] }),
     [uploadResult?.url]
   );
-
-  useEffect(() => {
-    return () => {
-      if (noticeTimerRef.current) {
-        clearTimeout(noticeTimerRef.current);
-        noticeTimerRef.current = null;
-      }
-      if (noticePortalRef.current?.parentNode) {
-        noticePortalRef.current.parentNode.removeChild(noticePortalRef.current);
-        noticePortalRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!uploadNotice) {
-      return;
-    }
-    if (noticeTimerRef.current) {
-      clearTimeout(noticeTimerRef.current);
-    }
-    noticeTimerRef.current = setTimeout(() => {
-      setUploadNotice(null);
-    }, 4000);
-  }, [uploadNotice?.id]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const root = document.getElementById('modal-root');
-    if (!root) {
-      return;
-    }
-    const container = document.createElement('div');
-    root.appendChild(container);
-    noticePortalRef.current = container;
-    return () => {
-      if (container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-      if (noticePortalRef.current === container) {
-        noticePortalRef.current = null;
-      }
-    };
-  }, []);
 
   const gachaNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -623,10 +573,27 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         warnings: result.warnings,
         savedAt: new Date().toISOString()
       });
+      if (result.warnings.length > 0) {
+        notify({
+          variant: 'warning',
+          title: '保存は完了しました',
+          message: `端末への保存は完了しましたが、警告が${result.warnings.length}件あります。`
+        });
+      } else {
+        notify({
+          variant: 'success',
+          message: '端末への保存が完了しました'
+        });
+      }
     } catch (error) {
       console.error('ZIPの作成に失敗しました', error);
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`ZIPの作成に失敗しました: ${message}`);
+      notify({
+        variant: 'error',
+        title: '保存に失敗しました',
+        message
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -642,47 +609,40 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
   };
 
   const runZipUpload = useCallback(async (ownerName: string) => {
-    const { zip, uploadResponse } = await buildAndUploadSelectionZip({
+    let hasShownSlowBlobCheckNotice = false;
+    const { zip, shareLink } = await issueShareUrlByUpload({
+      persistence,
       snapshot: resolveZipSnapshot(),
       selection,
       userId,
       userName: receiverDisplayName,
       ownerName,
-      uploadZip,
       ownerDiscordId: discordSession?.user?.id,
       ownerDiscordName: discordSession?.user?.name,
+      uploadZip,
+      onBlobReuploadRetry: () => {
+        // Blob存在確認に失敗して再アップロードへ移る時だけ、待機継続の案内を一度だけ表示する。
+        if (hasShownSlowBlobCheckNotice) {
+          return;
+        }
+        hasShownSlowBlobCheckNotice = true;
+        notify({
+          variant: 'warning',
+          message: '想定よりも時間がかかっています。そのままでお待ちください'
+        });
+      },
       excludeRiaguImages
     });
 
-    const expiresAtDisplay = uploadResponse.expiresAt
-      ? formatExpiresAt(uploadResponse.expiresAt) ?? uploadResponse.expiresAt
-      : undefined;
-
-    const savedAt = new Date().toISOString();
-
-    persistence.savePartial({
-      saveOptions: {
-        [userId]: {
-          version: 3,
-          key: uploadResponse.token,
-          shareUrl: uploadResponse.shareUrl,
-          downloadUrl: uploadResponse.downloadUrl,
-          expiresAt: uploadResponse.expiresAt,
-          pathname: uploadResponse.pathname,
-          savedAt
-        }
-      }
-    });
-
     const result: SaveOptionsUploadResult = {
-      url: uploadResponse.shareUrl,
-      label: uploadResponse.shareUrl,
-      expiresAt: expiresAtDisplay
+      url: shareLink.url,
+      label: shareLink.label,
+      expiresAt: shareLink.expiresAt
     };
 
     setUploadResult(result);
 
-    return { uploadResponse, result, zip };
+    return { result, zip };
   }, [
     discordSession?.user?.id,
     discordSession?.user?.name,
@@ -692,7 +652,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     selection,
     uploadZip,
     userId,
-    excludeRiaguImages
+    excludeRiaguImages,
+    notify
   ]);
 
   const runUploadToShimmy = async (ownerName: string) => {
@@ -701,11 +662,6 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     }
     setIsUploading(true);
     setErrorBanner(null);
-    if (noticeTimerRef.current) {
-      clearTimeout(noticeTimerRef.current);
-      noticeTimerRef.current = null;
-    }
-    setUploadNotice(null);
     setUploadResult(null);
     persistence.savePartial({
       saveOptions: {
@@ -728,7 +684,10 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           zip.originalPrizeMissingPullIds
         );
       }
-      setUploadNotice({ id: Date.now(), message: 'アップロードが完了しました' });
+      notify({
+        variant: 'success',
+        message: 'アップロードが完了しました'
+      });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.info('ZIPアップロードがユーザーによってキャンセルされました');
@@ -736,12 +695,21 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       }
       console.error('ZIPアップロード処理に失敗しました', error);
       if (isBlobUploadCsrfTokenMismatchError(error)) {
-        pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+        pushCsrfTokenMismatchWarning(
+          push,
+          error instanceof Error ? error.message : undefined,
+          extractBlobUploadCsrfFailureReason(error)
+        );
         setErrorBanner(null);
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
       setErrorBanner(`アップロードに失敗しました: ${message}`);
+      notify({
+        variant: 'error',
+        title: 'アップロードに失敗しました',
+        message
+      });
     } finally {
       setIsUploading(false);
     }
@@ -803,7 +771,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
       } else {
         console.error('Discord共有用ZIPの生成またはアップロードに失敗しました', error);
         if (isBlobUploadCsrfTokenMismatchError(error)) {
-          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          pushCsrfTokenMismatchWarning(
+            push,
+            error instanceof Error ? error.message : undefined,
+            extractBlobUploadCsrfFailureReason(error)
+          );
           setErrorBanner(null);
           setIsDiscordSharing(false);
           return;
@@ -875,8 +847,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         const shareUrl = uploadData.url;
         const shareLabelCandidate = uploadData.label ?? shareUrl;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
-        const shareComment =
-          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+        const shareComment = buildDiscordShareComment({
+          shareUrl,
+          shareLabel: shareLabelCandidate,
+          expiresAtText: uploadData.expiresAt ?? null
+        });
         const { channelId, channelName, channelParentId } = await sendDiscordShareToMember({
           push,
           discordUserId,
@@ -926,8 +901,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         }
 
         setErrorBanner(null);
-        setUploadNotice({
-          id: Date.now(),
+        notify({
+          variant: 'success',
           message: `${memberDisplayName}さんにDiscordで共有しました`
         });
       } catch (error) {
@@ -942,6 +917,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
         setErrorBanner(displayMessage);
+        notify({
+          variant: 'error',
+          title: 'Discord共有に失敗しました',
+          message: displayMessage
+        });
       }
       setIsDiscordSharing(false);
       return;
@@ -954,6 +934,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
         shareUrl: uploadData.url,
         shareLabel: uploadData.label,
         receiverName: receiverDisplayName,
+        shareComment: buildDiscordShareComment({
+          shareUrl: uploadData.url,
+          shareLabel: uploadData.label ?? uploadData.url,
+          expiresAtText: uploadData.expiresAt ?? null
+        }),
         onShared: ({
           memberId: sharedMemberId,
           memberName,
@@ -1007,13 +992,18 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
               originalPrizeMissingPullIds
             );
           }
-          setUploadNotice({
-            id: Date.now(),
+          notify({
+            variant: 'success',
             message: `${memberName}さんにDiscordで共有しました`
           });
         },
         onShareFailed: (message) => {
           setErrorBanner(message);
+          notify({
+            variant: 'error',
+            title: 'Discord共有に失敗しました',
+            message
+          });
         }
       });
     } catch (error) {
@@ -1022,6 +1012,11 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
           ? error.message
           : 'Discordギルドの選択情報を取得できませんでした。Discord共有設定を確認してください。';
       setErrorBanner(message);
+      notify({
+        variant: 'error',
+        title: 'Discord共有に失敗しました',
+        message
+      });
     } finally {
       setIsDiscordSharing(false);
     }
@@ -1049,22 +1044,8 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
     });
   };
 
-  const uploadNoticePortal =
-    uploadNotice && noticePortalRef.current
-      ? createPortal(
-          <div className="pointer-events-none fixed inset-x-0 top-10 z-[120] flex justify-center">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-emerald-500/50 bg-white/95 px-5 py-2 text-sm font-medium text-black shadow-lg shadow-emerald-900/10">
-              <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
-              <span className="text-black">{uploadNotice.message}</span>
-            </div>
-          </div>,
-          noticePortalRef.current
-        )
-      : null;
-
   return (
     <>
-      {uploadNoticePortal}
       <ModalBody className="space-y-6">
         <div className="space-y-3 rounded-2xl border border-border/60 bg-surface/30 p-4 text-sm">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">保存対象一覧</div>
@@ -1102,28 +1083,28 @@ export function SaveOptionsDialog({ payload, close, push }: ModalComponentProps<
 
         <div className="grid gap-4 lg:grid-cols-3">
           <SaveOptionCard
-            title="デバイスに保存"
+            title="景品をzipにして端末に保存"
             busyTitle="生成中…"
-            description="端末にZIPを保存し、後からお好みのサービスにアップロードして共有します。"
+            description="ユーザーが獲得した景品をzipファイルにまとめ、端末に保存します。その後はギ〇ファイル便などにご自身でアップロードする形となります。"
             icon={<FolderArrowDownIcon className="h-6 w-6" />}
             onClick={handleSaveToDevice}
             disabled={isUploading}
             isBusy={isProcessing}
-            helperText="デバイスに保存"
+            helperText="景品をzipにして端末に保存"
           />
           <SaveOptionCard
-            title="zipファイルをアップロード"
+            title="景品のダウンロードURLを発行"
             busyTitle="アップロード中…"
-            description="ZIPをshimmy3.comにアップロードし、受け取り用の共有リンクを発行します。"
+            description="ユーザーが獲得した景品をアップロードして、ダウンロードURLを発行します。その後はXやdiscordにご自身で発行されたURLを送信してもらう形となります。"
             icon={<ArrowUpTrayIcon className="h-6 w-6" />}
             onClick={handleUploadToShimmy}
             disabled={isProcessing}
             isBusy={isUploading}
-            helperText="zipファイルをアップロード"
+            helperText="景品のダウンロードURLを発行"
           />
           <SaveOptionCard
             title="Discordで共有"
-            description="保存した共有リンクをDiscordのお渡しチャンネルに送信します。先に共有URLを発行してからご利用ください。"
+            description="ダウンロードURL発行から設定されたDiscordサーバーのお渡しチャンネルに送信までやります。ログインが必要ですので、先にログインとDiscord鯖の設定を行ってください。"
             disabled={isProcessing || isUploading || isDiscordSharing}
             icon={<PaperAirplaneIcon className="h-6 w-6" />}
             onClick={handleShareToDiscord}

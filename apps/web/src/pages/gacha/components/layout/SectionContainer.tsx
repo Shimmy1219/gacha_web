@@ -1,4 +1,14 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type Ref,
+  type TouchEventHandler,
+  type UIEventHandler,
+  type WheelEventHandler,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
 import { clsx } from 'clsx';
 
 import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
@@ -7,31 +17,60 @@ interface SectionContainerProps {
   id?: string;
   title: string;
   description?: string;
-  accentLabel?: string;
   actions?: ReactNode;
+  leadingAction?: ReactNode;
   filterButton?: ReactNode;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
   forceMobile?: boolean;
+  contentElementRef?: Ref<HTMLDivElement>;
+  onContentScroll?: UIEventHandler<HTMLDivElement>;
+  onContentWheel?: WheelEventHandler<HTMLDivElement>;
+  onContentTouchStart?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchMove?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchEnd?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchCancel?: TouchEventHandler<HTMLDivElement>;
 }
 
 export function SectionContainer({
   id,
   title,
   description,
-  accentLabel,
   actions,
+  leadingAction,
   filterButton,
   children,
   className,
   contentClassName,
-  forceMobile = false
+  forceMobile = false,
+  contentElementRef,
+  onContentScroll,
+  onContentWheel,
+  onContentTouchStart,
+  onContentTouchMove,
+  onContentTouchEnd,
+  onContentTouchCancel
 }: SectionContainerProps): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
   const { isMobile } = useResponsiveDashboard();
   const isMobileLayout = forceMobile || isMobile;
+
+  const setContentElementRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      if (!contentElementRef) {
+        return;
+      }
+      if (typeof contentElementRef === 'function') {
+        contentElementRef(node);
+        return;
+      }
+      contentElementRef.current = node;
+    },
+    [contentElementRef]
+  );
 
   const updateScrollbarState = useCallback(() => {
     const element = contentRef.current;
@@ -86,15 +125,21 @@ export function SectionContainer({
       <div className="section-container__body relative z-[1] flex h-full min-h-0 flex-col gap-2">
         <header className="section-container__header flex shrink-0 flex-wrap items-start justify-between gap-4 px-4">
           <div className="section-container__header-primary flex flex-1 flex-col gap-2 sm:w-full">
-            {accentLabel ? (
-              <span className="section-container__accent badge">{accentLabel}</span>
-            ) : null}
             <div className="section-container__title-block space-y-1 sm:max-w-none">
-              <div className="section-container__title-row flex items-center gap-3">
-                <h2 className="section-container__title flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+              <div className="section-container__title-row flex items-center justify-between gap-3">
+                <div className="section-container__title-row-left flex min-w-0 flex-1 items-center gap-2">
+                  {leadingAction ? (
+                    <div className="section-container__leading-action-wrapper flex shrink-0 items-center">
+                      {leadingAction}
+                    </div>
+                  ) : null}
+                  <h2 className="section-container__title min-w-0 flex-1 text-lg font-semibold text-surface-foreground sm:text-xl">{title}</h2>
+                </div>
                 {filterButton ? (
-                  <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
-                    {filterButton}
+                  <div className="section-container__title-row-right flex shrink-0 items-center">
+                    <div className="section-container__filter-button-wrapper flex shrink-0 items-center">
+                      {filterButton}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -112,13 +157,19 @@ export function SectionContainer({
           )}
         >
           <div
-            ref={contentRef}
+            ref={setContentElementRef}
             className={clsx(
               'section-container__content min-h-0 space-y-4',
               isMobileLayout ? 'h-auto overflow-visible' : 'section-scroll h-full',
               !isMobileLayout && !hasScrollbar && 'section-scroll--no-scrollbar',
               contentClassName
             )}
+            onScroll={onContentScroll}
+            onWheel={onContentWheel}
+            onTouchStart={onContentTouchStart}
+            onTouchMove={onContentTouchMove}
+            onTouchEnd={onContentTouchEnd}
+            onTouchCancel={onContentTouchCancel}
           >
             {children}
           </div>

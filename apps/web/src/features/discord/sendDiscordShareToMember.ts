@@ -17,6 +17,7 @@ interface FindChannelsResponsePayload {
   created?: boolean;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface SendDiscordResponsePayload {
@@ -161,7 +162,11 @@ export async function sendDiscordShareToMember({
           continue;
         }
 
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+        if (
+          pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, {
+            csrfReason: findPayload?.csrfReason
+          })
+        ) {
           throw new Error('Discordギルドの設定を確認してください。');
         }
         throw new Error(message);

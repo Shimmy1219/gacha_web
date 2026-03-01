@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent
 } from 'react';
 import { RadioGroup } from '@headlessui/react';
 import { ArrowPathIcon, PencilSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -16,8 +17,8 @@ import { SwitchField } from '../../pages/gacha/components/form/SwitchField';
 import { useSiteTheme } from '../../features/theme/SiteThemeProvider';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { SITE_ACCENT_PALETTE } from '../../features/theme/siteAccentPalette';
-import { ConfirmDialog, ModalBody } from '..';
-import { type ModalComponent } from '../ModalTypes';
+import { ConfirmDialog, ModalBody, useModal } from '..';
+import { type ModalComponent, type ModalComponentProps } from '../ModalTypes';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { deleteAllAssets } from '@domain/assets/assetStorage';
 import { useStoreValue } from '@domain/stores';
@@ -27,26 +28,40 @@ import { clearToolbarPreferencesStorage } from '../../features/toolbar/toolbarSt
 import { clearDashboardControlsPositionStorage } from '../../pages/gacha/components/dashboard/dashboardControlsPositionStorage';
 import { useResponsiveDashboard } from '../../pages/gacha/components/dashboard/useResponsiveDashboard';
 import { useGachaDeletion } from '../../features/gacha/hooks/useGachaDeletion';
+import { useNotification } from '../../features/notification';
 import { OfficialXAccountPanel } from '../../components/OfficialXAccountPanel';
+import { syncOwnerNameActorCookie } from '../../features/receive/ownerActorCookie';
 import {
+  DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
+  DEFAULT_DRAW_RESULT_REVEAL_ENABLED,
+  DEFAULT_SITE_ZOOM_PERCENT,
   DEFAULT_GACHA_OWNER_SHARE_RATE,
-  type DashboardDesktopLayout
+  DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES,
+  SITE_ZOOM_PERCENT_MAX,
+  SITE_ZOOM_PERCENT_MIN,
+  type DashboardDesktopLayout,
+  type DrawResultRevealBackgroundColor
 } from '@domain/stores/uiPreferencesStore';
 import { ReceiveIconRegistryPanel } from './ReceiveIconRegistryPanel';
 import { useReceiveIconRegistry } from '../../pages/receive/hooks/useReceiveIconRegistry';
+import {
+  buildPageSettingsDialogProps,
+  type PageSettingsDialogPayload,
+  type PageSettingsFocusTargetKey,
+  type PageSettingsHighlightMode,
+  type PageSettingsMenuKey
+} from './pageSettingsDialogConfig';
 
 interface MenuItem {
-  id: SettingsMenuKey;
+  id: PageSettingsMenuKey;
   label: string;
   description: string;
 }
 
-type SettingsMenuKey = 'gacha' | 'site-theme' | 'layout' | 'receive' | 'misc';
-
 const MENU_ITEMS: MenuItem[] = [
   {
     id: 'gacha',
-    label: 'ガチャ一覧',
+    label: 'ガチャ設定',
     description: '一覧ページの並べ替えや表示項目を調整します。'
   },
   {
@@ -56,7 +71,7 @@ const MENU_ITEMS: MenuItem[] = [
   },
   {
     id: 'layout',
-    label: 'レイアウト',
+    label: 'レイアウトとズーム',
     description: 'ページ全体のレイアウトや表示方法を切り替えます。'
   },
   {
@@ -78,13 +93,13 @@ const DASHBOARD_DESKTOP_LAYOUT_OPTIONS: Array<{
 }> = [
   {
     value: 'grid',
-    label: 'カードグリッド',
+    label: '4カラム表示',
     description: '各セクションを複数列で同時に表示します。従来のデスクトップ表示です。'
   },
   {
     value: 'sidebar',
-    label: 'サイドタブ',
-    description: '左側のタブでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
+    label: 'サイドバー表示',
+    description: '左側のサイドバーでセクションを切り替えます。横幅が狭い画面でも閲覧しやすい構成です。'
   }
 ];
 
@@ -110,6 +125,44 @@ const CUSTOM_BASE_TONE_OPTIONS = [
   previewBackground: string;
   previewForeground: string;
 }>;
+
+const DRAW_RESULT_REVEAL_BACKGROUND_OPTIONS: Array<{
+  value: DrawResultRevealBackgroundColor;
+  label: string;
+  description: string;
+  previewColor: string;
+}> = [
+  {
+    value: 'black',
+    label: '黒',
+    description: '現在の演出と同様に暗めの背景で表示します。',
+    previewColor: '#000000'
+  },
+  {
+    value: 'white',
+    label: '白',
+    description: '明るい背景で表示します。',
+    previewColor: '#ffffff'
+  },
+  {
+    value: 'pink',
+    label: 'ピンク',
+    description: '淡いピンクの背景で表示します。',
+    previewColor: '#fbcfe8'
+  },
+  {
+    value: 'purple',
+    label: '紫',
+    description: '淡い紫の背景で表示します。',
+    previewColor: '#e9d5ff'
+  },
+  {
+    value: 'light-blue',
+    label: '水色',
+    description: '淡い水色の背景で表示します。',
+    previewColor: '#bae6fd'
+  }
+];
 
 function ReceiveSettingsContent(): JSX.Element {
   const { iconAssetIds, remainingSlots, isProcessing, error, addIcons, removeIcon } = useReceiveIconRegistry();
@@ -147,33 +200,89 @@ function formatOwnerShareRateInput(value: number): string {
   return Number.isFinite(percent) ? String(percent).replace(/\.0$/, '') : '';
 }
 
-const REM_IN_PIXELS = 16;
-const BASE_MODAL_MIN_HEIGHT_REM = 28;
-const VIEWPORT_PADDING_REM = 12;
-const BASE_MODAL_MIN_HEIGHT_PX = BASE_MODAL_MIN_HEIGHT_REM * REM_IN_PIXELS;
-const VIEWPORT_PADDING_PX = VIEWPORT_PADDING_REM * REM_IN_PIXELS;
+const PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY = 'pageSettingsZoomPreview';
+const DEFAULT_HIGHLIGHT_DURATION_MS = 7000;
+const MIN_HIGHLIGHT_DURATION_MS = 2000;
+const MAX_HIGHLIGHT_DURATION_MS = 20000;
 
-export const PageSettingsDialog: ModalComponent = (props) => {
-  const { close, push } = props;
-  const modalBodyRef = useRef<HTMLDivElement | null>(null);
-  const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('site-theme');
+interface FocusTargetDefinition {
+  menu: PageSettingsMenuKey;
+  containerId: string;
+  focusElementId: string;
+}
+
+const PAGE_SETTINGS_FOCUS_TARGETS: Record<PageSettingsFocusTargetKey, FocusTargetDefinition> = {
+  'misc-owner-name': {
+    menu: 'misc',
+    containerId: 'page-settings-focus-target-owner-name',
+    focusElementId: 'owner-name'
+  },
+  'gacha-owner-share-rate': {
+    menu: 'gacha',
+    containerId: 'page-settings-focus-target-gacha-owner-share-rate',
+    focusElementId: 'gacha-owner-share-rate'
+  },
+  'layout-site-zoom': {
+    menu: 'layout',
+    containerId: 'page-settings-focus-target-layout-site-zoom',
+    focusElementId: 'page-settings-site-zoom-range'
+  }
+};
+
+function clampSiteZoomPercent(value: number): number {
+  return Math.min(Math.max(Math.round(value), SITE_ZOOM_PERCENT_MIN), SITE_ZOOM_PERCENT_MAX);
+}
+
+function clampHighlightDurationMs(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_HIGHLIGHT_DURATION_MS;
+  }
+  const normalized = Math.round(value as number);
+  return Math.min(Math.max(normalized, MIN_HIGHLIGHT_DURATION_MS), MAX_HIGHLIGHT_DURATION_MS);
+}
+
+interface PageSettingsDialogViewProps {
+  close: ModalComponentProps<PageSettingsDialogPayload>['close'];
+  push: ModalComponentProps<PageSettingsDialogPayload>['push'];
+  isTop: ModalComponentProps<PageSettingsDialogPayload>['isTop'];
+  payload?: PageSettingsDialogPayload;
+  standaloneMode?: boolean;
+}
+
+// サイト設定UI本体。モーダル表示とページ表示（standalone）の両方で共有する。
+function PageSettingsDialogView(props: PageSettingsDialogViewProps): JSX.Element {
+  const { close, push, isTop, payload, standaloneMode = false } = props;
+  const requestedFocusTarget = payload?.focusTarget ?? null;
+  const requestedFocusDefinition = requestedFocusTarget ? PAGE_SETTINGS_FOCUS_TARGETS[requestedFocusTarget] : null;
+  const requestedInitialMenu = payload?.initialMenu ?? null;
+  const initialMenu = requestedFocusDefinition?.menu ?? requestedInitialMenu ?? 'site-theme';
+  const highlightMode: PageSettingsHighlightMode = payload?.highlightMode === 'persistent' ? 'persistent' : 'pulse';
+  const highlightDurationMs = clampHighlightDurationMs(payload?.highlightDurationMs);
+  const { notify } = useNotification();
+  const deepLinkAppliedRef = useRef<string | null>(null);
+  const focusExecutionRef = useRef<string | null>(null);
+  const [activeMenu, setActiveMenu] = useState<PageSettingsMenuKey>(initialMenu);
+  const [highlightedFocusTarget, setHighlightedFocusTarget] = useState<PageSettingsFocusTargetKey | null>(
+    requestedFocusTarget
+  );
   const [showArchived, setShowArchived] = useState(true);
   const [showBetaTips, setShowBetaTips] = useState(true);
   const [confirmLogout, setConfirmLogout] = useState(true);
   const [isDeletingAllData, setIsDeletingAllData] = useState(false);
   const [isResettingDiscordServerInfo, setIsResettingDiscordServerInfo] = useState(false);
-  const [maxBodyHeight, setMaxBodyHeight] = useState<number>(BASE_MODAL_MIN_HEIGHT_PX);
-  const [viewportMaxHeight, setViewportMaxHeight] = useState<number | null>(null);
   const [isLargeLayout, setIsLargeLayout] = useState<boolean>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
       return true;
     }
     return window.matchMedia('(min-width: 1024px)').matches;
   });
-  const { forceSidebarLayout } = useResponsiveDashboard();
+  const { forceSidebarLayout, isMobile: isMobileDashboard } = useResponsiveDashboard();
   const isSidebarLayoutForced = forceSidebarLayout;
   const [activeView, setActiveView] = useState<'menu' | 'content'>(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
+      return 'content';
+    }
+    if (requestedFocusTarget) {
       return 'content';
     }
     return window.matchMedia('(min-width: 1024px)').matches ? 'content' : 'menu';
@@ -204,6 +313,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const [desktopLayout, setDesktopLayout] = useState<DashboardDesktopLayout>(() =>
     uiPreferencesStore.getDashboardDesktopLayout()
   );
+  const [siteZoomPercent, setSiteZoomPercent] = useState<number>(() =>
+    uiPreferencesStore.getSiteZoomPercent()
+  );
+  const [isZoomPreviewing, setIsZoomPreviewing] = useState(false);
   const appState = useStoreValue(appStateStore);
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const quickSendNewOnlyPreference = useMemo(
@@ -211,6 +324,17 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const quickSendNewOnly = quickSendNewOnlyPreference ?? false;
+  const drawResultRevealEnabledPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealEnabled = drawResultRevealEnabledPreference ?? DEFAULT_DRAW_RESULT_REVEAL_ENABLED;
+  const drawResultRevealBackgroundColorPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealBackgroundColorPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealBackgroundColor =
+    drawResultRevealBackgroundColorPreference ?? DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR;
   const excludeRiaguImagesPreference = useMemo(
     () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -236,6 +360,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [uiPreferencesState, uiPreferencesStore]
   );
   const gachaOwnerShareRate = gachaOwnerShareRatePreference ?? DEFAULT_GACHA_OWNER_SHARE_RATE;
+  const confirmArchiveGacha = useGachaDeletion({ mode: 'archive' });
   const confirmPermanentDeleteGacha = useGachaDeletion({ mode: 'delete' });
   const [editingGachaId, setEditingGachaId] = useState<string | null>(null);
   const [editingGachaName, setEditingGachaName] = useState('');
@@ -315,6 +440,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   useEffect(() => {
     const prefs = persistence.loadSnapshot().receivePrefs;
     setOwnerName(prefs?.ownerName ?? '');
+    // 初回表示時にlocalStorageの値をactor cookieへ反映して、APIログとの相関を維持する。
+    syncOwnerNameActorCookie(prefs?.ownerName ?? null);
   }, [discordSession?.loggedIn, discordSession?.user?.name, persistence]);
 
   const persistOwnerName = useCallback(
@@ -329,6 +456,8 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         ownerName: normalized.length > 0 ? normalized : null
       };
       persistence.saveReceivePrefsDebounced(nextPrefs);
+      // owner_name cookieも同時更新して、APIログでowner actorを判別できるようにする。
+      syncOwnerNameActorCookie(nextPrefs.ownerName ?? null);
     },
     [persistence]
   );
@@ -344,6 +473,23 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   const handleQuickSendNewOnlyChange = useCallback(
     (enabled: boolean) => {
       uiPreferencesStore.setQuickSendNewOnlyPreference(enabled, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleDrawResultRevealEnabledChange = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setDrawResultRevealEnabledPreference(enabled, { persist: 'immediate' });
+      // サイト設定で明示的にON/OFFを選んだ場合は、初回確認モーダルの再表示対象から外す。
+      uiPreferencesStore.setDrawResultRevealPreferenceConfirmed(true, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+  const handleDrawResultRevealBackgroundColorChange = useCallback(
+    (nextColor: DrawResultRevealBackgroundColor) => {
+      if (!DRAW_RESULT_REVEAL_BACKGROUND_COLOR_VALUES.includes(nextColor)) {
+        return;
+      }
+      uiPreferencesStore.setDrawResultRevealBackgroundColorPreference(nextColor, { persist: 'immediate' });
     },
     [uiPreferencesStore]
   );
@@ -386,6 +532,59 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     [isSidebarLayoutForced, uiPreferencesStore]
   );
 
+  const handleSiteZoomChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const numeric = Number(event.target.value);
+      if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+        return;
+      }
+      const nextZoomPercent = clampSiteZoomPercent(numeric);
+      setSiteZoomPercent(nextZoomPercent);
+      uiPreferencesStore.setSiteZoomPercent(nextZoomPercent, { persist: 'debounced' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleCommitSiteZoom = useCallback(() => {
+    const normalized = clampSiteZoomPercent(siteZoomPercent);
+    uiPreferencesStore.setSiteZoomPercent(normalized, { persist: 'immediate', emit: false });
+  }, [siteZoomPercent, uiPreferencesStore]);
+
+  const handleStartZoomPreview = useCallback(
+    (_event: ReactPointerEvent<HTMLInputElement>) => {
+      if (isMobileDashboard) {
+        return;
+      }
+      setIsZoomPreviewing(true);
+    },
+    [isMobileDashboard]
+  );
+
+  const handleStopZoomPreview = useCallback(() => {
+    setIsZoomPreviewing(false);
+    handleCommitSiteZoom();
+  }, [handleCommitSiteZoom]);
+
+  const handleSiteZoomSliderBlur = useCallback(() => {
+    handleStopZoomPreview();
+  }, [handleStopZoomPreview]);
+
+  const handleSiteZoomSliderKeyUp = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      const commitKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']);
+      if (commitKeys.has(event.key)) {
+        handleCommitSiteZoom();
+      }
+    },
+    [handleCommitSiteZoom]
+  );
+
+  const handleResetSiteZoom = useCallback(() => {
+    setIsZoomPreviewing(false);
+    setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT);
+    uiPreferencesStore.setSiteZoomPercent(DEFAULT_SITE_ZOOM_PERCENT, { persist: 'immediate' });
+  }, [uiPreferencesStore]);
+
   const handleDeleteAllData = useCallback(async () => {
     if (isDeletingAllData) {
       return;
@@ -414,9 +613,11 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       succeeded = true;
     } catch (error) {
       console.error('Failed to delete all data', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert('全てのデータを削除できませんでした。ブラウザのストレージ設定をご確認の上、再度お試しください。');
-      }
+      notify({
+        variant: 'error',
+        title: 'データ削除に失敗しました',
+        message: '全てのデータを削除できませんでした。ブラウザのストレージ設定をご確認の上、再度お試しください。'
+      });
     } finally {
       setIsDeletingAllData(false);
       if (succeeded) {
@@ -432,6 +633,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     clearToolbarPreferencesStorage,
     deleteAllAssets,
     isDeletingAllData,
+    notify,
     persistence,
     ptControlsStore,
     pullHistoryStore,
@@ -454,15 +656,15 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       userProfilesStore.resetDiscordInfo({ persist: 'immediate' });
     } catch (error) {
       console.error('Failed to reset Discord server info', error);
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        window.alert(
-          'Discordサーバー情報のリセットに失敗しました。ブラウザのストレージ設定をご確認の上、再度お試しください。'
-        );
-      }
+      notify({
+        variant: 'error',
+        title: 'Discord情報のリセットに失敗しました',
+        message: 'ブラウザのストレージ設定をご確認の上、再度お試しください。'
+      });
     } finally {
       setIsResettingDiscordServerInfo(false);
     }
-  }, [isResettingDiscordServerInfo, userProfilesStore]);
+  }, [isResettingDiscordServerInfo, notify, userProfilesStore]);
 
   const handleRequestDeleteAllData = useCallback(() => {
     if (isDeletingAllData) {
@@ -487,13 +689,23 @@ export const PageSettingsDialog: ModalComponent = (props) => {
 
   const gachaEntries = useMemo(() => {
     if (!appState) {
-      return [] as Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }>;
+      return [] as Array<{
+        id: string;
+        name: string;
+        isSelected: boolean;
+        isArchived: boolean;
+      }>;
     }
 
     const order = appState.order ?? [];
     const meta = appState.meta ?? {};
     const seen = new Set<string>();
-    const entries: Array<{ id: string; name: string; isSelected: boolean; isArchived: boolean }> = [];
+    const entries: Array<{
+      id: string;
+      name: string;
+      isSelected: boolean;
+      isArchived: boolean;
+    }> = [];
 
     const append = (gachaId: string | undefined | null) => {
       if (!gachaId || seen.has(gachaId)) {
@@ -567,6 +779,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
   }, [uiPreferencesState, uiPreferencesStore]);
 
   useEffect(() => {
+    setSiteZoomPercent(uiPreferencesStore.getSiteZoomPercent());
+  }, [uiPreferencesState, uiPreferencesStore]);
+
+  useEffect(() => {
     const nextValue = formatOwnerShareRateInput(gachaOwnerShareRate);
     setOwnerShareRateInput((previous) => (previous === nextValue ? previous : nextValue));
   }, [gachaOwnerShareRate]);
@@ -577,25 +793,59 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     setCustomAccentDraft(customAccentColor.toUpperCase());
   }, [customAccentColor]);
 
-  useLayoutEffect(() => {
-    if (typeof window === 'undefined') {
+  useEffect(() => {
+    if (!isZoomPreviewing || typeof window === 'undefined') {
       return;
     }
 
-    const updateViewport = () => {
-      const innerHeight = window.innerHeight;
-      const next = innerHeight - VIEWPORT_PADDING_PX;
-      const limit = next > 0 ? next : innerHeight;
-      setViewportMaxHeight(limit > 0 ? limit : null);
+    const stopPreview = () => {
+      handleStopZoomPreview();
     };
 
-    updateViewport();
-    window.addEventListener('resize', updateViewport);
+    window.addEventListener('pointerup', stopPreview);
+    window.addEventListener('pointercancel', stopPreview);
 
     return () => {
-      window.removeEventListener('resize', updateViewport);
+      window.removeEventListener('pointerup', stopPreview);
+      window.removeEventListener('pointercancel', stopPreview);
     };
-  }, []);
+  }, [handleStopZoomPreview, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (activeMenu !== 'layout' && isZoomPreviewing) {
+      handleStopZoomPreview();
+    }
+  }, [activeMenu, handleStopZoomPreview, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (isMobileDashboard && isZoomPreviewing) {
+      handleStopZoomPreview();
+    }
+  }, [handleStopZoomPreview, isMobileDashboard, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (isTop || !isZoomPreviewing) {
+      return;
+    }
+    handleStopZoomPreview();
+  }, [handleStopZoomPreview, isTop, isZoomPreviewing]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const { body } = document;
+    if (isZoomPreviewing) {
+      body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY] = '1';
+    } else {
+      delete body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY];
+    }
+
+    return () => {
+      delete body.dataset[PAGE_SETTINGS_ZOOM_PREVIEW_DATASET_KEY];
+    };
+  }, [isZoomPreviewing]);
 
   useLayoutEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') {
@@ -623,30 +873,6 @@ export const PageSettingsDialog: ModalComponent = (props) => {
       } else {
         mediaQuery.removeListener(updateLayout);
       }
-    };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (typeof window === 'undefined' || typeof window.ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const element = modalBodyRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new window.ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const nextHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, Math.ceil(entry.contentRect.height));
-        setMaxBodyHeight((previous) => (nextHeight > previous ? nextHeight : previous));
-      }
-    });
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
     };
   }, []);
 
@@ -696,8 +922,104 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     );
   }, [showDiscordLogsPreference]);
 
+  // 外部から指定された初期メニュー/フォーカスターゲットを初回描画時に反映する。
+  // 依存配列にはpayload由来の値だけを置き、通常操作では再適用しない。
+  useEffect(() => {
+    const deepLinkKey = `${requestedInitialMenu ?? ''}:${requestedFocusTarget ?? ''}`;
+    if (deepLinkAppliedRef.current === deepLinkKey) {
+      return;
+    }
+    deepLinkAppliedRef.current = deepLinkKey;
+    focusExecutionRef.current = null;
+
+    const nextMenu = requestedFocusDefinition?.menu ?? requestedInitialMenu;
+    if (nextMenu) {
+      setActiveMenu(nextMenu);
+    }
+
+    if (requestedFocusTarget) {
+      setHighlightedFocusTarget(requestedFocusTarget);
+      if (!isLargeLayout) {
+        setActiveView('content');
+      }
+    }
+  }, [isLargeLayout, requestedFocusDefinition, requestedFocusTarget, requestedInitialMenu]);
+
+  // ターゲット要素が表示可能になったタイミングでスクロール・フォーカスし、入力位置を明確化する。
+  // レイアウトや表示ビューが変わった時のみ再評価する。
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!requestedFocusTarget || !requestedFocusDefinition) {
+      return;
+    }
+    if (activeMenu !== requestedFocusDefinition.menu) {
+      return;
+    }
+    if (!isLargeLayout && activeView !== 'content') {
+      return;
+    }
+
+    const focusExecutionKey = `${requestedFocusTarget}:${activeMenu}:${activeView}:${isLargeLayout}`;
+    if (focusExecutionRef.current === focusExecutionKey) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      const containerElement = document.getElementById(requestedFocusDefinition.containerId);
+      if (!(containerElement instanceof HTMLElement)) {
+        return;
+      }
+
+      containerElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+
+      const focusElement = document.getElementById(requestedFocusDefinition.focusElementId);
+      if (focusElement instanceof HTMLElement) {
+        focusElement.focus({ preventScroll: true });
+      } else {
+        containerElement.focus({ preventScroll: true });
+      }
+
+      setHighlightedFocusTarget(requestedFocusTarget);
+      focusExecutionRef.current = focusExecutionKey;
+    }, 80);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [activeMenu, activeView, isLargeLayout, requestedFocusDefinition, requestedFocusTarget]);
+
+  // pulse指定時のみハイライトを一定時間で解除し、通常表示へ戻す。
+  // highlightedFocusTargetが切り替わるたびにタイマーを張り直す。
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!highlightedFocusTarget || highlightMode === 'persistent') {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setHighlightedFocusTarget((current) => (current === highlightedFocusTarget ? null : current));
+    }, highlightDurationMs);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [highlightDurationMs, highlightMode, highlightedFocusTarget]);
+
+  const isFocusTargetHighlighted = useCallback(
+    (target: PageSettingsFocusTargetKey) => highlightedFocusTarget === target,
+    [highlightedFocusTarget]
+  );
+
   const handleMenuSelect = useCallback(
-    (menu: SettingsMenuKey) => {
+    (menu: PageSettingsMenuKey) => {
       setActiveMenu(menu);
       if (!isLargeLayout) {
         setActiveView('content');
@@ -726,7 +1048,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-base font-semibold text-surface-foreground">ガチャ一覧の表示</h2>
+              <h2 className="text-base font-semibold text-surface-foreground">ガチャ設定</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 並べ替えや表示ルールを変更すると、ガチャ管理ページに即時反映されます。
               </p>
@@ -744,6 +1066,68 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 checked={quickSendNewOnly}
                 onChange={handleQuickSendNewOnlyChange}
               />
+              <SwitchField
+                label="ガチャ結果表示演出を表示"
+                description="ガチャ実行直後に表示される抽選結果オーバーレイ演出の表示/非表示を切り替えます。"
+                checked={drawResultRevealEnabled}
+                onChange={handleDrawResultRevealEnabledChange}
+              />
+              <div className="page-settings-dialog__draw-result-background-panel rounded-2xl border border-border/60 bg-panel/70 p-4">
+                <div className="page-settings-dialog__draw-result-background-header space-y-1">
+                  <h3 className="page-settings-dialog__draw-result-background-title text-sm font-semibold text-surface-foreground">
+                    抽選結果表示の背景色
+                  </h3>
+                  <p className="page-settings-dialog__draw-result-background-description text-xs leading-relaxed text-muted-foreground">
+                    抽選結果オーバーレイで使う背景色を選択します。
+                  </p>
+                </div>
+                <RadioGroup
+                  value={drawResultRevealBackgroundColor}
+                  onChange={handleDrawResultRevealBackgroundColorChange}
+                  className="page-settings-dialog__draw-result-background-options mt-3 space-y-2"
+                >
+                  {DRAW_RESULT_REVEAL_BACKGROUND_OPTIONS.map((option) => (
+                    <RadioGroup.Option
+                      key={option.value}
+                      value={option.value}
+                      className={({ checked, active }) =>
+                        clsx(
+                          'page-settings-dialog__draw-result-background-option flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-2 transition',
+                          checked
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border/60 bg-panel hover:border-accent/40 hover:bg-panel-contrast/90',
+                          active && !checked ? 'ring-2 ring-accent/40' : undefined
+                        )
+                      }
+                    >
+                      {({ checked }) => (
+                        <div className="page-settings-dialog__draw-result-background-option-content flex w-full items-start justify-between gap-3">
+                          <div className="page-settings-dialog__draw-result-background-option-main flex items-start gap-3">
+                            <span
+                              className="page-settings-dialog__draw-result-background-option-swatch mt-0.5 block h-8 w-8 rounded-lg border border-border/60"
+                              style={{ backgroundColor: option.previewColor }}
+                              aria-hidden="true"
+                            />
+                            <div className="page-settings-dialog__draw-result-background-option-texts space-y-0.5">
+                              <RadioGroup.Label className="page-settings-dialog__draw-result-background-option-label text-sm font-semibold text-surface-foreground">
+                                {option.label}
+                              </RadioGroup.Label>
+                              <RadioGroup.Description className="page-settings-dialog__draw-result-background-option-description text-[11px] leading-relaxed text-muted-foreground">
+                                {option.description}
+                              </RadioGroup.Description>
+                            </div>
+                          </div>
+                          {checked ? (
+                            <span className="page-settings-dialog__draw-result-background-option-status text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
+                              適用中
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </RadioGroup.Option>
+                  ))}
+                </RadioGroup>
+              </div>
               <SwitchField
                 label="リアグに登録した画像は送信・保存されないようにする"
                 description="ONにすると保存オプションやクイック送信でリアグ対象の画像を含めません。"
@@ -769,7 +1153,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 onChange={handleApplyLowerThresholdGuaranteesChange}
               />
             </div>
-            <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+            <div
+              id="page-settings-focus-target-gacha-owner-share-rate"
+              className={clsx(
+                'page-settings-dialog__gacha-owner-share-rate-card page-settings-target rounded-2xl border border-border/60 bg-panel/70 p-4',
+                isFocusTargetHighlighted('gacha-owner-share-rate') && 'page-settings-target--highlighted'
+              )}
+            >
               <label htmlFor="gacha-owner-share-rate" className="text-sm font-semibold text-surface-foreground">
                 配信アプリからの還元率
               </label>
@@ -787,7 +1177,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   onChange={handleOwnerShareRateChange}
                   onBlur={handleOwnerShareRateCommit}
                   onKeyDown={handleOwnerShareRateKeyDown}
-                  className="w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  className={clsx(
+                    'page-settings-dialog__gacha-owner-share-rate-input w-24 rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40',
+                    isFocusTargetHighlighted('gacha-owner-share-rate') && 'page-settings-target__input--highlighted'
+                  )}
                   inputMode="decimal"
                 />
                 <span className="text-xs text-muted-foreground">%</span>
@@ -807,79 +1200,93 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                     .map((entry) => (
                       <li key={entry.id}>
                         <div className="rounded-xl border border-border/60 bg-panel px-4 py-3 text-sm text-surface-foreground">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="flex min-w-[200px] flex-1 flex-col gap-2">
-                              {editingGachaId === entry.id ? (
-                                <>
-                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                                    <input
-                                      type="text"
-                                      value={editingGachaName}
-                                      onChange={handleEditingGachaNameChange}
-                                      onKeyDown={(event) => {
-                                        if (event.key === 'Enter') {
-                                          event.preventDefault();
-                                          handleCommitEditingGacha();
-                                        }
-                                        if (event.key === 'Escape') {
-                                          event.preventDefault();
-                                          handleCancelEditingGacha();
-                                        }
-                                      }}
-                                      autoFocus
-                                      className="w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
-                                    />
-                                    <div className="flex flex-wrap items-center gap-2">
+                          <div className="page-settings-dialog__gacha-entry-layout flex flex-col gap-3">
+                            <div className="page-settings-dialog__gacha-entry-top flex items-start justify-between gap-3">
+                              <div className="page-settings-dialog__gacha-entry-info flex min-w-0 flex-1 flex-col gap-2">
+                                {editingGachaId === entry.id ? (
+                                  <>
+                                    <div className="page-settings-dialog__gacha-entry-edit-row flex flex-col gap-2 sm:flex-row sm:items-center">
+                                      <input
+                                        type="text"
+                                        value={editingGachaName}
+                                        onChange={handleEditingGachaNameChange}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            handleCommitEditingGacha();
+                                          }
+                                          if (event.key === 'Escape') {
+                                            event.preventDefault();
+                                            handleCancelEditingGacha();
+                                          }
+                                        }}
+                                        autoFocus
+                                        className="page-settings-dialog__gacha-entry-edit-input w-full rounded-lg border border-border/60 bg-panel px-3 py-2 text-sm text-surface-foreground transition focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                                      />
+                                      <div className="page-settings-dialog__gacha-entry-edit-actions flex flex-wrap items-center gap-2">
+                                        <button
+                                          type="button"
+                                          className="page-settings-dialog__gacha-entry-save-button inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                          onClick={handleCommitEditingGacha}
+                                        >
+                                          保存
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="page-settings-dialog__gacha-entry-cancel-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                          onClick={handleCancelEditingGacha}
+                                        >
+                                          キャンセル
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="page-settings-dialog__gacha-entry-id text-xs text-muted-foreground">ID: {entry.id}</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="page-settings-dialog__gacha-entry-name-row flex items-center gap-2">
+                                      <p className="page-settings-dialog__gacha-entry-name font-semibold leading-tight">{entry.name}</p>
                                       <button
                                         type="button"
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                        onClick={handleCommitEditingGacha}
+                                        className="page-settings-dialog__gacha-entry-edit-button inline-flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                        onClick={() => handleStartEditingGacha(entry.id, entry.name)}
+                                        aria-label={`${entry.name}を編集`}
                                       >
-                                        保存
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
-                                        onClick={handleCancelEditingGacha}
-                                      >
-                                        キャンセル
+                                        <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
                                       </button>
                                     </div>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-semibold leading-tight">{entry.name}</p>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border/60 text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-                                      onClick={() => handleStartEditingGacha(entry.id, entry.name)}
-                                      aria-label={`${entry.name}を編集`}
-                                    >
-                                      <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
-                                    </button>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">ID: {entry.id}</p>
-                                </>
-                              )}
-                            </div>
-                            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+                                    <p className="page-settings-dialog__gacha-entry-id text-xs text-muted-foreground">ID: {entry.id}</p>
+                                  </>
+                                )}
+                              </div>
                               {entry.isSelected ? (
-                                <span className="inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
+                                <span className="page-settings-dialog__gacha-entry-selected inline-flex items-center rounded-full bg-accent/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.25em] text-accent">
                                   選択中
                                 </span>
                               ) : null}
-                              {entry.isArchived ? (
-                                <span className="inline-flex items-center rounded-full border border-border/60 bg-panel-muted/70 px-3 py-1 text-[11px] font-semibold tracking-[0.2em] text-muted-foreground">
+                            </div>
+                            <div className="page-settings-dialog__gacha-entry-actions flex flex-wrap items-center gap-2">
+                              {!entry.isArchived ? (
+                                <button
+                                  type="button"
+                                  className="page-settings-dialog__gacha-entry-archive-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-panel-muted hover:text-surface-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground/30"
+                                  onClick={() => confirmArchiveGacha({ id: entry.id, name: entry.name })}
+                                >
+                                  アーカイブ
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="page-settings-dialog__gacha-entry-archived-button inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-panel-muted/70 px-3 py-1.5 text-xs font-semibold tracking-[0.2em] text-muted-foreground"
+                                  disabled
+                                >
                                   アーカイブ済み
-                                </span>
-                              ) : null}
+                                </button>
+                              )}
                               {entry.isArchived ? (
                                 <button
                                   type="button"
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                                  className="page-settings-dialog__gacha-entry-restore-button inline-flex items-center gap-1.5 rounded-lg border border-accent/50 px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                                   onClick={() => handleRestoreGacha(entry.id)}
                                 >
                                   戻す
@@ -887,7 +1294,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                               ) : null}
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+                                className="page-settings-dialog__gacha-entry-delete-button inline-flex items-center gap-1.5 rounded-lg border border-red-500/50 px-3 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
                                 onClick={() => confirmPermanentDeleteGacha({ id: entry.id, name: entry.name })}
                               >
                                 削除
@@ -911,23 +1318,28 @@ export const PageSettingsDialog: ModalComponent = (props) => {
         return <ReceiveSettingsContent />;
       case 'layout':
         return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-base font-semibold text-surface-foreground">レイアウト</h2>
+          <div
+            className={clsx(
+              'page-settings__layout-tab space-y-6',
+              isZoomPreviewing && 'page-settings__layout-tab--previewing'
+            )}
+          >
+            <div className="page-settings__layout-intro">
+              <h2 className="text-base font-semibold text-surface-foreground">レイアウトとズーム</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 デスクトップ時の表示方式を切り替えて、画面サイズに合わせた操作性を選択できます。
               </p>
             </div>
-            <div className="space-y-4">
-              <div className="space-y-1">
+            <div className="page-settings__desktop-layout-panel space-y-4">
+              <div className="page-settings__desktop-layout-header space-y-1">
                 <h3 className="text-sm font-semibold text-surface-foreground">デスクトップレイアウト</h3>
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  横幅の広い画面での表示スタイルを切り替えられます。サイドタブはノートPCなどの狭い画面でもセクションを順番に確認できます。
+                  横幅の広い画面での表示スタイルを切り替えられます。サイドバー表示はノートPCなどの狭い画面でもセクションを順番に確認できます。
                 </p>
               </div>
               {isSidebarLayoutForced ? (
                 <p className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-accent">
-                  画面幅が900〜1025pxのため、サイドタブレイアウトが自動的に適用されています。
+                  画面幅が900〜1025pxのため、サイドバーレイアウトが自動的に適用されています。
                 </p>
               ) : null}
               <RadioGroup
@@ -970,7 +1382,7 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                           </RadioGroup.Description>
                           {optionDisabled ? (
                             <p className="text-[11px] text-muted-foreground">
-                              現在の画面幅ではサイドタブのみ利用できます。
+                              現在の画面幅ではサイドバーのみ利用できます。
                             </p>
                           ) : null}
                           {isSidebarLayoutForced && option.value === 'sidebar' ? (
@@ -985,6 +1397,66 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                 })}
               </RadioGroup>
             </div>
+            {!isMobileDashboard ? (
+              <div
+                id="page-settings-focus-target-layout-site-zoom"
+                className={clsx(
+                  'page-settings__site-zoom-panel page-settings-target space-y-4 transition',
+                  isZoomPreviewing &&
+                    'page-settings__site-zoom-panel--previewing rounded-2xl border border-border/60',
+                  isFocusTargetHighlighted('layout-site-zoom') && 'page-settings-target--highlighted'
+                )}
+              >
+                <div className="page-settings__site-zoom-header space-y-1">
+                  <h3 className="page-settings__site-zoom-title text-sm font-semibold text-surface-foreground">
+                    サイト表示倍率
+                  </h3>
+                  <p className="page-settings__site-zoom-description text-xs leading-relaxed text-muted-foreground">
+                    表示サイズを50%〜100%で調整できます。
+                  </p>
+                </div>
+                <div className="page-settings__site-zoom-controls flex items-center gap-3">
+                  <label className="sr-only" htmlFor="page-settings-site-zoom-range">
+                    サイト表示倍率
+                  </label>
+                  <input
+                    id="page-settings-site-zoom-range"
+                    type="range"
+                    min={SITE_ZOOM_PERCENT_MIN}
+                    max={SITE_ZOOM_PERCENT_MAX}
+                    step={1}
+                    value={siteZoomPercent}
+                    onChange={handleSiteZoomChange}
+                    onPointerDown={handleStartZoomPreview}
+                    onPointerUp={handleStopZoomPreview}
+                    onPointerCancel={handleStopZoomPreview}
+                    onBlur={handleSiteZoomSliderBlur}
+                    onKeyUp={handleSiteZoomSliderKeyUp}
+                    className={clsx(
+                      'page-settings__site-zoom-slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-panel-contrast accent-accent',
+                      isFocusTargetHighlighted('layout-site-zoom') &&
+                        'page-settings-target__input--highlighted ring-2 ring-accent/45'
+                    )}
+                    aria-valuemin={SITE_ZOOM_PERCENT_MIN}
+                    aria-valuemax={SITE_ZOOM_PERCENT_MAX}
+                    aria-valuenow={siteZoomPercent}
+                    aria-label="サイト表示倍率"
+                  />
+                  <span className="page-settings__site-zoom-value min-w-[3.5rem] text-right text-sm font-semibold text-accent">
+                    {siteZoomPercent}%
+                  </span>
+                </div>
+                <div className="page-settings__site-zoom-actions flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResetSiteZoom}
+                    className="page-settings__site-zoom-reset-button rounded-lg border border-border/60 px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                  >
+                    リセット
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         );
       case 'site-theme':
@@ -1191,7 +1663,13 @@ export const PageSettingsDialog: ModalComponent = (props) => {
               </p>
             </div>
             <div className="space-y-4">
-              <div className="rounded-2xl border border-border/60 bg-panel/70 p-4">
+              <div
+                id="page-settings-focus-target-owner-name"
+                className={clsx(
+                  'page-settings-dialog__owner-name-card page-settings-target rounded-2xl border border-border/60 bg-panel/70 p-4',
+                  isFocusTargetHighlighted('misc-owner-name') && 'page-settings-target--highlighted'
+                )}
+              >
                 <label htmlFor="owner-name" className="text-sm font-semibold text-surface-foreground">
                   オーナー名
                 </label>
@@ -1204,7 +1682,10 @@ export const PageSettingsDialog: ModalComponent = (props) => {
                   value={ownerName}
                   onChange={handleOwnerNameChange}
                   placeholder="例: Shimmy配信"
-                  className="mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                  className={clsx(
+                    'page-settings-dialog__owner-name-input mt-3 w-full rounded-xl border border-border/60 bg-surface/80 px-3 py-2 text-sm text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40',
+                    isFocusTargetHighlighted('misc-owner-name') && 'page-settings-target__input--highlighted'
+                  )}
                 />
               </div>
               <SwitchField
@@ -1292,88 +1773,127 @@ export const PageSettingsDialog: ModalComponent = (props) => {
     }
   };
 
-  const desiredMinHeight = Math.max(BASE_MODAL_MIN_HEIGHT_PX, maxBodyHeight);
-  const viewportLimit = viewportMaxHeight != null && viewportMaxHeight > 0 ? viewportMaxHeight : null;
-  const effectiveMinHeight = viewportLimit ? Math.min(desiredMinHeight, viewportLimit) : desiredMinHeight;
-
-  return (
-    <ModalBody
-      ref={modalBodyRef}
-      className={clsx(
-        'flex flex-col space-y-0 overflow-hidden p-0',
-        isLargeLayout ? 'mt-6' : 'mt-4 bg-panel/95'
-      )}
-      style={{
-        minHeight: `${effectiveMinHeight}px`,
-        maxHeight: viewportLimit ? `${viewportLimit}px` : undefined
-      }}
-    >
-      <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-3xl bg-panel/95 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-start lg:gap-8 lg:rounded-none lg:bg-transparent">
-        <nav
-          className={clsx(
-            'm-2 w-[calc(100%-1rem)] shrink-0 p-2 lg:m-0 lg:w-full lg:p-0',
-            isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
-            activeView === 'menu' ? 'block' : 'hidden',
-            'lg:block'
-          )}
-        >
-          <ul className="space-y-2">
-            {menuItems.map((item) => {
-              const isActive = activeMenu === item.id;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleMenuSelect(item.id)}
-                    className={clsx(
-                      'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
-                      isActive
-                        ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
-                        : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <span className="block text-sm font-semibold">{item.label}</span>
-                        <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
-                          {item.description}
-                        </span>
-                      </div>
-                      <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
-                        〉
+  const isStandaloneMobileLayout = standaloneMode && !isLargeLayout;
+  const dialogRootClassName = clsx(
+    'page-settings-dialog flex min-h-0 flex-col space-y-0 p-0',
+    isZoomPreviewing && 'page-settings-dialog--zoom-previewing',
+    standaloneMode ? 'max-h-none overflow-visible' : 'max-h-full overflow-hidden',
+    isLargeLayout ? 'mt-6' : standaloneMode ? 'mt-0 bg-transparent' : 'mt-4 bg-panel/95'
+  );
+  const splitContainerClassName = clsx(
+    'page-settings__split-scroll-container flex flex-col gap-4 [&>*]:min-h-0 sm:gap-6 lg:flex-row lg:items-stretch lg:gap-8',
+    isStandaloneMobileLayout
+      ? 'flex-none overflow-visible rounded-none bg-transparent'
+      : 'flex-1 overflow-hidden rounded-3xl bg-panel/95 lg:rounded-none lg:bg-transparent'
+  );
+  const menuScrollClassName = clsx(
+    'page-settings__menu-scroll min-h-0 lg:w-full lg:flex-none lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'm-0 w-full flex-none overflow-visible p-0 lg:m-0 lg:p-0'
+      : 'm-2 w-[calc(100%-1rem)] flex-1 overflow-y-auto p-2 lg:m-0 lg:p-0',
+    isLargeLayout ? 'max-w-[220px]' : 'max-w-none',
+    activeView === 'menu' ? 'block' : 'hidden',
+    'lg:block'
+  );
+  const contentScrollClassName = clsx(
+    'page-settings__content-scroll min-h-0 lg:self-stretch',
+    isStandaloneMobileLayout
+      ? 'flex-none max-h-none overflow-visible rounded-none border-0 bg-transparent p-0 pr-0 shadow-none'
+      : 'flex-1 max-h-full overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
+    isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
+  );
+  const mainContent = (
+    <div className={splitContainerClassName}>
+      <nav className={menuScrollClassName}>
+        <ul className="space-y-2">
+          {menuItems.map((item) => {
+            const isActive = activeMenu === item.id;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => handleMenuSelect(item.id)}
+                  className={clsx(
+                    'group w-full rounded-xl border px-4 py-3 text-left transition lg:shadow-none',
+                    isActive
+                      ? 'border-accent bg-accent/10 text-surface-foreground shadow-sm'
+                      : 'border-border/50 bg-panel/60 text-muted-foreground shadow-sm hover:border-accent/40 hover:bg-panel-contrast/80 lg:border-transparent lg:bg-transparent lg:hover:border-border/60 lg:hover:bg-panel-muted/70'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <span className="block text-sm font-semibold">{item.label}</span>
+                      <span className="mt-1 block text-[11px] leading-relaxed text-muted-foreground">
+                        {item.description}
                       </span>
                     </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="page-settings-nav__official-x-contact mt-3">
-            <OfficialXAccountPanel variant="compact" />
-          </div>
-        </nav>
-        <div
-          className={clsx(
-            'page-settings__content-scroll flex-1 max-h-full min-h-0 overflow-y-auto rounded-3xl border border-border/50 bg-panel/95 p-4 pr-3 shadow-md sm:p-5 lg:rounded-2xl lg:border-border/60 lg:bg-panel lg:p-6 lg:pr-4 lg:shadow-sm',
-            isLargeLayout ? 'block' : activeView === 'content' ? 'block' : 'hidden'
-          )}
-          style={{ maxHeight: viewportLimit ?? undefined }}
-        >
-          {!isLargeLayout ? (
-            <div className="mb-4 flex items-center lg:hidden">
-              <button
-                type="button"
-                onClick={handleBackToMenu}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-              >
-                <span aria-hidden="true">〈</span>
-                <span>メニューに戻る</span>
-              </button>
-            </div>
-          ) : null}
-          {renderMenuContent()}
+                    <span className="text-sm text-muted-foreground lg:hidden" aria-hidden="true">
+                      〉
+                    </span>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="page-settings-nav__official-x-contact mt-3">
+          <OfficialXAccountPanel variant="compact" />
         </div>
+      </nav>
+      <div className={contentScrollClassName}>
+        {!isLargeLayout ? (
+          <div className="mb-4 flex items-center lg:hidden">
+            <button
+              type="button"
+              onClick={handleBackToMenu}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              <span aria-hidden="true">〈</span>
+              <span>メニューに戻る</span>
+            </button>
+          </div>
+        ) : null}
+        {renderMenuContent()}
       </div>
-    </ModalBody>
+    </div>
   );
-};
+
+  if (standaloneMode) {
+    // ページ表示ではモーダル専用の内部スクロール制御を使わず、通常のページスクロールへ委譲する。
+    return <div className={dialogRootClassName}>{mainContent}</div>;
+  }
+
+  return <ModalBody className={dialogRootClassName}>{mainContent}</ModalBody>;
+}
+
+// サイト設定をカテゴリ別に編集し、必要に応じて特定の設定項目へ誘導するモーダル。
+export const PageSettingsDialog: ModalComponent<PageSettingsDialogPayload> = (props) => (
+  <PageSettingsDialogView {...props} />
+);
+
+export interface PageSettingsStandaloneProps {
+  onClose: () => void;
+  payload?: PageSettingsDialogPayload;
+}
+
+/**
+ * サイト設定UIをモーダル外（ページ内）で表示するためのラッパー。
+ *
+ * @param onClose 閉じる/戻るアクション時の処理
+ * @param payload 初期メニューやハイライト対象の指定
+ * @returns モーダル非依存で利用できるサイト設定UI
+ */
+export function PageSettingsStandalone({ onClose, payload }: PageSettingsStandaloneProps): JSX.Element {
+  const { dismissAll, push, replace } = useModal();
+  const modalProps = buildPageSettingsDialogProps({ payload });
+  const componentProps: ModalComponentProps<PageSettingsDialogPayload> = {
+    ...modalProps,
+    close: onClose,
+    dismiss: dismissAll,
+    push,
+    replace,
+    isTop: true
+  };
+
+  return <PageSettingsDialogView {...componentProps} standaloneMode />;
+}

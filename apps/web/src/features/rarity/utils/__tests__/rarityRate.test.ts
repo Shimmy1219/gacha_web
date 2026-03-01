@@ -9,6 +9,18 @@ describe('formatRarityRate', () => {
     expect(formatRarityRate(rate)).toBe('0.0033...');
   });
 
+  it('appends an ellipsis for recurring sixths', () => {
+    expect(formatRarityRate(4 / 15)).toBe('26.66...');
+  });
+
+  it('appends an ellipsis for recurring twos', () => {
+    expect(formatRarityRate(2 / 9)).toBe('22.22...');
+  });
+
+  it('appends an ellipsis for recurring sevens', () => {
+    expect(formatRarityRate(7 / 9)).toBe('77.77...');
+  });
+
   it('returns a trimmed decimal when the recurring cycle fits within precision', () => {
     const rate = clampRate(0.74235 / 13);
     expect(formatRarityRate(rate)).toBe('5.7103846154');

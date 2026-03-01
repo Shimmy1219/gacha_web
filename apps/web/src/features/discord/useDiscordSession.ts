@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import type { PropsWithChildren, ReactElement } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useState } from 'react';
+import type { QueryFunctionContext } from '@tanstack/react-query';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -9,6 +11,16 @@ import {
   DISCORD_PWA_PENDING_STATE_STORAGE_KEY,
   getDiscordInfoStore
 } from './discordInfoStore';
+import {
+  clearDiscordSessionHintCookieClientSide,
+  hasDiscordSessionHintCookie
+} from './discordSessionHint';
+import {
+  createCsrfRetryRequestHeaders,
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload
+} from '../csrf/csrfGuards';
 
 export interface DiscordUserProfile {
   id: string;
@@ -55,6 +67,7 @@ type PwaClaimResult =
 
 let activePwaClaimPromise: Promise<PwaClaimResult> | null = null;
 let activePwaClaimState: string | null = null;
+const DiscordSessionContext = createContext<UseDiscordSessionResult | null>(null);
 
 function createStatePreview(state: string): string {
   return state.length > 8 ? `${state.slice(0, 4)}...` : state;
@@ -184,7 +197,7 @@ function resolveLoginContext(): 'browser' | 'pwa' {
   return mediaStandalone || isIosStandalone ? 'pwa' : 'browser';
 }
 
-async function fetchSession(): Promise<DiscordSessionData> {
+async function fetchSession({ signal }: QueryFunctionContext): Promise<DiscordSessionData> {
   logDiscordAuthEvent('Discordセッション情報の確認を開始します', {
     endpoint: '/api/discord/me?soft=1'
   });
@@ -192,7 +205,10 @@ async function fetchSession(): Promise<DiscordSessionData> {
     headers: {
       Accept: 'application/json'
     },
-    credentials: 'include'
+    credentials: 'include',
+    signal,
+    // 304が返るとヒントcookie削除が反映できないため、HTTPキャッシュを使わず毎回取得する。
+    cache: 'no-store'
   });
 
   if (!response.ok) {
@@ -212,7 +228,7 @@ async function fetchSession(): Promise<DiscordSessionData> {
   return payload;
 }
 
-export function useDiscordSession(): UseDiscordSessionResult {
+function useDiscordSessionValue(): UseDiscordSessionResult {
   const queryClient = useQueryClient();
   const [shouldDelaySessionFetch, setShouldDelaySessionFetch] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
@@ -220,6 +236,13 @@ export function useDiscordSession(): UseDiscordSessionResult {
     }
     return resolveLoginContext() === 'pwa' && readPendingPwaState() !== null;
   });
+  const [hasSessionHint, setHasSessionHint] = useState<boolean>(() => hasDiscordSessionHintCookie());
+
+  const syncSessionHintFromCookie = useCallback((): boolean => {
+    const next = hasDiscordSessionHintCookie();
+    setHasSessionHint(next);
+    return next;
+  }, []);
 
   const claimPendingPwaSession = useCallback(
     async (options?: { signal?: AbortSignal }): Promise<PwaClaimResult> => {
@@ -340,6 +363,8 @@ export function useDiscordSession(): UseDiscordSessionResult {
 
             clearPendingPwaState();
             console.info('Discord PWA セッション復旧に成功しました', { statePreview });
+            // claim-session 成功時はレスポンスの Set-Cookie で hint が更新されるため同期する
+            syncSessionHintFromCookie();
             await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
             return 'claimed';
           } catch (error) {
@@ -374,7 +399,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
         // pending state still exists (e.g. recoverable failure). Retry on next loop iteration.
       }
     },
-    [queryClient, setShouldDelaySessionFetch]
+    [queryClient, setShouldDelaySessionFetch, syncSessionHintFromCookie]
   );
 
   const query = useQuery({
@@ -382,10 +407,21 @@ export function useDiscordSession(): UseDiscordSessionResult {
     queryFn: fetchSession,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: !shouldDelaySessionFetch
+    // 未ログイン利用者は hint が無い限り /api/discord/me を自動実行しない
+    enabled: !shouldDelaySessionFetch && hasSessionHint,
+    onSuccess: (payload) => {
+      if (payload.loggedIn) {
+        return;
+      }
+      // サーバーが hint を削除した直後に、同一タブでも即時反映して再取得ループを防ぐ
+      clearDiscordSessionHintCookieClientSide();
+      setHasSessionHint(false);
+    }
   });
   const { refetch: refetchQuery } = query;
 
+  // アプリ復帰時にPWA復旧と必要な場合のみセッション再取得を行う。
+  // claimPendingPwaSession/refetchQuery/syncSessionHintFromCookie は effect 内で参照するため依存に含める。
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -410,6 +446,11 @@ export function useDiscordSession(): UseDiscordSessionResult {
           logDiscordAuthEvent('Discord PWA セッション復旧がキャンセルされたためセッション再取得をスキップします');
           return;
         }
+        const canFetchSession = syncSessionHintFromCookie();
+        if (!canFetchSession) {
+          logDiscordAuthEvent('Discordセッションヒントが存在しないため再取得をスキップします');
+          return;
+        }
         logDiscordAuthEvent('アプリが前面に復帰したためDiscordセッション情報の再取得を開始します');
         await refetchQuery();
       })();
@@ -420,7 +461,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [claimPendingPwaSession, refetchQuery]);
+  }, [claimPendingPwaSession, refetchQuery, syncSessionHintFromCookie]);
 
   const login = useCallback(async () => {
     const baseLoginUrl = '/api/auth/discord/start';
@@ -517,8 +558,7 @@ export function useDiscordSession(): UseDiscordSessionResult {
     logDiscordAuthEvent('DiscordログアウトAPIを呼び出します', {
       endpoint: '/api/auth/logout'
     });
-    let csrf: string | null = null;
-    try {
+    const issueCsrf = async (): Promise<string> => {
       const csrfResponse = await fetch(`/api/blob/csrf?ts=${Date.now()}`, {
         method: 'GET',
         credentials: 'include',
@@ -526,43 +566,87 @@ export function useDiscordSession(): UseDiscordSessionResult {
         headers: { Accept: 'application/json' }
       });
       const csrfPayload = (await csrfResponse.json().catch(() => null)) as { ok?: boolean; token?: string } | null;
-      if (csrfResponse.ok && csrfPayload?.ok && typeof csrfPayload.token === 'string') {
-        csrf = csrfPayload.token;
+      if (!csrfResponse.ok || !csrfPayload?.ok || typeof csrfPayload.token !== 'string' || csrfPayload.token.length === 0) {
+        const reason = csrfResponse.status;
+        throw new Error(`CSRF token issuance failed (status ${reason})`);
       }
-    } catch (error) {
-      logDiscordAuthError('CSRFトークンの発行に失敗しました', error);
-    }
+      return csrfPayload.token;
+    };
 
-    if (!csrf) {
-      logDiscordAuthError('CSRFトークンが取得できなかったためログアウトを中断します', {
-        endpoint: '/api/auth/logout'
+    let csrfToken: string | null = null;
+    let response: Response;
+    try {
+      response = await fetchWithCsrfRetry({
+        fetcher: fetch,
+        getToken: async () => {
+          if (csrfToken) {
+            return csrfToken;
+          }
+          csrfToken = await issueCsrf();
+          return csrfToken;
+        },
+        refreshToken: async () => {
+          csrfToken = await issueCsrf();
+          return csrfToken;
+        },
+        performRequest: async (csrf, currentFetcher, meta) =>
+          currentFetcher('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              ...createCsrfRetryRequestHeaders(meta)
+            },
+            body: JSON.stringify({ csrf })
+          }),
+        maxRetry: 1
       });
+    } catch (error) {
+      logDiscordAuthError('CSRFトークンの発行またはログアウト通信に失敗しました', error);
       return;
     }
 
-    const response = await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ csrf })
-    });
     if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        errorCode?: string;
+        csrfReason?: string;
+      } | null;
+      const csrfFailure = inspectCsrfFailurePayload(payload);
+      if (csrfFailure.isMismatch) {
+        logDiscordAuthError('DiscordログアウトAPIがCSRF検証で失敗しました', {
+          status: response.status,
+          csrfReason: csrfFailure.reason,
+          guide: getCsrfMismatchGuideMessageJa(csrfFailure.reason)
+        });
+      }
       logDiscordAuthError('DiscordログアウトAPIの呼び出しに失敗しました', {
-        status: response.status
+        status: response.status,
+        error: payload?.error
       });
     } else {
       logDiscordAuthEvent('DiscordログアウトAPIの呼び出しが完了しました', {
         status: response.status
       });
+      // ログアウト成功時のみクッキー削除を反映し、不要な /api/discord/me 再取得を止める
+      clearDiscordSessionHintCookieClientSide();
+      setHasSessionHint(false);
     }
     await queryClient.invalidateQueries({ queryKey: ['discord', 'session'] });
   }, [queryClient]);
 
   const refetch = useCallback(async () => {
+    const canFetchSession = syncSessionHintFromCookie();
+    if (!canFetchSession) {
+      return undefined;
+    }
     const result = await refetchQuery();
     return result.data;
-  }, [refetchQuery]);
+  }, [refetchQuery, syncSessionHintFromCookie]);
 
+  // 初回マウント時にPWA保留stateの回収を開始する。
+  // claimPendingPwaSession が差し替わった場合は最新ロジックで再実行するため依存に含める。
   useEffect(() => {
     const controller = new AbortController();
 
@@ -582,4 +666,32 @@ export function useDiscordSession(): UseDiscordSessionResult {
     logout,
     refetch
   };
+}
+
+/**
+ * Discordセッション状態をアプリ全体で一元管理するProvider。
+ *
+ * @param children Discordセッション情報を利用する子要素
+ * @returns Discordセッションコンテキストを提供する要素
+ */
+// 責務: Discordセッション取得ロジックを1インスタンスに固定し、配下へ共有する。
+export function DiscordSessionProvider({ children }: PropsWithChildren): ReactElement {
+  const value = useDiscordSessionValue();
+  return createElement(DiscordSessionContext.Provider, { value }, children);
+}
+
+/**
+ * Discordログイン状態を取得・維持するためのカスタムフック。
+ *
+ * `sid` は HttpOnly クッキーでクライアントから直接参照できないため、
+ * `discord_session_hint` を使って `/api/discord/me` の自動取得可否を制御する。
+ *
+ * @returns Discordセッション情報とログイン/ログアウト操作
+ */
+export function useDiscordSession(): UseDiscordSessionResult {
+  const context = useContext(DiscordSessionContext);
+  if (!context) {
+    throw new Error('useDiscordSession must be used within DiscordSessionProvider');
+  }
+  return context;
 }

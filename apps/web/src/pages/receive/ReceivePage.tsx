@@ -8,6 +8,9 @@ import {
   ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { OFFICIAL_X_ACCOUNT_ID, OFFICIAL_X_ACCOUNT_URL } from '../../components/OfficialXAccountPanel';
+import { ItemPreview } from '../../components/ItemPreviewThumbnail';
+import { useStoreValue } from '@domain/stores';
+import { useDomainStores } from '../../features/storage/AppPersistenceProvider';
 
 import { ProgressBar } from './components/ProgressBar';
 import { ReceiveItemCard } from './components/ReceiveItemCard';
@@ -26,6 +29,13 @@ import { loadReceiveZipInventory, loadReceiveZipSelectionInfo } from './receiveZ
 import { formatReceiveBytes, formatReceiveDateTime } from './receiveFormatters';
 import { saveReceiveItem, saveReceiveItems } from './receiveSave';
 import { ensureReceiveHistoryThumbnailsForEntry } from './receiveThumbnails';
+import {
+  createCsrfRetryRequestHeaders,
+  fetchWithCsrfRetry,
+  getCsrfMismatchGuideMessageJa,
+  inspectCsrfFailurePayload
+} from '../../features/csrf/csrfGuards';
+import { resolveGachaThumbnailFromBlob } from '../../features/gacha/thumbnailBlobApi';
 
 interface ResolveSuccessPayload {
   url: string;
@@ -91,6 +101,16 @@ interface CsrfResponsePayload {
   ok?: boolean;
   token?: string;
   error?: string;
+}
+
+interface ReceiveGachaSummaryCard {
+  key: string;
+  gachaId: string | null;
+  gachaName: string;
+  itemCount: number;
+  ownerId: string | null;
+  thumbnailAssetId: string | null;
+  thumbnailBlobUrl: string | null;
 }
 
 async function requestCsrfToken(signal?: AbortSignal): Promise<string> {
@@ -249,6 +269,8 @@ function formatOmittedMessage(itemNames: string[]): string | null {
 }
 
 export function ReceivePage(): JSX.Element {
+  const { appState: appStateStore } = useDomainStores();
+  const appState = useStoreValue(appStateStore);
   const [searchParams, setSearchParams] = useSearchParams();
   const [tokenInput, setTokenInput] = useState<string>('');
   const [resolveStatus, setResolveStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -272,6 +294,9 @@ export function ReceivePage(): JSX.Element {
   const [duplicateHistoryEntry, setDuplicateHistoryEntry] = useState<ReceiveHistoryEntryMetadata | null>(null);
   const [duplicateReason, setDuplicateReason] = useState<'token' | 'pull' | null>(null);
   const [omittedItemNames, setOmittedItemNames] = useState<string[]>([]);
+  const [activeSelectionOwnerId, setActiveSelectionOwnerId] = useState<string | null>(null);
+  const [resolvedThumbnailUrlByCardKey, setResolvedThumbnailUrlByCardKey] = useState<Record<string, string | null>>({});
+  const [hasTriggeredReceiveAction, setHasTriggeredReceiveAction] = useState<boolean>(false);
   const resolveAbortRef = useRef<AbortController | null>(null);
   const downloadAbortRef = useRef<AbortController | null>(null);
   const csrfRef = useRef<string | null>(null);
@@ -292,6 +317,114 @@ export function ReceivePage(): JSX.Element {
     const tokenParam = searchParams.get('t');
     return Boolean(tokenParam && tokenParam.trim());
   }, [searchParams]);
+  const baseGachaSummaryCards = useMemo<ReceiveGachaSummaryCard[]>(() => {
+    if (mediaItems.length === 0) {
+      return [];
+    }
+
+    const meta = appState?.meta ?? {};
+    const map = new Map<string, ReceiveGachaSummaryCard>();
+
+    mediaItems.forEach((item) => {
+      const gachaName = item.metadata?.gachaName?.trim() || '不明なガチャ';
+      const gachaId = item.metadata?.gachaId?.trim() || null;
+      const key = gachaId ?? `name:${gachaName}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.itemCount += 1;
+        return;
+      }
+
+      const metaEntry = gachaId ? meta[gachaId] : null;
+      const metaOwnerId =
+        typeof metaEntry?.thumbnailOwnerId === 'string' && metaEntry.thumbnailOwnerId.length > 0
+          ? metaEntry.thumbnailOwnerId
+          : null;
+      const isOwnerMatched =
+        Boolean(activeSelectionOwnerId) &&
+        Boolean(metaOwnerId) &&
+        activeSelectionOwnerId === metaOwnerId;
+      const thumbnailAssetIdFromMeta = isOwnerMatched ? metaEntry?.thumbnailAssetId : null;
+      const thumbnailBlobUrlFromMeta = isOwnerMatched ? metaEntry?.thumbnailBlobUrl : null;
+      map.set(key, {
+        key,
+        gachaId,
+        gachaName,
+        itemCount: 1,
+        ownerId: activeSelectionOwnerId,
+        thumbnailAssetId:
+          typeof thumbnailAssetIdFromMeta === 'string' && thumbnailAssetIdFromMeta.length > 0
+            ? thumbnailAssetIdFromMeta
+            : null,
+        thumbnailBlobUrl:
+          typeof thumbnailBlobUrlFromMeta === 'string' && thumbnailBlobUrlFromMeta.length > 0
+            ? thumbnailBlobUrlFromMeta
+            : null
+      });
+    });
+
+    return Array.from(map.values()).sort((left, right) => left.gachaName.localeCompare(right.gachaName, 'ja'));
+  }, [activeSelectionOwnerId, appState, mediaItems]);
+
+  useEffect(() => {
+    const requests = baseGachaSummaryCards
+      .filter((card) => Boolean(card.gachaId))
+      .map((card) => ({
+        key: card.key,
+        gachaId: card.gachaId as string,
+        ownerId: card.ownerId
+      }));
+    if (requests.length === 0) {
+      setResolvedThumbnailUrlByCardKey({});
+      return;
+    }
+
+    let active = true;
+    void (async () => {
+      try {
+        const resolved = await resolveGachaThumbnailFromBlob(
+          requests.map((entry) => ({
+            gachaId: entry.gachaId,
+            ownerId: entry.ownerId
+          }))
+        );
+        if (!active) {
+          return;
+        }
+        const nextMap: Record<string, string | null> = {};
+        requests.forEach((entry, index) => {
+          const resolvedEntry = resolved[index];
+          if (!resolvedEntry || (resolvedEntry.match !== 'owner' && resolvedEntry.match !== 'fallback')) {
+            nextMap[entry.key] = null;
+            return;
+          }
+          nextMap[entry.key] =
+            typeof resolvedEntry.url === 'string' && resolvedEntry.url.length > 0
+              ? resolvedEntry.url
+              : null;
+        });
+        setResolvedThumbnailUrlByCardKey(nextMap);
+      } catch (error) {
+        console.warn('Failed to resolve gacha thumbnails for receive page', error);
+        if (active) {
+          setResolvedThumbnailUrlByCardKey({});
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [baseGachaSummaryCards]);
+
+  const gachaSummaryCards = useMemo(
+    () =>
+      baseGachaSummaryCards.map((card) => ({
+        ...card,
+        thumbnailBlobUrl: resolvedThumbnailUrlByCardKey[card.key] ?? card.thumbnailBlobUrl
+      })),
+    [baseGachaSummaryCards, resolvedThumbnailUrlByCardKey]
+  );
 
   useEffect(() => {
     if (hasHistoryParam) {
@@ -311,8 +444,14 @@ export function ReceivePage(): JSX.Element {
       setDuplicateReason(null);
       setHasAttemptedLoad(false);
       setOmittedItemNames([]);
+      setActiveSelectionOwnerId(null);
+      setResolvedThumbnailUrlByCardKey({});
     }
   }, [activeToken, hasHistoryParam, isShareLinkMode]);
+
+  useEffect(() => {
+    setHasTriggeredReceiveAction(false);
+  }, [activeToken, historyParam]);
 
   useEffect(() => {
     if (hasHistoryParam) {
@@ -327,6 +466,8 @@ export function ReceivePage(): JSX.Element {
       setMediaItems([]);
       setOmittedItemNames([]);
       setActiveHistoryId(null);
+      setActiveSelectionOwnerId(null);
+      setResolvedThumbnailUrlByCardKey({});
       return;
     }
 
@@ -476,6 +617,7 @@ export function ReceivePage(): JSX.Element {
         } finally {
           queueThumbnailGeneration(existingEntry.id);
           setActiveHistoryId(existingEntry.id);
+          setActiveSelectionOwnerId(existingEntry.ownerId ?? null);
           setDuplicateHistoryEntry(existingEntry);
           setDuplicateReason('token');
           setIsSavingHistory(false);
@@ -486,12 +628,21 @@ export function ReceivePage(): JSX.Element {
       const selectionInfo = await loadReceiveZipSelectionInfo(zipBlob);
       const pullIds = selectionInfo.pullIds;
       const ownerName = selectionInfo.ownerName;
+      const ownerId = selectionInfo.ownerId;
+      setActiveSelectionOwnerId(ownerId ?? null);
       let nextHistoryEntries = historyEntries;
       let metadataChanged = false;
       if (historyEntries.length > 0) {
         const updatedEntries = [...historyEntries];
         for (const entry of historyEntries) {
-          if (entry.pullIds && entry.pullIds.length > 0) {
+          if (
+            entry.pullIds &&
+            entry.pullIds.length > 0 &&
+            entry.ownerName &&
+            entry.ownerName.trim() &&
+            entry.ownerId &&
+            entry.ownerId.trim()
+          ) {
             continue;
           }
           const entryBlob = await loadHistoryFile(entry.id);
@@ -500,15 +651,21 @@ export function ReceivePage(): JSX.Element {
           }
           const entrySelectionInfo = await loadReceiveZipSelectionInfo(entryBlob);
           const entryPullIds = entrySelectionInfo.pullIds;
-          if (entryPullIds.length === 0) {
+          if (
+            entryPullIds.length === 0 &&
+            !entrySelectionInfo.ownerName &&
+            !entrySelectionInfo.ownerId
+          ) {
             continue;
           }
           const index = updatedEntries.findIndex((candidate) => candidate.id === entry.id);
           if (index >= 0) {
+            const currentEntry = updatedEntries[index];
             updatedEntries[index] = {
-              ...updatedEntries[index],
-              pullIds: entryPullIds,
-              ownerName: entrySelectionInfo.ownerName ?? updatedEntries[index].ownerName
+              ...currentEntry,
+              pullIds: entryPullIds.length > 0 ? entryPullIds : currentEntry.pullIds,
+              ownerName: entrySelectionInfo.ownerName ?? currentEntry.ownerName,
+              ownerId: entrySelectionInfo.ownerId ?? currentEntry.ownerId
             };
             metadataChanged = true;
           }
@@ -526,6 +683,7 @@ export function ReceivePage(): JSX.Element {
         : null;
       if (duplicatedByPull) {
         setActiveHistoryId(duplicatedByPull.id);
+        setActiveSelectionOwnerId(duplicatedByPull.ownerId ?? null);
         setDuplicateHistoryEntry(duplicatedByPull);
         setDuplicateReason('pull');
         setIsSavingHistory(false);
@@ -556,6 +714,7 @@ export function ReceivePage(): JSX.Element {
         itemNames: itemNames.length > 0 ? itemNames.slice(0, 24) : undefined,
         pullCount: pullCount ?? undefined,
         ownerName: ownerName ?? null,
+        ownerId: ownerId ?? null,
         pullIds: pullIds.length > 0 ? pullIds : undefined,
         downloadedAt: timestamp,
         itemCount: items.length,
@@ -591,6 +750,7 @@ export function ReceivePage(): JSX.Element {
     if (!resolved?.url) {
       return;
     }
+    setHasTriggeredReceiveAction(true);
     downloadAbortRef.current?.abort();
     const controller = new AbortController();
     downloadAbortRef.current = controller;
@@ -606,6 +766,7 @@ export function ReceivePage(): JSX.Element {
     setCleanupStatus('idle');
     setCleanupError(null);
     setActiveHistoryId(null);
+    setActiveSelectionOwnerId(null);
     setHistorySaveError(null);
 
     try {
@@ -680,6 +841,7 @@ export function ReceivePage(): JSX.Element {
       setHasAttemptedLoad(true);
       setActiveHistoryId(entry.id);
       setIsRestoringHistory(true);
+      setHasTriggeredReceiveAction(true);
       setIsBulkDownloading(false);
       setBulkDownloadError(null);
       setCleanupStatus('idle');
@@ -703,6 +865,25 @@ export function ReceivePage(): JSX.Element {
         const blob = await loadHistoryFile(entry.id);
         if (!blob) {
           throw new Error('保存済みのファイルが見つかりませんでした。履歴を削除して再度お試しください。');
+        }
+        const selectionInfo = await loadReceiveZipSelectionInfo(blob);
+        const resolvedOwnerId = selectionInfo.ownerId ?? entry.ownerId ?? null;
+        setActiveSelectionOwnerId(resolvedOwnerId);
+        if (
+          (!entry.ownerId && selectionInfo.ownerId) ||
+          (!entry.ownerName && selectionInfo.ownerName)
+        ) {
+          const updatedEntries = historyEntries.map((historyEntry) =>
+            historyEntry.id === entry.id
+              ? {
+                  ...historyEntry,
+                  ownerId: selectionInfo.ownerId ?? historyEntry.ownerId,
+                  ownerName: selectionInfo.ownerName ?? historyEntry.ownerName
+                }
+              : historyEntry
+          );
+          setHistoryEntries(updatedEntries);
+          persistHistoryMetadata(updatedEntries);
         }
         const { metadataEntries, mediaItems: items, migratedBlob } = await loadReceiveZipInventory(blob, {
           migrateDigitalItemTypes: true,
@@ -738,7 +919,7 @@ export function ReceivePage(): JSX.Element {
         setIsRestoringHistory(false);
       }
     },
-    []
+    [historyEntries]
   );
 
   useEffect(() => {
@@ -775,26 +956,45 @@ export function ReceivePage(): JSX.Element {
     setCleanupError(null);
 
     try {
-      const csrf = csrfRef.current ?? (await requestCsrfToken());
-      csrfRef.current = csrf;
-
-      const response = await fetch('/api/receive/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token: resolvedToken, csrf })
+      const response = await fetchWithCsrfRetry({
+        fetcher: fetch,
+        getToken: async () => {
+          const token = csrfRef.current ?? (await requestCsrfToken());
+          csrfRef.current = token;
+          return token;
+        },
+        refreshToken: async () => {
+          const token = await requestCsrfToken();
+          csrfRef.current = token;
+          return token;
+        },
+        performRequest: async (csrf, currentFetcher, meta) =>
+          currentFetcher('/api/receive/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...createCsrfRetryRequestHeaders(meta)
+            },
+            credentials: 'include',
+            body: JSON.stringify({ token: resolvedToken, csrf })
+          }),
+        maxRetry: 1
       });
 
-      let payload: { ok?: boolean; error?: string } | null = null;
+      let payload: { ok?: boolean; error?: string; errorCode?: string; csrfReason?: string } | null = null;
       try {
-        payload = (await response.json()) as { ok?: boolean; error?: string };
+        payload = (await response.json()) as { ok?: boolean; error?: string; errorCode?: string; csrfReason?: string };
       } catch {
         // ignore json parse errors
       }
 
       if (!response.ok || !payload?.ok) {
-        const message = payload?.error ?? 'ファイルの削除に失敗しました。時間を置いて再度お試しください。';
-        throw new Error(message);
+        const reason = payload?.error ?? 'ファイルの削除に失敗しました。時間を置いて再度お試しください。';
+        const csrfFailure = inspectCsrfFailurePayload(payload);
+        if (csrfFailure.isMismatch) {
+          throw new Error(`${reason}\n\n${getCsrfMismatchGuideMessageJa(csrfFailure.reason)}`);
+        }
+        throw new Error(reason);
       }
 
       setCleanupStatus('success');
@@ -850,7 +1050,7 @@ export function ReceivePage(): JSX.Element {
   return (
     <div className="receive-page-root min-h-screen text-surface-foreground">
       <main className="receive-page-content mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 lg:px-8">
-        <div className="receive-page-hero-card rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
+        <div className="receive-page-hero-card rounded-3xl bg-panel/85 p-6 backdrop-blur">
           <div className="receive-page-hero-header flex flex-wrap items-start justify-between gap-4">
             <div className="receive-page-hero-info space-y-3">
               <div className="space-y-1">
@@ -913,7 +1113,7 @@ export function ReceivePage(): JSX.Element {
                       }
                     }}
                     placeholder="例: https://shimmy3.com/receive?t=XXXXXXXXXX"
-                    className="receive-page-token-input h-[52px] w-full flex-1 rounded-2xl border border-border/60 bg-surface/80 px-4 text-base text-surface-foreground shadow-inner shadow-black/5 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40"
+                    className="receive-page-token-input h-[52px] min-h-[52px] w-full rounded-2xl border border-border/60 bg-surface/80 px-4 text-base text-surface-foreground outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/40 lg:flex-1"
                   />
                   <button
                     type="submit"
@@ -930,31 +1130,31 @@ export function ReceivePage(): JSX.Element {
           ) : null}
         </div>
 
+        {historyLoadError ? (
+          <div className="receive-page-history-load-error rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
+            {historyLoadError}
+          </div>
+        ) : null}
+
         {shouldShowSteps ? (
-          <div className="receive-page-steps-card rounded-3xl border border-border/60 bg-panel/85 p-6 shadow-lg shadow-black/10 backdrop-blur">
-            <div className="receive-page-steps-content flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="receive-page-steps-description">
-                <h2 className="receive-page-steps-title text-2xl font-semibold text-surface-foreground">手順</h2>
-                <ol className="receive-page-steps-list mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-                  <li className="receive-page-step-item">「受け取る」ボタンを押すとダウンロードが始まります（端末には自動保存されません）。</li>
-                  <li className="receive-page-step-item">ダウンロード完了後に自動で解凍し、画像・動画・音声などの項目を一覧表示します。</li>
-                  <li className="receive-page-step-item">各項目の「保存」ボタンで、端末に個別保存できます。</li>
-                </ol>
-              </div>
+          <div className="receive-page-steps-card rounded-3xl bg-panel/85 p-6 backdrop-blur">
+            {(!hasTriggeredReceiveAction || Boolean(downloadError)) ? (
               <div className="receive-page-steps-actions flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleStartDownload}
-                  disabled={resolveStatus !== 'success' || downloadPhase === 'downloading' || downloadPhase === 'unpacking'}
-                  className="receive-page-start-download-button btn btn-primary rounded-2xl px-8 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="receive-page-start-download-button-text">{isViewingHistory ? 'もう一度受け取る' : '受け取る'}</span>
-                </button>
+                {!hasTriggeredReceiveAction ? (
+                  <button
+                    type="button"
+                    onClick={handleStartDownload}
+                    disabled={resolveStatus !== 'success' || downloadPhase === 'downloading' || downloadPhase === 'unpacking'}
+                    className="receive-page-start-download-button btn btn-primary rounded-2xl px-8 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="receive-page-start-download-button-text">{isViewingHistory ? 'もう一度受け取る' : '受け取る'}</span>
+                  </button>
+                ) : null}
                 {downloadError ? (
                   <div className="receive-page-download-error-banner rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">{downloadError}</div>
                 ) : null}
               </div>
-            </div>
+            ) : null}
 
             {(downloadPhase === 'downloading' || downloadPhase === 'unpacking') && (
               <div className="receive-page-progress-section mt-6 space-y-4">
@@ -1003,6 +1203,8 @@ export function ReceivePage(): JSX.Element {
                   <ReceiveBulkSaveButton
                     onClick={handleDownloadAll}
                     isLoading={isBulkDownloading}
+                    tone="accent"
+                    showIcon={false}
                     className="receive-page-bulk-download-button"
                   />
                   <span className="receive-page-completion-summary-status text-xs uppercase tracking-wide text-muted-foreground">受け取り完了</span>
@@ -1028,13 +1230,41 @@ export function ReceivePage(): JSX.Element {
           </div>
         ) : null}
 
+        {gachaSummaryCards.length > 0 ? (
+          <section className="receive-page-gacha-summary-section rounded-3xl bg-panel/85 p-5 backdrop-blur">
+            <h2 className="receive-page-gacha-summary-title text-base font-semibold text-surface-foreground">ガチャ別サマリー</h2>
+            <div className="receive-page-gacha-summary-grid mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {gachaSummaryCards.map((card) => (
+                <div
+                  key={card.key}
+                  className="receive-page-gacha-summary-card flex items-center gap-3 rounded-2xl border border-border/60 bg-surface/50 p-3"
+                >
+                  <ItemPreview
+                    assetId={card.thumbnailAssetId}
+                    fallbackUrl={card.thumbnailBlobUrl}
+                    alt={`${card.gachaName}の配信サムネイル`}
+                    kindHint="image"
+                    imageFit="cover"
+                    emptyLabel="noImage"
+                    className="receive-page-gacha-summary-thumbnail h-12 w-12 bg-surface-deep"
+                  />
+                  <div className="receive-page-gacha-summary-card-content min-w-0">
+                    <p className="receive-page-gacha-summary-card-name truncate text-sm font-semibold text-surface-foreground">{card.gachaName}</p>
+                    <p className="receive-page-gacha-summary-card-count text-xs text-muted-foreground">景品 {card.itemCount} 件</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         {mediaItems.length > 0 ? (
           <div className="receive-page-media-grid grid gap-4 sm:gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
             {mediaItems.map((item) => (
               <ReceiveItemCard key={item.id} item={item} onSave={handleSaveItem} />
             ))}
           </div>
-        ) : resolveStatus === 'success' && downloadPhase === 'waiting' ? (
+        ) : resolveStatus === 'success' && downloadPhase === 'waiting' && !hasTriggeredReceiveAction ? (
           <div className="receive-page-download-prompt rounded-3xl border border-dashed border-border/60 bg-surface/40 p-10 text-center text-sm text-muted-foreground">
             <span className="receive-page-download-prompt-text">受け取りボタンを押すとファイルのダウンロードが始まります。</span>
           </div>
@@ -1055,7 +1285,7 @@ export function ReceivePage(): JSX.Element {
                 type="button"
                 onClick={handleCleanupBlob}
                 disabled={cleanupStatus === 'working' || cleanupStatus === 'success'}
-                className="receive-page-cleanup-button inline-flex items-center gap-2 rounded-xl border border-amber-500/60 bg-amber-500 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+                className="receive-page-cleanup-button inline-flex items-center gap-2 rounded-xl border border-amber-500/60 bg-amber-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
               >
                 {cleanupStatus === 'working' ? (
                   <ArrowPathIcon className="receive-page-cleanup-spinner h-5 w-5 animate-spin" aria-hidden="true" />
@@ -1074,24 +1304,6 @@ export function ReceivePage(): JSX.Element {
             ) : null}
           </div>
         ) : null}
-
-        <div className="rounded-3xl border border-border/60 bg-panel/85 p-5 text-sm text-muted-foreground shadow-lg shadow-black/10 backdrop-blur">
-          <h3 className="text-base font-semibold text-surface-foreground">ヒント</h3>
-          {historyLoadError ? (
-            <div className="mt-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-500">
-              {historyLoadError}
-            </div>
-          ) : null}
-          <ul className="mt-3 list-disc space-y-2 pl-5">
-            <li>履歴はブラウザに保存されます。別の端末では共有されません。</li>
-            <li>ブラウザの閲覧履歴削除行為や、キャッシュ削除行為などでこのサイトのダウンロード履歴も消えます。また、OSが自動的に消すこともあります。</li>
-            <li>ダウンロード中はブラウザを閉じずにお待ちください。</li>
-          </ul>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link to="/receive/history" className="btn btn-muted rounded-full">履歴を見る</Link>
-            <Link to="/receive/list" className="btn btn-muted rounded-full">所持一覧を見る</Link>
-          </div>
-        </div>
       </main>
     </div>
   );

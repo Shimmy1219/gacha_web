@@ -1,6 +1,8 @@
 // /api/discord/me.js
 import { withApiGuards } from '../_lib/apiGuards.js';
+import { setDiscordActorCookies } from '../_lib/actorCookies.js';
 import { getCookies } from '../_lib/cookies.js';
+import { clearDiscordSessionHintCookie, setDiscordSessionHintCookie } from '../_lib/discordSessionHintCookie.js';
 import { getSessionWithRefresh } from '../_lib/getSessionWithRefresh.js';
 import { createRequestLogger } from '../_lib/logger.js';
 
@@ -24,10 +26,17 @@ export default withApiGuards({
   const log = createRequestLogger('api/discord/me', req);
   const soft = req.query?.soft === '1';
   log.info('リクエストを受信しました', { soft });
+  // このエンドポイントはヒントクッキー更新など副作用を伴うため、
+  // HTTPキャッシュ(ETag/304)で短絡されないよう毎回実処理を強制する。
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   const { sid } = getCookies(req);
   if (!sid) {
     log.info('セッション用クッキーが見つかりませんでした。');
+    // sid が消えている場合はヒントクッキーも掃除して、以後の不要な自動アクセスを防ぐ
+    clearDiscordSessionHintCookie(res);
     if (soft) return res.status(200).json({ ok:false, loggedIn:false });
     return res.status(401).json({ ok:false, error:'no session' });
   }
@@ -38,15 +47,42 @@ export default withApiGuards({
   const sess = await getSessionWithRefresh(sid);
   if (!sess) {
     log.info('kvからセッションデータが見つかりませんでした。', { sidPreview });
+    // サーバー側セッションが既に無効化されているためヒントを削除する
+    clearDiscordSessionHintCookie(res);
     if (soft) return res.status(200).json({ ok:false, loggedIn:false });
     return res.status(401).json({ ok:false, error:'invalid session' });
   }
 
   log.info('kvからセッションデータを復元しました。', { sidPreview, userId: sess.uid });
+  const sessionUsername =
+    typeof sess.username === 'string' && sess.username.trim().length > 0
+      ? sess.username.trim()
+      : typeof sess.name === 'string' && sess.name.trim().length > 0
+        ? sess.name.trim()
+        : String(sess.uid ?? '');
+  const sessionDisplayName =
+    typeof sess.displayName === 'string' && sess.displayName.trim().length > 0
+      ? sess.displayName.trim()
+      : sessionUsername;
+  // callbackを経由しないケースでも actor追跡用cookieを自己修復する。
+  setDiscordActorCookies(res, {
+    id: sess.uid,
+    username: sessionUsername,
+    displayName: sessionDisplayName,
+    maxAgeSec: 60 * 60 * 24 * 30
+  });
+  // 正常セッション時はヒントを延命しておく
+  setDiscordSessionHintCookie(res);
 
   return res.status(200).json({
     ok: true,
     loggedIn: true,
-    user: { id: sess.uid, name: sess.name, avatar: sess.avatar },
+    user: {
+      id: sess.uid,
+      name: sessionDisplayName,
+      username: sessionUsername,
+      displayName: sessionDisplayName,
+      avatar: sess.avatar
+    },
   });
 });

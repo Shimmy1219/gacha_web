@@ -14,6 +14,7 @@ import { useDiscordSession } from '../../../../features/discord/useDiscordSessio
 import { useAppPersistence } from '../../../../features/storage/AppPersistenceProvider';
 import { DISCORD_BOT_INVITE_URL } from '../../../../features/discord/discordInviteConfig';
 import { useModal, DiscordBotInviteDialog } from '../../../../modals';
+import { syncOwnerNameActorCookie } from '../../../../features/receive/ownerActorCookie';
 import {
   loadDiscordGuildSelection,
   type DiscordGuildSelection
@@ -66,6 +67,8 @@ export function DiscordLoginButton({
     const currentOwnerName = currentPrefs?.ownerName ?? null;
     if (userId) {
       const normalized = userName?.trim() || userId;
+      // Discordログイン中はownerNameとowner_name cookieを同じ値へ寄せる。
+      syncOwnerNameActorCookie(normalized);
       if (normalized && normalized !== currentOwnerName) {
         persistence.saveReceivePrefs({
           ...currentPrefs,
@@ -76,14 +79,10 @@ export function DiscordLoginButton({
       }
       return;
     }
-    if (currentOwnerName) {
-      persistence.saveReceivePrefs({
-        ...currentPrefs,
-        version: 3,
-        intro: currentPrefs?.intro ?? { skipIntro: false },
-        ownerName: null
-      });
-    }
+    // ログイン状態の判定前(初回ロード中)でもこのeffectは走るため、
+    // ここでownerNameをnullにすると画面遷移/リロードのたびに設定が消えてしまう。
+    // 未ログイン時は永続設定を保持し、cookieだけ現在値へ同期する。
+    syncOwnerNameActorCookie(currentOwnerName);
   }, [persistence, userId, userName]);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { Disclosure } from '@headlessui/react';
-import { ChevronRightIcon, EllipsisVerticalIcon, FolderArrowDownIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { ChevronRightIcon, EllipsisVerticalIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
 import {
@@ -18,6 +18,7 @@ import { getRarityTextPresentation } from '../../../../features/rarity/utils/rar
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import {
   ConfirmDialog,
+  DrawGachaDialog,
   InventoryHistoryDialog,
   OriginalPrizeSettingsDialog,
   useModal,
@@ -74,6 +75,7 @@ export interface UserCardProps {
   catalogItemsByGacha?: Record<string, InventoryCatalogItemOption[]>;
   rarityOptionsByGacha?: Record<string, InventoryRarityOption[]>;
   discordDisplayName?: string | null;
+  discordUserName?: string | null;
   discordAvatarAssetId?: string | null;
   discordAvatarUrl?: string | null;
 }
@@ -92,6 +94,7 @@ export function UserCard({
   catalogItemsByGacha,
   rarityOptionsByGacha,
   discordDisplayName,
+  discordUserName,
   discordAvatarAssetId,
   discordAvatarUrl
 }: UserCardProps): JSX.Element {
@@ -138,6 +141,12 @@ export function UserCard({
   const catalogItemsMap = catalogItemsByGacha ?? {};
   const rarityOptionsMap = rarityOptionsByGacha ?? {};
   const normalizedDiscordDisplayName = discordDisplayName?.trim() ?? '';
+  const normalizedDiscordUserName = discordUserName?.trim() ?? '';
+  const discordUserIdDisplay = normalizedDiscordUserName
+    ? normalizedDiscordUserName.startsWith('@')
+      ? normalizedDiscordUserName
+      : `@${normalizedDiscordUserName}`
+    : '';
   const avatarAssetId = discordAvatarAssetId ?? null;
   const avatarPreview = useAssetPreview(avatarAssetId);
   const avatarSrc = avatarPreview.url ?? (discordAvatarUrl ?? null);
@@ -147,13 +156,13 @@ export function UserCard({
   );
   const resolvedDefaultOpen = persistedOpenState ?? expandedByDefault ?? false;
   const avatarFallback = useMemo(() => {
-    const source = normalizedDiscordDisplayName || userName;
+    const source = normalizedDiscordDisplayName || normalizedDiscordUserName || userName;
     if (!source) {
       return '';
     }
     const [first] = Array.from(source);
     return first ? first.toUpperCase() : '';
-  }, [normalizedDiscordDisplayName, userName]);
+  }, [normalizedDiscordDisplayName, normalizedDiscordUserName, userName]);
   const inventoryDigest = useMemo(() => {
     return inventories
       .map((entry) => `${entry.gachaId}:${entry.pulls.reduce((sum, item) => sum + item.count, 0)}`)
@@ -286,6 +295,18 @@ export function UserCard({
     });
   }, [push, userId, userName]);
 
+  const handleOpenDrawGacha = useCallback(() => {
+    setUserMenuAnchor(null);
+    push(DrawGachaDialog, {
+      id: 'draw-gacha-dialog',
+      title: 'ガチャを引く',
+      size: 'lg',
+      payload: {
+        initialUserName: userName
+      }
+    });
+  }, [push, userName]);
+
   const handleDeleteUser = useCallback(() => {
     setUserMenuAnchor(null);
     push(ConfirmDialog, {
@@ -339,12 +360,17 @@ export function UserCard({
   return (
     <Disclosure defaultOpen={resolvedDefaultOpen}>
       {({ open }) => (
-        <article className="user-card space-y-4 rounded-2xl border border-border/60 bg-[var(--color-user-card)] p-5">
+        <article
+          className={clsx(
+            'user-card space-y-3 rounded-2xl border border-border/60 bg-[var(--color-user-card)] px-4 pt-4 sm:px-5',
+            open ? 'pb-4' : 'pb-1'
+          )}
+        >
           <header
-            className="user-card__header flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap"
+            className="user-card__header flex flex-wrap items-start justify-between gap-2.5 sm:flex-nowrap"
             onClick={handleCardClick}
           >
-            <div className="flex min-w-0 flex-1 items-start gap-3">
+            <div className="user-card__header-main flex min-w-0 flex-1 items-start gap-3">
               <Disclosure.Button
                 ref={toggleButtonRef}
                 type="button"
@@ -364,97 +390,110 @@ export function UserCard({
                   )}
                 />
               </Disclosure.Button>
-              <div className="flex min-w-0 flex-1 items-start gap-1">
-                {avatarSrc ? (
-                  <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
-                    <img
-                      src={avatarSrc}
-                      alt={`${userName}のDiscordアイコン`}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                ) : normalizedDiscordDisplayName ? (
-                  <div className="user-card__avatar-fallback relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-surface/50 text-sm font-semibold text-muted-foreground">
-                    <span aria-hidden="true">{avatarFallback}</span>
-                  </div>
-                ) : null}
-                <div className="user-card__summary min-w-0 space-y-1">
-                  {isEditingName ? (
-                    <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
-                      <label className="sr-only" htmlFor={nameFieldId}>
-                        ユーザー名
-                      </label>
-                      <input
-                        ref={nameInputRef}
-                        id={nameFieldId}
-                        type="text"
-                        className="min-w-[10rem] flex-1 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1.5 text-sm text-surface-foreground focus:border-accent focus:outline-none"
-                        value={nameDraft}
-                        onChange={(event) => {
-                          setNameDraft(event.target.value);
-                          if (nameError) {
-                            setNameError(null);
-                          }
-                        }}
-                        onKeyDown={handleNameKeyDown}
-                        aria-invalid={nameError ? 'true' : undefined}
+              <div className="user-card__main-content flex min-w-0 flex-1 flex-col gap-2">
+                <div className="user-card__identity flex min-w-0 flex-1 items-start gap-2">
+                  {avatarSrc ? (
+                    <div className="user-card__avatar relative mt-0.5 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-border/60 bg-surface/60">
+                      <img
+                        src={avatarSrc}
+                        alt={`${userName}のDiscordアイコン`}
+                        className="h-full w-full object-cover"
                       />
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="submit"
-                          className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-white transition hover:bg-accent-bright focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                        >
-                          保存
-                        </button>
+                    </div>
+                  ) : normalizedDiscordDisplayName || normalizedDiscordUserName ? (
+                    <div className="user-card__avatar-fallback relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-surface/50 text-sm font-semibold text-muted-foreground">
+                      <span aria-hidden="true">{avatarFallback}</span>
+                    </div>
+                  ) : null}
+                  <div className="user-card__summary flex min-w-0 flex-1 flex-col gap-1.5">
+                    {isEditingName ? (
+                      <form className="flex flex-wrap items-center gap-2" onSubmit={handleNameSubmit}>
+                        <label className="sr-only" htmlFor={nameFieldId}>
+                          ユーザー名
+                        </label>
+                        <input
+                          ref={nameInputRef}
+                          id={nameFieldId}
+                          type="text"
+                          className="min-w-[10rem] flex-1 rounded-lg border border-border/60 bg-panel-contrast px-3 py-1.5 text-sm text-surface-foreground focus:border-accent focus:outline-none"
+                          value={nameDraft}
+                          onChange={(event) => {
+                            setNameDraft(event.target.value);
+                            if (nameError) {
+                              setNameError(null);
+                            }
+                          }}
+                          onKeyDown={handleNameKeyDown}
+                          aria-invalid={nameError ? 'true' : undefined}
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="submit"
+                            className="rounded-lg bg-accent px-3 py-1 text-sm font-semibold text-white transition hover:bg-accent-bright focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            保存
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border/60 px-3 py-1 text-sm text-muted-foreground transition hover:border-border/40 hover:text-surface-foreground"
+                            onClick={handleCancelEditName}
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
                         <button
                           type="button"
-                          className="rounded-lg border border-border/60 px-3 py-1 text-sm text-muted-foreground transition hover:border-border/40 hover:text-surface-foreground"
-                          onClick={handleCancelEditName}
+                          className="user-card__name-trigger flex w-full items-center text-left leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          aria-expanded={open}
+                          aria-controls={panelId}
+                          onClick={() => {
+                            toggleButtonRef.current?.click();
+                          }}
                         >
-                          キャンセル
+                          <h3 className="user-card__name text-[15px] font-semibold leading-tight text-surface-foreground sm:text-base">
+                            {userName}
+                          </h3>
                         </button>
-                      </div>
-                    </form>
-                  ) : (
+                        {discordUserIdDisplay ? (
+                          <span className="user-card__discord-display text-xs text-muted-foreground">
+                            {discordUserIdDisplay}
+                          </span>
+                        ) : null}
+                      </>
+                    )}
+                    {isEditingName && normalizedDiscordDisplayName ? (
+                      <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
+                    ) : null}
+                    {nameError ? <p className="text-xs text-red-500">{nameError}</p> : null}
+                    {memo ? (
+                      <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
+                    ) : null}
+                  </div>
+                </div>
+                {onExport ? (
+                  <div className="user-card__summary-footer flex flex-wrap items-center gap-2 pt-0.5">
                     <button
                       type="button"
-                      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      aria-expanded={open}
-                      aria-controls={panelId}
-                      onClick={() => {
-                        toggleButtonRef.current?.click();
-                      }}
+                      className="user-card__export-button inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent/60 bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                      onClick={() => onExport(userId)}
                     >
-                      <h3 className="user-card__name text-base font-semibold text-surface-foreground">{userName}</h3>
-                      {normalizedDiscordDisplayName ? (
-                        <span className="user-card__discord-display text-xs text-muted-foreground">
-                          {normalizedDiscordDisplayName}
-                        </span>
-                      ) : null}
+                      景品の保存・共有
                     </button>
-                  )}
-                  {isEditingName && normalizedDiscordDisplayName ? (
-                    <p className="text-xs text-muted-foreground">Discord表示名: {normalizedDiscordDisplayName}</p>
-                  ) : null}
-                  {nameError ? <p className="text-xs text-red-500">{nameError}</p> : null}
-                  {memo ? (
-                    <p className="user-card__memo text-xs text-muted-foreground">{memo}</p>
-                  ) : null}
-                  {showCounts && totalSummary ? (
-                    <p className="user-card__total text-xs text-muted-foreground/80">{totalSummary}</p>
-                  ) : null}
-                </div>
+                    <button
+                      type="button"
+                      className="user-card__draw-button toolbar-actions__draw-button btn-primary inline-flex min-h-0 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-1.5 text-xs lg:w-auto"
+                      onClick={handleOpenDrawGacha}
+                    >
+                      ガチャを引く
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
-            <div className="user-card__actions flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="user-card__export-button inline-flex h-9 w-9 items-center justify-center rounded-lg border border-accent/70 bg-accent text-base font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:bg-accent-bright"
-                onClick={() => onExport?.(userId)}
-                aria-label="保存"
-              >
-                <FolderArrowDownIcon className="h-5 w-5" />
-              </button>
+            <div className="user-card__actions flex shrink-0 items-start gap-2 pt-0.5">
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-panel-contrast text-muted-foreground transition hover:border-accent/60 hover:bg-panel-muted hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -477,7 +516,7 @@ export function UserCard({
           <div
             data-state={open ? 'open' : 'closed'}
             className={clsx(
-              'user-card__collapsible group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
+              'group grid overflow-hidden transition-[grid-template-rows] duration-300 ease-linear',
               'data-[state=open]:grid-rows-[1fr]',
               'data-[state=closed]:grid-rows-[0fr]'
             )}

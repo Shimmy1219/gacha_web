@@ -21,11 +21,13 @@ import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
 import { useModal } from '../../../../modals';
 import { ItemDeleteConfirmDialog } from '../../../../modals/dialogs/ItemDeleteConfirmDialog';
+import { ItemsRarityFileUploadDialog } from '../../../../modals/dialogs/ItemsRarityFileUploadDialog';
 import { PrizeSettingsDialog } from '../../../../modals/dialogs/PrizeSettingsDialog';
 import { ItemAssetPreviewDialog } from '../../../../modals/dialogs/ItemAssetPreviewDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { useDomainStores } from '../../../../features/storage/AppPersistenceProvider';
 import { type GachaCatalogItemV4, type RiaguCardModelV3 } from '@domain/app-persistence';
+import { deleteAsset, saveAsset } from '@domain/assets/assetStorage';
 import { generateItemId } from '@domain/idGenerators';
 import { GachaTabs, type GachaTabOption } from '../common/GachaTabs';
 import { useGachaDeletion } from '../../../../features/gacha/hooks/useGachaDeletion';
@@ -81,7 +83,29 @@ function getSequentialItemName(position: number): string {
   return name || 'A';
 }
 
-export function ItemsSection(): JSX.Element {
+function formatFilenameAsItemName(filename: string | null | undefined): string {
+  if (!filename) {
+    return '';
+  }
+
+  const trimmed = filename.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const lastDotIndex = trimmed.lastIndexOf('.');
+  if (lastDotIndex <= 0) {
+    return trimmed;
+  }
+
+  return trimmed.slice(0, lastDotIndex);
+}
+
+interface ItemsSectionProps {
+  onRegisterGacha?: () => void;
+}
+
+export function ItemsSection({ onRegisterGacha }: ItemsSectionProps): JSX.Element {
   const { catalog: catalogStore, pullHistory: pullHistoryStore, riagu: riaguStore } = useDomainStores();
   const { status, data } = useGachaLocalStorage();
   const { push } = useModal();
@@ -90,6 +114,7 @@ export function ItemsSection(): JSX.Element {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const sectionWrapperRef = useRef<HTMLDivElement | null>(null);
+  const previousSelectedGachaIdRef = useRef<string | null | undefined>(data?.appState?.selectedGachaId);
   const [forceMobileSection, setForceMobileSection] = useState(false);
   const [sortOption, setSortOption] = useState<ItemSortOption>('catalog');
   const [sortDirection, setSortDirection] = useState<ItemSortDirection>(
@@ -383,19 +408,26 @@ export function ItemsSection(): JSX.Element {
   }, [flatItems]);
 
   useEffect(() => {
+    const selectedGachaId = data?.appState?.selectedGachaId;
+    const selectedGachaIdChanged = previousSelectedGachaIdRef.current !== selectedGachaId;
+    previousSelectedGachaIdRef.current = selectedGachaId;
+
     if (!gachaTabs.length) {
       setActiveGachaId(null);
       return;
     }
 
     setActiveGachaId((current) => {
+      // 新規ガチャ作成時のみ selectedGachaId 変更を優先して、追加直後の表示先を新規ガチャへ合わせる。
+      if (selectedGachaIdChanged && selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
+      }
       if (current && gachaTabs.some((tab) => tab.id === current)) {
         return current;
       }
 
-      const preferred = data?.appState?.selectedGachaId;
-      if (preferred && gachaTabs.some((tab) => tab.id === preferred)) {
-        return preferred;
+      if (selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
       }
 
       return gachaTabs[0].id;
@@ -886,23 +918,105 @@ export function ItemsSection(): JSX.Element {
     [data?.rarityState]
   );
 
-  const handleAddItemWithoutAsset = useCallback(() => {
+  const handleAddItemsWithAssets = useCallback(
+    async (params: {
+      files: File[];
+      rarityId: string | null;
+      useFilenameAsItemName: boolean;
+    }) => {
+      const { files, rarityId, useFilenameAsItemName } = params;
+
+      if (!activeGachaId) {
+        throw new Error('有効なガチャが見つかりません。');
+      }
+
+      if (files.length === 0) {
+        return;
+      }
+
+      if (typeof window === 'undefined' || typeof window.indexedDB === 'undefined') {
+        throw new Error('この環境ではファイルを保存できません。');
+      }
+
+      const catalogState = catalogStore.getState() ?? data?.catalogState;
+      const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
+      if (!gachaCatalog) {
+        throw new Error(`ガチャ ${activeGachaId} のカタログが見つかりません。`);
+      }
+
+      const availableRarityIds = new Set(rarityOptionsForActiveGacha.map((option) => option.id));
+      const fallbackRarityId = getDefaultRarityId(activeGachaId);
+      const resolvedRarityId =
+        rarityId && availableRarityIds.has(rarityId) ? rarityId : fallbackRarityId;
+
+      if (!resolvedRarityId) {
+        throw new Error('追加可能なレアリティが見つかりません。');
+      }
+
+      const createdAssetIds: string[] = [];
+
+      try {
+        const assetRecords = await Promise.all(
+          files.map(async (file) => {
+            const saved = await saveAsset(file);
+            createdAssetIds.push(saved.id);
+            return saved;
+          })
+        );
+
+        const baseOrder = gachaCatalog.order?.length ?? 0;
+        const timestamp = new Date().toISOString();
+        const itemsToAdd: GachaCatalogItemV4[] = assetRecords.map((record, index) => ({
+          itemId: generateItemId(),
+          name:
+            (useFilenameAsItemName
+              ? formatFilenameAsItemName(files[index]?.name ?? record.name)
+              : '') || getSequentialItemName(baseOrder + index),
+          rarityId: resolvedRarityId,
+          order: baseOrder + index + 1,
+          pickupTarget: false,
+          completeTarget: false,
+          originalPrize: false,
+          assets: [{ assetId: record.id, thumbnailAssetId: record.previewId ?? null }],
+          riagu: false,
+          updatedAt: timestamp
+        }));
+
+        catalogStore.addItems({
+          gachaId: activeGachaId,
+          items: itemsToAdd,
+          updatedAt: timestamp
+        });
+      } catch (error) {
+        if (createdAssetIds.length > 0) {
+          await Promise.allSettled(createdAssetIds.map((assetId) => deleteAsset(assetId)));
+        }
+        throw error;
+      }
+    },
+    [
+      activeGachaId,
+      catalogStore,
+      data?.catalogState,
+      getDefaultRarityId,
+      rarityOptionsForActiveGacha
+    ]
+  );
+
+  const handleAddItemWithoutAsset = useCallback(async () => {
     if (!activeGachaId) {
-      console.warn('ファイルなしの追加時に有効なガチャが見つかりませんでした');
-      return;
+      throw new Error('ファイルなしの追加時に有効なガチャが見つかりませんでした。');
     }
 
-    const catalogState = data?.catalogState;
+    const catalogState = catalogStore.getState() ?? data?.catalogState;
     const gachaCatalog = catalogState?.byGacha?.[activeGachaId];
     if (!gachaCatalog) {
-      console.warn(`ガチャ ${activeGachaId} のカタログが見つかりませんでした`);
-      return;
+      throw new Error(`ガチャ ${activeGachaId} のカタログが見つかりませんでした。`);
     }
 
     const rarityId = getDefaultRarityId(activeGachaId);
     if (!rarityId) {
-      console.warn('追加可能なレアリティが見つかりませんでした');
-      return;
+      throw new Error('追加可能なレアリティが見つかりませんでした。');
     }
 
     const baseOrder = gachaCatalog.order?.length ?? 0;
@@ -929,8 +1043,33 @@ export function ItemsSection(): JSX.Element {
       return;
     }
 
-    handleAddItemWithoutAsset();
-  }, [canAddItems, handleAddItemWithoutAsset, showAddCard]);
+    if (!activeGachaId) {
+      return;
+    }
+
+    push(ItemsRarityFileUploadDialog, {
+      id: `items-rarity-upload-${activeGachaId}`,
+      title: '景品を追加',
+      size: 'md',
+      payload: {
+        rarityOptions: rarityOptionsForActiveGacha.map((option) => ({
+          id: option.id,
+          label: option.label || option.id,
+          color: option.color
+        })),
+        onSelectFiles: handleAddItemsWithAssets,
+        onAddItemWithoutFile: handleAddItemWithoutAsset
+      }
+    });
+  }, [
+    activeGachaId,
+    canAddItems,
+    handleAddItemWithoutAsset,
+    handleAddItemsWithAssets,
+    push,
+    rarityOptionsForActiveGacha,
+    showAddCard
+  ]);
 
   const gridClassName = useMemo(
     () =>
@@ -1156,6 +1295,7 @@ export function ItemsSection(): JSX.Element {
             activeId={activeGachaId}
             onSelect={(gachaId) => setActiveGachaId(gachaId)}
             onDelete={(tab) => confirmDeleteGacha(tab)}
+            onAddGacha={onRegisterGacha}
             className="items-section__tabs"
           />
 

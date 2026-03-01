@@ -1,0 +1,102 @@
+import { PhotoIcon, VideoCameraIcon } from '@heroicons/react/24/outline'
+import { type CSSProperties } from 'react'
+
+import { RarityLabel } from '../../../components/RarityLabel'
+import { useAssetPreview } from '../../../features/assets/useAssetPreview'
+
+import type { DrawResultRevealCardModel } from './revealCards'
+
+export interface DrawResultRevealCardProps {
+  card: DrawResultRevealCardModel
+  imageLoading?: 'lazy' | 'eager'
+  badgeStyle?: CSSProperties
+  contentTextColor?: string
+  isDarkColorScheme?: boolean
+}
+
+/**
+ * ガチャ結果演出で表示するサムネイルカード。
+ * 画像・動画・音声で表示を切り替え、常時 `×N` の倍率バッジを表示する。
+ *
+ * @param props 演出カードデータ
+ * @returns 結果演出カード要素
+ */
+export function DrawResultRevealCard({
+  card,
+  imageLoading = 'lazy',
+  badgeStyle,
+  contentTextColor,
+  isDarkColorScheme = true
+}: DrawResultRevealCardProps): JSX.Element {
+  const preview = useAssetPreview(card.assetId, {
+    previewAssetId: card.thumbnailAssetId
+  })
+
+  const previewType = preview.type ?? preview.previewType ?? null
+  const hasImagePreview = Boolean(preview.url) && !previewType?.startsWith('audio/')
+  const isAudio = card.digitalItemType === 'audio' || Boolean(previewType?.startsWith('audio/'))
+  const isVideo = Boolean(previewType?.startsWith('video/'))
+
+  return (
+    <article className="draw-gacha-result-card draw-gacha-result-card--reveal">
+      <div className="draw-gacha-result-card__thumb-wrapper relative">
+        <span
+          className="draw-gacha-result-card__rarity absolute left-1 top-1 z-[1] inline-flex max-w-[calc(100%-0.75rem)] items-center rounded-full border border-white/40 bg-black/65 px-2 py-0.5 text-[10px] font-semibold text-white"
+          style={badgeStyle}
+        >
+          <RarityLabel label={card.rarityLabel} color={card.rarityColor} className="max-w-full text-[10px] font-semibold" />
+        </span>
+        <div className="draw-gacha-result-card__thumb flex items-center justify-center overflow-hidden bg-transparent">
+          {isAudio ? (
+            <div className="draw-gacha-result-card__audio-placeholder flex h-full w-full items-center justify-center" aria-label="音声アイテム">
+              <span className="draw-gacha-result-card__audio-symbol text-3xl font-bold" style={{ color: contentTextColor }}>♫</span>
+            </div>
+          ) : hasImagePreview && preview.url ? (
+            <img
+              src={preview.url}
+              alt={card.name}
+              loading={imageLoading}
+              decoding="async"
+              className="draw-gacha-result-card__image h-full w-full object-contain"
+            />
+          ) : isVideo ? (
+            <VideoCameraIcon
+              className="draw-gacha-result-card__video-icon h-9 w-9 opacity-80"
+              aria-hidden="true"
+              style={{ color: contentTextColor }}
+            />
+          ) : (
+            <PhotoIcon
+              className="draw-gacha-result-card__photo-icon h-9 w-9 opacity-80"
+              aria-hidden="true"
+              style={{ color: contentTextColor }}
+            />
+          )}
+        </div>
+        <span
+          className="draw-gacha-result-card__quantity-badge rounded-full border border-white/40 bg-black/65 px-2 py-0.5 text-[11px] font-semibold text-white"
+          style={badgeStyle}
+        >
+          ×{card.quantity}
+        </span>
+        {card.guaranteedQuantity > 0 ? (
+          <span
+            className={
+              isDarkColorScheme
+                ? 'draw-gacha-result-card__guaranteed-badge absolute right-1.5 top-1.5 rounded-full border border-amber-300/45 bg-amber-300/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100'
+                : 'draw-gacha-result-card__guaranteed-badge absolute right-1.5 top-1.5 rounded-full border border-amber-700/35 bg-amber-100/90 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800'
+            }
+          >
+            保証×{card.guaranteedQuantity}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="draw-gacha-result-card__meta mt-2 space-y-1" style={{ color: contentTextColor }}>
+        <span className="draw-gacha-result-card__name block truncate text-xs font-medium" title={card.name}>
+          {card.name}
+        </span>
+      </div>
+    </article>
+  )
+}

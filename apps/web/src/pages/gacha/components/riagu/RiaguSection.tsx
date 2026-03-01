@@ -1,6 +1,6 @@
 import { Disclosure } from '@headlessui/react';
 import { clsx } from 'clsx';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SectionContainer } from '../layout/SectionContainer';
 import { useTabMotion } from '../../../../hooks/useTabMotion';
@@ -82,6 +82,10 @@ const currencyFormatter = new Intl.NumberFormat('ja-JP', {
 const numberFormatter = new Intl.NumberFormat('ja-JP');
 
 const RIAGU_PANEL_CLOSE_DELAY_MS = 300;
+
+interface RiaguSectionProps {
+  onRegisterGacha?: () => void;
+}
 
 function formatMarginPercent(value: number | null): string {
   if (value == null || Number.isNaN(value) || !Number.isFinite(value)) {
@@ -243,9 +247,10 @@ function createRiaguSummaryMetrics({
   };
 }
 
-export function RiaguSection(): JSX.Element {
+export function RiaguSection({ onRegisterGacha }: RiaguSectionProps): JSX.Element {
   const { status, data } = useGachaLocalStorage();
   const [activeGachaId, setActiveGachaId] = useState<string | null>(null);
+  const previousSelectedGachaIdRef = useRef<string | null | undefined>(data?.appState?.selectedGachaId);
   const [isSummaryDetailsOpen, setIsSummaryDetailsOpen] = useState(false);
   const confirmDeleteGacha = useGachaDeletion();
   const { push } = useModal();
@@ -370,19 +375,26 @@ export function RiaguSection(): JSX.Element {
   }, [data?.appState, data?.catalogState, riaguGachaIds]);
 
   useEffect(() => {
+    const selectedGachaId = data?.appState?.selectedGachaId;
+    const selectedGachaIdChanged = previousSelectedGachaIdRef.current !== selectedGachaId;
+    previousSelectedGachaIdRef.current = selectedGachaId;
+
     if (!gachaTabs.length) {
       setActiveGachaId(null);
       return;
     }
 
     setActiveGachaId((current) => {
+      // 新規ガチャ登録で selectedGachaId が変わった時のみ、表示中タブを新規ガチャに切り替える。
+      if (selectedGachaIdChanged && selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
+      }
       if (current && gachaTabs.some((tab) => tab.id === current)) {
         return current;
       }
 
-      const preferred = data?.appState?.selectedGachaId;
-      if (preferred && gachaTabs.some((tab) => tab.id === preferred)) {
-        return preferred;
+      if (selectedGachaId && gachaTabs.some((tab) => tab.id === selectedGachaId)) {
+        return selectedGachaId;
       }
 
       return gachaTabs[0].id;
@@ -475,6 +487,7 @@ export function RiaguSection(): JSX.Element {
         activeId={activeGachaId}
         onSelect={(gachaId) => setActiveGachaId(gachaId)}
         onDelete={(tab) => confirmDeleteGacha(tab)}
+        onAddGacha={onRegisterGacha}
         className="riagu-section__tabs"
       />
 

@@ -1,8 +1,4 @@
 import {
-  ArrowPathIcon,
-  ClipboardIcon,
-  PaperAirplaneIcon,
-  ShareIcon,
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
@@ -10,33 +6,48 @@ import clsx from 'clsx';
 
 import { SingleSelectDropdown, type SingleSelectOption } from '../../pages/gacha/components/select/SingleSelectDropdown';
 import { ModalBody, ModalFooter, ConfirmDialog, type ModalComponentProps } from '..';
-import { PageSettingsDialog } from './PageSettingsDialog';
 import { DiscordMemberPickerDialog } from './DiscordMemberPickerDialog';
 import { QuickSendConfirmDialog } from './QuickSendConfirmDialog';
 import { useAppPersistence, useDomainStores } from '../../features/storage/AppPersistenceProvider';
 import { useStoreValue } from '@domain/stores';
 import { useShareHandler } from '../../hooks/useShare';
-import { XLogoIcon } from '../../components/icons/XLogoIcon';
+import {
+  ResultActionButtons,
+  type ResultActionButtonsQuickSendModeOption,
+  type ResultActionQuickSendModeId
+} from './ResultActionButtons';
 import { resolveSafeUrl } from '../../utils/safeUrl';
-import { buildAndUploadSelectionZip } from '../../features/save/buildAndUploadSelectionZip';
-import { isBlobUploadCsrfTokenMismatchError, useBlobUpload } from '../../features/save/useBlobUpload';
+import {
+  extractBlobUploadCsrfFailureReason,
+  isBlobUploadCsrfTokenMismatchError,
+  useBlobUpload
+} from '../../features/save/useBlobUpload';
+import { issueShareUrlByUpload } from '../../features/save/issueShareUrlByUpload';
 import { useDiscordSession } from '../../features/discord/useDiscordSession';
 import { linkDiscordProfileToStore } from '../../features/discord/linkDiscordProfileToStore';
 import { useHaptics } from '../../features/haptics/HapticsProvider';
+import { useNotification } from '../../features/notification';
 import {
   DiscordGuildSelectionMissingError,
   requireDiscordGuildSelection,
   type DiscordGuildSelection
 } from '../../features/discord/discordGuildSelectionStorage';
 import { sendDiscordShareToMember } from '../../features/discord/sendDiscordShareToMember';
+import { buildDiscordShareComment, formatDiscordShareExpiresAt } from '../../features/discord/shareMessage';
 import { pushCsrfTokenMismatchWarning } from './_lib/discordApiErrorHandling';
 import type {
   GachaAppStateV3,
   GachaCatalogStateV4,
   GachaRarityStateV3,
+  GachaCatalogItemAssetV4,
   PtSettingV3,
   UserProfileCardV3
 } from '@domain/app-persistence';
+import {
+  DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR,
+  DEFAULT_DRAW_RESULT_REVEAL_ENABLED,
+  type DrawResultRevealBackgroundColor
+} from '@domain/stores/uiPreferencesStore';
 import type { GachaResultPayload } from '@domain/gacha/gachaResult';
 import {
   buildGachaPools,
@@ -51,6 +62,13 @@ import {
   type GachaPoolDefinition
 } from '../../logic/gacha';
 import { getRarityTextPresentation } from '../../features/rarity/utils/rarityColorPresentation';
+import { DrawResultRevealOverlay } from './draw-result/DrawResultRevealOverlay';
+import {
+  buildRevealCardsFromAggregatedItems,
+  type DrawResultRevealAssetMeta,
+  type DrawResultRevealCardModel
+} from './draw-result/revealCards';
+import { useOpenPageSettings } from '../../features/settings/openPageSettings';
 
 interface DrawGachaDialogResultItem {
   itemId: string;
@@ -83,6 +101,15 @@ interface QueuedDiscordDeliveryRequest {
   requestedAt: number;
   itemIdFilter?: string[];
 }
+
+interface DrawGachaDialogPayload {
+  initialUserName?: string;
+}
+
+const DRAW_RESULT_QUICK_SEND_MODE_OPTIONS: readonly ResultActionButtonsQuickSendModeOption[] = [
+  { id: 'discord', label: 'Discord送信' },
+  { id: 'share_url', label: '共有URL発行' }
+];
 
 function resolvePlanForPulls({
   pulls,
@@ -240,7 +267,20 @@ function formatExecutedAt(value: string | undefined): string {
   }).format(date);
 }
 
-export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Element {
+const DRAW_RESULT_REVEAL_INTERVAL_MS = 90;
+const DRAW_RESULT_REVEAL_PREFERENCE_CONFIRM_MESSAGE =
+  '今後もビジュアルガチャ結果表示を有効しますか？これは後からサイト設定から変更出来ます。';
+
+function resolvePrimaryAssetMeta(assets: GachaCatalogItemAssetV4[] | undefined): DrawResultRevealAssetMeta {
+  const primaryAsset = Array.isArray(assets) ? assets[0] : undefined;
+  return {
+    assetId: primaryAsset?.assetId ?? null,
+    thumbnailAssetId: primaryAsset?.thumbnailAssetId ?? null,
+    digitalItemType: primaryAsset?.digitalItemType ?? null
+  };
+}
+
+export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<DrawGachaDialogPayload>): JSX.Element {
   const {
     appState: appStateStore,
     catalog: catalogStore,
@@ -274,6 +314,40 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const drawDialogLastPointsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPointsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawDialogLastPullsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPullsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const quickActionModePreference = useMemo(
+    () => uiPreferencesStore.getQuickActionModePreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealEnabledPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealEnabledPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealEnabled = drawResultRevealEnabledPreference ?? DEFAULT_DRAW_RESULT_REVEAL_ENABLED;
+  const drawResultRevealPreferenceConfirmed = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealPreferenceConfirmed(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const shouldPromptDrawResultRevealPreference = useMemo(
+    () => drawResultRevealEnabledPreference === null && !drawResultRevealPreferenceConfirmed,
+    [drawResultRevealEnabledPreference, drawResultRevealPreferenceConfirmed]
+  );
+  const isDrawResultRevealEnabled = shouldPromptDrawResultRevealPreference
+    ? true
+    : drawResultRevealEnabled;
+  const drawResultRevealBackgroundColorPreference = useMemo(
+    () => uiPreferencesStore.getDrawResultRevealBackgroundColorPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawResultRevealBackgroundColor: DrawResultRevealBackgroundColor =
+    drawResultRevealBackgroundColorPreference ?? DEFAULT_DRAW_RESULT_REVEAL_BACKGROUND_COLOR;
   const excludeRiaguImagesPreference = useMemo(
     () => uiPreferencesStore.getExcludeRiaguImagesPreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -296,6 +370,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const applyLowerThresholdGuarantees = applyLowerThresholdGuaranteesPreference ?? true;
   const includeOutOfStockItems = includeOutOfStockInComplete || allowOutOfStockGuaranteeItem;
   const { triggerConfirmation, triggerError, triggerSelection } = useHaptics();
+  const { notify } = useNotification();
 
   const { options: gachaOptions, map: gachaMap } = useMemo(
     () =>
@@ -309,6 +384,27 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       ),
     [appState, catalogState, includeOutOfStockInComplete, includeOutOfStockItems, inventoryCountsByItemId, rarityState]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+
+    // 端末設定の「視差効果を減らす」を監視し、結果演出の自動再生有無へ反映する。
+    // 依存配列を空にしているのは、購読の開始と解除をマウント/アンマウント時だけに限定するため。
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => {
+      setPrefersReducedMotion(mediaQuery.matches);
+    };
+
+    // 初期値と変更購読を同じ関数で扱い、ユーザー設定変更に追従する。
+    updatePreference();
+    mediaQuery.addEventListener('change', updatePreference);
+
+    return () => {
+      mediaQuery.removeEventListener('change', updatePreference);
+    };
+  }, []);
 
   const [selectedGachaId, setSelectedGachaId] = useState<string | undefined>(() => {
     if (lastPreferredGachaId && gachaOptions.some((option) => option.value === lastPreferredGachaId)) {
@@ -329,11 +425,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     },
     [applySelectedGacha]
   );
-  const [pointsInput, setPointsInput] = useState('100');
+  const [pointsInput, setPointsInput] = useState(() =>
+    String(drawDialogLastPointsInputPreference ?? 100)
+  );
   const [pointsInputMode, setPointsInputMode] = useState<'points' | 'pulls'>('points');
-  const [pullsInput, setPullsInput] = useState('10');
+  const [pullsInput, setPullsInput] = useState(() =>
+    String(drawDialogLastPullsInputPreference ?? 10)
+  );
   const [completeExecutionsOverride, setCompleteExecutionsOverride] = useState<number | null>(null);
-  const [userName, setUserName] = useState('');
+  const [userName, setUserName] = useState(() => payload?.initialUserName?.trim() ?? '');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -341,6 +441,8 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [resultItems, setResultItems] = useState<DrawGachaDialogResultItem[] | null>(null);
   const [lastExecutedAt, setLastExecutedAt] = useState<string | undefined>(undefined);
   const [lastGachaLabel, setLastGachaLabel] = useState<string | undefined>(undefined);
+  const [lastGachaThumbnailAssetId, setLastGachaThumbnailAssetId] = useState<string | null>(null);
+  const [lastGachaThumbnailBlobUrl, setLastGachaThumbnailBlobUrl] = useState<string | null>(null);
   const [lastPointsSpent, setLastPointsSpent] = useState<number | null>(null);
   const [lastPointsRemainder, setLastPointsRemainder] = useState<number | null>(null);
   const [lastUsedManualPulls, setLastUsedManualPulls] = useState(false);
@@ -354,10 +456,48 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const [discordDeliveryStage, setDiscordDeliveryStage] = useState<
     'idle' | 'building-zip' | 'uploading' | 'sending'
   >('idle');
-  const [discordDeliveryError, setDiscordDeliveryError] = useState<string | null>(null);
+  const [quickSendMode, setQuickSendMode] = useState<ResultActionQuickSendModeId>(
+    () => quickActionModePreference ?? 'discord'
+  );
+  const [isShareUrlIssuing, setIsShareUrlIssuing] = useState(false);
+  const [shareUrlIssueStage, setShareUrlIssueStage] = useState<'idle' | 'building-zip' | 'uploading'>('idle');
+  const [shareUrlIssueCompleted, setShareUrlIssueCompleted] = useState(false);
+  const [, setDiscordDeliveryError] = useState<string | null>(null);
   const [discordDeliveryNotice, setDiscordDeliveryNotice] = useState<string | null>(null);
   const [discordDeliveryCompleted, setDiscordDeliveryCompleted] = useState(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealPreferencePromptQueuedRef = useRef(false);
+  const drawGachaDialogBodyRef = useRef<HTMLDivElement | null>(null);
+  const lastRevealedPullIdRef = useRef<string | null>(null);
+  const [isRevealOverlayVisible, setIsRevealOverlayVisible] = useState(false);
+  const [revealCards, setRevealCards] = useState<DrawResultRevealCardModel[]>([]);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const [isRevealAnimating, setIsRevealAnimating] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  const clearRevealTimer = useCallback(() => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
+    }
+  }, []);
+  const scrollDrawGachaDialogBodyToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const bodyElement = drawGachaDialogBodyRef.current;
+    if (!bodyElement) {
+      return;
+    }
+    if (bodyElement.scrollHeight <= bodyElement.clientHeight) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      bodyElement.scrollTo({
+        top: bodyElement.scrollHeight,
+        behavior
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (!gachaOptions.length) {
@@ -454,9 +594,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   ]);
 
   useEffect(() => {
+    // ガチャ切替時に結果表示や送信状態を初期化し、前回実行の残状態を持ち越さないようにする。
+    // selectedGachaId が変わったときだけリセットを走らせる。
     setErrorMessage(null);
     setResultItems(null);
     setLastPullId(null);
+    setLastGachaLabel(undefined);
+    setLastGachaThumbnailAssetId(null);
+    setLastGachaThumbnailBlobUrl(null);
     setLastPointsSpent(null);
     setLastPointsRemainder(null);
     setLastUsedManualPulls(false);
@@ -473,7 +618,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       clearTimeout(noticeTimerRef.current);
       noticeTimerRef.current = null;
     }
-  }, [selectedGachaId]);
+    clearRevealTimer();
+    lastRevealedPullIdRef.current = null;
+    revealPreferencePromptQueuedRef.current = false;
+    setIsRevealOverlayVisible(false);
+    setRevealCards([]);
+    setRevealedCount(0);
+    setIsRevealAnimating(false);
+  }, [clearRevealTimer, selectedGachaId]);
 
   const parsedPoints = useMemo(() => {
     if (!pointsInput.trim()) {
@@ -509,6 +661,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     setPullsInput(String(nextValue));
   }, [pullsInput]);
 
+  const setQuickAdjustInputToZero = useCallback(() => {
+    if (pointsInputMode === 'pulls') {
+      setPullsInput('0');
+      return;
+    }
+    setPointsInput('0');
+  }, [pointsInputMode]);
+
   const handleQuickAdjust = useCallback((delta: number) => {
     if (pointsInputMode === 'pulls') {
       adjustPullsInput(delta);
@@ -516,6 +676,24 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     }
     adjustPointsInput(delta);
   }, [adjustPointsInput, adjustPullsInput, pointsInputMode]);
+
+  useEffect(() => {
+    // ポイント入力はUI設定へ保存し、次回モーダル起動時に直近値を復元する。
+    const parsed = Number(pointsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPointsInputPreference(parsed, { persist: 'debounced' });
+  }, [pointsInput, uiPreferencesStore]);
+
+  useEffect(() => {
+    // 連数入力も同様に保存し、直前に使った値を保持する。
+    const parsed = Number(pullsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPullsInputPreference(parsed, { persist: 'debounced' });
+  }, [pullsInput, uiPreferencesStore]);
 
   const normalizedUserName = userName.trim();
 
@@ -564,6 +742,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
   const { share: shareResult, copy: copyShareText, feedback: shareFeedback } = useShareHandler();
   const { uploadZip } = useBlobUpload();
   const { data: discordSession } = useDiscordSession();
+  const openPageSettings = useOpenPageSettings();
   const persistence = useAppPersistence();
   const isPullsMode = pointsInputMode === 'pulls';
   const completeExecutionsOverrideForPlan = isPullsMode ? 0 : completeExecutionsOverride;
@@ -587,18 +766,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         confirmLabel: '設定を開く',
         cancelLabel: '閉じる',
         onConfirm: () => {
-          push(PageSettingsDialog, {
-            id: 'page-settings',
-            title: 'ページ設定',
-            size: 'lg',
-            panelClassName: 'page-settings-modal overflow-hidden',
-            showHeaderCloseButton: true
+          openPageSettings({
+            payload: {
+              focusTarget: 'misc-owner-name',
+              highlightMode: 'pulse',
+              highlightDurationMs: 7000,
+              origin: 'draw-gacha-owner-name-warning'
+            }
           });
         }
       }
     });
     return null;
-  }, [push, resolveOwnerName]);
+  }, [openPageSettings, push, resolveOwnerName]);
 
   const planResolution = useMemo(() => {
     if (!selectedGacha) {
@@ -688,6 +868,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         noticeTimerRef.current = null;
       }
       setLastUserId(null);
+      clearRevealTimer();
+      lastRevealedPullIdRef.current = null;
+      revealPreferencePromptQueuedRef.current = false;
+      setIsRevealOverlayVisible(false);
+      setRevealCards([]);
+      setRevealedCount(0);
+      setIsRevealAnimating(false);
 
       if (!selectedGacha) {
         setErrorMessage('ガチャの種類を選択してください。');
@@ -852,10 +1039,13 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           return;
         }
 
+        const selectedGachaMeta = appState?.meta?.[selectedGacha.id];
         setResultItems(aggregatedItems);
         setLastPullId(pullId);
         setLastExecutedAt(executedAt);
         setLastGachaLabel(selectedGacha.label);
+        setLastGachaThumbnailAssetId(selectedGachaMeta?.thumbnailAssetId ?? null);
+        setLastGachaThumbnailBlobUrl(selectedGachaMeta?.thumbnailBlobUrl ?? null);
         setLastPointsSpent(useManualPulls ? null : executionResult.pointsSpent);
         setLastPointsRemainder(useManualPulls ? null : executionResult.pointsRemainder);
         setLastUsedManualPulls(useManualPulls);
@@ -883,6 +1073,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       }
     },
     [
+      appState,
       allowOutOfStockGuaranteeItem,
       applyLowerThresholdGuarantees,
       completeExecutionsOverrideForPlan,
@@ -902,13 +1093,24 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       triggerError,
       triggerSelection,
       userInventoriesState?.byItemId,
-      userProfiles
+      userProfiles,
+      clearRevealTimer
     ]
   );
 
   const handleExecute = () => {
     void executeGachaDraw();
   };
+
+  useEffect(() => {
+    if (!lastPullId) {
+      return;
+    }
+
+    // ガチャ実行成功時に結果一覧まで自動で移動し、操作直後に結果確認しやすくする。
+    // lastPullId は成功時のみ更新されるため、依存は lastPullId と helper callback のみに限定する。
+    scrollDrawGachaDialogBodyToBottom('smooth');
+  }, [lastPullId, scrollDrawGachaDialogBodyToBottom]);
 
   const executedAtLabel = formatExecutedAt(lastExecutedAt);
   const integerFormatter = useMemo(() => new Intl.NumberFormat('ja-JP'), []);
@@ -947,6 +1149,35 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     });
     return map;
   }, [selectedGacha]);
+  const itemAssetById = useMemo(() => {
+    const map = new Map<string, DrawResultRevealAssetMeta>();
+    if (!selectedGachaId) {
+      return map;
+    }
+
+    const catalogItems = catalogState?.byGacha?.[selectedGachaId]?.items;
+    if (!catalogItems) {
+      return map;
+    }
+
+    Object.entries(catalogItems).forEach(([itemId, snapshot]) => {
+      map.set(itemId, resolvePrimaryAssetMeta(snapshot.assets));
+    });
+
+    return map;
+  }, [catalogState, selectedGachaId]);
+  const revealCardsFromResult = useMemo(() => {
+    if (!resultItems || resultItems.length === 0) {
+      return [] as DrawResultRevealCardModel[];
+    }
+
+    return buildRevealCardsFromAggregatedItems({
+      aggregatedItems: resultItems,
+      itemAssetById,
+      rarityOrderIndex,
+      itemOrderIndex
+    });
+  }, [itemAssetById, itemOrderIndex, rarityOrderIndex, resultItems]);
   const sortedResultItems = useMemo(() => {
     if (!resultItems) {
       return null;
@@ -967,6 +1198,62 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     });
     return items;
   }, [itemOrderIndex, rarityOrderIndex, resultItems]);
+
+  useEffect(() => {
+    if (!isDrawResultRevealEnabled || !lastPullId || revealCardsFromResult.length === 0) {
+      return;
+    }
+    if (lastRevealedPullIdRef.current === lastPullId) {
+      return;
+    }
+
+    // 同一履歴IDに対する二重開始を防ぎ、抽選完了のたびに1回だけ演出を開始する。
+    // lastPullId と変換済みカード配列の変化時のみ再評価する。
+    lastRevealedPullIdRef.current = lastPullId;
+    clearRevealTimer();
+    setRevealCards(revealCardsFromResult);
+    setIsRevealOverlayVisible(true);
+
+    if (prefersReducedMotion || revealCardsFromResult.length <= 1) {
+      setRevealedCount(revealCardsFromResult.length);
+      setIsRevealAnimating(false);
+      return;
+    }
+
+    setRevealedCount(1);
+    setIsRevealAnimating(true);
+  }, [clearRevealTimer, isDrawResultRevealEnabled, lastPullId, prefersReducedMotion, revealCardsFromResult]);
+
+  useEffect(() => {
+    if (isDrawResultRevealEnabled || !isRevealOverlayVisible) {
+      return;
+    }
+
+    clearRevealTimer();
+    setIsRevealAnimating(false);
+    setIsRevealOverlayVisible(false);
+  }, [clearRevealTimer, isDrawResultRevealEnabled, isRevealOverlayVisible]);
+
+  useEffect(() => {
+    if (!isRevealOverlayVisible || !isRevealAnimating) {
+      return;
+    }
+    if (revealedCount >= revealCards.length) {
+      setIsRevealAnimating(false);
+      return;
+    }
+
+    // 表示中フラグと件数に応じて 1 件ずつ解放し、カードを段階的に追加描画する。
+    // 依存配列に revealedCount を含め、1回進むごとに次タイマーを再スケジュールする。
+    revealTimerRef.current = window.setTimeout(() => {
+      setRevealedCount((previous) => Math.min(previous + 1, revealCards.length));
+      revealTimerRef.current = null;
+    }, DRAW_RESULT_REVEAL_INTERVAL_MS);
+
+    return () => {
+      clearRevealTimer();
+    };
+  }, [clearRevealTimer, isRevealAnimating, isRevealOverlayVisible, revealCards.length, revealedCount]);
   const planWarnings = displayPlan?.warnings ?? [];
   const normalizedCompleteSetting = displayPlan?.normalizedSettings.complete;
   const maxCompleteExecutions = useMemo(() => {
@@ -1140,10 +1427,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     [shareContent?.tweetUrl]
   );
 
-  const shareStatus = shareFeedback?.entryKey === 'draw-result' ? shareFeedback.status : null;
   const isDiscordLoggedIn = discordSession?.loggedIn === true;
   const staffDiscordId = discordSession?.user?.id ?? null;
   const staffDiscordName = discordSession?.user?.name ?? null;
+  const activeQuickSendMode: ResultActionQuickSendModeId = isDiscordLoggedIn ? quickSendMode : 'share_url';
   const lastUserProfile = lastUserId ? userProfilesState?.users?.[lastUserId] : undefined;
   const canDeliverToDiscord = Boolean(
     resultItems &&
@@ -1152,8 +1439,11 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       isDiscordLoggedIn &&
       staffDiscordId
   );
+  const canIssueShareUrl = Boolean(resultItems && lastPullId && lastUserId);
+  const isAnyQuickActionInProgress =
+    isDiscordDelivering || queuedDiscordDelivery !== null || isShareUrlIssuing;
   const discordDeliveryButtonDisabled =
-    isDiscordDelivering || queuedDiscordDelivery !== null || !canDeliverToDiscord;
+    isAnyQuickActionInProgress || !canDeliverToDiscord;
   const isDiscordDeliveryInProgress = isDiscordDelivering || queuedDiscordDelivery !== null;
   const discordDeliveryButtonMinWidth = '14.5rem';
   const discordDeliveryButtonLabel = useMemo(() => {
@@ -1171,15 +1461,43 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         return 'お渡し部屋に景品を送信';
     }
   }, [discordDeliveryCompleted, discordDeliveryStage]);
+  const shareUrlIssueButtonLabel = useMemo(() => {
+    if (shareUrlIssueCompleted) {
+      return 'URL発行済み';
+    }
+    switch (shareUrlIssueStage) {
+      case 'building-zip':
+        return 'ZIPファイル作成中...';
+      case 'uploading':
+        return 'ファイルアップロード中...';
+      default:
+        return '共有URLを発行';
+    }
+  }, [shareUrlIssueCompleted, shareUrlIssueStage]);
+  const shareUrlIssueButtonDisabled = isAnyQuickActionInProgress || !canIssueShareUrl;
+  const isShareUrlIssueInProgress = isShareUrlIssuing;
 
   useEffect(() => {
+    // ログイン中は保存済みモードに追従し、別画面での変更も反映する。
+    // 未ログイン時は常に共有URL発行モードを使うため同期しない。
+    if (!isDiscordLoggedIn) {
+      return;
+    }
+    const nextMode = quickActionModePreference ?? 'discord';
+    setQuickSendMode((currentMode) => (currentMode === nextMode ? currentMode : nextMode));
+  }, [isDiscordLoggedIn, quickActionModePreference]);
+
+  useEffect(() => {
+    // モーダル破棄時にタイマーを必ず解放し、非表示後の state 更新を防ぐ。
+    // clearRevealTimer は stable な callback として依存配列に含める。
     return () => {
       if (noticeTimerRef.current) {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
       }
+      clearRevealTimer();
     };
-  }, []);
+  }, [clearRevealTimer]);
 
   useEffect(() => {
     if (!discordDeliveryNotice) {
@@ -1193,6 +1511,54 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       noticeTimerRef.current = null;
     }, 4000);
   }, [discordDeliveryNotice]);
+
+  useEffect(() => {
+    if (!shareFeedback || shareFeedback.entryKey !== 'draw-result') {
+      return;
+    }
+
+    if (shareFeedback.status === 'copied') {
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: 'コピーしました'
+      });
+      return;
+    }
+
+    if (shareFeedback.status === 'shared') {
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: '共有を開始しました'
+      });
+      return;
+    }
+
+    notify({
+      variant: 'error',
+      title: 'エラー',
+      message: '共有に失敗しました'
+    });
+  }, [notify, shareFeedback]);
+
+  const notifyDiscordDeliverySuccess = useCallback((message: string) => {
+    setDiscordDeliveryNotice(message);
+    notify({
+      variant: 'success',
+      title: '成功',
+      message
+    });
+  }, [notify]);
+
+  const notifyDiscordDeliveryError = useCallback((message: string) => {
+    setDiscordDeliveryError(message);
+    notify({
+      variant: 'error',
+      title: 'エラー',
+      message
+    });
+  }, [notify]);
 
   const requestQuickSendPreference = useCallback(() => {
     return new Promise<{ sendNewOnly: boolean; rememberChoice: boolean } | null>((resolve) => {
@@ -1232,6 +1598,18 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     return decision.sendNewOnly;
   }, [quickSendNewOnlyPreference, requestQuickSendPreference, uiPreferencesStore]);
 
+  const copyIssuedShareUrlToClipboard = useCallback(async (url: string): Promise<boolean> => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const handleShareResult = useCallback(() => {
     if (!shareContent) {
       return;
@@ -1256,27 +1634,27 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       setDiscordDeliveryCompleted(false);
       if (!resultItems || resultItems.length === 0) {
         const message = '共有できるガチャ結果がありません。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!lastPullId) {
         const message = '共有する履歴が見つかりませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!targetUserId) {
         const message = '共有対象のユーザー情報が見つかりませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!isDiscordLoggedIn) {
         const message = 'Discordにログインしてから共有してください。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
       if (!staffDiscordId) {
         const message = 'Discordアカウントの情報を取得できませんでした。再度ログインしてください。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
 
@@ -1291,7 +1669,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       const sharedMemberId = trimOrNull(profile.discordUserId);
       if (!sharedMemberId) {
         const message = 'Discord連携ユーザーのIDを確認できませんでした。';
-        setDiscordDeliveryError(message);
+        notifyDiscordDeliveryError(message);
         throw new Error(message);
       }
 
@@ -1318,10 +1696,12 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 : profile.id || targetUserId;
 
         const selection = { mode: 'history', pullIds: [lastPullId] } as const;
+        let hasShownSlowBlobCheckNotice = false;
 
         const filteredItemIds =
           itemIdFilter && itemIdFilter.length > 0 ? new Set(itemIdFilter) : undefined;
-        const { zip, uploadResponse } = await buildAndUploadSelectionZip({
+        const { zip, uploadResponse, shareLink } = await issueShareUrlByUpload({
+          persistence,
           snapshot,
           selection,
           userId: targetUserId,
@@ -1331,15 +1711,22 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           uploadZip,
           ownerDiscordId: staffDiscordId,
           ownerDiscordName: staffDiscordName ?? undefined,
+          onBlobReuploadRetry: () => {
+            // Blob存在確認に失敗して再アップロードへ入る時、通知を一度だけ案内する。
+            if (hasShownSlowBlobCheckNotice) {
+              return;
+            }
+            hasShownSlowBlobCheckNotice = true;
+            notify({
+              variant: 'warning',
+              message: '想定よりも時間がかかっています。そのままでお待ちください'
+            });
+          },
           excludeRiaguImages,
           onZipBuilt: () => {
             setDiscordDeliveryStage('uploading');
           }
         });
-
-        if (!uploadResponse?.shareUrl) {
-          throw new Error('Discord共有に必要なURLを取得できませんでした。');
-        }
 
         if (zip.pullIds.length > 0) {
           pullHistory.markPullStatus(zip.pullIds, 'uploaded');
@@ -1370,11 +1757,14 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           profile.id
         );
 
-        const shareUrl = uploadResponse.shareUrl;
-        const shareLabelCandidate = shareUrl ?? null;
+        const shareUrl = shareLink.url;
+        const shareLabelCandidate = shareLink.label ?? null;
         const shareTitle = `${receiverDisplayName ?? '景品'}のお渡しリンクです`;
-        const shareComment =
-          shareLabelCandidate && shareLabelCandidate !== shareUrl ? shareLabelCandidate : null;
+        const shareComment = buildDiscordShareComment({
+          shareUrl,
+          shareLabel: shareLabelCandidate,
+          expiresAtText: formatDiscordShareExpiresAt(uploadResponse.expiresAt)
+        });
         const displayNameForChannel = pickDisplayName(
           profile.discordDisplayName,
           receiverDisplayName,
@@ -1432,11 +1822,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         });
 
         setDiscordDeliveryError(null);
-        setDiscordDeliveryNotice(`${memberDisplayName}さんに景品を送信しました`);
+        notifyDiscordDeliverySuccess(`${memberDisplayName}さんに景品を送信しました`);
         setDiscordDeliveryCompleted(true);
       } catch (error) {
         if (isBlobUploadCsrfTokenMismatchError(error)) {
-          pushCsrfTokenMismatchWarning(push, error instanceof Error ? error.message : undefined);
+          pushCsrfTokenMismatchWarning(
+            push,
+            error instanceof Error ? error.message : undefined,
+            extractBlobUploadCsrfFailureReason(error)
+          );
         }
         const message =
           error instanceof DiscordGuildSelectionMissingError
@@ -1448,7 +1842,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           error instanceof DiscordGuildSelectionMissingError
             ? message
             : `Discord共有の送信に失敗しました: ${message}`;
-        setDiscordDeliveryError(displayMessage);
+        notifyDiscordDeliveryError(displayMessage);
         setDiscordDeliveryCompleted(false);
         throw new Error(displayMessage);
       } finally {
@@ -1467,7 +1861,10 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       staffDiscordName,
       pullHistory,
       userProfiles,
-      excludeRiaguImages
+      excludeRiaguImages,
+      notify,
+      notifyDiscordDeliveryError,
+      notifyDiscordDeliverySuccess
     ]
   );
 
@@ -1513,23 +1910,23 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
 
   const handleDeliverToDiscord = useCallback(async () => {
     if (!resultItems || resultItems.length === 0) {
-      setDiscordDeliveryError('共有できるガチャ結果がありません。');
+      notifyDiscordDeliveryError('共有できるガチャ結果がありません。');
       return;
     }
     if (!lastPullId) {
-      setDiscordDeliveryError('共有する履歴が見つかりませんでした。');
+      notifyDiscordDeliveryError('共有する履歴が見つかりませんでした。');
       return;
     }
     if (!lastUserId) {
-      setDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
+      notifyDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
       return;
     }
     if (!isDiscordLoggedIn) {
-      setDiscordDeliveryError('Discordにログインしてから共有してください。');
+      notifyDiscordDeliveryError('Discordにログインしてから共有してください。');
       return;
     }
     if (!staffDiscordId) {
-      setDiscordDeliveryError('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
+      notifyDiscordDeliveryError('Discordアカウントの情報を取得できませんでした。再度ログインしてください。');
       return;
     }
 
@@ -1542,7 +1939,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
       return;
     }
     if (quickSendNewOnly && newResultItemIds.length === 0) {
-      setDiscordDeliveryError('新規取得した景品がありません。');
+      notifyDiscordDeliveryError('新規取得した景品がありません。');
       return;
     }
     const itemIdFilter = quickSendNewOnly ? newResultItemIds : undefined;
@@ -1555,7 +1952,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
         error instanceof DiscordGuildSelectionMissingError
           ? error.message
           : 'お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。';
-      setDiscordDeliveryError(message);
+      notifyDiscordDeliveryError(message);
       return;
     }
 
@@ -1624,7 +2021,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           const displayMessage = message.includes('Discord情報')
             ? message
             : `Discord情報の連携に失敗しました: ${message}`;
-          setDiscordDeliveryError(displayMessage);
+          notifyDiscordDeliveryError(displayMessage);
         }
       }
     });
@@ -1639,8 +2036,153 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     resolveQuickSendNewOnly,
     newResultItemIds,
     push,
-    userProfiles
+    userProfiles,
+    notifyDiscordDeliveryError
   ]);
+
+  const handleIssueShareUrl = useCallback(async () => {
+    if (!resultItems || resultItems.length === 0) {
+      notifyDiscordDeliveryError('共有できるガチャ結果がありません。');
+      return;
+    }
+    if (!lastPullId) {
+      notifyDiscordDeliveryError('共有する履歴が見つかりませんでした。');
+      return;
+    }
+    if (!lastUserId) {
+      notifyDiscordDeliveryError('共有対象のユーザー情報が見つかりませんでした。');
+      return;
+    }
+
+    const ownerName = ensureOwnerName();
+    if (!ownerName) {
+      return;
+    }
+
+    setDiscordDeliveryError(null);
+    setDiscordDeliveryNotice(null);
+    setShareUrlIssueCompleted(false);
+    setIsShareUrlIssuing(true);
+    setShareUrlIssueStage('building-zip');
+
+    try {
+      const snapshot = persistence.loadSnapshot();
+      const profile = lastUserProfile;
+      const receiverDisplayName =
+        profile?.displayName?.trim() && profile.displayName.trim().length > 0
+          ? profile.displayName.trim()
+          : lastUserName && lastUserName.trim().length > 0
+            ? lastUserName.trim()
+            : normalizedUserName && normalizedUserName.length > 0
+              ? normalizedUserName
+              : lastUserId;
+      let hasShownSlowBlobCheckNotice = false;
+
+      const { zip, shareLink } = await issueShareUrlByUpload({
+        persistence,
+        snapshot,
+        selection: { mode: 'history', pullIds: [lastPullId] },
+        userId: lastUserId,
+        userName: receiverDisplayName,
+        ownerName,
+        ownerDiscordId: staffDiscordId,
+        ownerDiscordName: staffDiscordName ?? undefined,
+        uploadZip,
+        excludeRiaguImages,
+        onBlobReuploadRetry: () => {
+          // Blob存在確認に失敗して再アップロードへ入る時、通知を一度だけ案内する。
+          if (hasShownSlowBlobCheckNotice) {
+            return;
+          }
+          hasShownSlowBlobCheckNotice = true;
+          notify({
+            variant: 'warning',
+            message: '想定よりも時間がかかっています。そのままでお待ちください'
+          });
+        },
+        onZipBuilt: () => {
+          setShareUrlIssueStage('uploading');
+        }
+      });
+
+      if (zip.pullIds.length > 0) {
+        pullHistory.markPullStatus(zip.pullIds, 'ziped');
+        pullHistory.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+        pullHistory.markPullStatus(zip.pullIds, 'uploaded');
+        pullHistory.markPullOriginalPrizeMissing(zip.pullIds, zip.originalPrizeMissingPullIds);
+      }
+
+      const copied = await copyIssuedShareUrlToClipboard(shareLink.url);
+      const successMessage = copied
+        ? '共有URLを発行し、クリップボードへコピーしました'
+        : '共有URLを発行しました';
+      setShareUrlIssueCompleted(true);
+      setDiscordDeliveryNotice(successMessage);
+      notify({
+        variant: 'success',
+        title: '成功',
+        message: successMessage
+      });
+    } catch (error) {
+      if (isBlobUploadCsrfTokenMismatchError(error)) {
+        pushCsrfTokenMismatchWarning(
+          push,
+          error instanceof Error ? error.message : undefined,
+          extractBlobUploadCsrfFailureReason(error)
+        );
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      const displayMessage = `共有URLの発行に失敗しました: ${message}`;
+      setDiscordDeliveryError(displayMessage);
+      setShareUrlIssueCompleted(false);
+      notify({
+        variant: 'error',
+        title: 'エラー',
+        message: displayMessage
+      });
+    } finally {
+      setIsShareUrlIssuing(false);
+      setShareUrlIssueStage('idle');
+    }
+  }, [
+    resultItems,
+    lastPullId,
+    lastUserId,
+    ensureOwnerName,
+    persistence,
+    lastUserProfile,
+    lastUserName,
+    normalizedUserName,
+    staffDiscordId,
+    staffDiscordName,
+    uploadZip,
+    excludeRiaguImages,
+    notify,
+    pullHistory,
+    copyIssuedShareUrlToClipboard,
+    setDiscordDeliveryError,
+    notifyDiscordDeliveryError,
+    push
+  ]);
+
+  const handleQuickSendAction = useCallback(() => {
+    if (activeQuickSendMode === 'share_url') {
+      void handleIssueShareUrl();
+      return;
+    }
+    void handleDeliverToDiscord();
+  }, [activeQuickSendMode, handleDeliverToDiscord, handleIssueShareUrl]);
+
+  const handleQuickSendModeChange = useCallback(
+    (nextMode: ResultActionQuickSendModeId) => {
+      if (!isDiscordLoggedIn) {
+        return;
+      }
+      setQuickSendMode(nextMode);
+      uiPreferencesStore.setQuickActionModePreference(nextMode, { persist: 'immediate' });
+    },
+    [isDiscordLoggedIn, uiPreferencesStore]
+  );
 
   const handleCopyShareResult = useCallback(() => {
     if (!shareContent) {
@@ -1649,9 +2191,55 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
     void copyShareText('draw-result', shareContent.shareText);
   }, [copyShareText, shareContent]);
 
+  const applyDrawResultRevealPreference = useCallback(
+    (enabled: boolean) => {
+      uiPreferencesStore.setDrawResultRevealEnabledPreference(enabled, { persist: 'immediate' });
+      uiPreferencesStore.setDrawResultRevealPreferenceConfirmed(true, { persist: 'immediate' });
+    },
+    [uiPreferencesStore]
+  );
+
+  const handleRevealSkip = useCallback(() => {
+    clearRevealTimer();
+    setRevealedCount(revealCards.length);
+    setIsRevealAnimating(false);
+  }, [clearRevealTimer, revealCards.length]);
+
+  const handleRevealClose = useCallback(() => {
+    clearRevealTimer();
+    setIsRevealAnimating(false);
+    setIsRevealOverlayVisible(false);
+
+    if (!shouldPromptDrawResultRevealPreference || revealPreferencePromptQueuedRef.current) {
+      return;
+    }
+
+    // 連打や再描画で同じ確認モーダルが多重起動しないようにガードする。
+    revealPreferencePromptQueuedRef.current = true;
+
+    push(ConfirmDialog, {
+      id: 'draw-result-reveal-preference-confirm',
+      title: '表示設定の確認',
+      size: 'sm',
+      dismissible: false,
+      showHeaderCloseButton: false,
+      payload: {
+        message: DRAW_RESULT_REVEAL_PREFERENCE_CONFIRM_MESSAGE,
+        confirmLabel: '有効',
+        cancelLabel: '無効',
+        onConfirm: () => {
+          applyDrawResultRevealPreference(true);
+        },
+        onCancel: () => {
+          applyDrawResultRevealPreference(false);
+        }
+      }
+    });
+  }, [applyDrawResultRevealPreference, clearRevealTimer, push, shouldPromptDrawResultRevealPreference]);
+
   return (
-    <>
-      <ModalBody className="space-y-6">
+    <div className="draw-gacha-dialog__frame relative flex min-h-0 flex-1 flex-col" id="draw-gacha-dialog-frame">
+      <ModalBody ref={drawGachaDialogBodyRef} className="draw-gacha-dialog__body space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -1744,6 +2332,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   { label: '+100', delta: 100 },
                   { label: '+10', delta: 10 },
                   { label: '+1', delta: 1 },
+                  { label: '0', setZero: true },
                   { label: '-1', delta: -1 },
                   { label: '-10', delta: -10 },
                   { label: '-100', delta: -100 },
@@ -1752,7 +2341,15 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                   <button
                     key={item.label}
                     type="button"
-                    onClick={() => handleQuickAdjust(item.delta)}
+                    onClick={() => {
+                      if ('setZero' in item && item.setZero) {
+                        setQuickAdjustInputToZero();
+                        return;
+                      }
+                      if ('delta' in item) {
+                        handleQuickAdjust(item.delta);
+                      }
+                    }}
                     className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent"
                   >
                     {item.label}
@@ -1993,89 +2590,31 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
                 </div>
               </div>
               {shareContent ? (
-                <div className="flex flex-wrap items-center justify-end gap-2 text-right sm:text-left">
-                  <button
-                    type="button"
-                    className="btn flex items-center gap-1 !min-h-0 px-3 py-1.5 text-xs bg-discord-primary text-white transition hover:bg-discord-hover focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-70"
-                    style={{ minWidth: discordDeliveryButtonMinWidth }}
-                    onClick={handleDeliverToDiscord}
-                    disabled={discordDeliveryButtonDisabled}
-                  >
-                    {isDiscordDeliveryInProgress ? (
-                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    {discordDeliveryButtonLabel}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleShareResult}
-                    title="結果を共有"
-                    aria-label="結果を共有"
-                  >
-                    <ShareIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果を共有</span>
-                  </button>
-                  {safeTweetUrl ? (
-                    <a
-                      href={safeTweetUrl}
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000] p-1.5 text-white transition hover:bg-[#111111] focus-visible:ring-2 focus-visible:ring-white/70 !min-h-0"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Xで共有"
-                      aria-label="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </a>
-                  ) : (
-                    <span
-                      className="btn aspect-square h-8 w-8 border-none bg-[#000000]/60 p-1.5 text-white/70 !min-h-0"
-                      aria-disabled="true"
-                      title="Xで共有"
-                    >
-                      <XLogoIcon aria-hidden className="h-3.5 w-3.5" />
-                      <span className="sr-only">Xで共有</span>
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-muted aspect-square h-8 w-8 p-1.5 !min-h-0"
-                    onClick={handleCopyShareResult}
-                    title="結果をコピー"
-                    aria-label="結果をコピー"
-                  >
-                    <ClipboardIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="sr-only">結果をコピー</span>
-                  </button>
-                  {shareStatus === 'shared' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有を開始しました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'copied' ? (
-                    <span className="basis-full text-right text-[11px] text-muted-foreground">
-                      共有テキストをコピーしました
-                    </span>
-                  ) : null}
-                  {shareStatus === 'error' ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      共有に失敗しました
-                    </span>
-                  ) : null}
-                  {discordDeliveryNotice ? (
-                    <span className="basis-full text-right text-[11px] text-emerald-600">
-                      {discordDeliveryNotice}
-                    </span>
-                  ) : null}
-                  {discordDeliveryError ? (
-                    <span className="basis-full text-right text-[11px] text-red-500">
-                      {discordDeliveryError}
-                    </span>
-                  ) : null}
-                </div>
+                <ResultActionButtons
+                  className="draw-gacha-dialog__result-action-buttons flex-wrap justify-end text-right sm:text-left"
+                  onShare={handleShareResult}
+                  onCopy={handleCopyShareResult}
+                  tweetUrl={safeTweetUrl}
+                  quickSend={{
+                    onClick: handleQuickSendAction,
+                    disabled:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonDisabled
+                        : discordDeliveryButtonDisabled,
+                    inProgress:
+                      activeQuickSendMode === 'share_url'
+                        ? isShareUrlIssueInProgress
+                        : isDiscordDeliveryInProgress,
+                    label:
+                      activeQuickSendMode === 'share_url'
+                        ? shareUrlIssueButtonLabel
+                        : discordDeliveryButtonLabel,
+                    minWidth: discordDeliveryButtonMinWidth,
+                    modeOptions: isDiscordLoggedIn ? DRAW_RESULT_QUICK_SEND_MODE_OPTIONS : undefined,
+                    selectedModeId: activeQuickSendMode,
+                    onSelectMode: isDiscordLoggedIn ? handleQuickSendModeChange : undefined
+                  }}
+                />
               ) : null}
             </div>
             {lastExecutionWarnings.length ? (
@@ -2100,7 +2639,7 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </div>
         ) : null}
       </ModalBody>
-      <ModalFooter>
+      <ModalFooter className="draw-gacha-dialog__footer">
         <button type="button" className="btn btn-muted" onClick={close}>
           閉じる
         </button>
@@ -2122,6 +2661,19 @@ export function DrawGachaDialog({ close, push }: ModalComponentProps): JSX.Eleme
           </button>
         ) : null}
       </ModalFooter>
-    </>
+      {isDrawResultRevealEnabled && isRevealOverlayVisible ? (
+        <DrawResultRevealOverlay
+          title={lastUserName}
+          cards={revealCards}
+          revealedCount={revealedCount}
+          isAnimating={isRevealAnimating}
+          backgroundColor={drawResultRevealBackgroundColor}
+          gachaThumbnailAssetId={lastGachaThumbnailAssetId}
+          gachaThumbnailBlobUrl={lastGachaThumbnailBlobUrl}
+          onSkip={handleRevealSkip}
+          onClose={handleRevealClose}
+        />
+      ) : null}
+    </div>
   );
 }

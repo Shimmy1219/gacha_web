@@ -84,6 +84,8 @@ interface PtControlsPanelProps {
   settings?: PtSettingV3;
   rarityOptions: RarityOption[];
   itemOptionsByRarity?: GuaranteeItemOptionsByRarity;
+  isCompleteEnabled?: boolean;
+  showOptionalHints?: boolean;
   onSettingsChange?: (next: PtSettingV3 | undefined) => void;
 }
 
@@ -110,11 +112,13 @@ function createGuaranteeRow(seed?: string, overrides?: Partial<PtGuaranteeRowSta
 
 function ControlsRow({
   label,
+  labelClassName,
   children,
   action,
   alignTop = false
 }: {
   label: string;
+  labelClassName?: string;
   children?: ReactNode;
   action?: ReactNode;
   alignTop?: boolean;
@@ -129,7 +133,7 @@ function ControlsRow({
         alignTop ? 'items-start' : 'items-center'
       )}
     >
-      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className={clsx('text-xs font-semibold text-muted-foreground', labelClassName)}>{label}</p>
       <div
         className={clsx(
           'pt-controls-panel__row-fields flex flex-nowrap gap-2 whitespace-nowrap text-xs text-muted-foreground',
@@ -148,12 +152,14 @@ function InlineNumberField({
   onChange,
   placeholder,
   min = 0,
+  disabled = false,
   className
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   min?: number;
+  disabled?: boolean;
   className?: string;
 }): JSX.Element {
   return (
@@ -162,9 +168,11 @@ function InlineNumberField({
       min={min}
       value={value}
       placeholder={placeholder}
+      disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
       className={clsx(
         'pt-controls-panel__number-field h-9 min-w-[6ch] rounded-lg border border-border/60 bg-panel-contrast px-2 text-sm font-semibold text-surface-foreground transition focus:border-accent focus:ring-2 focus:ring-accent/40 focus:outline-none',
+        disabled && 'cursor-not-allowed border-border/40 bg-panel-muted/70 text-muted-foreground opacity-80',
         className
       )}
     />
@@ -374,7 +382,8 @@ function cloneSettingWithoutUpdatedAt(setting: PtSettingV3 | undefined): PtSetti
 function buildSettingsFromSnapshot(
   snapshot: PanelSnapshot,
   previous: PtSettingV3 | undefined,
-  defaultRarityId: string
+  defaultRarityId: string,
+  isCompleteEnabled: boolean
 ): PtSettingV3 | undefined {
   const next: PtSettingV3 = {};
 
@@ -387,9 +396,11 @@ function buildSettingsFromSnapshot(
     };
   }
 
-  const completePrice = parseNonNegativeNumber(snapshot.complete);
-  if (completePrice != null) {
-    next.complete = { price: completePrice };
+  if (isCompleteEnabled) {
+    const completePrice = parseNonNegativeNumber(snapshot.complete);
+    if (completePrice != null) {
+      next.complete = { price: completePrice };
+    }
   }
 
   const bundles = snapshot.bundles
@@ -449,6 +460,8 @@ export function PtControlsPanel({
   settings,
   rarityOptions,
   itemOptionsByRarity,
+  isCompleteEnabled = true,
+  showOptionalHints = false,
   onSettingsChange
 }: PtControlsPanelProps): JSX.Element {
   const [perPull, setPerPull] = useState('');
@@ -533,7 +546,12 @@ export function PtControlsPanel({
       if (hasWarnings) {
         return;
       }
-      const nextSetting = buildSettingsFromSnapshot(snapshot, settings, defaultRarityId);
+      const nextSetting = buildSettingsFromSnapshot(
+        snapshot,
+        settings,
+        defaultRarityId,
+        isCompleteEnabled
+      );
       const serialized = nextSetting ? JSON.stringify(nextSetting) : '';
       if (lastEmittedRef.current === serialized) {
         return;
@@ -541,7 +559,7 @@ export function PtControlsPanel({
       lastEmittedRef.current = serialized;
       onSettingsChange(nextSetting);
     },
-    [defaultRarityId, onSettingsChange, settings]
+    [defaultRarityId, isCompleteEnabled, onSettingsChange, settings]
   );
 
   useEffect(() => {
@@ -577,19 +595,26 @@ export function PtControlsPanel({
         />
       </ControlsRow>
 
-      <ControlsRow label="コンプpt">
+      <ControlsRow
+        label="コンプpt"
+        labelClassName={clsx(!isCompleteEnabled && 'text-muted-foreground/50')}
+      >
         <InlineNumberField
           value={complete}
           onChange={(value) => {
             setComplete(value);
           }}
-          placeholder="1000"
-          className="ml-auto w-[12ch]"
+          disabled={!isCompleteEnabled}
+          placeholder="未設定"
+          className={clsx(
+            'ml-auto w-[12ch]',
+            !isCompleteEnabled && 'pt-controls-panel__number-field--disabled'
+          )}
         />
       </ControlsRow>
 
       <ControlsRow
-        label="お得バンドル（n ptで m 連）"
+        label={showOptionalHints ? '（任意）お得バンドル（ｎptでｍ連）' : 'お得バンドル（n ptで m 連）'}
         action={
           <AddButton
             onClick={() =>
@@ -702,7 +727,7 @@ export function PtControlsPanel({
       ) : null}
 
       <ControlsRow
-        label="天井保証"
+        label={showOptionalHints ? '（任意）天井保証' : '天井保証'}
         action={
           <AddButton
             onClick={() =>

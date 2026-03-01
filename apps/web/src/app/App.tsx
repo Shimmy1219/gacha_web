@@ -6,7 +6,6 @@ import { useResponsiveDashboard } from '../pages/gacha/components/dashboard/useR
 import { useModal } from '../modals';
 import { StartWizardDialog } from '../modals/dialogs/StartWizardDialog';
 import { CreateGachaWizardDialog } from '../modals/dialogs/CreateGachaWizardDialog';
-import { PageSettingsDialog } from '../modals/dialogs/PageSettingsDialog';
 import { DrawGachaDialog } from '../modals/dialogs/DrawGachaDialog';
 import { BackupTransferDialog } from '../modals/dialogs/BackupTransferDialog';
 import { BackupImportConflictDialog } from '../modals/dialogs/BackupImportConflictDialog';
@@ -26,7 +25,10 @@ import { importTxtFile } from '../logic/importTxt';
 import { AppRoutes } from './routes/AppRoutes';
 import { DiscordAuthDebugOverlay } from '../features/discord/DiscordAuthDebugOverlay';
 import { useHaptics } from '../features/haptics/HapticsProvider';
+import { useNotification } from '../features/notification';
+import { syncOwnerNameActorCookie } from '../features/receive/ownerActorCookie';
 import { getUnreadReleaseNotes, RELEASE_NOTES } from '../content/releaseNotes';
+import { useOpenPageSettings } from '../features/settings/openPageSettings';
 
 export function App(): JSX.Element {
   const mainRef = useRef<HTMLElement>(null);
@@ -40,6 +42,8 @@ export function App(): JSX.Element {
   const uiPreferencesStore = stores.uiPreferences;
   const uiPreferencesState = useStoreValue(uiPreferencesStore);
   const { triggerConfirmation, triggerError } = useHaptics();
+  const { notify } = useNotification();
+  const openPageSettings = useOpenPageSettings();
   const showDiscordAuthLogs = useMemo(
     () => uiPreferencesStore.getDiscordAuthLogsEnabled(),
     [uiPreferencesState, uiPreferencesStore]
@@ -172,6 +176,12 @@ export function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    // 起動時に永続設定のownerNameをactor cookieへ同期し、ログ相関を復元する。
+    const prefs = persistence.loadSnapshot().receivePrefs;
+    syncOwnerNameActorCookie(prefs?.ownerName ?? null);
+  }, [persistence]);
+
+  useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       return;
     }
@@ -222,11 +232,11 @@ export function App(): JSX.Element {
           } catch (error) {
             console.error('TXTインポートに失敗しました', error);
             triggerError();
-            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-              const message =
-                error instanceof Error ? error.message : 'TXTの取り込みで不明なエラーが発生しました';
-              window.alert(message);
-            }
+            notify({
+              variant: 'error',
+              title: 'TXTの取り込みに失敗しました',
+              message: error instanceof Error ? error.message : 'TXTの取り込みで不明なエラーが発生しました'
+            });
           }
         },
         onPickJson: (file) => {
@@ -241,43 +251,30 @@ export function App(): JSX.Element {
             });
             console.info('バックアップの読み込みが完了しました', result);
             triggerConfirmation();
-
-            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-              if (result.importedGachaIds.length === 0) {
-                const skippedNames = result.skippedGacha
-                  .map((entry) => entry.name ?? entry.id)
-                  .filter(Boolean)
-                  .join(', ');
-                const summary = skippedNames
-                  ? `バックアップに含まれるガチャは既に登録済みのため、追加されませんでした。\nスキップされたガチャ: ${skippedNames}`
-                  : 'バックアップに追加可能なガチャが見つかりませんでした。';
-                window.alert(summary);
-              } else {
-                const importedList = result.importedGachaNames.length > 0
-                  ? `追加したガチャ: ${result.importedGachaNames.join(', ')}`
-                  : `追加したガチャID: ${result.importedGachaIds.join(', ')}`;
-                const skippedList = result.skippedGacha.length > 0
-                  ? `\nスキップされたガチャ: ${result.skippedGacha
-                      .map((entry) => entry.name ?? entry.id)
-                      .filter(Boolean)
-                      .join(', ')}`
-                  : '';
-                const assetsLine = result.importedAssetCount > 0
-                  ? `\n復元したアセット数: ${result.importedAssetCount}`
-                  : '';
-                window.alert(`バックアップの復元が完了しました。\n${importedList}${assetsLine}${skippedList}`);
-              }
+            if (result.importedGachaIds.length === 0) {
+              notify({
+                variant: 'warning',
+                title: '復元対象がありません',
+                message: '追加可能なガチャが見つかりませんでした。'
+              });
+            } else {
+              notify({
+                variant: 'success',
+                title: 'バックアップを復元しました',
+                message: `追加: ${result.importedGachaIds.length}件 / スキップ: ${result.skippedGacha.length}件 / アセット: ${result.importedAssetCount}件`
+              });
             }
           } catch (error) {
             console.error('バックアップの復元に失敗しました', error);
             triggerError();
-            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-              const message =
+            notify({
+              variant: 'error',
+              title: 'バックアップの復元に失敗しました',
+              message:
                 error instanceof Error
                   ? error.message
-                  : 'バックアップの復元に失敗しました。ファイル形式や内容をご確認ください。';
-              window.alert(message);
-            }
+                  : 'バックアップの復元に失敗しました。ファイル形式や内容をご確認ください。'
+            });
           }
         },
         onEnterTransferCode: () => {
@@ -289,6 +286,11 @@ export function App(): JSX.Element {
           });
         },
         onCreateNew: () => {
+          if (isMobile) {
+            navigate('/gacha/create');
+            return;
+          }
+
           push(CreateGachaWizardDialog, {
             id: 'create-gacha-wizard',
             title: '新規ガチャを作成',
@@ -311,6 +313,10 @@ export function App(): JSX.Element {
     handleOpenStartWizard();
   };
 
+  const handleOpenHistory = () => {
+    navigate('/gacha/history');
+  };
+
   const handleExportAll = () => {
     push(BackupTransferDialog, {
       id: 'backup-transfer-dialog',
@@ -325,13 +331,14 @@ export function App(): JSX.Element {
           } catch (error) {
             console.error('バックアップのエクスポートに失敗しました', error);
             triggerError();
-            if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-              const message =
+            notify({
+              variant: 'error',
+              title: 'バックアップの保存に失敗しました',
+              message:
                 error instanceof Error
                   ? error.message
-                  : 'バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。';
-              window.alert(message);
-            }
+                  : 'バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。'
+            });
             throw (error instanceof Error
               ? error
               : new Error('バックアップの保存に失敗しました。ブラウザの権限や空き容量をご確認ください。'));
@@ -351,24 +358,17 @@ export function App(): JSX.Element {
   };
 
   const handleOpenPageSettings = () => {
-    push(PageSettingsDialog, {
-      id: 'page-settings',
-      title: 'サイト設定',
-      description: 'ガチャ一覧の表示方法やサイトカラーをカスタマイズできます。',
-      size: 'xl',
-      panelClassName: 'page-settings-modal overflow-hidden',
-      panelPaddingClassName: 'p-2 lg:p-6',
-      showHeaderCloseButton: true
-    });
+    openPageSettings();
   };
 
   const gachaLayoutProps: Omit<GachaLayoutProps, 'children'> = {
-    title: '四遊楽ガチャツール',
-    tagline: 'SHIYURA Integrated Gacha Management Tool refactor',
+    title: '四遊楽ガチャツール(β)',
+    tagline: 'SHIYURA Integrated Gacha Management Tool',
     mainRef,
     isMobile,
     onDrawGacha: handleDrawGacha,
     onRegisterGacha: handleRegisterGacha,
+    onOpenHistory: handleOpenHistory,
     onExportAll: handleExportAll,
     onOpenPageSettings: handleOpenPageSettings
   };

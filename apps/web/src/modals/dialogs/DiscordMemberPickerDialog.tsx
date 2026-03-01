@@ -59,6 +59,7 @@ interface DiscordMembersResponse {
   members?: DiscordGuildMemberSummary[];
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 interface DiscordGiftChannelsResponse {
@@ -66,6 +67,7 @@ interface DiscordGiftChannelsResponse {
   channels?: unknown;
   error?: string;
   errorCode?: string;
+  csrfReason?: string;
 }
 
 type DiscordMemberPickerMode = 'share' | 'link';
@@ -82,6 +84,7 @@ interface DiscordMemberPickerSharePayload extends DiscordMemberPickerBasePayload
   shareUrl: string;
   shareLabel?: string;
   shareTitle?: string;
+  shareComment?: string;
   receiverName?: string;
   onShared?: (result: DiscordMemberShareResult) => void;
   onShareFailed?: (message: string) => void;
@@ -198,7 +201,8 @@ function useDiscordGuildMembers(
         pushDiscordApiWarningByErrorCode(
           push,
           payload?.errorCode,
-          message && message.length > 0 ? message : `Discordメンバー一覧の取得に失敗しました (${response.status})`
+          message && message.length > 0 ? message : `Discordメンバー一覧の取得に失敗しました (${response.status})`,
+          { csrfReason: payload?.csrfReason }
         );
         throw new Error(
           message && message.length > 0
@@ -208,7 +212,7 @@ function useDiscordGuildMembers(
       }
 
       if (!payload?.ok || !Array.isArray(payload.members)) {
-        pushDiscordApiWarningByErrorCode(push, payload?.errorCode, payload?.error);
+        pushDiscordApiWarningByErrorCode(push, payload?.errorCode, payload?.error, { csrfReason: payload?.csrfReason });
         throw new Error(payload?.error || 'Discordメンバー一覧の取得に失敗しました');
       }
 
@@ -255,7 +259,8 @@ function useDiscordGuildMembers(
             pushDiscordApiWarningByErrorCode(
               push,
               giftPayload?.errorCode,
-              message && message.length > 0 ? message : `お渡しチャンネル一覧の取得に失敗しました (${giftResponse.status})`
+              message && message.length > 0 ? message : `お渡しチャンネル一覧の取得に失敗しました (${giftResponse.status})`,
+              { csrfReason: giftPayload?.csrfReason }
             );
             if (message) {
               console.warn(`Failed to update Discord gift channel cache: ${message}`);
@@ -470,6 +475,7 @@ export function DiscordMemberPickerDialog({
         created?: boolean;
         error?: string;
         errorCode?: string;
+        csrfReason?: string;
       } | null = null;
 
       while (true) {
@@ -498,6 +504,7 @@ export function DiscordMemberPickerDialog({
           created?: boolean;
           error?: string;
           errorCode?: string;
+          csrfReason?: string;
         } | null;
 
         if (!findResponse.ok || !findPayload || !findPayload.ok) {
@@ -542,7 +549,11 @@ export function DiscordMemberPickerDialog({
             continue;
           }
 
-          if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message)) {
+          if (
+            pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, {
+              csrfReason: findPayload?.csrfReason
+            })
+          ) {
             setSubmitError(null);
             return;
           }
@@ -593,9 +604,10 @@ export function DiscordMemberPickerDialog({
       const title =
         sharePayload?.shareTitle ?? `${sharePayload?.receiverName ?? '景品'}のお渡しリンクです`;
       const comment =
-        sharePayload?.shareLabel && sharePayload.shareLabel !== sharePayload.shareUrl
+        sharePayload?.shareComment ??
+        (sharePayload?.shareLabel && sharePayload.shareLabel !== sharePayload.shareUrl
           ? sharePayload.shareLabel
-          : undefined;
+          : undefined);
 
       const sendResponse = await fetchDiscordApi('/api/discord/send', {
         method: 'POST',

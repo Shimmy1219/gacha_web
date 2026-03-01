@@ -11,6 +11,10 @@ export interface GachaAppStateV3 {
       createdAt?: string;
       updatedAt?: string;
       isArchived?: boolean;
+      thumbnailAssetId?: string | null;
+      thumbnailBlobUrl?: string | null;
+      thumbnailOwnerId?: string | null;
+      thumbnailUpdatedAt?: string | null;
     }
   >;
   order: string[];
@@ -230,7 +234,13 @@ export interface UiPreferencesStateV3 {
     ownerShareRate?: number;
     drawDialog?: {
       lastSelectedGachaId?: string;
+      lastPointsInput?: number;
+      lastPullsInput?: number;
       quickSendNewOnly?: boolean;
+      quickActionMode?: 'discord' | 'share_url';
+      revealOverlayEnabled?: boolean;
+      revealOverlayPreferenceConfirmed?: boolean;
+      revealOverlayBackgroundColor?: string;
       [key: string]: unknown;
     };
     stock?: {
@@ -280,6 +290,14 @@ export interface ReceivePrefsStateV3 {
   };
   ownerName?: string | null;
   iconAssetIds?: string[];
+  iconRingTransforms?: Record<
+    string,
+    {
+      scale: number;
+      offsetXRatio: number;
+      offsetYRatio: number;
+    }
+  >;
 }
 
 export type PullHistoryEntrySourceV1 = 'insiteResult' | 'manual' | 'realtime';

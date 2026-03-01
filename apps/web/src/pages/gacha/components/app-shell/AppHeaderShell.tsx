@@ -10,16 +10,22 @@ import { HeaderBrand } from './HeaderBrand';
 import { MobileMenuButton } from './MobileMenuButton';
 import { ResponsiveToolbarRail } from './ResponsiveToolbarRail';
 import { ToolbarActions } from './ToolbarActions';
+import {
+  readSiteZoomScaleFromComputedStyle,
+  resolveUnscaledPixelValue
+} from '../../../../features/theme/siteZoomMath';
 
 export interface AppHeaderShellProps {
   title: string;
   tagline?: string;
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
+  onOpenHistory?: () => void;
   onExportAll?: () => void;
   onOpenPageSettings?: () => void;
   showDrawGachaButton?: boolean;
   showRegisterGachaButton?: boolean;
+  showHistoryButton?: boolean;
   showExportButton?: boolean;
   showDiscordLoginButton?: boolean;
   navActions?: ReactNode;
@@ -32,10 +38,12 @@ export function AppHeaderShell({
   tagline,
   onDrawGacha,
   onRegisterGacha,
+  onOpenHistory,
   onExportAll,
   onOpenPageSettings,
   showDrawGachaButton = true,
   showRegisterGachaButton = true,
+  showHistoryButton = true,
   showExportButton = true,
   showDiscordLoginButton = true,
   navActions,
@@ -52,7 +60,7 @@ export function AppHeaderShell({
   const headerHeightRef = useRef(0);
   const hiddenStateRef = useRef(isHidden);
   const lastScrollYRef = useRef(0);
-  const hasToolbarActions = showDrawGachaButton || showRegisterGachaButton || showExportButton;
+  const hasToolbarActions = showDrawGachaButton || showRegisterGachaButton || showHistoryButton || showExportButton;
   const resolvedMobileNavActions = mobileNavActions ?? navActions;
 
   const handleClose = useCallback(() => setOpen(false), []);
@@ -70,10 +78,13 @@ export function AppHeaderShell({
     const root = document.documentElement;
 
     const updateHeaderHeight = () => {
+      const rootStyle = window.getComputedStyle(root);
+      const zoomScale = readSiteZoomScaleFromComputedStyle(rootStyle);
       const { height } = headerEl.getBoundingClientRect();
-      headerHeightRef.current = height;
-      root.style.setProperty('--app-header-height', `${height}px`);
-      const stickyOffset = hiddenStateRef.current ? 0 : height;
+      const unscaledHeight = resolveUnscaledPixelValue(height, zoomScale);
+      headerHeightRef.current = unscaledHeight;
+      root.style.setProperty('--app-header-height', `${unscaledHeight}px`);
+      const stickyOffset = hiddenStateRef.current ? 0 : unscaledHeight;
       root.style.setProperty('--app-sticky-top', `${stickyOffset}px`);
     };
 
@@ -193,9 +204,11 @@ export function AppHeaderShell({
               mode="desktop"
               onDrawGacha={onDrawGacha}
               onRegisterGacha={onRegisterGacha}
+              onOpenHistory={onOpenHistory}
               onExportAll={onExportAll}
               showDrawGachaButton={showDrawGachaButton}
               showRegisterGachaButton={showRegisterGachaButton}
+              showHistoryButton={showHistoryButton}
               showExportButton={showExportButton}
             />
           ) : null}
@@ -259,9 +272,11 @@ export function AppHeaderShell({
                   mode="mobile"
                   onDrawGacha={onDrawGacha}
                   onRegisterGacha={onRegisterGacha}
+                  onOpenHistory={onOpenHistory}
                   onExportAll={onExportAll}
                   showDrawGachaButton={showDrawGachaButton}
                   showRegisterGachaButton={showRegisterGachaButton}
+                  showHistoryButton={showHistoryButton}
                   showExportButton={showExportButton}
                 />
               ) : null}

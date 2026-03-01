@@ -3,13 +3,59 @@ import { clsx } from 'clsx';
 import { useMemo } from 'react';
 
 import { MultiSelectDropdown } from '../select/MultiSelectDropdown';
+import { SingleSelectDropdown } from '../select/SingleSelectDropdown';
 import { useHaptics } from '../../../../features/haptics/HapticsProvider';
+import type { UserFilterSortOrder } from '../../../../domain/stores/uiPreferencesStore';
 
 import {
   type UserFilterOption,
   useUserFilterController,
   useUserFilterOptions
 } from '../../../../features/users/logic/userFilters';
+
+interface SortSelectFilterProps {
+  id: string;
+  label: string;
+  options: UserFilterOption[];
+  value: UserFilterSortOrder;
+  onChange: (value: UserFilterSortOrder) => void;
+}
+
+function SortSelectFilter({ id, label, options, value, onChange }: SortSelectFilterProps): JSX.Element {
+  const dropdownOptions = useMemo(() => options.map((option) => ({ ...option })), [options]);
+
+  return (
+    <div className="user-filter-panel__sort-select grid grid-cols-[minmax(8rem,auto),1fr] items-center gap-3 sm:gap-2">
+      <span className="user-filter-panel__label text-[11px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
+        {label}
+      </span>
+      <SingleSelectDropdown
+        id={id}
+        value={value}
+        options={dropdownOptions}
+        onChange={onChange}
+        classNames={{
+          root: 'user-filter-panel__sort-select-wrapper relative',
+          button:
+            'user-filter-panel__sort-select-button inline-flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-panel px-4 py-2 text-sm !font-normal text-surface-foreground transition',
+          buttonOpen: 'border-accent text-accent',
+          buttonClosed: 'hover:border-accent/70',
+          icon: 'user-filter-panel__sort-select-icon h-4 w-4 transition-transform',
+          iconOpen: 'rotate-180',
+          menu:
+            'user-filter-panel__sort-select-options space-y-1 rounded-xl border border-border/60 bg-panel/95 p-2 shadow-[0_18px_44px_rgba(0,0,0,0.6)] backdrop-blur-sm',
+          option:
+            'user-filter-panel__sort-select-option flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
+          optionActive: 'bg-accent/10 text-surface-foreground',
+          optionInactive: 'text-muted-foreground hover:bg-surface/40',
+          optionLabel: 'user-filter-panel__sort-select-option-label flex-1 text-left',
+          optionDescription: 'user-filter-panel__sort-select-option-description text-[10px] text-muted-foreground/80',
+          checkIcon: 'user-filter-panel__sort-select-option-check h-4 w-4 transition text-accent'
+        }}
+      />
+    </div>
+  );
+}
 
 interface MultiSelectFilterProps {
   id: string;
@@ -116,11 +162,11 @@ interface UserFilterPanelProps {
 
 export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
   const { id, open = true } = props ?? {};
-  const { gachaOptions, rarityOptions } = useUserFilterOptions();
+  const { rarityOptions, sortOptions } = useUserFilterOptions();
   const {
     state,
-    setSelectedGachaIds,
     setSelectedRarityIds,
+    setUserSortOrder,
     setHideMiss,
     setShowCounts,
     setShowSkipOnly,
@@ -141,12 +187,12 @@ export function UserFilterPanel(props?: UserFilterPanelProps): JSX.Element {
       )}
     >
       <div className="user-filter-panel__controls grid gap-3 sm:gap-5">
-        <MultiSelectFilter
-          id="user-filter-gacha"
-          label="ガチャ絞り込み"
-          options={gachaOptions}
-          value={state.selectedGachaIds}
-          onChange={setSelectedGachaIds}
+        <SortSelectFilter
+          id="user-filter-sort"
+          label="並び替え"
+          options={sortOptions}
+          value={state.userSortOrder}
+          onChange={setUserSortOrder}
         />
         <MultiSelectFilter
           id="user-filter-rarity"

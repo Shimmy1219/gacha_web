@@ -10,6 +10,7 @@ interface OpenDiscordShareDialogParams {
   receiverName?: string;
   shareLabel?: string | null;
   shareTitle?: string | null;
+  shareComment?: string | null;
   initialCategory?: DiscordGuildCategorySelection | null;
   dialogTitle?: string;
   onShared?: (result: DiscordMemberShareResult) => void;
@@ -23,6 +24,7 @@ export function openDiscordShareDialog({
   receiverName,
   shareLabel,
   shareTitle,
+  shareComment,
   initialCategory,
   dialogTitle,
   onShared,
@@ -40,6 +42,7 @@ export function openDiscordShareDialog({
       shareUrl,
       shareLabel: shareLabel ?? undefined,
       shareTitle: shareTitle ?? undefined,
+      shareComment: shareComment ?? undefined,
       receiverName,
       onShared: (result) => {
         onShared?.(result);
@@ -48,4 +51,3 @@ export function openDiscordShareDialog({
     }
   });
 }
-

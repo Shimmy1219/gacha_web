@@ -14,6 +14,7 @@ export interface GachaLayoutProps {
   isMobile: boolean;
   onDrawGacha?: () => void;
   onRegisterGacha?: () => void;
+  onOpenHistory?: () => void;
   onExportAll?: () => void;
   onOpenPageSettings?: () => void;
   children: ReactNode;
@@ -26,6 +27,7 @@ export function GachaLayout({
   isMobile,
   onDrawGacha,
   onRegisterGacha,
+  onOpenHistory,
   onExportAll,
   onOpenPageSettings,
   children
@@ -48,10 +50,12 @@ export function GachaLayout({
         tagline={tagline}
         onDrawGacha={onDrawGacha}
         onRegisterGacha={onRegisterGacha}
+        onOpenHistory={onOpenHistory}
         onExportAll={onExportAll}
         onOpenPageSettings={onOpenPageSettings}
         showDrawGachaButton={shouldShowToolbarActions}
         showRegisterGachaButton={shouldShowToolbarActions}
+        showHistoryButton={shouldShowToolbarActions}
         showExportButton={shouldShowToolbarActions}
         showDiscordLoginButton={shouldShowDiscordLoginButton}
         navActions={receiveNavActions}

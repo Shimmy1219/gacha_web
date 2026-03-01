@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchDiscordApi } from './fetchDiscordApi';
+import { getCsrfMismatchGuideMessageJa, inspectCsrfFailurePayload } from '../csrf/csrfGuards';
 
 export interface DiscordGuildSummary {
   id: string;
@@ -17,6 +18,8 @@ interface DiscordGuildsResponse {
   ok: boolean;
   guilds?: DiscordGuildSummary[];
   error?: string;
+  errorCode?: string;
+  csrfReason?: string;
 }
 
 async function fetchDiscordGuilds(): Promise<DiscordGuildSummary[]> {
@@ -24,14 +27,19 @@ async function fetchDiscordGuilds(): Promise<DiscordGuildSummary[]> {
     method: 'GET',
   });
 
+  const payload = (await response.json().catch(() => null)) as DiscordGuildsResponse | null;
+
   if (!response.ok) {
-    const message = `Failed to fetch discord guilds: ${response.status}`;
+    const csrfFailure = inspectCsrfFailurePayload(payload);
+    if (csrfFailure.isMismatch) {
+      throw new Error(`Discordギルド一覧の取得に失敗しました。\n\n${getCsrfMismatchGuideMessageJa(csrfFailure.reason)}`);
+    }
+    const message = payload?.error ?? `Failed to fetch discord guilds: ${response.status}`;
     throw new Error(message);
   }
 
-  const payload = (await response.json()) as DiscordGuildsResponse;
-  if (!payload.ok || !Array.isArray(payload.guilds)) {
-    throw new Error(payload.error ?? 'Discord guilds payload is invalid');
+  if (!payload?.ok || !Array.isArray(payload.guilds)) {
+    throw new Error(payload?.error ?? 'Discord guilds payload is invalid');
   }
 
   return payload.guilds;

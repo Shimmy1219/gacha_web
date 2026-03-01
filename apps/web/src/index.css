@@ -27,6 +27,9 @@
   --color-accent-foreground: 255 255 255;
   --background-gradient-1: rgba(0, 0, 0, 0);
   --background-gradient-2: rgba(0, 0, 0, 0);
+  --site-zoom-scale: 1;
+  --site-zoom-inverse-scale: 1;
+  --site-zoom-percent: 100;
 }
 
 [data-site-theme='light'] {
@@ -118,11 +121,24 @@
     -webkit-appearance: none;
     margin: 0;
   }
+
+  :root[data-site-zoom-mode='transform'] body {
+    transform: scale(var(--site-zoom-scale));
+    transform-origin: top left;
+    width: calc(100% / var(--site-zoom-scale));
+    min-height: calc(100% / var(--site-zoom-scale));
+  }
 }
 
 @layer components {
   .section-container {
-    max-height: max(0px, calc(100vh - var(--app-header-height, 0px) - var(--app-main-vertical-padding, 0px)));
+    max-height: max(
+      0px,
+      calc(
+        (100vh * var(--site-zoom-inverse-scale, 1)) - var(--app-header-height, 0px) -
+          var(--app-main-vertical-padding, 0px)
+      )
+    );
   }
 
   .section-container--mobile {
@@ -176,6 +192,12 @@
   .riagu-section__scroll.section-scroll {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+
+  .users-section__content--closing-scroll-lock {
+    overflow: hidden !important;
+    overscroll-behavior: contain;
+    touch-action: none;
   }
 
   @media (min-width: 901px) {
@@ -244,28 +266,159 @@
     background-color: rgb(var(--color-accent-bright) / 0.75);
   }
 
-  .page-settings__content-scroll {
+  .dashboard-desktop-grid {
+    grid-template-columns: minmax(0, 1fr);
+    --dashboard-grid-lg-col-1-fr: 1fr;
+    --dashboard-grid-lg-col-2-fr: 1fr;
+    --dashboard-grid-xl-col-1-fr: 0.92fr;
+    --dashboard-grid-xl-col-2-fr: 1.32fr;
+    --dashboard-grid-xl-col-3-fr: 1.11fr;
+    --dashboard-grid-xl-col-4-fr: 0.8fr;
+  }
+
+  @media (min-width: 1024px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-lg-col-1-fr))
+        minmax(0, var(--dashboard-grid-lg-col-2-fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .dashboard-desktop-grid {
+      grid-template-columns:
+        minmax(0, var(--dashboard-grid-xl-col-1-fr))
+        minmax(0, var(--dashboard-grid-xl-col-2-fr))
+        minmax(0, var(--dashboard-grid-xl-col-3-fr))
+        minmax(0, var(--dashboard-grid-xl-col-4-fr));
+    }
+  }
+
+  .page-settings__content-scroll,
+  .page-settings__menu-scroll {
     min-height: 0;
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-accent) / 0.8) transparent;
     scrollbar-gutter: stable;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar {
+  .page-settings__content-scroll::-webkit-scrollbar,
+  .page-settings__menu-scroll::-webkit-scrollbar {
     width: 0.65rem;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-track {
+  .page-settings__content-scroll::-webkit-scrollbar-track,
+  .page-settings__menu-scroll::-webkit-scrollbar-track {
     background: rgb(var(--color-surface-deep) / 0.7);
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb {
     background: rgb(var(--color-accent) / 0.8);
     border-radius: 9999px;
   }
 
-  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover {
+  .page-settings__content-scroll::-webkit-scrollbar-thumb:hover,
+  .page-settings__menu-scroll::-webkit-scrollbar-thumb:hover {
     background: rgb(var(--color-accent) / 1);
+  }
+
+  .page-settings-target {
+    transition:
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      background-color 220ms ease;
+  }
+
+  .page-settings-target--highlighted {
+    border-color: rgb(var(--color-accent) / 0.95) !important;
+    background-color: rgb(var(--color-accent) / 0.09);
+    box-shadow:
+      0 0 0 2px rgb(var(--color-accent) / 0.32),
+      0 0 0 6px rgb(var(--color-accent) / 0.14);
+    animation: page-settings-target-highlight-pulse 1.4s ease-in-out 3;
+  }
+
+  .page-settings-target__input--highlighted {
+    border-color: rgb(var(--color-accent) / 0.95) !important;
+    box-shadow:
+      0 0 0 2px rgb(var(--color-accent) / 0.26),
+      0 0 0 4px rgb(var(--color-accent) / 0.12);
+  }
+
+  @keyframes page-settings-target-highlight-pulse {
+    0% {
+      box-shadow:
+        0 0 0 2px rgb(var(--color-accent) / 0.24),
+        0 0 0 4px rgb(var(--color-accent) / 0.1);
+    }
+    50% {
+      box-shadow:
+        0 0 0 3px rgb(var(--color-accent) / 0.4),
+        0 0 0 8px rgb(var(--color-accent) / 0.2);
+    }
+    100% {
+      box-shadow:
+        0 0 0 2px rgb(var(--color-accent) / 0.24),
+        0 0 0 4px rgb(var(--color-accent) / 0.1);
+    }
+  }
+
+  body[data-page-settings-zoom-preview='1'] .modal-overlay {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .modal-header {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__menu-scroll {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1'] .page-settings-modal .page-settings__content-scroll {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__layout-intro,
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__desktop-layout-panel {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  body[data-page-settings-zoom-preview='1']
+    .page-settings-modal
+    .page-settings__layout-tab--previewing
+    .page-settings__site-zoom-panel--previewing {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 120;
+    margin: 0 auto;
+    width: min(42rem, calc(100vw - 2rem));
+    padding: 0.875rem 1rem;
+    border-color: rgb(var(--color-accent) / 0.45);
+    background: rgb(var(--color-panel) / 0.96);
+    box-shadow: 0 14px 36px rgb(0 0 0 / 0.45);
   }
 
   @media (max-width: 1023px) {
@@ -348,8 +501,15 @@
     gap: 0;
     overflow-x: auto;
     overflow-y: clip;
+    scroll-padding-inline: 1rem;
     scrollbar-width: thin;
     scrollbar-color: rgba(var(--color-accent) / 0) transparent;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-scroll-area {
+      scroll-behavior: smooth;
+    }
   }
 
   .tab-scroll-area:hover {
@@ -570,6 +730,80 @@
     color: rgb(var(--color-accent-foreground) / 1);
   }
 
+  .draw-gacha-dialog__frame {
+    isolation: isolate;
+  }
+
+  .draw-gacha-result-overlay {
+    pointer-events: auto;
+  }
+
+  .draw-gacha-result-overlay__content {
+    backdrop-filter: blur(1.5px);
+  }
+
+  .draw-gacha-result-overlay__grid {
+    display: grid;
+    grid-template-columns: repeat(var(--draw-result-columns, 1), minmax(0, 1fr));
+    align-content: flex-start;
+    gap: 0.85rem 0.7rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.45) transparent;
+  }
+
+  .draw-gacha-result-overlay__grid-item {
+    min-width: 0;
+  }
+
+  .draw-gacha-result-overlay__grid::-webkit-scrollbar {
+    width: 0.55rem;
+  }
+
+  .draw-gacha-result-overlay__grid::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 9999px;
+  }
+
+  .draw-gacha-result-overlay__grid::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.35);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
+
+  .draw-gacha-result-overlay__grid::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.55);
+  }
+
+  .draw-gacha-result-card {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .draw-gacha-result-card__thumb {
+    aspect-ratio: 1 / 1;
+  }
+
+  .draw-gacha-result-card__image {
+    object-fit: contain;
+  }
+
+  .draw-gacha-result-card__quantity-badge {
+    position: absolute;
+    right: 0.25rem;
+    bottom: 0.25rem;
+  }
+
+  .draw-gacha-result-card--reveal {
+    animation: draw-gacha-result-card-reveal 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: 50% 70%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .draw-gacha-result-card--reveal {
+      animation: none;
+    }
+  }
+
   [data-site-theme='light'] .start-wizard__tile:hover .start-wizard__tile-cta {
     color: rgb(0 0 0 / 1);
   }
@@ -643,6 +877,17 @@
 }
 
 @layer utilities {
+  @keyframes draw-gacha-result-card-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   @keyframes tab-slide-from-right {
     from {
       opacity: 0;
