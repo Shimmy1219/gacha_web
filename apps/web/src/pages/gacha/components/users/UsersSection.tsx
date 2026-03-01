@@ -23,6 +23,7 @@ import { SaveTargetDialog } from '../../../../modals/dialogs/SaveTargetDialog';
 import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocalStorage';
 import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
+import { useResponsiveDashboard } from '../dashboard/useResponsiveDashboard';
 
 const USERS_FILTER_AUTO_CLOSE_SCROLL_DELTA_THRESHOLD = 8;
 const USERS_FILTER_CLOSE_WHEEL_DELTA_THRESHOLD = 12;
@@ -40,10 +41,12 @@ export function UsersSection(): JSX.Element {
   const usersContentRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
   const touchStartYRef = useRef<number | null>(null);
+  const touchLastYRef = useRef<number | null>(null);
   const touchStartedAtTopRef = useRef(false);
   const reachedTopAfterAutoCloseRef = useRef(false);
   const autoToggleCooldownUntilRef = useRef(0);
   const closeAnimationUnlockTimerRef = useRef<number | null>(null);
+  const { isMobile } = useResponsiveDashboard();
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
@@ -69,6 +72,22 @@ export function UsersSection(): JSX.Element {
     [isUsersSectionScrollable]
   );
 
+  const isUsersGestureAtTop = useCallback(
+    (element: HTMLDivElement | null): boolean => {
+      if (isUsersSectionScrollable(element)) {
+        return isUsersSectionAtTop(element);
+      }
+      if (!isMobile) {
+        return true;
+      }
+      if (typeof window === 'undefined') {
+        return true;
+      }
+      return window.scrollY <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+    },
+    [isMobile, isUsersSectionAtTop, isUsersSectionScrollable]
+  );
+
   const closeFiltersByScrollIntent = useCallback((): boolean => {
     if (!filtersOpen) {
       return false;
@@ -89,10 +108,10 @@ export function UsersSection(): JSX.Element {
       setIsScrollLockedDuringClosing(false);
       closeAnimationUnlockTimerRef.current = null;
     }, USERS_FILTER_CLOSE_ANIMATION_MS + 80);
-    reachedTopAfterAutoCloseRef.current = isUsersSectionAtTop(contentElement);
+    reachedTopAfterAutoCloseRef.current = isUsersGestureAtTop(contentElement);
     autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
     return true;
-  }, [filtersOpen, isUsersSectionAtTop]);
+  }, [filtersOpen, isUsersGestureAtTop]);
 
   const tryOpenFiltersByTopOverscroll = useCallback((): boolean => {
     const contentElement = usersContentRef.current;
@@ -103,7 +122,7 @@ export function UsersSection(): JSX.Element {
       return false;
     }
 
-    const isAtTop = isUsersSectionAtTop(contentElement);
+    const isAtTop = isUsersGestureAtTop(contentElement);
     if (!isAtTop || !reachedTopAfterAutoCloseRef.current) {
       return false;
     }
@@ -112,7 +131,7 @@ export function UsersSection(): JSX.Element {
     reachedTopAfterAutoCloseRef.current = false;
     autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
     return true;
-  }, [filtersOpen, isUsersSectionAtTop]);
+  }, [filtersOpen, isUsersGestureAtTop]);
 
   const handleUsersContentScroll = useCallback(
     (event: ReactUIEvent<HTMLDivElement>) => {
@@ -122,7 +141,7 @@ export function UsersSection(): JSX.Element {
       lastScrollTopRef.current = currentScrollTop;
 
       if (!isUsersSectionScrollable(contentElement)) {
-        reachedTopAfterAutoCloseRef.current = true;
+        reachedTopAfterAutoCloseRef.current = isUsersGestureAtTop(contentElement);
         return;
       }
 
@@ -148,7 +167,7 @@ export function UsersSection(): JSX.Element {
         void closeFiltersByScrollIntent();
       }
     },
-    [closeFiltersByScrollIntent, filtersOpen, isUsersSectionScrollable]
+    [closeFiltersByScrollIntent, filtersOpen, isUsersGestureAtTop, isUsersSectionScrollable]
   );
 
   const handleUsersContentWheel = useCallback(
@@ -187,8 +206,9 @@ export function UsersSection(): JSX.Element {
   const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
     const touchY = event.touches[0]?.clientY ?? null;
     touchStartYRef.current = touchY;
-    touchStartedAtTopRef.current = isUsersSectionAtTop(usersContentRef.current);
-  }, [isUsersSectionAtTop]);
+    touchLastYRef.current = touchY;
+    touchStartedAtTopRef.current = isUsersGestureAtTop(usersContentRef.current);
+  }, [isUsersGestureAtTop]);
 
   const handleUsersContentTouchMove = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
@@ -207,6 +227,13 @@ export function UsersSection(): JSX.Element {
       if (initialY == null || currentY == null) {
         return;
       }
+      const previousY = touchLastYRef.current;
+      touchLastYRef.current = currentY;
+      if (previousY == null) {
+        return;
+      }
+
+      const currentMoveDelta = currentY - previousY;
 
       const dragDistance = currentY - initialY;
 
@@ -228,13 +255,17 @@ export function UsersSection(): JSX.Element {
       if (dragDistance < USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD) {
         return;
       }
-      if (!touchStartedAtTopRef.current || !isUsersSectionAtTop(contentElement)) {
+      if (currentMoveDelta <= 0) {
+        return;
+      }
+      if (!touchStartedAtTopRef.current || !isUsersGestureAtTop(contentElement)) {
         return;
       }
 
       const opened = tryOpenFiltersByTopOverscroll();
       if (opened) {
         touchStartYRef.current = currentY;
+        touchLastYRef.current = currentY;
         touchStartedAtTopRef.current = true;
       }
     },
@@ -242,13 +273,20 @@ export function UsersSection(): JSX.Element {
       closeFiltersByScrollIntent,
       filtersOpen,
       isScrollLockedDuringClosing,
-      isUsersSectionAtTop,
+      isUsersGestureAtTop,
       tryOpenFiltersByTopOverscroll
     ]
   );
 
   const handleUsersContentTouchEnd = useCallback(() => {
     touchStartYRef.current = null;
+    touchLastYRef.current = null;
+    touchStartedAtTopRef.current = false;
+  }, []);
+
+  const handleUsersContentTouchCancel = useCallback(() => {
+    touchStartYRef.current = null;
+    touchLastYRef.current = null;
     touchStartedAtTopRef.current = false;
   }, []);
 
@@ -261,14 +299,14 @@ export function UsersSection(): JSX.Element {
       lastScrollTopRef.current = currentScrollTop;
       reachedTopAfterAutoCloseRef.current = nextOpen
         ? false
-        : currentScrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+        : isUsersGestureAtTop(contentElement ?? null);
       autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
       if (!nextOpen) {
         setFiltersOverflowVisible(false);
       }
       return nextOpen;
     });
-  }, []);
+  }, [isUsersGestureAtTop]);
 
   useEffect(() => {
     if (!filtersOpen) {
@@ -409,6 +447,7 @@ export function UsersSection(): JSX.Element {
       onContentTouchStart={handleUsersContentTouchStart}
       onContentTouchMove={handleUsersContentTouchMove}
       onContentTouchEnd={handleUsersContentTouchEnd}
+      onContentTouchCancel={handleUsersContentTouchCancel}
     >
       <div
         className={clsx(

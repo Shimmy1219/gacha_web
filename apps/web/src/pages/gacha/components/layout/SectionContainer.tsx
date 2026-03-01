@@ -30,6 +30,7 @@ interface SectionContainerProps {
   onContentTouchStart?: TouchEventHandler<HTMLDivElement>;
   onContentTouchMove?: TouchEventHandler<HTMLDivElement>;
   onContentTouchEnd?: TouchEventHandler<HTMLDivElement>;
+  onContentTouchCancel?: TouchEventHandler<HTMLDivElement>;
 }
 
 export function SectionContainer({
@@ -48,7 +49,8 @@ export function SectionContainer({
   onContentWheel,
   onContentTouchStart,
   onContentTouchMove,
-  onContentTouchEnd
+  onContentTouchEnd,
+  onContentTouchCancel
 }: SectionContainerProps): JSX.Element {
   const contentRef = useRef<HTMLDivElement>(null);
   const [hasScrollbar, setHasScrollbar] = useState(false);
@@ -167,6 +169,7 @@ export function SectionContainer({
             onTouchStart={onContentTouchStart}
             onTouchMove={onContentTouchMove}
             onTouchEnd={onContentTouchEnd}
+            onTouchCancel={onContentTouchCancel}
           >
             {children}
           </div>
