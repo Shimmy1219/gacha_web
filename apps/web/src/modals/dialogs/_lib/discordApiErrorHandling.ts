@@ -7,6 +7,8 @@ import {
 
 export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild' as const;
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions' as const;
+export const DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED =
+  'discord_category_channel_limit_reached' as const;
 
 export function isDiscordUnknownGuildErrorCode(value: unknown): boolean {
   return value === DISCORD_API_ERROR_CODE_UNKNOWN_GUILD;
@@ -14,6 +16,10 @@ export function isDiscordUnknownGuildErrorCode(value: unknown): boolean {
 
 export function isDiscordMissingPermissionsErrorCode(value: unknown): boolean {
   return value === DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS;
+}
+
+export function isDiscordCategoryChannelLimitReachedErrorCode(value: unknown): boolean {
+  return value === DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED;
 }
 
 export function isCsrfTokenMismatchErrorCode(value: unknown): boolean {

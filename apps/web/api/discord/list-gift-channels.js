@@ -55,7 +55,18 @@ export default withApiGuards({
   }
 
   const guildId = typeof req.query.guild_id === 'string' ? req.query.guild_id.trim() : '';
-  const categoryId = typeof req.query.category_id === 'string' ? req.query.category_id.trim() : '';
+  const categoryIds = [];
+  const categoryIdSet = new Set();
+  for (const categoryId of [
+    ...normalizeMemberIds(req.query.category_id),
+    ...normalizeMemberIds(req.query.category_ids),
+  ]) {
+    if (categoryIdSet.has(categoryId)) {
+      continue;
+    }
+    categoryIdSet.add(categoryId);
+    categoryIds.push(categoryId);
+  }
   if (!guildId){
     log.warn('missing guild identifier');
     return res.status(400).json({ ok:false, error:'guild_id required' });
@@ -68,7 +79,7 @@ export default withApiGuards({
 
   log.debug('request parameters normalized', {
     guildId,
-    categoryId: categoryId || null,
+    categoryIds,
     memberIdFilterCount: memberIdCandidates.size,
   });
 
@@ -133,8 +144,8 @@ export default withApiGuards({
     ? candidates.filter((candidate) => memberIdCandidates.has(candidate.memberId))
     : candidates;
 
-  const categoryFiltered = categoryId
-    ? filtered.filter((candidate) => candidate.parentId === categoryId)
+  const categoryFiltered = categoryIdSet.size > 0
+    ? filtered.filter((candidate) => candidate.parentId && categoryIdSet.has(candidate.parentId))
     : filtered;
 
   const payload = categoryFiltered.map((candidate) => ({
@@ -147,7 +158,7 @@ export default withApiGuards({
 
   log.info('gift channel listing completed', {
     guildId,
-    categoryId: categoryId || null,
+    categoryIds,
     returnedCount: payload.length,
   });
 

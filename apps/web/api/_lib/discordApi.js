@@ -76,6 +76,9 @@ export const DISCORD_API_ERROR_CODE_UNKNOWN_GUILD = 'discord_unknown_guild';
 
 export const DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS = 'discord_missing_permissions';
 
+export const DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED =
+  'discord_category_channel_limit_reached';
+
 export const DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA =
   '申し訳ございません。Discord botの権限確認中にエラーが発生しました。でも大丈夫です。ギルド設定でBotに「チャンネルの管理(Manage Channels)」権限を付与してください。そしたらもう一度試してみてください。\n\n１．サーバー設定を開く\n２．画面下の「ロール」を開く\n３．「四遊楽ガチャ」をタップ\n４．「権限」をタップ\n５．「チャンネルの管理」をON\n６．再度カテゴリを選ぶ';
 
@@ -109,6 +112,40 @@ export function isDiscordUnknownGuildError(error) {
   }
   const raw = typeof info?.rawBody === 'string' ? info.rawBody.toLowerCase() : '';
   return raw.includes('unknown guild');
+}
+
+function hasCategoryChannelLimitMessage(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return value.toLowerCase().includes('maximum number of channels in category reached');
+}
+
+export function isDiscordCategoryChannelLimitReachedError(error) {
+  const info = extractDiscordApiErrorInfo(error);
+  if (!info) {
+    return false;
+  }
+  if (info.status !== 400) {
+    return false;
+  }
+
+  const parentErrors = info?.jsonBody?.parent_id;
+  if (Array.isArray(parentErrors)) {
+    for (const entry of parentErrors) {
+      if (hasCategoryChannelLimitMessage(entry)) {
+        return true;
+      }
+    }
+  }
+
+  const message = typeof info?.jsonBody?.message === 'string' ? info.jsonBody.message : '';
+  if (hasCategoryChannelLimitMessage(message)) {
+    return true;
+  }
+
+  const raw = typeof info?.rawBody === 'string' ? info.rawBody : '';
+  return hasCategoryChannelLimitMessage(raw);
 }
 
 export function build1to1Overwrites({ guildId, ownerId, memberId, botId }){

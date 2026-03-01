@@ -7,9 +7,11 @@ import {
   dFetch,
   assertGuildOwner,
   build1to1Overwrites,
+  DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED,
   DISCORD_API_ERROR_CODE_UNKNOWN_GUILD,
   DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS,
   DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
+  isDiscordCategoryChannelLimitReachedError,
   isDiscordMissingPermissionsError,
   isDiscordUnknownGuildError,
   PERM
@@ -40,11 +42,40 @@ function buildChannelNameFromDisplayName(displayName, memberId){
   return candidate.length > 90 ? candidate.slice(0, 90) : candidate;
 }
 
-function matchesCandidateCategory(candidate, categoryId){
-  if (!categoryId){
+function normalizeCategoryIds(queryValue){
+  const values = [];
+  const append = (value) => {
+    if (typeof value !== 'string' && typeof value !== 'number'){
+      return;
+    }
+    const normalized = String(value).trim();
+    if (!normalized){
+      return;
+    }
+    for (const part of normalized.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed){
+        values.push(trimmed);
+      }
+    }
+  };
+
+  if (Array.isArray(queryValue)){
+    for (const entry of queryValue){
+      append(entry);
+    }
+  } else {
+    append(queryValue);
+  }
+
+  return values;
+}
+
+function matchesCandidateCategory(candidate, categoryIdSet){
+  if (!categoryIdSet || categoryIdSet.size === 0){
     return true;
   }
-  return candidate.parentId === categoryId;
+  return candidate.parentId ? categoryIdSet.has(candidate.parentId) : false;
 }
 
 function matchesOwnerBotOnlyCandidateByName(candidateName, expectedName, memberId){
@@ -105,14 +136,14 @@ function evaluateChannelForGiftMatching({
   guildId,
   botUserIdSet,
   memberId,
-  categoryId,
+  categoryIdSet,
   expectedChannelName
 }){
   const channelId = normalizeSnowflake(channel?.id);
   const channelType = typeof channel?.type === 'number' ? channel.type : null;
   const parentId = normalizeSnowflake(channel?.parent_id);
   const channelName = typeof channel?.name === 'string' ? channel.name : null;
-  const categoryMatched = !categoryId || parentId === categoryId;
+  const categoryMatched = !categoryIdSet || categoryIdSet.size === 0 || (parentId ? categoryIdSet.has(parentId) : false);
 
   const result = {
     channelId: channelId ?? null,
@@ -328,8 +359,20 @@ export default withApiGuards({
   const memberId = String(req.query.member_id || '');
   const memberDisplayNameParam = typeof req.query.display_name === 'string' ? req.query.display_name : '';
   const createParam = String(req.query.create ?? '1').toLowerCase();
-  const categoryIdParam = req.query.category_id;
-  const categoryId = typeof categoryIdParam === 'string' ? categoryIdParam.trim() : '';
+  const rawCategoryIds = [
+    ...normalizeCategoryIds(req.query.category_id),
+    ...normalizeCategoryIds(req.query.category_ids)
+  ];
+  const categoryIds = [];
+  const categoryIdSet = new Set();
+  for (const categoryId of rawCategoryIds) {
+    if (categoryIdSet.has(categoryId)) {
+      continue;
+    }
+    categoryIdSet.add(categoryId);
+    categoryIds.push(categoryId);
+  }
+  const primaryCategoryId = categoryIds[0] || '';
   const allowCreate = createParam !== '0' && createParam !== 'false';
   if (!guildId || !memberId) {
     log.warn('missing identifiers', { guildIdPresent: Boolean(guildId), memberIdPresent: Boolean(memberId) });
@@ -342,7 +385,7 @@ export default withApiGuards({
     memberDisplayNameParam,
     createParam,
     allowCreate,
-    categoryId: categoryId || null,
+    categoryIds,
   });
 
   // オーナー検証
@@ -370,6 +413,14 @@ export default withApiGuards({
         ok: false,
         error: DISCORD_MISSING_PERMISSIONS_GUIDE_MESSAGE_JA,
         errorCode: DISCORD_API_ERROR_CODE_MISSING_PERMISSIONS
+      });
+    }
+    if (isDiscordCategoryChannelLimitReachedError(error)) {
+      log.warn('【既知のエラー】discord category channel limit reached', { context, message });
+      return res.status(409).json({
+        ok: false,
+        error: 'カテゴリ内のチャンネル数が50に到達しました。',
+        errorCode: DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED
       });
     }
     log.error('【既知のエラー】discord api request failed', { context, message });
@@ -427,7 +478,7 @@ export default withApiGuards({
       guildId,
       botUserIdSet,
       memberId,
-      categoryId,
+      categoryIdSet,
       expectedChannelName
     })
   );
@@ -436,16 +487,16 @@ export default withApiGuards({
   });
 
   const matchesForMember = candidates.filter(
-    (candidate) => candidate.memberId === memberId && matchesCandidateCategory(candidate, categoryId)
+    (candidate) => candidate.memberId === memberId && matchesCandidateCategory(candidate, categoryIdSet)
   );
-  const outOfCategoryMatches = categoryId
-    ? candidates.filter((candidate) => candidate.memberId === memberId && candidate.parentId !== categoryId)
+  const outOfCategoryMatches = categoryIdSet.size > 0
+    ? candidates.filter((candidate) => candidate.memberId === memberId && !matchesCandidateCategory(candidate, categoryIdSet))
     : [];
 
-  if (categoryId && outOfCategoryMatches.length > 0){
+  if (categoryIdSet.size > 0 && outOfCategoryMatches.length > 0){
     log.info('existing member channels found outside selected category and ignored', {
       memberId,
-      categoryId,
+      categoryIds,
       ignoredCount: outOfCategoryMatches.length,
       ignoredChannelIds: outOfCategoryMatches.map((candidate) => candidate.channelId),
     });
@@ -512,7 +563,7 @@ export default withApiGuards({
     guildId,
     botUserIdSet,
   })
-    .filter((candidate) => matchesCandidateCategory(candidate, categoryId))
+    .filter((candidate) => matchesCandidateCategory(candidate, categoryIdSet))
     .filter((candidate) => matchesOwnerBotOnlyCandidateByName(candidate.channelName, expectedChannelName, memberId));
 
   if (ownerBotOnlyCandidates.length === 1){
@@ -532,7 +583,7 @@ export default withApiGuards({
         channelId: adopted.channelId,
         memberId,
         parentId: adopted.parentId,
-        categoryId: categoryId || null,
+        categoryIds,
       });
     } catch (error) {
       return respondDiscordApiError(error, 'guild-channel-grant-member');
@@ -551,7 +602,7 @@ export default withApiGuards({
     log.warn('multiple owner+bot channels matched member name; skip adoption', {
       memberId,
       expectedChannelName,
-      categoryId: categoryId || null,
+      categoryIds,
       channelIds: ownerBotOnlyCandidates.map((candidate) => candidate.channelId),
     });
   }
@@ -561,47 +612,77 @@ export default withApiGuards({
     return res.json({ ok:true, channel_id: null, created:false });
   }
 
-  if (!categoryId) {
+  if (categoryIds.length === 0) {
     log.warn('category id missing for channel creation');
-    return res.status(400).json({ ok:false, error:'category_id required to create private channel' });
+    return res.status(400).json({ ok:false, error:'category_id or category_ids required to create private channel' });
   }
 
-  const category = allChannels.find(c => c.type === 4 && c.id === categoryId);
-  if (!category) {
-    log.warn('specified category not found in guild', { categoryId });
+  const availableCategoryById = new Map(
+    allChannels
+      .filter((channel) => channel && channel.type === 4 && typeof channel.id === 'string')
+      .map((channel) => [channel.id, channel])
+  );
+  const existingCreateCategories = categoryIds
+    .map((categoryId) => availableCategoryById.get(categoryId) ?? null)
+    .filter(Boolean);
+  if (existingCreateCategories.length === 0) {
+    log.warn('specified categories not found in guild', {
+      categoryIds,
+      primaryCategoryId: primaryCategoryId || null,
+    });
     return res.status(404).json({ ok:false, error:'指定されたカテゴリが見つかりません。' });
   }
 
-  // 無ければ作成
   const overwrites = build1to1Overwrites({ guildId, ownerId: sess.uid, memberId, botId: botUserId });
-  let created;
-  try {
-    log.debug('creating new channel', {
-      guildId,
-      memberId,
-      parentCategoryId: category.id,
-      channelNamePreview: expectedChannelName,
-      overwritePayload: overwrites,
-    });
-    created = await dFetch(`/guilds/${guildId}/channels`, {
-      token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
-      body: {
-        name: expectedChannelName,
-        type: 0,               // text
-        parent_id: category.id,
-        permission_overwrites: overwrites
+  let categoryLimitReached = false;
+  for (const category of existingCreateCategories) {
+    let created;
+    try {
+      log.debug('creating new channel', {
+        guildId,
+        memberId,
+        parentCategoryId: category.id,
+        channelNamePreview: expectedChannelName,
+        overwritePayload: overwrites,
+      });
+      created = await dFetch(`/guilds/${guildId}/channels`, {
+        token: process.env.DISCORD_BOT_TOKEN, isBot:true, method:'POST',
+        body: {
+          name: expectedChannelName,
+          type: 0,               // text
+          parent_id: category.id,
+          permission_overwrites: overwrites
+        }
+      });
+    } catch (error) {
+      if (isDiscordCategoryChannelLimitReachedError(error)) {
+        categoryLimitReached = true;
+        log.warn('category channel limit reached for candidate category', {
+          categoryId: category.id,
+          categoryIds,
+        });
+        continue;
       }
+      return respondDiscordApiError(error, 'guild-channel-create');
+    }
+
+    log.info('channel created', { channelId: created.id, guildId, memberId, parentId: category.id });
+    return res.json({
+      ok:true,
+      channel_id: created.id,
+      channel_name: typeof created?.name === 'string' ? created.name : null,
+      created:true,
+      parent_id: category.id
     });
-  } catch (error) {
-    return respondDiscordApiError(error, 'guild-channel-create');
   }
 
-  log.info('channel created', { channelId: created.id, guildId, memberId, parentId: category.id });
-  return res.json({
-    ok:true,
-    channel_id: created.id,
-    channel_name: typeof created?.name === 'string' ? created.name : null,
-    created:true,
-    parent_id: category.id
-  });
+  if (categoryLimitReached) {
+    return res.status(409).json({
+      ok: false,
+      error: 'カテゴリ内のチャンネル数が50に到達しました。',
+      errorCode: DISCORD_API_ERROR_CODE_CATEGORY_CHANNEL_LIMIT_REACHED
+    });
+  }
+
+  return res.status(502).json({ ok:false, error:'discord api request failed' });
 });

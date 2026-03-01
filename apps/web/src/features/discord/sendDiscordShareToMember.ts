@@ -1,8 +1,13 @@
 import type { ModalComponentProps } from '../../modals';
-import { pushDiscordApiWarningByErrorCode } from '../../modals/dialogs/_lib/discordApiErrorHandling';
+import {
+  isDiscordCategoryChannelLimitReachedErrorCode,
+  pushDiscordApiWarningByErrorCode
+} from '../../modals/dialogs/_lib/discordApiErrorHandling';
+import { normalizeDiscordCategoryIds } from './discordCategorySeries';
 import { ensurePrivateChannelCategory } from './ensurePrivateChannelCategory';
 import type { DiscordGuildSelection } from './discordGuildSelectionStorage';
 import { fetchDiscordApi } from './fetchDiscordApi';
+import { recoverDiscordCategoryLimitByCreatingNextCategory } from './recoverDiscordCategoryLimit';
 
 interface FindChannelsResponsePayload {
   ok: boolean;
@@ -69,6 +74,17 @@ export async function sendDiscordShareToMember({
   let resolvedChannelName = normalizeOptionalString(channelName);
   let resolvedChannelParentId = normalizeOptionalString(channelParentId);
   let preferredCategory = resolvedChannelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+  let preferredCategoryIds = normalizeDiscordCategoryIds([
+    preferredCategory,
+    ...(guildSelection.privateChannelCategory?.categoryIds ?? [])
+  ]);
+  if (preferredCategory && preferredCategoryIds.length === 0) {
+    preferredCategoryIds = [preferredCategory];
+  }
+  let preferredCategoryName =
+    guildSelection.privateChannelCategory?.id === preferredCategory
+      ? normalizeOptionalString(guildSelection.privateChannelCategory?.name)
+      : null;
 
   if (!resolvedChannelId && !preferredCategory) {
     const category = await ensurePrivateChannelCategory({
@@ -78,6 +94,8 @@ export async function sendDiscordShareToMember({
       dialogTitle: categoryDialogTitle ?? 'お渡しカテゴリの設定'
     });
     preferredCategory = category.id;
+    preferredCategoryIds = normalizeDiscordCategoryIds([category.id, ...(category.categoryIds ?? [])]);
+    preferredCategoryName = normalizeOptionalString(category.name);
   }
 
   if (!resolvedChannelId) {
@@ -85,45 +103,79 @@ export async function sendDiscordShareToMember({
       throw new Error('お渡しチャンネルのカテゴリが設定されていません。Discord共有設定を確認してください。');
     }
 
-    const params = new URLSearchParams({
-      guild_id: guildSelection.guildId,
-      member_id: memberId,
-      category_id: preferredCategory
-    });
-    if (createChannelIfMissing) {
-      params.set('create', '1');
-    }
     const normalizedDisplayName = normalizeOptionalString(displayNameForChannel);
-    if (normalizedDisplayName) {
-      params.set('display_name', normalizedDisplayName);
-    }
+    const exhaustedCategoryIds = new Set<string>();
+    let confirmationRequired = true;
 
-    const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
-      method: 'GET'
-    });
-
-    const findPayload = (await findResponse.json().catch(() => null)) as FindChannelsResponsePayload | null;
-
-    if (!findResponse.ok || !findPayload) {
-      const message =
-        findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-      if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-        throw new Error('Discordギルドの設定を確認してください。');
+    while (!resolvedChannelId) {
+      const params = new URLSearchParams({
+        guild_id: guildSelection.guildId,
+        member_id: memberId,
+        category_id: preferredCategory
+      });
+      if (preferredCategoryIds.length > 0) {
+        params.set('category_ids', preferredCategoryIds.join(','));
       }
-      throw new Error(message);
-    }
-
-    if (!findPayload.ok) {
-      const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-      if (pushDiscordApiWarningByErrorCode(push, findPayload.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-        throw new Error('Discordギルドの設定を確認してください。');
+      if (createChannelIfMissing) {
+        params.set('create', '1');
       }
-      throw new Error(message);
-    }
+      if (normalizedDisplayName) {
+        params.set('display_name', normalizedDisplayName);
+      }
 
-    resolvedChannelId = normalizeOptionalString(findPayload.channel_id);
-    resolvedChannelName = normalizeOptionalString(findPayload.channel_name);
-    resolvedChannelParentId = normalizeOptionalString(findPayload.parent_id);
+      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+        method: 'GET'
+      });
+
+      const findPayload = (await findResponse.json().catch(() => null)) as FindChannelsResponsePayload | null;
+      if (!findResponse.ok || !findPayload || !findPayload.ok) {
+        const message =
+          !findResponse.ok || !findPayload
+            ? findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`
+            : findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+
+        if (
+          createChannelIfMissing &&
+          preferredCategory &&
+          isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)
+        ) {
+          exhaustedCategoryIds.add(preferredCategory);
+          const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
+            push,
+            discordUserId,
+            guildSelection,
+            currentCategoryId: preferredCategory,
+            currentCategoryName: preferredCategoryName,
+            exhaustedCategoryIds,
+            confirmationRequired
+          });
+          if (!nextCategory?.id) {
+            throw new Error('Discord共有を中断しました。');
+          }
+          preferredCategory = nextCategory.id;
+          preferredCategoryIds = normalizeDiscordCategoryIds([nextCategory.id, ...(nextCategory.categoryIds ?? [])]);
+          if (preferredCategoryIds.length === 0) {
+            preferredCategoryIds = [nextCategory.id];
+          }
+          preferredCategoryName = normalizeOptionalString(nextCategory.name);
+          confirmationRequired = false;
+          continue;
+        }
+
+        if (
+          pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, {
+            csrfReason: findPayload?.csrfReason
+          })
+        ) {
+          throw new Error('Discordギルドの設定を確認してください。');
+        }
+        throw new Error(message);
+      }
+
+      resolvedChannelId = normalizeOptionalString(findPayload.channel_id);
+      resolvedChannelName = normalizeOptionalString(findPayload.channel_name);
+      resolvedChannelParentId = normalizeOptionalString(findPayload.parent_id) ?? preferredCategory;
+    }
   }
 
   if (!resolvedChannelId) {
@@ -161,6 +213,6 @@ export async function sendDiscordShareToMember({
   return {
     channelId: resolvedChannelId,
     channelName: resolvedChannelName ?? null,
-    channelParentId: resolvedChannelParentId ?? null
+    channelParentId: resolvedChannelParentId ?? preferredCategory ?? null
   };
 }

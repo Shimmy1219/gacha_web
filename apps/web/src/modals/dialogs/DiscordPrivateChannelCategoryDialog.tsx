@@ -11,9 +11,15 @@ import {
   saveDiscordGuildSelection,
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import {
+  normalizeDiscordCategoryIds,
+  resolveDiscordCategorySeriesSelection
+} from '../../features/discord/discordCategorySeries';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
+import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
 import {
+  isDiscordCategoryChannelLimitReachedErrorCode,
   pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
@@ -110,6 +116,18 @@ export function DiscordPrivateChannelCategoryDialog({
 
   const categoriesQuery = useDiscordGuildCategories(guildId, push);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const selectedCategorySeries = useMemo(() => {
+    if (!selectedCategoryId) {
+      return {
+        categoryIds: [] as string[],
+        entries: [] as Array<{ id: string; name: string; index: number }>
+      };
+    }
+    return resolveDiscordCategorySeriesSelection({
+      categories,
+      selectedCategoryId
+    });
+  }, [categories, selectedCategoryId]);
 
   useEffect(() => {
     if (!payload?.initialCategory?.id) {
@@ -186,46 +204,116 @@ export function DiscordPrivateChannelCategoryDialog({
     }
     setSubmitStage('creating-channel');
     let createdChannelId: string | null = null;
+    let activeCategory = category;
+    let activeCategoryIds = normalizeDiscordCategoryIds([
+      activeCategory.id,
+      ...selectedCategorySeries.categoryIds
+    ]);
+    if (activeCategoryIds.length === 0) {
+      activeCategoryIds = [activeCategory.id];
+    }
+    const exhaustedCategoryIds = new Set<string>();
+    let confirmationRequired = true;
+    let findPayload: {
+      ok: boolean;
+      channel_id?: string | null;
+      channel_name?: string | null;
+      parent_id?: string | null;
+      created?: boolean;
+      error?: string;
+      errorCode?: string;
+      csrfReason?: string;
+    } | null = null;
+
     try {
-      const params = new URLSearchParams({
-        guild_id: guildId,
-        member_id: discordUserId,
-        create: '1'
-      });
-      params.set('category_id', category.id);
-      params.set('display_name', 'カテゴリ確認用チャンネル');
-
-      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
-        method: 'GET'
-      });
-
-      const findPayload = (await findResponse.json().catch(() => null)) as {
-        ok: boolean;
-        channel_id?: string | null;
-        channel_name?: string | null;
-        parent_id?: string | null;
-        created?: boolean;
-        error?: string;
-        errorCode?: string;
-        csrfReason?: string;
-      } | null;
-
-      if (!findResponse.ok || !findPayload) {
-        const message = findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`;
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-          setSubmitError(null);
-          return;
+      while (true) {
+        const params = new URLSearchParams({
+          guild_id: guildId,
+          member_id: discordUserId,
+          create: '1'
+        });
+        params.set('category_id', activeCategory.id);
+        if (activeCategoryIds.length > 0) {
+          params.set('category_ids', activeCategoryIds.join(','));
         }
-        throw new Error(message);
+        params.set('display_name', 'カテゴリ確認用チャンネル');
+
+        const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+          method: 'GET'
+        });
+
+        findPayload = (await findResponse.json().catch(() => null)) as {
+          ok: boolean;
+          channel_id?: string | null;
+          channel_name?: string | null;
+          parent_id?: string | null;
+          created?: boolean;
+          error?: string;
+          errorCode?: string;
+          csrfReason?: string;
+        } | null;
+
+        if (!findResponse.ok || !findPayload || !findPayload.ok) {
+          const message =
+            !findResponse.ok || !findPayload
+              ? findPayload?.error || `テスト用チャンネルの作成に失敗しました (${findResponse.status})`
+              : findPayload.error || 'テスト用チャンネルの作成に失敗しました';
+
+          if (isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)) {
+            exhaustedCategoryIds.add(activeCategory.id);
+            const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
+              push,
+              discordUserId,
+              guildSelection: selection,
+              currentCategoryId: activeCategory.id,
+              currentCategoryName: activeCategory.name,
+              exhaustedCategoryIds,
+              confirmationRequired
+            });
+            if (!nextCategory?.id) {
+              setSubmitError('カテゴリ設定を中断しました。');
+              return;
+            }
+
+            activeCategory = nextCategory;
+            const nextCategoryIds = normalizeDiscordCategoryIds([
+              nextCategory.id,
+              ...(nextCategory.categoryIds ?? [])
+            ]);
+            if (nextCategoryIds.length > 0) {
+              activeCategoryIds = nextCategoryIds;
+            } else {
+              const categorySource = categories.some((item) => item.id === nextCategory.id)
+                ? categories
+                : [...categories, { id: nextCategory.id, name: nextCategory.name, position: Number.MAX_SAFE_INTEGER }];
+              activeCategoryIds = resolveDiscordCategorySeriesSelection({
+                categories: categorySource,
+                selectedCategoryId: nextCategory.id,
+                selectedCategoryName: nextCategory.name
+              }).categoryIds;
+            }
+            setSelectedCategoryId(nextCategory.id);
+            setSubmitError(null);
+            confirmationRequired = false;
+            continue;
+          }
+
+          if (
+            pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, {
+              csrfReason: findPayload?.csrfReason
+            })
+          ) {
+            setSubmitError(null);
+            return;
+          }
+          throw new Error(message);
+        }
+
+        break;
       }
 
-      if (!findPayload.ok) {
-        const message = findPayload.error || 'テスト用チャンネルの作成に失敗しました';
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-          setSubmitError(null);
-          return;
-        }
-        throw new Error(message);
+      if (!findPayload) {
+        throw new Error('テスト用チャンネルの作成に失敗しました');
       }
 
       createdChannelId = findPayload.channel_id ?? null;
@@ -264,9 +352,10 @@ export function DiscordPrivateChannelCategoryDialog({
       setSubmitStage('saving-selection');
 
       const categorySelection: DiscordGuildCategorySelection = {
-        id: category.id,
-        name: category.name,
-        selectedAt: new Date().toISOString()
+        id: activeCategory.id,
+        name: activeCategory.name,
+        selectedAt: new Date().toISOString(),
+        categoryIds: activeCategoryIds
       };
       saveDiscordGuildSelection(discordUserId, {
         ...selection,
@@ -286,22 +375,18 @@ export function DiscordPrivateChannelCategoryDialog({
     <>
       <ModalBody className="space-y-6">
         <section className="space-y-2 rounded-2xl border border-border/70 bg-surface/20 p-4 text-sm leading-relaxed text-muted-foreground">
-          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルのカテゴリを選択</h2>
+          <h2 className="text-base font-semibold text-surface-foreground">お渡しチャンネルを自動作成するカテゴリを選択</h2>
           <p>
-            選択したカテゴリの配下に1:1のお渡しチャンネルを自動作成します。カテゴリはこの端末に保存され、次回以降の共有に利用されます。
+            ユーザーに景品を送る際、選択したカテゴリの配下に1 on 1の景品お渡しチャンネルを自動で作成します。そのユーザーに対して、2回目以降送る時は、1回目に使用されたチャンネルに対して景品が送られます。
+            <br />
+            ※これまでにあなたが手動で作成したお渡しチャンネルには送られません。ご了承ください。
           </p>
         </section>
 
         <section className="space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-surface-foreground">カテゴリ一覧</h3>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {categoriesQuery.isFetching ? (
-                <span className="inline-flex items-center gap-1" aria-live="polite">
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  更新中…
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 font-medium text-surface-foreground transition hover:bg-surface/60"
@@ -311,8 +396,11 @@ export function DiscordPrivateChannelCategoryDialog({
                 disabled={categoriesQuery.isFetching}
                 aria-busy={categoriesQuery.isFetching}
               >
-                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                再取得
+                <ArrowPathIcon
+                  className={`h-4 w-4 ${categoriesQuery.isFetching ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+                {categoriesQuery.isFetching ? '更新中' : '更新'}
               </button>
             </div>
           </div>
@@ -341,7 +429,8 @@ export function DiscordPrivateChannelCategoryDialog({
           {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length > 0 ? (
             <ul className="space-y-2">
               {categories.map((category) => {
-                const isSelected = category.id === selectedCategoryId;
+                const isPrimarySelected = category.id === selectedCategoryId;
+                const isAutoSelected = selectedCategorySeries.categoryIds.includes(category.id);
                 return (
                   <li key={category.id}>
                     <button
@@ -351,14 +440,19 @@ export function DiscordPrivateChannelCategoryDialog({
                         setSubmitError(null);
                       }}
                       className="flex w-full items-center justify-between gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
-                      aria-pressed={isSelected}
+                      aria-pressed={isPrimarySelected}
                     >
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{category.name || '(名称未設定)'}</span>
                         <span className="text-xs text-muted-foreground">ID: {category.id}</span>
+                        {isAutoSelected && selectedCategorySeries.categoryIds.length > 1 ? (
+                          <span className="text-xs text-accent">自動選択</span>
+                        ) : null}
                       </div>
-                      {isSelected ? (
+                      {isPrimarySelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />
+                      ) : isAutoSelected ? (
+                        <CheckCircleIcon className="h-6 w-6 text-accent/70" aria-hidden="true" />
                       ) : (
                         <span className="h-6 w-6 rounded-full border border-border/60" aria-hidden="true" />
                       )}

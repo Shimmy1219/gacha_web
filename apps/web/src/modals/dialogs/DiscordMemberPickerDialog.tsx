@@ -23,11 +23,15 @@ import {
 import { sortDiscordGuildMembers, type DiscordGuildMemberSortMode } from '../../features/discord/discordMemberSorting';
 import {
   type DiscordGuildCategorySelection,
+  loadDiscordGuildSelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
+import { normalizeDiscordCategoryIds } from '../../features/discord/discordCategorySeries';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
+import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import {
+  isDiscordCategoryChannelLimitReachedErrorCode,
   pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
@@ -132,9 +136,15 @@ function useDiscordGuildMembers(
   guildId: string | null | undefined,
   query: string,
   categoryId: string | null | undefined,
+  categoryIds: string[] | null | undefined,
   push: ModalComponentProps['push']
 ) {
   const trimmedQuery = query.trim();
+  const normalizedCategoryIds = useMemo(
+    () => normalizeDiscordCategoryIds([categoryId, ...(categoryIds ?? [])]),
+    [categoryId, categoryIds]
+  );
+  const categoryIdsKey = normalizedCategoryIds.join(',');
   const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
 
   const initialData = useMemo(() => {
@@ -169,7 +179,7 @@ function useDiscordGuildMembers(
   }, [cacheEntry]);
 
   return useQuery<DiscordGuildMemberSummary[]>({
-    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryId ?? null],
+    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryIdsKey],
     queryFn: async () => {
       if (!discordUserId || !guildId) {
         return [];
@@ -226,7 +236,10 @@ function useDiscordGuildMembers(
 
         try {
           const channelParams = new URLSearchParams({ guild_id: guildId });
-          if (categoryId) {
+          if (normalizedCategoryIds.length > 0) {
+            channelParams.set('category_ids', normalizedCategoryIds.join(','));
+            channelParams.set('category_id', normalizedCategoryIds[0]);
+          } else if (categoryId) {
             channelParams.set('category_id', categoryId);
           }
           if (trimmedQuery) {
@@ -329,9 +342,38 @@ export function DiscordMemberPickerDialog({
     const initialId = payload?.initialCategory?.id?.trim();
     return initialId && initialId.length > 0 ? initialId : null;
   }, [payload?.initialCategory?.id, selectedCategory?.id]);
+  const categoryFilterIds = useMemo(() => {
+    const selectedIds = normalizeDiscordCategoryIds([
+      selectedCategory?.id ?? null,
+      ...(selectedCategory?.categoryIds ?? [])
+    ]);
+    if (selectedIds.length > 0) {
+      return selectedIds;
+    }
+    return normalizeDiscordCategoryIds([
+      payload?.initialCategory?.id ?? null,
+      ...(payload?.initialCategory?.categoryIds ?? [])
+    ]);
+  }, [
+    payload?.initialCategory?.categoryIds,
+    payload?.initialCategory?.id,
+    selectedCategory?.categoryIds,
+    selectedCategory?.id
+  ]);
+  const categoryFilterIdsKey = useMemo(
+    () => normalizeDiscordCategoryIds([categoryFilterId, ...categoryFilterIds]).join(','),
+    [categoryFilterId, categoryFilterIds]
+  );
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId, push);
+  const membersQuery = useDiscordGuildMembers(
+    discordUserId,
+    guildId,
+    debouncedQuery,
+    categoryFilterId,
+    categoryFilterIds,
+    push
+  );
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
@@ -414,22 +456,18 @@ export function DiscordMemberPickerDialog({
     setSubmitError(null);
 
     try {
-      const params = new URLSearchParams({
-        guild_id: guildId,
-        member_id: selectedMemberId,
-        create: '1'
-      });
       const selectedMemberSummary = members.find((member) => member.id === selectedMemberId);
-      if (selectedMemberSummary?.displayName) {
-        params.set('display_name', selectedMemberSummary.displayName);
+      let activeCategory = category;
+      let activeCategoryIds = normalizeDiscordCategoryIds([
+        activeCategory.id,
+        ...(activeCategory.categoryIds ?? [])
+      ]);
+      if (activeCategoryIds.length === 0) {
+        activeCategoryIds = [activeCategory.id];
       }
-      params.set('category_id', category.id);
-
-      const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
-        method: 'GET'
-      });
-
-      const findPayload = (await findResponse.json().catch(() => null)) as {
+      const exhaustedCategoryIds = new Set<string>();
+      let confirmationRequired = true;
+      let findPayload: {
         ok: boolean;
         channel_id?: string | null;
         channel_name?: string | null;
@@ -438,24 +476,95 @@ export function DiscordMemberPickerDialog({
         error?: string;
         errorCode?: string;
         csrfReason?: string;
-      } | null;
+      } | null = null;
 
-      if (!findResponse.ok || !findPayload) {
-        const message = findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`;
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-          setSubmitError(null);
-          return;
+      while (true) {
+        const params = new URLSearchParams({
+          guild_id: guildId,
+          member_id: selectedMemberId,
+          create: '1'
+        });
+        if (selectedMemberSummary?.displayName) {
+          params.set('display_name', selectedMemberSummary.displayName);
         }
-        throw new Error(message);
+        params.set('category_id', activeCategory.id);
+        if (activeCategoryIds.length > 0) {
+          params.set('category_ids', activeCategoryIds.join(','));
+        }
+
+        const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
+          method: 'GET'
+        });
+
+        findPayload = (await findResponse.json().catch(() => null)) as {
+          ok: boolean;
+          channel_id?: string | null;
+          channel_name?: string | null;
+          parent_id?: string | null;
+          created?: boolean;
+          error?: string;
+          errorCode?: string;
+          csrfReason?: string;
+        } | null;
+
+        if (!findResponse.ok || !findPayload || !findPayload.ok) {
+          const message =
+            !findResponse.ok || !findPayload
+              ? findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`
+              : findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+
+          if (
+            isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)
+          ) {
+            const storedSelection = loadDiscordGuildSelection(discordUserId);
+            if (!storedSelection || storedSelection.guildId !== guildId) {
+              throw new Error('Discordギルドの選択情報を再取得してください。');
+            }
+
+            exhaustedCategoryIds.add(activeCategory.id);
+            const nextCategory = await recoverDiscordCategoryLimitByCreatingNextCategory({
+              push,
+              discordUserId,
+              guildSelection: storedSelection,
+              currentCategoryId: activeCategory.id,
+              currentCategoryName: activeCategory.name,
+              exhaustedCategoryIds,
+              confirmationRequired
+            });
+            if (!nextCategory?.id) {
+              throw new Error('Discord共有を中断しました。');
+            }
+
+            activeCategory = nextCategory;
+            activeCategoryIds = normalizeDiscordCategoryIds([
+              nextCategory.id,
+              ...(nextCategory.categoryIds ?? [])
+            ]);
+            if (activeCategoryIds.length === 0) {
+              activeCategoryIds = [nextCategory.id];
+            }
+            setSelectedCategory(nextCategory);
+            setSubmitError(null);
+            confirmationRequired = false;
+            continue;
+          }
+
+          if (
+            pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, {
+              csrfReason: findPayload?.csrfReason
+            })
+          ) {
+            setSubmitError(null);
+            return;
+          }
+          throw new Error(message);
+        }
+
+        break;
       }
 
-      if (!findPayload.ok) {
-        const message = findPayload.error || 'お渡しチャンネルの確認に失敗しました';
-        if (pushDiscordApiWarningByErrorCode(push, findPayload?.errorCode, message, { csrfReason: findPayload?.csrfReason })) {
-          setSubmitError(null);
-          return;
-        }
-        throw new Error(message);
+      if (!findPayload) {
+        throw new Error('お渡しチャンネルの作成に失敗しました。');
       }
 
       const channelId = findPayload.channel_id ?? null;
@@ -467,7 +576,7 @@ export function DiscordMemberPickerDialog({
         memberId: selectedMemberId,
         channelId,
         channelName: findPayload.channel_name ?? null,
-        channelParentId: findPayload.parent_id ?? null,
+        channelParentId: findPayload.parent_id ?? activeCategory.id,
         botHasView: true
       };
 
@@ -480,7 +589,7 @@ export function DiscordMemberPickerDialog({
 
       const trimmedQuery = debouncedQuery.trim();
       queryClient.setQueryData<DiscordGuildMemberSummary[]>(
-        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterId ?? null],
+        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterIdsKey],
         (current) => {
           if (!Array.isArray(current)) {
             return current;
@@ -543,7 +652,7 @@ export function DiscordMemberPickerDialog({
         memberAvatarUrl,
         channelId,
         channelName: findPayload.channel_name ?? null,
-        channelParentId: findPayload.parent_id ?? null,
+        channelParentId: findPayload.parent_id ?? activeCategory.id,
         created: Boolean(findPayload.created),
         shareUrl: sharePayload.shareUrl,
         shareLabel: sharePayload?.shareLabel ?? null,
@@ -648,6 +757,9 @@ export function DiscordMemberPickerDialog({
               {selectedCategory ? (
                 <p className="mt-2 text-xs text-surface-foreground">
                   現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
+                  {selectedCategory.categoryIds && selectedCategory.categoryIds.length > 1
+                    ? ` / 同シリーズ自動選択: ${selectedCategory.categoryIds.length}カテゴリ`
+                    : ''}
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-danger">

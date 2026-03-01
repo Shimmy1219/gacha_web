@@ -213,10 +213,15 @@ export function DiscordBotInviteDialog({
           <header className="space-y-2 text-surface-foreground">
             <h2 className="text-base font-semibold">Discord Botの招待が必要です</h2>
             <p>
-              お渡し鯖に共有リンクを送信するには、下記のボタンからShimmy3 Discord Botをギルドへ招待してください。
+              お渡し鯖に景品のDLリンクを自動で送信するには、下記のボタンから四遊楽ガチャのDiscord botをファン鯖、もしくは特典鯖に招待してください。
             </p>
           </header>
           <div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              ※権限は変更しないでください。エラーになる可能性があります。
+              <br />
+              ※登録されたサーバーのメッセージを運営側が読むことは絶対にありません。また、メンバー情報や個人情報、メッセージ情報を運営が保存することもありません。
+            </p>
             {safeInviteUrl ? (
               <a
                 href={safeInviteUrl}
@@ -236,9 +241,6 @@ export function DiscordBotInviteDialog({
                 Botを招待する
               </span>
             )}
-            <p className="mt-3 text-xs text-muted-foreground">
-              招待先のギルドを選択し、権限を確認して承認してください。完了後、下の「ギルド一覧を再取得」から反映を確認できます。
-            </p>
           </div>
         </section>
 
@@ -247,16 +249,10 @@ export function DiscordBotInviteDialog({
             <div>
               <h3 className="text-sm font-semibold text-surface-foreground">共有先のギルドを選択</h3>
               <p className="text-xs text-muted-foreground">
-                Botを招待したギルドを選択すると、この端末に保存され今後の共有で利用されます。
+                Botを招待したら、「ギルド一覧を更新」ボタンを押して再度反映してください。
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {isFetching ? (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground" aria-live="polite">
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ギルド情報を取得中です…
-                </span>
-              ) : null}
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-panel px-3 py-1.5 text-xs font-medium text-surface-foreground transition hover:bg-surface/60"
@@ -266,8 +262,8 @@ export function DiscordBotInviteDialog({
                 disabled={isFetching}
                 aria-busy={isFetching}
               >
-                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
-                ギルド一覧を再取得
+                <ArrowPathIcon className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {isFetching ? '更新中' : 'ギルド一覧を更新'}
               </button>
             </div>
           </div>
