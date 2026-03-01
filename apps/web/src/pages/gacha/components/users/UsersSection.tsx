@@ -1,6 +1,14 @@
 import { AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import {
+  type TouchEvent as ReactTouchEvent,
+  type UIEvent as ReactUIEvent,
+  type WheelEvent as ReactWheelEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 
 import {
   UserCard,
@@ -14,11 +22,157 @@ import { useGachaLocalStorage } from '../../../../features/storage/useGachaLocal
 import { UserFilterPanel } from './UserFilterPanel';
 import { useFilteredUsers } from '../../../../features/users/logic/userFilters';
 
+const USERS_FILTER_AUTO_CLOSE_SCROLL_DELTA_THRESHOLD = 8;
+const USERS_FILTER_REOPEN_WHEEL_DELTA_THRESHOLD = 12;
+const USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD = 24;
+const USERS_FILTER_SCROLL_TOP_TOLERANCE = 1;
+const USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS = 180;
+
 export function UsersSection(): JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const usersContentRef = useRef<HTMLDivElement | null>(null);
+  const lastScrollTopRef = useRef(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const reachedTopAfterAutoCloseRef = useRef(false);
+  const autoToggleCooldownUntilRef = useRef(0);
   const { push } = useModal();
   const { status, data } = useGachaLocalStorage();
   const { users, showCounts } = useFilteredUsers(status === 'ready' ? data : null);
+
+  const isUsersSectionScrollable = useCallback((element: HTMLDivElement | null): boolean => {
+    if (!element) {
+      return false;
+    }
+    return element.scrollHeight - element.clientHeight > 1;
+  }, []);
+
+  const tryOpenFiltersByTopOverscroll = useCallback((): boolean => {
+    const contentElement = usersContentRef.current;
+    if (!contentElement || filtersOpen) {
+      return false;
+    }
+    if (!isUsersSectionScrollable(contentElement)) {
+      return false;
+    }
+    if (Date.now() < autoToggleCooldownUntilRef.current) {
+      return false;
+    }
+
+    const isAtTop = contentElement.scrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+    if (!isAtTop || !reachedTopAfterAutoCloseRef.current) {
+      return false;
+    }
+
+    setFiltersOpen(true);
+    reachedTopAfterAutoCloseRef.current = false;
+    autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+    return true;
+  }, [filtersOpen, isUsersSectionScrollable]);
+
+  const handleUsersContentScroll = useCallback(
+    (event: ReactUIEvent<HTMLDivElement>) => {
+      const contentElement = event.currentTarget;
+      const currentScrollTop = Math.max(contentElement.scrollTop, 0);
+      const delta = currentScrollTop - lastScrollTopRef.current;
+      lastScrollTopRef.current = currentScrollTop;
+
+      if (!isUsersSectionScrollable(contentElement)) {
+        reachedTopAfterAutoCloseRef.current = true;
+        return;
+      }
+
+      if (!filtersOpen) {
+        if (currentScrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE) {
+          reachedTopAfterAutoCloseRef.current = true;
+        } else if (delta > 0) {
+          reachedTopAfterAutoCloseRef.current = false;
+        }
+        return;
+      }
+
+      if (currentScrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE) {
+        return;
+      }
+
+      if (
+        delta > USERS_FILTER_AUTO_CLOSE_SCROLL_DELTA_THRESHOLD &&
+        Date.now() >= autoToggleCooldownUntilRef.current
+      ) {
+        // 下方向スクロール開始時はまずツールバーを閉じて、コンテンツ閲覧を優先する。
+        setFiltersOpen(false);
+        reachedTopAfterAutoCloseRef.current = false;
+        autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+      }
+    },
+    [filtersOpen, isUsersSectionScrollable]
+  );
+
+  const handleUsersContentWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (event.deltaY > -USERS_FILTER_REOPEN_WHEEL_DELTA_THRESHOLD) {
+        return;
+      }
+      void tryOpenFiltersByTopOverscroll();
+    },
+    [tryOpenFiltersByTopOverscroll]
+  );
+
+  const handleUsersContentTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    touchStartYRef.current = event.touches[0]?.clientY ?? null;
+  }, []);
+
+  const handleUsersContentTouchMove = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (filtersOpen) {
+        return;
+      }
+
+      const contentElement = usersContentRef.current;
+      if (!contentElement || !isUsersSectionScrollable(contentElement)) {
+        return;
+      }
+
+      const initialY = touchStartYRef.current;
+      const currentY = event.touches[0]?.clientY;
+      if (initialY == null || currentY == null) {
+        return;
+      }
+
+      if (contentElement.scrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE) {
+        reachedTopAfterAutoCloseRef.current = true;
+      }
+
+      const dragDistance = currentY - initialY;
+      if (dragDistance < USERS_FILTER_REOPEN_TOUCH_DELTA_THRESHOLD) {
+        return;
+      }
+
+      const opened = tryOpenFiltersByTopOverscroll();
+      if (opened) {
+        touchStartYRef.current = currentY;
+      }
+    },
+    [filtersOpen, isUsersSectionScrollable, tryOpenFiltersByTopOverscroll]
+  );
+
+  const handleUsersContentTouchEnd = useCallback(() => {
+    touchStartYRef.current = null;
+  }, []);
+
+  const handleFilterToggle = useCallback(() => {
+    const contentElement = usersContentRef.current;
+    const currentScrollTop = contentElement?.scrollTop ?? 0;
+
+    setFiltersOpen((open) => {
+      const nextOpen = !open;
+      lastScrollTopRef.current = currentScrollTop;
+      reachedTopAfterAutoCloseRef.current = nextOpen
+        ? false
+        : currentScrollTop <= USERS_FILTER_SCROLL_TOP_TOLERANCE;
+      autoToggleCooldownUntilRef.current = Date.now() + USERS_FILTER_AUTO_TOGGLE_COOLDOWN_MS;
+      return nextOpen;
+    });
+  }, []);
 
   const catalogItemsByGacha = useMemo<Record<string, InventoryCatalogItemOption[]>>(() => {
     const catalogState = data?.catalogState;
@@ -99,7 +253,7 @@ export function UsersSection(): JSX.Element {
               ? 'border-accent/70 bg-accent/20 text-accent'
               : 'hover:border-accent/60 hover:bg-accent/15'
           )}
-          onClick={() => setFiltersOpen((open) => !open)}
+          onClick={handleFilterToggle}
           aria-pressed={filtersOpen}
           aria-expanded={filtersOpen}
           aria-controls="users-filter-panel"
@@ -114,6 +268,12 @@ export function UsersSection(): JSX.Element {
         </button>
       }
       contentClassName="users-section__content"
+      contentElementRef={usersContentRef}
+      onContentScroll={handleUsersContentScroll}
+      onContentWheel={handleUsersContentWheel}
+      onContentTouchStart={handleUsersContentTouchStart}
+      onContentTouchMove={handleUsersContentTouchMove}
+      onContentTouchEnd={handleUsersContentTouchEnd}
     >
       <div
         className={clsx(
