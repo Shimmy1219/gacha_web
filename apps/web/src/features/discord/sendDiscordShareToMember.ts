@@ -3,6 +3,7 @@ import {
   isDiscordCategoryChannelLimitReachedErrorCode,
   pushDiscordApiWarningByErrorCode
 } from '../../modals/dialogs/_lib/discordApiErrorHandling';
+import { normalizeDiscordCategoryIds } from './discordCategorySeries';
 import { ensurePrivateChannelCategory } from './ensurePrivateChannelCategory';
 import type { DiscordGuildSelection } from './discordGuildSelectionStorage';
 import { fetchDiscordApi } from './fetchDiscordApi';
@@ -72,6 +73,13 @@ export async function sendDiscordShareToMember({
   let resolvedChannelName = normalizeOptionalString(channelName);
   let resolvedChannelParentId = normalizeOptionalString(channelParentId);
   let preferredCategory = resolvedChannelParentId ?? guildSelection.privateChannelCategory?.id ?? null;
+  let preferredCategoryIds = normalizeDiscordCategoryIds([
+    preferredCategory,
+    ...(guildSelection.privateChannelCategory?.categoryIds ?? [])
+  ]);
+  if (preferredCategory && preferredCategoryIds.length === 0) {
+    preferredCategoryIds = [preferredCategory];
+  }
   let preferredCategoryName =
     guildSelection.privateChannelCategory?.id === preferredCategory
       ? normalizeOptionalString(guildSelection.privateChannelCategory?.name)
@@ -85,6 +93,7 @@ export async function sendDiscordShareToMember({
       dialogTitle: categoryDialogTitle ?? 'お渡しカテゴリの設定'
     });
     preferredCategory = category.id;
+    preferredCategoryIds = normalizeDiscordCategoryIds([category.id, ...(category.categoryIds ?? [])]);
     preferredCategoryName = normalizeOptionalString(category.name);
   }
 
@@ -103,6 +112,9 @@ export async function sendDiscordShareToMember({
         member_id: memberId,
         category_id: preferredCategory
       });
+      if (preferredCategoryIds.length > 0) {
+        params.set('category_ids', preferredCategoryIds.join(','));
+      }
       if (createChannelIfMissing) {
         params.set('create', '1');
       }
@@ -140,6 +152,10 @@ export async function sendDiscordShareToMember({
             throw new Error('Discord共有を中断しました。');
           }
           preferredCategory = nextCategory.id;
+          preferredCategoryIds = normalizeDiscordCategoryIds([nextCategory.id, ...(nextCategory.categoryIds ?? [])]);
+          if (preferredCategoryIds.length === 0) {
+            preferredCategoryIds = [nextCategory.id];
+          }
           preferredCategoryName = normalizeOptionalString(nextCategory.name);
           confirmationRequired = false;
           continue;

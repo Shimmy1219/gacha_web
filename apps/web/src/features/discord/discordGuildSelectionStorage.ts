@@ -13,6 +13,7 @@ export interface DiscordGuildCategorySelection {
   id: string;
   name: string;
   selectedAt?: string;
+  categoryIds?: string[];
 }
 
 export interface DiscordGuildSelection {
@@ -48,6 +49,24 @@ function sanitizeCategory(candidate: unknown): DiscordGuildCategorySelection | n
   };
   if (typeof candidate.selectedAt === 'string') {
     selection.selectedAt = candidate.selectedAt;
+  }
+  if (Array.isArray(candidate.categoryIds)) {
+    const normalizedCategoryIds: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of candidate.categoryIds) {
+      if (typeof entry !== 'string') {
+        continue;
+      }
+      const trimmed = entry.trim();
+      if (!trimmed || seen.has(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+      normalizedCategoryIds.push(trimmed);
+    }
+    if (normalizedCategoryIds.length > 0) {
+      selection.categoryIds = normalizedCategoryIds;
+    }
   }
   return selection;
 }
@@ -176,7 +195,23 @@ export function saveDiscordGuildSelection(
     guildName: selection.guildName,
     guildIcon: selection.guildIcon ?? null,
     selectedAt: selection.selectedAt,
-    privateChannelCategory: selection.privateChannelCategory ?? null,
+    privateChannelCategory: selection.privateChannelCategory
+      ? {
+          id: selection.privateChannelCategory.id,
+          name: selection.privateChannelCategory.name,
+          selectedAt: selection.privateChannelCategory.selectedAt,
+          categoryIds: selection.privateChannelCategory.categoryIds
+            ? Array.from(
+                new Set(
+                  selection.privateChannelCategory.categoryIds
+                    .filter((entry): entry is string => typeof entry === 'string')
+                    .map((entry) => entry.trim())
+                    .filter(Boolean)
+                )
+              )
+            : undefined
+        }
+      : null,
     memberCacheUpdatedAt:
       selection.memberCacheUpdatedAt !== undefined
         ? selection.memberCacheUpdatedAt ?? null

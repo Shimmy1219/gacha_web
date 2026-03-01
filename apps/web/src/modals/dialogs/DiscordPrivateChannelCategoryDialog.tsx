@@ -11,6 +11,10 @@ import {
   saveDiscordGuildSelection,
   type DiscordGuildCategorySelection
 } from '../../features/discord/discordGuildSelectionStorage';
+import {
+  normalizeDiscordCategoryIds,
+  resolveDiscordCategorySeriesSelection
+} from '../../features/discord/discordCategorySeries';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
 import { ModalBody, ModalFooter, type ModalComponentProps } from '..';
@@ -109,6 +113,18 @@ export function DiscordPrivateChannelCategoryDialog({
 
   const categoriesQuery = useDiscordGuildCategories(guildId, push);
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data]);
+  const selectedCategorySeries = useMemo(() => {
+    if (!selectedCategoryId) {
+      return {
+        categoryIds: [] as string[],
+        entries: [] as Array<{ id: string; name: string; index: number }>
+      };
+    }
+    return resolveDiscordCategorySeriesSelection({
+      categories,
+      selectedCategoryId
+    });
+  }, [categories, selectedCategoryId]);
 
   useEffect(() => {
     if (!payload?.initialCategory?.id) {
@@ -186,6 +202,13 @@ export function DiscordPrivateChannelCategoryDialog({
     setSubmitStage('creating-channel');
     let createdChannelId: string | null = null;
     let activeCategory = category;
+    let activeCategoryIds = normalizeDiscordCategoryIds([
+      activeCategory.id,
+      ...selectedCategorySeries.categoryIds
+    ]);
+    if (activeCategoryIds.length === 0) {
+      activeCategoryIds = [activeCategory.id];
+    }
     const exhaustedCategoryIds = new Set<string>();
     let confirmationRequired = true;
     let findPayload: {
@@ -206,6 +229,9 @@ export function DiscordPrivateChannelCategoryDialog({
           create: '1'
         });
         params.set('category_id', activeCategory.id);
+        if (activeCategoryIds.length > 0) {
+          params.set('category_ids', activeCategoryIds.join(','));
+        }
         params.set('display_name', 'カテゴリ確認用チャンネル');
 
         const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
@@ -245,6 +271,22 @@ export function DiscordPrivateChannelCategoryDialog({
             }
 
             activeCategory = nextCategory;
+            const nextCategoryIds = normalizeDiscordCategoryIds([
+              nextCategory.id,
+              ...(nextCategory.categoryIds ?? [])
+            ]);
+            if (nextCategoryIds.length > 0) {
+              activeCategoryIds = nextCategoryIds;
+            } else {
+              const categorySource = categories.some((item) => item.id === nextCategory.id)
+                ? categories
+                : [...categories, { id: nextCategory.id, name: nextCategory.name, position: Number.MAX_SAFE_INTEGER }];
+              activeCategoryIds = resolveDiscordCategorySeriesSelection({
+                categories: categorySource,
+                selectedCategoryId: nextCategory.id,
+                selectedCategoryName: nextCategory.name
+              }).categoryIds;
+            }
             setSelectedCategoryId(nextCategory.id);
             setSubmitError(null);
             confirmationRequired = false;
@@ -303,7 +345,8 @@ export function DiscordPrivateChannelCategoryDialog({
       const categorySelection: DiscordGuildCategorySelection = {
         id: activeCategory.id,
         name: activeCategory.name,
-        selectedAt: new Date().toISOString()
+        selectedAt: new Date().toISOString(),
+        categoryIds: activeCategoryIds
       };
       saveDiscordGuildSelection(discordUserId, {
         ...selection,
@@ -327,6 +370,13 @@ export function DiscordPrivateChannelCategoryDialog({
           <p>
             選択したカテゴリの配下に1:1のお渡しチャンネルを自動作成します。カテゴリはこの端末に保存され、次回以降の共有に利用されます。
           </p>
+          {selectedCategorySeries.categoryIds.length > 1 ? (
+            <p className="text-xs text-surface-foreground">
+              同シリーズカテゴリを自動選択中:
+              {' '}
+              {selectedCategorySeries.entries.map((entry) => entry.name).join(' / ')}
+            </p>
+          ) : null}
         </section>
 
         <section className="space-y-4">
@@ -378,7 +428,8 @@ export function DiscordPrivateChannelCategoryDialog({
           {!categoriesQuery.isLoading && !categoriesQuery.isError && categories.length > 0 ? (
             <ul className="space-y-2">
               {categories.map((category) => {
-                const isSelected = category.id === selectedCategoryId;
+                const isPrimarySelected = category.id === selectedCategoryId;
+                const isAutoSelected = selectedCategorySeries.categoryIds.includes(category.id);
                 return (
                   <li key={category.id}>
                     <button
@@ -388,14 +439,19 @@ export function DiscordPrivateChannelCategoryDialog({
                         setSubmitError(null);
                       }}
                       className="flex w-full items-center justify-between gap-4 rounded-2xl border border-border/70 bg-surface/40 p-4 text-left transition hover:border-accent/50 hover:bg-surface/60"
-                      aria-pressed={isSelected}
+                      aria-pressed={isPrimarySelected}
                     >
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-surface-foreground">{category.name || '(名称未設定)'}</span>
                         <span className="text-xs text-muted-foreground">ID: {category.id}</span>
+                        {isAutoSelected && !isPrimarySelected ? (
+                          <span className="text-xs text-accent">同シリーズとして自動選択</span>
+                        ) : null}
                       </div>
-                      {isSelected ? (
+                      {isPrimarySelected ? (
                         <CheckCircleIcon className="h-6 w-6 text-accent" aria-hidden="true" />
+                      ) : isAutoSelected ? (
+                        <CheckCircleIcon className="h-6 w-6 text-accent/70" aria-hidden="true" />
                       ) : (
                         <span className="h-6 w-6 rounded-full border border-border/60" aria-hidden="true" />
                       )}

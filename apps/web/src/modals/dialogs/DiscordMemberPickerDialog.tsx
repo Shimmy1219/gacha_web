@@ -26,6 +26,7 @@ import {
   loadDiscordGuildSelection,
   updateDiscordGuildSelectionMemberCacheTimestamp
 } from '../../features/discord/discordGuildSelectionStorage';
+import { normalizeDiscordCategoryIds } from '../../features/discord/discordCategorySeries';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
@@ -132,9 +133,15 @@ function useDiscordGuildMembers(
   guildId: string | null | undefined,
   query: string,
   categoryId: string | null | undefined,
+  categoryIds: string[] | null | undefined,
   push: ModalComponentProps['push']
 ) {
   const trimmedQuery = query.trim();
+  const normalizedCategoryIds = useMemo(
+    () => normalizeDiscordCategoryIds([categoryId, ...(categoryIds ?? [])]),
+    [categoryId, categoryIds]
+  );
+  const categoryIdsKey = normalizedCategoryIds.join(',');
   const cacheEntry = useMemo(() => loadDiscordMemberCache(discordUserId, guildId), [discordUserId, guildId]);
 
   const initialData = useMemo(() => {
@@ -169,7 +176,7 @@ function useDiscordGuildMembers(
   }, [cacheEntry]);
 
   return useQuery<DiscordGuildMemberSummary[]>({
-    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryId ?? null],
+    queryKey: ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryIdsKey],
     queryFn: async () => {
       if (!discordUserId || !guildId) {
         return [];
@@ -225,7 +232,10 @@ function useDiscordGuildMembers(
 
         try {
           const channelParams = new URLSearchParams({ guild_id: guildId });
-          if (categoryId) {
+          if (normalizedCategoryIds.length > 0) {
+            channelParams.set('category_ids', normalizedCategoryIds.join(','));
+            channelParams.set('category_id', normalizedCategoryIds[0]);
+          } else if (categoryId) {
             channelParams.set('category_id', categoryId);
           }
           if (trimmedQuery) {
@@ -327,9 +337,38 @@ export function DiscordMemberPickerDialog({
     const initialId = payload?.initialCategory?.id?.trim();
     return initialId && initialId.length > 0 ? initialId : null;
   }, [payload?.initialCategory?.id, selectedCategory?.id]);
+  const categoryFilterIds = useMemo(() => {
+    const selectedIds = normalizeDiscordCategoryIds([
+      selectedCategory?.id ?? null,
+      ...(selectedCategory?.categoryIds ?? [])
+    ]);
+    if (selectedIds.length > 0) {
+      return selectedIds;
+    }
+    return normalizeDiscordCategoryIds([
+      payload?.initialCategory?.id ?? null,
+      ...(payload?.initialCategory?.categoryIds ?? [])
+    ]);
+  }, [
+    payload?.initialCategory?.categoryIds,
+    payload?.initialCategory?.id,
+    selectedCategory?.categoryIds,
+    selectedCategory?.id
+  ]);
+  const categoryFilterIdsKey = useMemo(
+    () => normalizeDiscordCategoryIds([categoryFilterId, ...categoryFilterIds]).join(','),
+    [categoryFilterId, categoryFilterIds]
+  );
 
   const debouncedQuery = useDebouncedValue(searchInput, 300);
-  const membersQuery = useDiscordGuildMembers(discordUserId, guildId, debouncedQuery, categoryFilterId, push);
+  const membersQuery = useDiscordGuildMembers(
+    discordUserId,
+    guildId,
+    debouncedQuery,
+    categoryFilterId,
+    categoryFilterIds,
+    push
+  );
 
   const members = useMemo(() => membersQuery.data ?? [], [membersQuery.data]);
 
@@ -414,6 +453,13 @@ export function DiscordMemberPickerDialog({
     try {
       const selectedMemberSummary = members.find((member) => member.id === selectedMemberId);
       let activeCategory = category;
+      let activeCategoryIds = normalizeDiscordCategoryIds([
+        activeCategory.id,
+        ...(activeCategory.categoryIds ?? [])
+      ]);
+      if (activeCategoryIds.length === 0) {
+        activeCategoryIds = [activeCategory.id];
+      }
       const exhaustedCategoryIds = new Set<string>();
       let confirmationRequired = true;
       let findPayload: {
@@ -436,6 +482,9 @@ export function DiscordMemberPickerDialog({
           params.set('display_name', selectedMemberSummary.displayName);
         }
         params.set('category_id', activeCategory.id);
+        if (activeCategoryIds.length > 0) {
+          params.set('category_ids', activeCategoryIds.join(','));
+        }
 
         const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
           method: 'GET'
@@ -480,6 +529,13 @@ export function DiscordMemberPickerDialog({
             }
 
             activeCategory = nextCategory;
+            activeCategoryIds = normalizeDiscordCategoryIds([
+              nextCategory.id,
+              ...(nextCategory.categoryIds ?? [])
+            ]);
+            if (activeCategoryIds.length === 0) {
+              activeCategoryIds = [nextCategory.id];
+            }
             setSelectedCategory(nextCategory);
             setSubmitError(null);
             confirmationRequired = false;
@@ -522,7 +578,7 @@ export function DiscordMemberPickerDialog({
 
       const trimmedQuery = debouncedQuery.trim();
       queryClient.setQueryData<DiscordGuildMemberSummary[]>(
-        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterId ?? null],
+        ['discord', 'members', discordUserId, guildId, trimmedQuery, categoryFilterIdsKey],
         (current) => {
           if (!Array.isArray(current)) {
             return current;
@@ -689,6 +745,9 @@ export function DiscordMemberPickerDialog({
               {selectedCategory ? (
                 <p className="mt-2 text-xs text-surface-foreground">
                   現在のお渡しカテゴリ: {selectedCategory.name} (ID: {selectedCategory.id})
+                  {selectedCategory.categoryIds && selectedCategory.categoryIds.length > 1
+                    ? ` / 同シリーズ自動選択: ${selectedCategory.categoryIds.length}カテゴリ`
+                    : ''}
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-danger">

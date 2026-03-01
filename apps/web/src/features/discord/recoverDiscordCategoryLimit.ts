@@ -6,6 +6,7 @@ import {
   type DiscordGuildCategorySelection,
   type DiscordGuildSelection
 } from './discordGuildSelectionStorage';
+import { resolveDiscordCategorySeriesSelection } from './discordCategorySeries';
 import { fetchDiscordApi } from './fetchDiscordApi';
 
 interface DiscordCategorySummary {
@@ -288,11 +289,20 @@ export async function recoverDiscordCategoryLimitByCreatingNextCategory({
         resolveNextCategoryName(baseName, categories.map((category) => category.name)),
         push
       );
+  const categorySource = categories.some((category) => category.id === selectedCategory.id)
+    ? categories
+    : [...categories, selectedCategory];
+  const resolvedSeries = resolveDiscordCategorySeriesSelection({
+    categories: categorySource,
+    selectedCategoryId: selectedCategory.id,
+    selectedCategoryName: selectedCategory.name
+  });
 
   const nextCategorySelection: DiscordGuildCategorySelection = {
     id: selectedCategory.id,
     name: selectedCategory.name,
-    selectedAt: new Date().toISOString()
+    selectedAt: new Date().toISOString(),
+    categoryIds: resolvedSeries.categoryIds
   };
 
   const latestSelection = loadDiscordGuildSelection(discordUserId);
