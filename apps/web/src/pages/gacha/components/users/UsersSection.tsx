@@ -485,6 +485,13 @@ export function UsersSection(): JSX.Element {
 
   const handleOpenSaveOptions = useCallback(
     (userId: string) => {
+      const defaultSelection = activeTabGachaId
+        ? {
+            mode: 'gacha' as const,
+            gachaIds: [activeTabGachaId]
+          }
+        : undefined;
+
       push(SaveTargetDialog, {
         id: `save-target-${userId}`,
         title: '保存対象を選択',
@@ -492,11 +499,12 @@ export function UsersSection(): JSX.Element {
         size: 'lg',
         payload: {
           userId,
-          userName: data?.userProfiles?.users?.[userId]?.displayName ?? userId
+          userName: data?.userProfiles?.users?.[userId]?.displayName ?? userId,
+          ...(defaultSelection ? { defaultSelection } : {})
         }
       });
     },
-    [data?.userProfiles?.users, push]
+    [activeTabGachaId, data?.userProfiles?.users, push]
   );
 
   return (

@@ -25,6 +25,10 @@ import { useModal } from '../ModalProvider';
 interface SaveTargetDialogPayload {
   userId: string;
   userName: string;
+  defaultSelection?: {
+    mode?: SaveTargetSelectionMode;
+    gachaIds?: string[];
+  };
 }
 
 interface GachaSelectionEntry {
@@ -77,6 +81,26 @@ function formatExecutedAt(value: string): string {
     return '日時不明';
   }
   return DATE_TIME_FORMATTER.format(date);
+}
+
+/**
+ * ダイアログ呼び出し側から渡された既定ガチャID配列を正規化する。
+ * 空文字や重複を排除して、初期チェック状態を安定させるために使用する。
+ *
+ * @param gachaIds 呼び出し元が指定した既定ガチャID配列
+ * @returns 正規化済みガチャID配列
+ */
+function normalizeDefaultGachaIds(gachaIds?: string[]): string[] {
+  if (!Array.isArray(gachaIds) || gachaIds.length === 0) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      gachaIds
+        .map((gachaId) => (typeof gachaId === 'string' ? gachaId.trim() : ''))
+        .filter((gachaId) => gachaId.length > 0)
+    )
+  );
 }
 
 type AppMetaMap = GachaAppStateV3['meta'] | undefined;
@@ -328,9 +352,14 @@ function buildHistoryEntries(
 export function SaveTargetDialog({ payload, replace, close }: ModalComponentProps<SaveTargetDialogPayload>): JSX.Element {
   const { push } = useModal();
   const { status, data, error } = useGachaLocalStorage();
-  const [mode, setMode] = useState<SaveTargetSelectionMode>('all');
-  const [selectedGachaIds, setSelectedGachaIds] = useState<string[]>([]);
-  const [gachaSelectionInitialized, setGachaSelectionInitialized] = useState(false);
+  const defaultMode = payload.defaultSelection?.mode ?? 'all';
+  const defaultGachaIds = useMemo(
+    () => normalizeDefaultGachaIds(payload.defaultSelection?.gachaIds),
+    [payload.defaultSelection?.gachaIds]
+  );
+  const [mode, setMode] = useState<SaveTargetSelectionMode>(defaultMode);
+  const [selectedGachaIds, setSelectedGachaIds] = useState<string[]>(defaultGachaIds);
+  const [gachaSelectionInitialized, setGachaSelectionInitialized] = useState(defaultGachaIds.length > 0);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [historySelectionInitialized, setHistorySelectionInitialized] = useState(false);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<string[]>([]);
