@@ -129,6 +129,19 @@ function normalizeDrawDialogLastSelectedGachaId(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeDrawDialogNumericInput(value: unknown): number | null {
+  if (value == null) {
+    return null;
+  }
+
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric) || Number.isNaN(numeric)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round(numeric));
+}
+
 function normalizeQuickActionMode(value: unknown): QuickActionMode | null {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
@@ -525,6 +538,54 @@ function readGachaOwnerShareRatePreference(state: UiPreferencesStateV3 | undefin
   }
 
   return normalizeGachaOwnerShareRate(gacha.ownerShareRate);
+}
+
+function readDrawDialogLastPointsInputPreference(
+  state: UiPreferencesStateV3 | undefined
+): number | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'lastPointsInput')) {
+    return null;
+  }
+
+  return normalizeDrawDialogNumericInput(drawDialog.lastPointsInput);
+}
+
+function readDrawDialogLastPullsInputPreference(
+  state: UiPreferencesStateV3 | undefined
+): number | null {
+  if (!state) {
+    return null;
+  }
+
+  const gacha = state.gacha;
+  if (!isRecord(gacha)) {
+    return null;
+  }
+
+  const drawDialog = gacha.drawDialog;
+  if (!isRecord(drawDialog)) {
+    return null;
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(drawDialog, 'lastPullsInput')) {
+    return null;
+  }
+
+  return normalizeDrawDialogNumericInput(drawDialog.lastPullsInput);
 }
 
 function readQuickSendNewOnlyPreference(state: UiPreferencesStateV3 | undefined): boolean | null {
@@ -964,6 +1025,14 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
     return readDrawDialogLastSelectedGachaId(this.state);
   }
 
+  getDrawDialogLastPointsInputPreference(): number | null {
+    return readDrawDialogLastPointsInputPreference(this.state);
+  }
+
+  getDrawDialogLastPullsInputPreference(): number | null {
+    return readDrawDialogLastPullsInputPreference(this.state);
+  }
+
   getLastSeenRelease(): string | null {
     return readLastSeenRelease(this.state);
   }
@@ -1040,6 +1109,134 @@ export class UiPreferencesStore extends PersistedStore<UiPreferencesStateV3 | un
         const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
         if (nextDrawDialog) {
           delete nextDrawDialog.lastSelectedGachaId;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setDrawDialogLastPointsInputPreference(
+    nextValue: number | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = nextValue == null ? null : normalizeDrawDialogNumericInput(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readDrawDialogLastPointsInputPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                lastPointsInput: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.lastPointsInput;
+        }
+
+        const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);
+        const nextGacha = previousGacha ? { ...previousGacha } : undefined;
+
+        if (hasDrawDialogEntries && nextGacha) {
+          nextGacha['drawDialog'] = nextDrawDialog as Record<string, unknown>;
+        } else if (nextGacha) {
+          delete nextGacha['drawDialog'];
+        }
+
+        const hasGachaEntries = Boolean(nextGacha && Object.keys(nextGacha).length > 0);
+
+        const nextState: UiPreferencesStateV3 = {
+          ...base,
+          ...(hasGachaEntries ? { gacha: nextGacha } : {})
+        };
+
+        if (!hasGachaEntries) {
+          delete nextState.gacha;
+        }
+
+        return nextState;
+      },
+      { persist: persistMode, emit }
+    );
+  }
+
+  setDrawDialogLastPullsInputPreference(
+    nextValue: number | null | undefined,
+    options: UpdateOptions = { persist: 'debounced' }
+  ): void {
+    const persistMode = options.persist ?? 'debounced';
+    const emit = options.emit;
+    const normalized = nextValue == null ? null : normalizeDrawDialogNumericInput(nextValue);
+
+    this.update(
+      (previous) => {
+        const current = readDrawDialogLastPullsInputPreference(previous);
+        if (current === normalized) {
+          return previous;
+        }
+
+        const base = ensureState(previous);
+        const previousGacha = base.gacha && isRecord(base.gacha) ? base.gacha : undefined;
+        const previousDrawDialog =
+          previousGacha && isRecord(previousGacha.drawDialog) ? previousGacha.drawDialog : undefined;
+
+        if (normalized !== null) {
+          return {
+            ...base,
+            gacha: {
+              ...(previousGacha ?? {}),
+              drawDialog: {
+                ...(previousDrawDialog ?? {}),
+                lastPullsInput: normalized
+              }
+            }
+          };
+        }
+
+        const nextDrawDialog = previousDrawDialog ? { ...previousDrawDialog } : undefined;
+        if (nextDrawDialog) {
+          delete nextDrawDialog.lastPullsInput;
         }
 
         const hasDrawDialogEntries = Boolean(nextDrawDialog && Object.keys(nextDrawDialog).length > 0);

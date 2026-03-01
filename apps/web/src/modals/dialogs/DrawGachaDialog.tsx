@@ -314,6 +314,14 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
     () => uiPreferencesStore.getQuickSendNewOnlyPreference(),
     [uiPreferencesState, uiPreferencesStore]
   );
+  const drawDialogLastPointsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPointsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
+  const drawDialogLastPullsInputPreference = useMemo(
+    () => uiPreferencesStore.getDrawDialogLastPullsInputPreference(),
+    [uiPreferencesState, uiPreferencesStore]
+  );
   const quickActionModePreference = useMemo(
     () => uiPreferencesStore.getQuickActionModePreference(),
     [uiPreferencesState, uiPreferencesStore]
@@ -417,9 +425,13 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
     },
     [applySelectedGacha]
   );
-  const [pointsInput, setPointsInput] = useState('100');
+  const [pointsInput, setPointsInput] = useState(() =>
+    String(drawDialogLastPointsInputPreference ?? 100)
+  );
   const [pointsInputMode, setPointsInputMode] = useState<'points' | 'pulls'>('points');
-  const [pullsInput, setPullsInput] = useState('10');
+  const [pullsInput, setPullsInput] = useState(() =>
+    String(drawDialogLastPullsInputPreference ?? 10)
+  );
   const [completeExecutionsOverride, setCompleteExecutionsOverride] = useState<number | null>(null);
   const [userName, setUserName] = useState(() => payload?.initialUserName?.trim() ?? '');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -649,6 +661,14 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
     setPullsInput(String(nextValue));
   }, [pullsInput]);
 
+  const setQuickAdjustInputToZero = useCallback(() => {
+    if (pointsInputMode === 'pulls') {
+      setPullsInput('0');
+      return;
+    }
+    setPointsInput('0');
+  }, [pointsInputMode]);
+
   const handleQuickAdjust = useCallback((delta: number) => {
     if (pointsInputMode === 'pulls') {
       adjustPullsInput(delta);
@@ -656,6 +676,24 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
     }
     adjustPointsInput(delta);
   }, [adjustPointsInput, adjustPullsInput, pointsInputMode]);
+
+  useEffect(() => {
+    // ポイント入力はUI設定へ保存し、次回モーダル起動時に直近値を復元する。
+    const parsed = Number(pointsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPointsInputPreference(parsed, { persist: 'debounced' });
+  }, [pointsInput, uiPreferencesStore]);
+
+  useEffect(() => {
+    // 連数入力も同様に保存し、直前に使った値を保持する。
+    const parsed = Number(pullsInput);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      return;
+    }
+    uiPreferencesStore.setDrawDialogLastPullsInputPreference(parsed, { persist: 'debounced' });
+  }, [pullsInput, uiPreferencesStore]);
 
   const normalizedUserName = userName.trim();
 
@@ -2294,6 +2332,7 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
                   { label: '+100', delta: 100 },
                   { label: '+10', delta: 10 },
                   { label: '+1', delta: 1 },
+                  { label: '0', setZero: true },
                   { label: '-1', delta: -1 },
                   { label: '-10', delta: -10 },
                   { label: '-100', delta: -100 },
@@ -2302,7 +2341,15 @@ export function DrawGachaDialog({ close, push, payload }: ModalComponentProps<Dr
                   <button
                     key={item.label}
                     type="button"
-                    onClick={() => handleQuickAdjust(item.delta)}
+                    onClick={() => {
+                      if ('setZero' in item && item.setZero) {
+                        setQuickAdjustInputToZero();
+                        return;
+                      }
+                      if ('delta' in item) {
+                        handleQuickAdjust(item.delta);
+                      }
+                    }}
                     className="inline-flex items-center rounded-full border border-border/60 px-3 py-1 text-xs text-muted-foreground transition-colors focus:outline-none focus:ring-1 focus:ring-accent/40 hover:border-accent hover:text-accent"
                   >
                     {item.label}

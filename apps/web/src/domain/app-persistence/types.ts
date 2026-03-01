@@ -234,6 +234,8 @@ export interface UiPreferencesStateV3 {
     ownerShareRate?: number;
     drawDialog?: {
       lastSelectedGachaId?: string;
+      lastPointsInput?: number;
+      lastPullsInput?: number;
       quickSendNewOnly?: boolean;
       quickActionMode?: 'discord' | 'share_url';
       revealOverlayEnabled?: boolean;
