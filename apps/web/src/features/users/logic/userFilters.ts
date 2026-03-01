@@ -12,6 +12,7 @@ import {
 } from '@domain/originalPrize';
 import {
   DEFAULT_USER_FILTER_PREFERENCES,
+  type UserFilterSortOrder,
   type UserFilterPreferences,
   UiPreferencesStore
 } from '@domain/stores/uiPreferencesStore';
@@ -47,8 +48,8 @@ export type UserFilterState = UserFilterPreferences;
 
 export interface UserFilterController {
   state: UserFilterState;
-  setSelectedGachaIds(value: '*' | string[]): void;
   setSelectedRarityIds(value: '*' | string[]): void;
+  setUserSortOrder(next: UserFilterSortOrder): void;
   setHideMiss(next: boolean): void;
   setShowCounts(next: boolean): void;
   setShowSkipOnly(next: boolean): void;
@@ -56,6 +57,13 @@ export interface UserFilterController {
   setKeyword(keyword: string): void;
   reset(): void;
 }
+
+const USER_SORT_OPTIONS: UserFilterOption[] = [
+  { value: 'name_asc', label: '名前順（昇順）' },
+  { value: 'name_desc', label: '名前順（降順）' },
+  { value: 'oldest', label: '古い順' },
+  { value: 'newest', label: '新しい順' }
+];
 
 /**
  * ユーザーフィルタで利用するガチャ選択肢を組み立てる。
@@ -152,18 +160,21 @@ export function useUserFilterState(): UserFilterState {
   return useUserFilterStateFromStore(uiPreferences);
 }
 
-export function useUserFilterOptions(): { gachaOptions: UserFilterOption[]; rarityOptions: UserFilterOption[] } {
+export function useUserFilterOptions(): { rarityOptions: UserFilterOption[]; sortOptions: UserFilterOption[] } {
   const { appState, rarities } = useDomainStores();
   const appStateValue = useStoreState(appState);
   const rarityStateValue = useStoreState(rarities);
 
-  const gachaOptions = useMemo(() => buildUserFilterGachaOptions(appStateValue), [appStateValue]);
   const rarityOptions = useMemo(
     () => buildRarityOptions(appStateValue, rarityStateValue),
     [appStateValue, rarityStateValue]
   );
+  const sortOptions = useMemo(
+    () => USER_SORT_OPTIONS.map((option) => ({ ...option })),
+    []
+  );
 
-  return { gachaOptions, rarityOptions };
+  return { rarityOptions, sortOptions };
 }
 
 export function useUserFilterController(): UserFilterController {
@@ -178,21 +189,21 @@ export function useUserFilterController(): UserFilterController {
     [uiPreferences]
   );
 
-  const setSelectedGachaIds = useCallback(
-    (value: '*' | string[]) => {
-      updatePreferences((previous) => ({
-        ...previous,
-        selectedGachaIds: value === '*' ? '*' : [...new Set(value)]
-      }));
-    },
-    [updatePreferences]
-  );
-
   const setSelectedRarityIds = useCallback(
     (value: '*' | string[]) => {
       updatePreferences((previous) => ({
         ...previous,
         selectedRarityIds: value === '*' ? '*' : [...new Set(value)]
+      }));
+    },
+    [updatePreferences]
+  );
+
+  const setUserSortOrder = useCallback(
+    (next: UserFilterSortOrder) => {
+      updatePreferences((previous) => ({
+        ...previous,
+        userSortOrder: next
       }));
     },
     [updatePreferences]
@@ -254,8 +265,8 @@ export function useUserFilterController(): UserFilterController {
 
   return {
     state,
-    setSelectedGachaIds,
     setSelectedRarityIds,
+    setUserSortOrder,
     setHideMiss,
     setShowCounts,
     setShowSkipOnly,
@@ -276,6 +287,84 @@ const FALLBACK_RARITY_COLOR = '#a1a1aa';
 
 function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase();
+}
+
+function parseDateToTimestamp(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function resolveProfileChronologicalTimestamp(
+  profile: GachaLocalStorageSnapshot['userProfiles']['users'][string] | undefined
+): number | null {
+  if (!profile) {
+    return null;
+  }
+  const joinedAtTimestamp = parseDateToTimestamp(profile.joinedAt);
+  if (joinedAtTimestamp !== null) {
+    return joinedAtTimestamp;
+  }
+  return parseDateToTimestamp(profile.updatedAt);
+}
+
+function compareUsersByName(a: DerivedUser, b: DerivedUser): number {
+  const compared = a.userName.localeCompare(b.userName, 'ja');
+  if (compared !== 0) {
+    return compared;
+  }
+  return a.userId.localeCompare(b.userId, 'ja');
+}
+
+function compareUsersByChronologicalOrder(
+  a: DerivedUser,
+  b: DerivedUser,
+  profileByUserId: GachaLocalStorageSnapshot['userProfiles']['users'],
+  newerFirst: boolean
+): number {
+  const timestampA = resolveProfileChronologicalTimestamp(profileByUserId[a.userId]);
+  const timestampB = resolveProfileChronologicalTimestamp(profileByUserId[b.userId]);
+
+  if (timestampA !== null && timestampB !== null && timestampA !== timestampB) {
+    return newerFirst ? timestampB - timestampA : timestampA - timestampB;
+  }
+  if (timestampA !== null && timestampB === null) {
+    return -1;
+  }
+  if (timestampA === null && timestampB !== null) {
+    return 1;
+  }
+  return compareUsersByName(a, b);
+}
+
+function sortFilteredUsers(
+  users: DerivedUser[],
+  profileByUserId: GachaLocalStorageSnapshot['userProfiles']['users'],
+  sortOrder: UserFilterSortOrder
+): DerivedUser[] {
+  const sortedUsers = [...users];
+
+  sortedUsers.sort((a, b) => {
+    switch (sortOrder) {
+      case 'name_asc':
+        return compareUsersByName(a, b);
+      case 'name_desc':
+        return compareUsersByName(b, a);
+      case 'newest':
+        return compareUsersByChronologicalOrder(a, b, profileByUserId, true);
+      case 'oldest':
+      default:
+        return compareUsersByChronologicalOrder(a, b, profileByUserId, false);
+    }
+  });
+
+  return sortedUsers;
 }
 
 function matchesSelection(selection: '*' | string[], value: string): boolean {
@@ -316,7 +405,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
 
   const keyword = normalizeKeyword(filters.keyword);
   const hasKeyword = keyword.length > 0;
-  const gachaSelection = filters.selectedGachaIds === '*' ? '*' : [...new Set(filters.selectedGachaIds)];
   const raritySelection = filters.selectedRarityIds === '*' ? '*' : [...new Set(filters.selectedRarityIds)];
   const showUnobtainedItems = filters.showUnobtainedItems;
 
@@ -354,10 +442,6 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
     });
 
     inventoriesList.forEach((inventory) => {
-      if (!matchesSelection(gachaSelection, inventory.gachaId)) {
-        return;
-      }
-
       const meta = appMeta[inventory.gachaId];
       if (meta?.isArchived) {
         return;
@@ -566,7 +650,10 @@ function buildFilteredUsers({ snapshot, filters }: BuildUsersParams): { users: D
     });
   });
 
-  return { users, showCounts: filters.showCounts };
+  return {
+    users: sortFilteredUsers(users, profiles, filters.userSortOrder),
+    showCounts: filters.showCounts
+  };
 }
 
 export function useFilteredUsers(

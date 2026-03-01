@@ -127,7 +127,7 @@ export function UsersSection(): JSX.Element {
       })
       .filter((user): user is (typeof users)[number] => user !== null);
 
-    // ガチャ絞り込み後も先頭カードを既定展開に寄せ、従来の可読性を維持する。
+    // ガチャタブでの絞り込み後も先頭カードを既定展開に寄せ、従来の可読性を維持する。
     return usersPerGacha.map((user, index) => ({
       ...user,
       expandedByDefault: index === 0

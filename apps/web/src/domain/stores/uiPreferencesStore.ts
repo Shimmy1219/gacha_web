@@ -4,6 +4,7 @@ import { PersistedStore, type UpdateOptions } from './persistedStore';
 export interface UserFilterPreferences {
   selectedGachaIds: '*' | string[];
   selectedRarityIds: '*' | string[];
+  userSortOrder: UserFilterSortOrder;
   hideMiss: boolean;
   showCounts: boolean;
   showSkipOnly: boolean;
@@ -11,9 +12,14 @@ export interface UserFilterPreferences {
   keyword: string;
 }
 
+export const USER_FILTER_SORT_ORDER_VALUES = ['name_asc', 'name_desc', 'oldest', 'newest'] as const;
+export type UserFilterSortOrder = (typeof USER_FILTER_SORT_ORDER_VALUES)[number];
+const USER_FILTER_SORT_ORDER_SET = new Set<string>(USER_FILTER_SORT_ORDER_VALUES);
+
 export const DEFAULT_USER_FILTER_PREFERENCES: UserFilterPreferences = {
   selectedGachaIds: '*',
   selectedRarityIds: '*',
+  userSortOrder: 'oldest',
   hideMiss: false,
   showCounts: true,
   showSkipOnly: false,
@@ -109,6 +115,30 @@ function normalizeKeyword(value: unknown): string {
     return value;
   }
   return '';
+}
+
+function normalizeUserFilterSortOrder(value: unknown): UserFilterSortOrder {
+  if (typeof value !== 'string') {
+    return DEFAULT_USER_FILTER_PREFERENCES.userSortOrder;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  const aliases: Record<string, UserFilterSortOrder> = {
+    nameasc: 'name_asc',
+    namedesc: 'name_desc',
+    asc: 'name_asc',
+    desc: 'name_desc',
+    old: 'oldest',
+    oldestfirst: 'oldest',
+    new: 'newest',
+    newestfirst: 'newest'
+  };
+  const resolved = aliases[normalized] ?? normalized;
+
+  if (!USER_FILTER_SORT_ORDER_SET.has(resolved)) {
+    return DEFAULT_USER_FILTER_PREFERENCES.userSortOrder;
+  }
+  return resolved as UserFilterSortOrder;
 }
 
 function normalizeReleaseId(value: unknown): string | null {
@@ -410,6 +440,7 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
 
   const selectedGachaIds = normalizeSelection(raw.selectedGachaIds);
   const selectedRarityIds = normalizeSelection(raw.selectedRarityIds ?? raw.selectedRarities);
+  const userSortOrder = normalizeUserFilterSortOrder(raw.userSortOrder ?? raw.sortOrder);
   const hideMiss = normalizeBoolean(raw.hideMiss, DEFAULT_USER_FILTER_PREFERENCES.hideMiss);
   const showCounts = normalizeBoolean(raw.showCounts, DEFAULT_USER_FILTER_PREFERENCES.showCounts);
   const showSkipOnly = normalizeBoolean(
@@ -425,6 +456,7 @@ function normalizeUserFilterPreferences(raw: unknown): UserFilterPreferences {
   return {
     selectedGachaIds,
     selectedRarityIds,
+    userSortOrder,
     hideMiss,
     showCounts,
     showSkipOnly,
@@ -444,6 +476,7 @@ function serializeUserFilterPreferences(preferences: UserFilterPreferences): Rec
   return {
     selectedGachaIds: serializeSelection(preferences.selectedGachaIds),
     selectedRarityIds: serializeSelection(preferences.selectedRarityIds),
+    userSortOrder: preferences.userSortOrder,
     hideMiss: preferences.hideMiss,
     showCounts: preferences.showCounts,
     showSkipOnly: preferences.showSkipOnly,
@@ -457,6 +490,9 @@ function arePreferencesEqual(a: UserFilterPreferences, b: UserFilterPreferences)
     return true;
   }
   if (a.keyword !== b.keyword) {
+    return false;
+  }
+  if (a.userSortOrder !== b.userSortOrder) {
     return false;
   }
   if (
