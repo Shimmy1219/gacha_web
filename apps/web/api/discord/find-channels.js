@@ -31,6 +31,8 @@ import {
   evaluateChannelForLegacyGiftRepair,
 } from './_lib/findChannelLegacyUtils.js';
 
+const DISCORD_API_ERROR_CODE_MULTIPLE_GIFT_CHANNELS_FOUND = 'discord_multiple_gift_channels_found';
+
 function normalizeCategoryIds(queryValue){
   const values = [];
   const append = (value) => {
@@ -355,6 +357,7 @@ export default withApiGuards({
 
   const guildId = String(req.query.guild_id || '');
   const memberId = String(req.query.member_id || '');
+  const preferredChannelId = typeof req.query.channel_id === 'string' ? req.query.channel_id.trim() : '';
   const memberDisplayNameParam = typeof req.query.display_name === 'string' ? req.query.display_name : '';
   const createParam = String(req.query.create ?? '1').toLowerCase();
   const rawCategoryIds = [
@@ -380,6 +383,7 @@ export default withApiGuards({
   log.debug('request parameters normalized', {
     guildId,
     memberId,
+    preferredChannelId: preferredChannelId || null,
     memberDisplayNameParam,
     createParam,
     allowCreate,
@@ -511,6 +515,96 @@ export default withApiGuards({
 
   const hasRequiredBotChannelAccess = (candidate) =>
     candidate.botCanView === true && candidate.botCanSend === true;
+
+  const toChannelCandidatePayload = (candidate) => ({
+    channel_id: candidate.channelId,
+    channel_name: candidate.channelName ?? null,
+    parent_id: candidate.parentId ?? null,
+    bot_can_view: candidate.botCanView ?? null,
+    bot_can_send: candidate.botCanSend ?? null,
+    bot_has_view: candidate.botCanView === true,
+  });
+
+  if (preferredChannelId) {
+    const preferredCandidate = matchesForMember.find((candidate) => candidate.channelId === preferredChannelId);
+    if (!preferredCandidate) {
+      log.warn('preferred channel id is not found in matched channels', {
+        memberId,
+        preferredChannelId,
+        matchedChannelIds: matchesForMember.map((candidate) => candidate.channelId),
+      });
+      return res.status(404).json({
+        ok: false,
+        error: '選択したお渡しチャンネルが見つかりません。'
+      });
+    }
+
+    if (hasRequiredBotChannelAccess(preferredCandidate)) {
+      log.info('preferred existing channel found with bot access', {
+        channelId: preferredCandidate.channelId,
+        parentId: preferredCandidate.parentId,
+      });
+      return res.json({
+        ok: true,
+        channel_id: preferredCandidate.channelId,
+        channel_name: preferredCandidate.channelName ?? null,
+        created: false,
+        parent_id: preferredCandidate.parentId
+      });
+    }
+
+    if (!botUserId) {
+      log.error('bot user id missing, cannot grant access to preferred channel', {
+        channelId: preferredCandidate.channelId,
+      });
+      return res.status(500).json({
+        ok: false,
+        error: 'DiscordボットのユーザーIDが設定されていません。',
+      });
+    }
+
+    try {
+      await dFetch(`/channels/${preferredCandidate.channelId}/permissions/${botUserId}`, {
+        token: process.env.DISCORD_BOT_TOKEN,
+        isBot: true,
+        method: 'PUT',
+        body: {
+          type: 1,
+          allow: allowMaskString,
+          deny: '0'
+        }
+      });
+      log.info('granted bot permission on preferred channel', {
+        channelId: preferredCandidate.channelId,
+        parentId: preferredCandidate.parentId
+      });
+      return res.json({
+        ok: true,
+        channel_id: preferredCandidate.channelId,
+        channel_name: preferredCandidate.channelName ?? null,
+        created: false,
+        parent_id: preferredCandidate.parentId
+      });
+    } catch (error) {
+      return respondDiscordApiError(error, 'guild-channel-grant-bot-preferred');
+    }
+  }
+
+  if (matchesForMember.length > 1) {
+    const channelCandidates = matchesForMember.map((candidate) => toChannelCandidatePayload(candidate));
+    log.info('multiple 1on1 channels found for member; client selection required', {
+      memberId,
+      categoryIds,
+      candidateCount: channelCandidates.length,
+      candidateChannelIds: channelCandidates.map((candidate) => candidate.channel_id),
+    });
+    return res.status(409).json({
+      ok: false,
+      error: '同じメンバー向けのお渡しチャンネルが複数見つかりました。送信先を選択してください。',
+      errorCode: DISCORD_API_ERROR_CODE_MULTIPLE_GIFT_CHANNELS_FOUND,
+      channels: channelCandidates,
+    });
+  }
 
   const matchWithBot = matchesForMember.find((candidate) => hasRequiredBotChannelAccess(candidate));
   const matchesWithoutBot = matchesForMember.filter((candidate) => !hasRequiredBotChannelAccess(candidate));

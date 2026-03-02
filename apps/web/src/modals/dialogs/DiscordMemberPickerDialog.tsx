@@ -29,9 +29,14 @@ import {
 import { normalizeDiscordCategoryIds } from '../../features/discord/discordCategorySeries';
 import { fetchDiscordApi } from '../../features/discord/fetchDiscordApi';
 import { recoverDiscordCategoryLimitByCreatingNextCategory } from '../../features/discord/recoverDiscordCategoryLimit';
+import {
+  DiscordGiftChannelPickerDialog,
+  type DiscordGiftChannelCandidate
+} from './DiscordGiftChannelPickerDialog';
 import { DiscordPrivateChannelCategoryDialog } from './DiscordPrivateChannelCategoryDialog';
 import {
   isDiscordCategoryChannelLimitReachedErrorCode,
+  isDiscordMultipleGiftChannelsFoundErrorCode,
   pushDiscordApiWarningByErrorCode
 } from './_lib/discordApiErrorHandling';
 
@@ -65,6 +70,18 @@ interface DiscordMembersResponse {
 interface DiscordGiftChannelsResponse {
   ok: boolean;
   channels?: unknown;
+  error?: string;
+  errorCode?: string;
+  csrfReason?: string;
+}
+
+interface DiscordFindChannelsResponse {
+  ok: boolean;
+  channel_id?: string | null;
+  channel_name?: string | null;
+  parent_id?: string | null;
+  channels?: unknown;
+  created?: boolean;
   error?: string;
   errorCode?: string;
   csrfReason?: string;
@@ -129,6 +146,37 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   }, [value, delay]);
 
   return debounced;
+}
+
+function normalizeDiscordFindChannelCandidates(candidates: unknown): DiscordGiftChannelCandidate[] {
+  if (!Array.isArray(candidates)) {
+    return [];
+  }
+
+  return candidates
+    .map((candidate) => {
+      if (!candidate || typeof candidate !== 'object') {
+        return null;
+      }
+      const record = candidate as Record<string, unknown>;
+      const channelIdRaw = record.channel_id;
+      const channelId = typeof channelIdRaw === 'string' ? channelIdRaw.trim() : '';
+      if (!channelId) {
+        return null;
+      }
+      const channelNameRaw = record.channel_name;
+      const parentIdRaw = record.parent_id;
+      const botCanViewRaw = record.bot_can_view;
+      const botCanSendRaw = record.bot_can_send;
+      return {
+        channelId,
+        channelName: typeof channelNameRaw === 'string' ? channelNameRaw : null,
+        parentId: typeof parentIdRaw === 'string' ? parentIdRaw : null,
+        botCanView: typeof botCanViewRaw === 'boolean' ? botCanViewRaw : null,
+        botCanSend: typeof botCanSendRaw === 'boolean' ? botCanSendRaw : null
+      } as DiscordGiftChannelCandidate;
+    })
+    .filter((candidate): candidate is DiscordGiftChannelCandidate => Boolean(candidate));
 }
 
 function useDiscordGuildMembers(
@@ -430,6 +478,23 @@ export function DiscordMemberPickerDialog({
     });
   };
 
+  const selectGiftChannelCandidate = async (
+    candidates: DiscordGiftChannelCandidate[]
+  ): Promise<DiscordGiftChannelCandidate | null> => {
+    return new Promise((resolve) => {
+      push(DiscordGiftChannelPickerDialog, {
+        id: 'discord-gift-channel-picker-dialog',
+        title: '送信先チャンネルの選択',
+        size: 'lg',
+        payload: {
+          channels: candidates,
+          onSelect: (channel) => resolve(channel),
+          onCancel: () => resolve(null)
+        }
+      });
+    });
+  };
+
   const performShare = async (category: DiscordGuildCategorySelection) => {
     if (!sharePayload?.shareUrl) {
       const message = '共有URLが見つかりませんでした。ZIPをアップロードしてから再度お試しください。';
@@ -467,16 +532,8 @@ export function DiscordMemberPickerDialog({
       }
       const exhaustedCategoryIds = new Set<string>();
       let confirmationRequired = true;
-      let findPayload: {
-        ok: boolean;
-        channel_id?: string | null;
-        channel_name?: string | null;
-        parent_id?: string | null;
-        created?: boolean;
-        error?: string;
-        errorCode?: string;
-        csrfReason?: string;
-      } | null = null;
+      let selectedExistingChannelId: string | null = null;
+      let findPayload: DiscordFindChannelsResponse | null = null;
 
       while (true) {
         const params = new URLSearchParams({
@@ -491,27 +548,35 @@ export function DiscordMemberPickerDialog({
         if (activeCategoryIds.length > 0) {
           params.set('category_ids', activeCategoryIds.join(','));
         }
+        if (selectedExistingChannelId) {
+          params.set('channel_id', selectedExistingChannelId);
+        }
 
         const findResponse = await fetchDiscordApi(`/api/discord/find-channels?${params.toString()}`, {
           method: 'GET'
         });
 
-        findPayload = (await findResponse.json().catch(() => null)) as {
-          ok: boolean;
-          channel_id?: string | null;
-          channel_name?: string | null;
-          parent_id?: string | null;
-          created?: boolean;
-          error?: string;
-          errorCode?: string;
-          csrfReason?: string;
-        } | null;
+        findPayload = (await findResponse.json().catch(() => null)) as DiscordFindChannelsResponse | null;
 
         if (!findResponse.ok || !findPayload || !findPayload.ok) {
           const message =
             !findResponse.ok || !findPayload
               ? findPayload?.error || `お渡しチャンネルの確認に失敗しました (${findResponse.status})`
               : findPayload.error || 'お渡しチャンネルの確認に失敗しました';
+
+          if (isDiscordMultipleGiftChannelsFoundErrorCode(findPayload?.errorCode)) {
+            const candidates = normalizeDiscordFindChannelCandidates(findPayload?.channels);
+            if (candidates.length < 2) {
+              throw new Error('お渡しチャンネル候補の取得に失敗しました。');
+            }
+            const selectedChannel = await selectGiftChannelCandidate(candidates);
+            if (!selectedChannel?.channelId) {
+              throw new Error('送信先チャンネルの選択をキャンセルしました。');
+            }
+            selectedExistingChannelId = selectedChannel.channelId;
+            setSubmitError(null);
+            continue;
+          }
 
           if (
             isDiscordCategoryChannelLimitReachedErrorCode(findPayload?.errorCode)
