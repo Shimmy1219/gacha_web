@@ -22,6 +22,7 @@ import {
   extractGiftChannelCandidates,
   extractOwnerBotOnlyGiftChannelCandidates,
   normalizeOverwriteType,
+  resolveBotPermissionContext,
   resolveBotIdentity,
 } from './_lib/giftChannelUtils.js';
 import {
@@ -113,6 +114,11 @@ function allowsView(overwrite){
   return (toBigInt(overwrite?.allow) & viewChannelBit) === viewChannelBit;
 }
 
+function allowsSend(overwrite){
+  const sendMessagesBit = BigInt(PERM.SEND_MESSAGES);
+  return (toBigInt(overwrite?.allow) & sendMessagesBit) === sendMessagesBit;
+}
+
 function deniesView(overwrite){
   const viewChannelBit = BigInt(PERM.VIEW_CHANNEL);
   return (toBigInt(overwrite?.deny) & viewChannelBit) === viewChannelBit;
@@ -144,6 +150,7 @@ function evaluateChannelForGiftMatching({
       ownerOverwritePresent: false,
       botOverwritePresent: false,
       botCanView: false,
+      botCanSend: false,
       everyoneDenyPresent: false,
       everyoneDenyView: false,
       ownerCanView: false,
@@ -213,6 +220,7 @@ function evaluateChannelForGiftMatching({
   });
   result.checks.botOverwritePresent = Boolean(botOverwrite);
   result.checks.botCanView = botOverwrite ? allowsView(botOverwrite) : false;
+  result.checks.botCanSend = botOverwrite ? allowsSend(botOverwrite) : false;
 
   const everyoneOverwrite = overwrites.find(
     (ow) => normalizeOverwriteType(ow) === 'role' && normalizeSnowflake(ow?.id) === guildSnowflake
@@ -257,11 +265,12 @@ function evaluateChannelForGiftMatching({
     result.checks.standardCandidateWithBot =
       result.checks.standardCandidateEligible &&
       result.checks.standardCandidateMemberMatched &&
-      result.checks.botCanView;
+      result.checks.botCanView &&
+      result.checks.botCanSend;
     result.checks.standardCandidateWithoutBot =
       result.checks.standardCandidateEligible &&
       result.checks.standardCandidateMemberMatched &&
-      !result.checks.botCanView;
+      !(result.checks.botCanView && result.checks.botCanSend);
   }
 
   // Owner + bot only candidate checks.
@@ -269,7 +278,8 @@ function evaluateChannelForGiftMatching({
     nonOwnerNonBotMemberOverwrites.length === 0 &&
     result.checks.everyoneDenyView &&
     result.checks.ownerCanView &&
-    result.checks.botCanView
+    result.checks.botCanView &&
+    result.checks.botCanSend
   );
   result.checks.ownerBotOnlyNameMatched = matchesOwnerBotOnlyCandidateByName(
     channelName,
@@ -416,10 +426,18 @@ export default withApiGuards({
   }
 
   const { primaryId: botUserId, idSet: botUserIdSet } = await resolveBotIdentity(log);
+  const permissionContext = await resolveBotPermissionContext({
+    guildId,
+    botUserId,
+    botUserIdSet,
+    token: process.env.DISCORD_BOT_TOKEN,
+    log
+  });
   log.debug('bot identity resolved', {
     primaryBotUserId: botUserId || null,
     botIdCandidates: Array.from(botUserIdSet),
     tokenProvided: Boolean(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_BOT_TOKEN.trim()),
+    botPermissionContextResolved: Boolean(permissionContext),
   });
 
   const allowMaskString = String(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES | PERM.READ_MESSAGE_HISTORY);
@@ -450,6 +468,7 @@ export default withApiGuards({
     ownerId: sess.uid,
     guildId,
     botUserIdSet,
+    permissionContext,
   });
 
   log.debug('gift channel candidates evaluated', {
@@ -490,8 +509,11 @@ export default withApiGuards({
     });
   }
 
-  const matchWithBot = matchesForMember.find((candidate) => candidate.botHasView);
-  const matchesWithoutBot = matchesForMember.filter((candidate) => !candidate.botHasView);
+  const hasRequiredBotChannelAccess = (candidate) =>
+    candidate.botCanView === true && candidate.botCanSend === true;
+
+  const matchWithBot = matchesForMember.find((candidate) => hasRequiredBotChannelAccess(candidate));
+  const matchesWithoutBot = matchesForMember.filter((candidate) => !hasRequiredBotChannelAccess(candidate));
 
   if (matchWithBot){
     log.info('existing channel found with bot access', {
@@ -562,6 +584,7 @@ export default withApiGuards({
     ownerId: sess.uid,
     guildId,
     botUserIdSet,
+    permissionContext,
   })
     .filter((candidate) => matchesCandidateCategory(candidate, categoryIdSet))
     .filter((candidate) => matchesOwnerBotOnlyCandidateByName(candidate.channelName, expectedChannelName, memberId));

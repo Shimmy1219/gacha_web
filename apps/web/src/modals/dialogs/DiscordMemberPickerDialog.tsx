@@ -577,7 +577,9 @@ export function DiscordMemberPickerDialog({
         channelId,
         channelName: findPayload.channel_name ?? null,
         channelParentId: findPayload.parent_id ?? activeCategory.id,
-        botHasView: true
+        botHasView: true,
+        botCanView: true,
+        botCanSend: true
       };
 
       // Gift channel creation can succeed even if the subsequent send fails.
@@ -891,8 +893,33 @@ export function DiscordMemberPickerDialog({
                   hasGiftChannel && member.giftChannelParentId
                     ? `カテゴリID: ${member.giftChannelParentId}`
                     : null;
-                const botWarningLabel =
-                  hasGiftChannel && member.giftChannelBotHasView === false ? 'Bot閲覧不可' : null;
+                const botCanView =
+                  member.giftChannelBotCanView ?? member.giftChannelBotHasView ?? null;
+                const botCanSend = member.giftChannelBotCanSend ?? null;
+                const botWarningLabel = (() => {
+                  if (!hasGiftChannel) {
+                    return null;
+                  }
+                  if (botCanView === true && botCanSend === true) {
+                    return null;
+                  }
+                  if (botCanView === true && botCanSend === false) {
+                    return 'Bot送信不可';
+                  }
+                  if (botCanView === false && botCanSend === true) {
+                    return 'Bot閲覧不可（送信権限のみ）';
+                  }
+                  if (botCanView === false && botCanSend === false) {
+                    return 'Bot閲覧・送信不可';
+                  }
+                  if (botCanView === false) {
+                    return 'Bot閲覧不可';
+                  }
+                  if (botCanSend === false) {
+                    return 'Bot送信不可';
+                  }
+                  return null;
+                })();
                 return (
                   <li key={member.id}>
                     <button

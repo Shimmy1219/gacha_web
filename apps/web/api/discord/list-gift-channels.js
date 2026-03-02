@@ -11,6 +11,7 @@ import {
 import { createRequestLogger } from '../_lib/logger.js';
 import {
   extractGiftChannelCandidates,
+  resolveBotPermissionContext,
   resolveBotIdentity,
 } from './_lib/giftChannelUtils.js';
 
@@ -105,10 +106,18 @@ export default withApiGuards({
     return res.status(502).json({ ok:false, error:'discord api request failed' });
   }
 
-  const { idSet: botUserIdSet } = await resolveBotIdentity(log);
+  const { primaryId: botUserId, idSet: botUserIdSet } = await resolveBotIdentity(log);
+  const permissionContext = await resolveBotPermissionContext({
+    guildId,
+    botUserId,
+    botUserIdSet,
+    token: process.env.DISCORD_BOT_TOKEN,
+    log
+  });
   log.debug('bot identity resolved for listing', {
     botIdCandidates: Array.from(botUserIdSet),
     tokenProvided: Boolean(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_BOT_TOKEN.trim()),
+    botPermissionContextResolved: Boolean(permissionContext),
   });
 
   let chans;
@@ -134,6 +143,7 @@ export default withApiGuards({
     ownerId: sess.uid,
     guildId,
     botUserIdSet,
+    permissionContext,
   });
 
   log.debug('gift channel candidates extracted for listing', {
@@ -153,7 +163,9 @@ export default withApiGuards({
     channel_name: candidate.channelName ?? null,
     parent_id: candidate.parentId ?? null,
     member_id: candidate.memberId,
-    bot_has_view: Boolean(candidate.botHasView),
+    bot_has_view: candidate.botCanView === true,
+    bot_can_view: candidate.botCanView ?? null,
+    bot_can_send: candidate.botCanSend ?? null,
   }));
 
   log.info('gift channel listing completed', {

@@ -14,6 +14,8 @@ export interface DiscordGuildMemberSummary {
   giftChannelName?: string | null;
   giftChannelParentId?: string | null;
   giftChannelBotHasView?: boolean | null;
+  giftChannelBotCanView?: boolean | null;
+  giftChannelBotCanSend?: boolean | null;
 }
 
 export interface DiscordMemberCacheEntry {
@@ -40,6 +42,8 @@ export interface DiscordMemberGiftChannelInfo {
   channelName: string | null;
   channelParentId: string | null;
   botHasView: boolean | null;
+  botCanView: boolean | null;
+  botCanSend: boolean | null;
 }
 
 export type DiscordMemberGiftChannelMergeMode = 'replace' | 'upsert';
@@ -77,6 +81,18 @@ function cloneWithGiftChannelMetadata(
     next.giftChannelBotHasView = source.giftChannelBotHasView ?? null;
   } else {
     delete next.giftChannelBotHasView;
+  }
+
+  if (hasOwnProperty(source, 'giftChannelBotCanView')) {
+    next.giftChannelBotCanView = source.giftChannelBotCanView ?? null;
+  } else {
+    delete next.giftChannelBotCanView;
+  }
+
+  if (hasOwnProperty(source, 'giftChannelBotCanSend')) {
+    next.giftChannelBotCanSend = source.giftChannelBotCanSend ?? null;
+  } else {
+    delete next.giftChannelBotCanSend;
   }
 
   return next;
@@ -170,6 +186,26 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
     }
   }
 
+  let giftChannelBotCanView: boolean | null | undefined;
+  if (hasOwnProperty(record, 'giftChannelBotCanView')) {
+    const raw = record.giftChannelBotCanView;
+    if (typeof raw === 'boolean') {
+      giftChannelBotCanView = raw;
+    } else if (raw === null) {
+      giftChannelBotCanView = null;
+    }
+  }
+
+  let giftChannelBotCanSend: boolean | null | undefined;
+  if (hasOwnProperty(record, 'giftChannelBotCanSend')) {
+    const raw = record.giftChannelBotCanSend;
+    if (typeof raw === 'boolean') {
+      giftChannelBotCanSend = raw;
+    } else if (raw === null) {
+      giftChannelBotCanSend = null;
+    }
+  }
+
   if (!id || !displayName) {
     return null;
   }
@@ -196,6 +232,12 @@ function sanitizeMember(candidate: unknown): DiscordGuildMemberSummary | null {
   }
   if (giftChannelBotHasView !== undefined) {
     sanitized.giftChannelBotHasView = giftChannelBotHasView ?? null;
+  }
+  if (giftChannelBotCanView !== undefined) {
+    sanitized.giftChannelBotCanView = giftChannelBotCanView ?? null;
+  }
+  if (giftChannelBotCanSend !== undefined) {
+    sanitized.giftChannelBotCanSend = giftChannelBotCanSend ?? null;
   }
 
   return sanitized;
@@ -240,12 +282,24 @@ function sanitizeGiftChannelFromApi(candidate: unknown): DiscordMemberGiftChanne
     channelParentId = null;
   }
 
+  const botCanViewRaw = record['bot_can_view'];
+  const botCanView = typeof botCanViewRaw === 'boolean'
+    ? (botCanViewRaw as boolean)
+    : botCanViewRaw === null
+      ? null
+      : null;
+
+  const botCanSendRaw = record['bot_can_send'];
+  const botCanSend = typeof botCanSendRaw === 'boolean'
+    ? (botCanSendRaw as boolean)
+    : botCanSendRaw === null
+      ? null
+      : null;
+
   const botHasViewRaw = record['bot_has_view'];
   const botHasView = typeof botHasViewRaw === 'boolean'
     ? (botHasViewRaw as boolean)
-    : botHasViewRaw === null
-      ? null
-      : null;
+    : botCanView;
 
   return {
     memberId,
@@ -253,6 +307,8 @@ function sanitizeGiftChannelFromApi(candidate: unknown): DiscordMemberGiftChanne
     channelName,
     channelParentId,
     botHasView,
+    botCanView,
+    botCanSend,
   };
 }
 
@@ -302,12 +358,28 @@ function sanitizeGiftChannelInfo(candidate: unknown): DiscordMemberGiftChannelIn
       ? null
       : null;
 
+  const botCanViewRaw = record.botCanView;
+  const botCanView = typeof botCanViewRaw === 'boolean'
+    ? (botCanViewRaw as boolean)
+    : botCanViewRaw === null
+      ? null
+      : null;
+
+  const botCanSendRaw = record.botCanSend;
+  const botCanSend = typeof botCanSendRaw === 'boolean'
+    ? (botCanSendRaw as boolean)
+    : botCanSendRaw === null
+      ? null
+      : null;
+
   return {
     memberId,
     channelId,
     channelName,
     channelParentId,
     botHasView,
+    botCanView,
+    botCanSend,
   };
 }
 
@@ -356,7 +428,9 @@ export function mergeDiscordGuildMembersGiftChannelMetadata(
         giftChannelId: info.channelId,
         giftChannelName: info.channelName ?? null,
         giftChannelParentId: info.channelParentId ?? null,
-        giftChannelBotHasView: info.botHasView ?? null
+        giftChannelBotHasView: info.botCanView ?? info.botHasView ?? null,
+        giftChannelBotCanView: info.botCanView ?? null,
+        giftChannelBotCanSend: info.botCanSend ?? null
       };
     }
 
@@ -369,6 +443,8 @@ export function mergeDiscordGuildMembersGiftChannelMetadata(
     delete nextMember.giftChannelName;
     delete nextMember.giftChannelParentId;
     delete nextMember.giftChannelBotHasView;
+    delete nextMember.giftChannelBotCanView;
+    delete nextMember.giftChannelBotCanSend;
     return nextMember;
   });
 }

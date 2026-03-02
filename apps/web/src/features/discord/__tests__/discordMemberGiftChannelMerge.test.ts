@@ -32,6 +32,12 @@ function member(
   if (partial.giftChannelBotHasView !== undefined) {
     base.giftChannelBotHasView = partial.giftChannelBotHasView;
   }
+  if (partial.giftChannelBotCanView !== undefined) {
+    base.giftChannelBotCanView = partial.giftChannelBotCanView;
+  }
+  if (partial.giftChannelBotCanSend !== undefined) {
+    base.giftChannelBotCanSend = partial.giftChannelBotCanSend;
+  }
 
   return base;
 }
@@ -42,7 +48,9 @@ function channel(partial: Partial<DiscordMemberGiftChannelInfo> & Pick<DiscordMe
     channelId: partial.channelId,
     channelName: partial.channelName ?? null,
     channelParentId: partial.channelParentId ?? null,
-    botHasView: partial.botHasView ?? null
+    botHasView: partial.botHasView ?? null,
+    botCanView: partial.botCanView ?? null,
+    botCanSend: partial.botCanSend ?? null
   };
 }
 
@@ -61,6 +69,8 @@ describe('mergeDiscordGuildMembersGiftChannelMetadata', () => {
     const nextBob = result.find((m) => m.id === 'bob');
 
     expect(nextAlice?.giftChannelId).toBe('channel-alice');
+    expect(nextAlice?.giftChannelBotCanView).toBeNull();
+    expect(nextAlice?.giftChannelBotCanSend).toBeNull();
     expect(nextBob?.giftChannelId).toBe('channel-bob');
   });
 

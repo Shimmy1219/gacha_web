@@ -16,7 +16,9 @@ function member(partial: Partial<DiscordGuildMemberSummary> & Pick<DiscordGuildM
     giftChannelId: partial.giftChannelId,
     giftChannelName: partial.giftChannelName,
     giftChannelParentId: partial.giftChannelParentId,
-    giftChannelBotHasView: partial.giftChannelBotHasView
+    giftChannelBotHasView: partial.giftChannelBotHasView,
+    giftChannelBotCanView: partial.giftChannelBotCanView,
+    giftChannelBotCanSend: partial.giftChannelBotCanSend
   };
 }
 

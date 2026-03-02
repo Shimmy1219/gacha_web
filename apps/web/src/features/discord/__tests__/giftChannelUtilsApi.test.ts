@@ -6,6 +6,8 @@ import {
 } from '../../../../api/discord/_lib/giftChannelUtils.js';
 
 const VIEW_CHANNEL_BIT = '1024';
+const SEND_MESSAGES_BIT = '2048';
+const VIEW_AND_SEND_ALLOW = String(Number(VIEW_CHANNEL_BIT) | Number(SEND_MESSAGES_BIT));
 
 function buildTextChannel(
   id: string,
@@ -35,7 +37,7 @@ function buildMemberAllow(memberId: string): Record<string, unknown> {
   return {
     id: memberId,
     type: 1,
-    allow: VIEW_CHANNEL_BIT,
+    allow: VIEW_AND_SEND_ALLOW,
     deny: '0'
   };
 }
@@ -72,6 +74,8 @@ describe('giftChannelUtils API helpers', () => {
     expect(result).toHaveLength(1);
     expect(result[0]?.channelId).toBe('channel-owner-member-bot');
     expect(result[0]?.memberId).toBe(memberId);
+    expect(result[0]?.botCanView).toBe(true);
+    expect(result[0]?.botCanSend).toBe(true);
   });
 
   it('extractOwnerBotOnlyGiftChannelCandidates includes only owner+bot-only channels', () => {
@@ -107,4 +111,3 @@ describe('giftChannelUtils API helpers', () => {
     expect(result[0]?.parentId).toBe('category-b');
   });
 });
-
